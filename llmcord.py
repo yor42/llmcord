@@ -58,7 +58,7 @@ def load_character(name):
 
     return chardef, charname
 
-Character_definition, character_name = load_character("kal\'tsit")
+Character_definition, character_name = load_character("test")
 
 cfg = get_config()
 
@@ -133,7 +133,7 @@ async def on_message(new_msg):
         messages.append(full_pre_system_prompt)
 
     contexttext = ""
-    appendsize = 0;
+    appendsize = 0
     user_warnings = set()
     curr_msg = new_msg
     while curr_msg and len(messages) < max_messages:
@@ -234,7 +234,6 @@ async def on_message(new_msg):
     edit_task = None
 
     kwargs = dict(model=model, messages=messages[::-1], stream=True, extra_body=config_file["extra_api_parameters"])
-    '''
     try:
         async with new_msg.channel.typing():
             async for curr_chunk in await openai_client.chat.completions.create(**kwargs):
@@ -298,7 +297,6 @@ async def on_message(new_msg):
         for msg_id in sorted(msg_nodes.keys())[: num_nodes - MAX_MESSAGE_NODES]:
             async with msg_nodes.setdefault(msg_id, MsgNode()).lock:
                 msg_nodes.pop(msg_id, None)
-                '''
 
 
 async def main():

@@ -2,6 +2,7 @@ from typing import List, Dict, Any
 from collections import defaultdict
 import json
 import tiktoken  # OpenAI's token counter, you can use different tokenizers
+import re
 
 class KeywordContextManager:
     def __init__(self,
@@ -55,14 +56,40 @@ class KeywordContextManager:
         """
         print(f"text used for context finding: {user_input}")
 
-        user_input = user_input.lower()
         matched_indices = set()
 
         # Find all matching contexts based on keywords
-        for keyword, context_indices in self.keyword_map.items():
-            if keyword and keyword in user_input:  # Only match non-empty keywords
-                print(f"found matching keyword {keyword} for indice {context_indices}")
-                matched_indices.update(context_indices)
+        for idx, ctx in enumerate(self.contexts):
+            if ctx.get('constant', False):
+                continue
+
+            # Get context properties
+            case_sensitive = ctx.get('case_sensitive', False)
+            use_regex = ctx.get('use_regex', False)
+            keys = ctx['keys']
+
+            # Prepare input text based on case sensitivity
+            input_text = user_input if case_sensitive else user_input.lower()
+
+            for key in keys:
+                if not key:  # Skip empty keys
+                    continue
+
+                key = key.strip()
+
+                if use_regex:
+                    flags = 0 if case_sensitive else re.IGNORECASE
+                    if re.search(key, input_text, flags=flags):
+                        matched_indices.add(idx)
+                        print(f"found matching regex {key} for idx {idx}")
+                        break
+                else:
+                    # Convert key to lowercase if not case sensitive
+                    key = key if case_sensitive else key.lower()
+                    if key in input_text:
+                        matched_indices.add(idx)
+                        print(f"found matching keyword {key} for idx {idx}")
+                        break
 
         if not matched_indices and not any(ctx.get('constant', False) for ctx in self.contexts):
             return []
