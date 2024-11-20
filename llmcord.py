@@ -6,6 +6,7 @@ from datetime import datetime as dt
 import logging
 from typing import Literal, Optional
 
+import aiofiles
 from discord.app_commands import commands
 from discord.ext import commands
 from langchain.memory import ConversationBufferMemory, ConversationSummaryBufferMemory
@@ -149,19 +150,78 @@ def get_config(filename="config.yaml") -> dict:
 
         return config
 
-def load_character(name):
-    with open("./characters/"+name+".json", "r", encoding=encoding) as file:
-        readjson = json.load(file)
-        chardef = readjson["description"]
-        charname = readjson["name"]
-    print(f"loaded character {charname}")
-    context_manager.load_contexts("./lorebooks/"+name+".json")
 
-    return chardef, charname
+async def load_character_async(name: str):
+    """Asynchronous version of load_character"""
+    try:
+        # Use async file operations in the future if needed
+        with open(f"./characters/{name}.json", "r", encoding=encoding) as file:
+            readjson = json.load(file)
+            chardef = readjson["description"]
+            charname = readjson["name"]
+            activitytext = readjson["activity"]
+
+        print(f"loaded character {charname}")
+        context_manager.load_contexts(f"./lorebooks/{name}.json")
+
+        return chardef, charname, activitytext
+    except FileNotFoundError:
+        raise ValueError(f"Character '{name}' not found")
+    except json.JSONDecodeError:
+        raise ValueError(f"Invalid JSON in character file '{name}'")
+
+
+async def load_prompt_template_async(name: str) -> list:
+    """Load prompt template from JSON file"""
+    try:
+        with open(f"./prompts/{name}.json", "r", encoding=encoding) as file:
+            prompt_data = json.load(file)
+            return prompt_data
+    except FileNotFoundError:
+        raise ValueError(f"Prompt template '{name}' not found")
+    except json.JSONDecodeError:
+        raise ValueError(f"Invalid JSON in prompt template '{name}'")
+
+def load_prompt_template(name: str) -> list:
+    """Load prompt template from JSON file"""
+    try:
+        with open(f"./prompts/{name}.json", "r", encoding=encoding) as file:
+            prompt_data = json.load(file)
+            return prompt_data
+    except FileNotFoundError:
+        raise ValueError(f"Prompt template '{name}' not found")
+    except json.JSONDecodeError:
+        raise ValueError(f"Invalid JSON in prompt template '{name}'")
+
+
+def build_prompt_from_template(template: list, character_def: str, char_name: str,
+                               formatted_contexts: str, time: str, usrname:str) -> ChatPromptTemplate:
+    """Build prompt messages from template"""
+    messages = []
+
+    for item in template:
+        content = item["content"]
+        content = content.replace("{{char}}", character_def).replace("{{name}}", char_name).replace("{{lorebook}}", formatted_contexts).replace("{{time}}", time).replace("{{username_instruction}}", usrname)
+
+        if item["type"] == "system":
+            messages.append(SystemMessage(content=content))
+        elif item["type"] == "user":
+            messages.append(HumanMessage(content=content))
+        elif item["type"] == "history":
+            messages.append(MessagesPlaceholder(variable_name="chat_history"))
+        elif item["type"] == "assistant":
+            messages.append(AIMessage(content=content))
+
+
+    return ChatPromptTemplate.from_messages(messages)
+
+
+# Add current prompt template to global state
+current_prompt_template = "default"  # Default prompt template name
 
 llm_enabled = True
 cfg = get_config()
-Character_definition, character_name = load_character("kal\'tsit")
+Character_definition, character_name, activtext= "", "", ""
 
 async def is_owner(ctx):
     if ownerid := cfg["owner_id"]:
@@ -174,8 +234,7 @@ if client_id := cfg["client_id"]:
 intents = discord.Intents.default()
 intents.message_content = True
 activity = discord.CustomActivity(name=(cfg["status_message"] or "github.com/jakobdylanc/llmcord")[:128])
-discord_client = discord.Client(intents=intents, activity=activity)
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents, activity = activity)
 httpx_client = httpx.AsyncClient()
 
 msg_nodes = {}
@@ -206,14 +265,62 @@ async def phone(ctx):
     else:
         await ctx.send(f"Dev just gave {character_name}'s phone back. yay.")
 
-@discord_client.event
+
+@bot.command()
+@commands.check(is_owner)
+async def switch_character(ctx, name: str):
+    """Switch to a different character"""
+    global Character_definition, character_name, activtext
+
+    try:
+        # Load new character
+        new_chardef, new_charname, activtext = await load_character_async(name)
+
+        # Update global variables
+        Character_definition = new_chardef
+        character_name = new_charname
+
+        await ctx.send(f"Successfully switched to character: {character_name}")
+
+        # Update bot's status if needed
+        if hasattr(discord_client, 'user'):
+            status_text = activtext or "github.com/jakobdylanc/llmcord"
+            act = discord.Activity(type=discord.ActivityType.custom,name=status_text)
+            await bot.change_presence(status= discord.Status.online, activity=act)
+
+    except ValueError as e:
+        await ctx.send(f"Error loading character: {str(e)}")
+    except Exception as e:
+        logging.error(f"Error switching character: {str(e)}")
+        await ctx.send("An unexpected error occurred while switching characters")
+
+current_prompt_json = []
+
+
+@bot.command()
+@commands.check(is_owner)
+async def switch_prompt(ctx, name: str):
+    """Switch to a different prompt template"""
+    global current_prompt_json
+    try:
+        # Test loading the prompt template
+        current_prompt_json = load_prompt_template_async(name)
+        await ctx.send(f"Successfully switched to prompt template: {name}")
+    except ValueError as e:
+        await ctx.send(f"Error loading prompt template: {str(e)}")
+    except Exception as e:
+        logging.error(f"Error switching prompt template: {str(e)}")
+        await ctx.send("An unexpected error occurred while switching prompt template")
+
+
+@bot.event
 async def on_message(new_msg):
     global msg_nodes, last_task_time
 
 
     if (
         new_msg.channel.type not in ALLOWED_CHANNEL_TYPES
-        or (new_msg.channel.type != discord.ChannelType.private and discord_client.user not in new_msg.mentions)
+        or (new_msg.channel.type != discord.ChannelType.private and bot.user not in new_msg.mentions)
         or new_msg.author.bot
     ):
         return
@@ -254,23 +361,14 @@ async def on_message(new_msg):
     pre_system_prompt = config_file["pre_history_system_prompt"]
     system_prompt = config_file["system_prompt"]
 
-    system_prompt_extras = [f"Today's date: {dt.now().strftime('%B %d %Y')}."]
+    time_prompt = f"Today's date: {dt.now().strftime('%B %d %Y')}."
+    usernameprompt = ""
     if accept_usernames:
-        system_prompt_extras.append("User mentions must be formatted as Discord mentions using the pattern '<@{USER_ID}>' where {USER_ID} is the numerical Discord ID. Example: user ID 123456789 should be written as '<@123456789>'. Always use this format when referring to users.")
+        usernameprompt = "User mentions must be formatted as Discord mentions using the pattern '<@{USER_ID}>' where {USER_ID} is the numerical Discord ID. Example: user ID 123456789 should be written as '<@123456789>'. Always use this format when referring to users."
 
     max_text = config_file["max_text"]
     max_images = config_file["max_images"] if accept_images else 0
     max_messages = config_file["max_messages"]
-
-    # Create memory with summarization using existing config values
-    memory = ConversationSummaryBufferMemory(
-        llm=summarizer_llm,
-        memory_key="chat_history",
-        max_token_limit=max_text * max_messages,  # Use existing limits to determine summary threshold
-        return_messages=True,
-        human_prefix="User",
-        ai_prefix=character_name
-    )
 
     messages = []
     all_messages = []  # Store all messages for memory
@@ -295,8 +393,8 @@ async def on_message(new_msg):
                     + [embed.description for embed in curr_msg.embeds if embed.description]
                     + [(await httpx_client.get(att.url)).text for att in good_attachments["text"]]
                 )
-                if curr_node.text.startswith(discord_client.user.mention):
-                    curr_node.text = curr_node.text.replace(discord_client.user.mention, "", 1).lstrip()
+                if curr_node.text.startswith(bot.user.mention):
+                    curr_node.text = curr_node.text.replace(bot.user.mention, "", 1).lstrip()
 
                 curr_node.images = [
                     dict(type="image_url", image_url=dict(
@@ -304,7 +402,7 @@ async def on_message(new_msg):
                     for att in good_attachments["image"]
                 ]
 
-                curr_node.role = "assistant" if curr_msg.author == discord_client.user else "user"
+                curr_node.role = "assistant" if curr_msg.author == bot.user else "user"
 
                 curr_node.user_id = curr_msg.author.id if curr_node.role == "user" else None
 
@@ -314,13 +412,13 @@ async def on_message(new_msg):
                 try:
                     if (
                             curr_msg.reference is None
-                            and discord_client.user.mention not in curr_msg.content
+                            and bot.user.mention not in curr_msg.content
                             and (prev_msg_in_channel :=
                     ([m async for m in curr_msg.channel.history(before=curr_msg, limit=1)] or [None])[0])
                             and any(prev_msg_in_channel.type == type for type in
                                     (discord.MessageType.default, discord.MessageType.reply))
                             and prev_msg_in_channel.author == (
-                    discord_client.user if curr_msg.channel.type == discord.ChannelType.private else curr_msg.author)
+                    bot.user if curr_msg.channel.type == discord.ChannelType.private else curr_msg.author)
                     ):
                         curr_node.next_msg = prev_msg_in_channel
                     else:
@@ -377,6 +475,15 @@ async def on_message(new_msg):
     if len(all_messages) > max_messages:
         user_warnings.add(f"⚠️ {len(all_messages) - max_messages} earlier messages have been summarized")
 
+    # Create memory with summarization using existing config values
+    memory = ConversationSummaryBufferMemory(
+        llm=summarizer_llm,
+        max_token_limit=max_text * max_messages,  # Use existing limits to determine summary threshold
+        return_messages=True,
+        human_prefix="User",
+        ai_prefix=character_name
+    )
+
     for message in all_messages:
         if message["role"] == "user":
             memory.chat_memory.add_messages(
@@ -394,22 +501,15 @@ async def on_message(new_msg):
 
     formatted_contexts = context_manager.get_formatted_relevent_context(contexttext)
 
-    prompt = ChatPromptTemplate.from_messages([
-        # Pre-history system prompt
-        SystemMessage(content=str(pre_system_prompt).replace("{{char}}", Character_definition).replace("{{name}}",
-                                                                                                       character_name)) if pre_system_prompt else None,
-
-        # Chat history placeholder
-        MessagesPlaceholder(variable_name="chat_history"),
-
-        # System prompt with context
-        SystemMessage(content="\n".join([system_prompt] + system_prompt_extras).replace("{{lorebook}}",
-                                                                                        formatted_contexts)) if system_prompt else None,
-    ])
-
-    # Add this code to print the formatted prompt
-    chat_history = memory.load_memory_variables({})
-    formatted_prompt = prompt.format_prompt(chat_history=chat_history["chat_history"])
+    prompt = build_prompt_from_template(
+        template=current_prompt_json,
+        char_name = character_name,
+        character_def= Character_definition,
+        formatted_contexts=formatted_contexts,
+        time=time_prompt,
+        usrname = usernameprompt
+    )
+    formatted_prompt = prompt.format_prompt(chat_history=memory.load_memory_variables({})["history"])
 
     # Add this code to print the formatted prompt
     print("\nFormatted Prompt Messages:")
@@ -423,7 +523,7 @@ async def on_message(new_msg):
     response_contents = []
 
     edit_task = None
-
+    '''
     try:
         async with new_msg.channel.typing():
             async for chunk in llm.astream(formatted_prompt.to_messages()):
@@ -481,21 +581,75 @@ async def on_message(new_msg):
         for msg_id in sorted(msg_nodes.keys())[: num_nodes - MAX_MESSAGE_NODES]:
             async with msg_nodes.setdefault(msg_id, MsgNode()).lock:
                 msg_nodes.pop(msg_id, None)
+    '''
+
+
+laststatus = True
 
 # Optional: Add status indicator to show LLM state
 async def update_status():
+    global laststatus
     while True:
-        status_text = cfg["status_message"] or "github.com/jakobdylanc/llmcord"
-        if not llm_enabled:
-            status_text = "Got phone taken away"
-        activity = discord.CustomActivity(name=status_text[:128])
-        await discord_client.change_presence(activity=activity)
-        await asyncio.sleep(60)
+        if laststatus != llm_enabled:  # Only update when state changes
+            laststatus = llm_enabled  # Update laststatus before setting new status
+            status_text = activtext or "github.com/jakobdylanc/llmcord"
+            onlinestat = discord.Status.online
+            if not llm_enabled:
+                status_text = "Got phone taken away"
+                onlinestat = discord.Status.idle
+            act = discord.CustomActivity(name=status_text[:128])
+            await bot.change_presence(activity=act, status=onlinestat)
+        await asyncio.sleep(1)
+
+
+async def initialize_bot():
+    """Initialize the bot and load the initial character"""
+    global Character_definition, character_name, activtext, current_prompt_json
+
+    try:
+        Character_definition, character_name, activtext = await load_character_async("kal\'tsit")
+        logging.info(f"Successfully loaded initial character: {character_name}")
+        current_prompt_json = load_prompt_template("english")
+
+    except Exception as e:
+        logging.error(f"Failed to load initial character: {e}")
+        logging.error(f"Exception type: {type(e)}")
+        Character_definition = ""
+        character_name = ""
+        activtext = ""
+        logging.info(f"Final character state - Name: {character_name}, Definition exists: {bool(Character_definition)}")
 
 async def main():
-    async with asyncio.TaskGroup() as tg:
-        tg.create_task(discord_client.start(cfg["bot_token"]))
-        tg.create_task(update_status())
+    """Main async function to run the bot"""
+    logging.info("Starting main process...")
 
-bot.run(cfg["bot_token"])
-asyncio.run(main())
+    # Initialize character only once
+    await initialize_bot()
+
+    logging.info("Starting status update task...")
+    status_task = asyncio.create_task(update_status())
+
+    try:
+        logging.info("Starting Discord bot...")
+        # Only start the bot, not both client and bot
+        await bot.start(cfg["bot_token"])
+    except Exception as e:
+        logging.error(f"Error starting Discord bot: {e}")
+    finally:
+        logging.info("Cleaning up...")
+        status_task.cancel()
+        await bot.close()
+
+@bot.event
+async def setup_hook():
+    """Built-in Discord.py setup hook that runs before the bot starts"""
+    # Only create the status update task, don't initialize again
+    bot.loop.create_task(update_status())
+
+if __name__ == "__main__":
+    logging.info("Starting application...")
+    asyncio.run(main())
+
+if __name__ == "__main__":
+    logging.info("Starting application...")
+    asyncio.run(main())

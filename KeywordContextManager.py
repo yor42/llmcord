@@ -1,6 +1,8 @@
 from typing import List, Dict, Any
 from collections import defaultdict
 import json
+
+import aiofiles
 import tiktoken  # OpenAI's token counter, you can use different tokenizers
 import re
 
@@ -20,7 +22,10 @@ class KeywordContextManager:
         return len(self.tokenizer.encode(text))
 
     def load_contexts(self, json_file: str):
-        with open(json_file, 'r') as f:
+        utf = "utf-8"
+        self.contexts = []
+        self.keyword_map.clear()
+        with open(json_file, 'r',encoding=utf) as f:
             contexts = json.load(f)
 
         # Pre-process and index all contexts
