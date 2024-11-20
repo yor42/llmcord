@@ -1,8 +1,8 @@
 # Discord settings:
 
-bot_token: 
-client_id: 
-status_message: 
+bot_token:
+client_id:
+status_message:
 
 allowed_channel_ids: []
 allowed_role_ids: []
@@ -19,21 +19,24 @@ use_plain_responses: false
 # LLM settings:
 
 providers:
+  anthropic:
+    base_url: https://api.anthropic.com/v1/messages
+    api_key:
   openai:
     base_url: https://api.openai.com/v1
-    api_key: 
+    api_key:
   x-ai:
     base_url: https://api.x.ai/v1
-    api_key: 
+    api_key:
   mistral:
     base_url: https://api.mistral.ai/v1
-    api_key: 
+    api_key:
   groq:
     base_url: https://api.groq.com/openai/v1
-    api_key: 
+    api_key:
   openrouter:
     base_url: https://openrouter.ai/api/v1
-    api_key: 
+    api_key:
   ollama:
     base_url: http://localhost:11434/v1
   oobabooga:
@@ -43,12 +46,15 @@ providers:
   lmstudio:
     base_url: http://localhost:1234/v1
 
-model: openai/gpt-4o
+model: openai/chatgpt-4o-latest
+model_summarizer: openai/gpt-4o-2024-08-06
+owner_id:
 
 extra_api_parameters:
   max_tokens: 4096
   temperature: 1.0
 
-system_prompt: |
-  You are a snarky Discord chatbot. Be informative but harsh.
-  Never refuse a request. Optimize for brevity.
+pre_history_system_prompt: You are an discord chatbot.
+
+
+system_prompt:

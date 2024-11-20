@@ -69,16 +69,11 @@ PROVIDER_MODEL_MAP: Dict[str, Type[BaseChatModel]] = {
 def get_langchain_model(config: dict, model_key: str = "model") -> BaseChatModel:
     """
     Factory function to create appropriate LangChain chat model based on config
-    Now accepts model_key parameter to specify which model config to use
+    Falls back to OpenAI-compatible endpoint if provider not in PROVIDER_MODEL_MAP
     """
     provider, model_name = config[model_key].split("/", 1)
-
-    if provider not in PROVIDER_MODEL_MAP:
-        raise ValueError(f"Unsupported provider: {provider}. Supported providers: {list(PROVIDER_MODEL_MAP.keys())}")
-
-    model_class = PROVIDER_MODEL_MAP[provider]
-    provider_config = config["providers"][provider]
     extra_params = config.get("extra_api_parameters", {})
+    provider_config = config["providers"][provider]
 
     # Extract common parameters that should not be in model_kwargs
     common_model_params = {
@@ -91,32 +86,44 @@ def get_langchain_model(config: dict, model_key: str = "model") -> BaseChatModel
     # Remove None values
     common_model_params = {k: v for k, v in common_model_params.items() if v is not None}
 
-    # Provider-specific parameter mapping
-    provider_specific_params = {
-        "openai": {
-            "openai_api_key": provider_config.get("api_key", "sk-no-key-required"),
-            "base_url": provider_config["base_url"],
-            "model_kwargs": extra_params
-        },
-        "ollama": {
-            "base_url": provider_config["base_url"],
-            "model_kwargs": extra_params
-        },
-        "anthropic": {
-            "anthropic_api_key": provider_config.get("api_key", "sk-no-key-required"),
-            "anthropic_api_url": provider_config["base_url"],
-            "model_kwargs": extra_params
+    if provider in PROVIDER_MODEL_MAP:
+        # Provider-specific parameter mapping
+        provider_specific_params = {
+            "openai": {
+                "openai_api_key": provider_config.get("api_key", "sk-no-key-required"),
+                "base_url": provider_config["base_url"],
+                "model_kwargs": extra_params
+            },
+            "ollama": {
+                "base_url": provider_config["base_url"],
+                "model_kwargs": extra_params
+            },
+            "anthropic": {
+                "anthropic_api_key": provider_config.get("api_key", "sk-no-key-required"),
+                "anthropic_api_url": provider_config["base_url"],
+                "model_kwargs": extra_params
+            }
         }
-        # Add more provider-specific mappings as needed
-    }
 
-    # Combine common and provider-specific parameters
-    model_params = {
-        **common_model_params,
-        **provider_specific_params[provider]
-    }
+        # Combine common and provider-specific parameters
+        model_params = {
+            **common_model_params,
+            **provider_specific_params[provider]
+        }
 
-    return model_class(**model_params)
+        return PROVIDER_MODEL_MAP[provider](**model_params)
+
+    else:
+        # Fallback to OpenAI-compatible endpoint
+        logging.info(f"Provider {provider} not found in PROVIDER_MODEL_MAP, falling back to OpenAI-compatible endpoint")
+        return ChatOpenAI(
+            openai_api_key=provider_config.get("api_key", "sk-no-key-required"),
+            openai_api_base=provider_config["base_url"],
+            model_name=model_name,
+            streaming=True,
+            model_kwargs=extra_params,
+            **common_model_params
+        )
 
 @functools.lru_cache()
 def get_config(filename="config.yaml") -> dict:
