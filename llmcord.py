@@ -6,8 +6,21 @@ from datetime import datetime as dt
 import logging
 from typing import Literal, Optional
 
+from langchain.chat_models import ChatOpenAI
+from langchain.schema import SystemMessage, HumanMessage, AIMessage
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain.memory import ConversationBufferMemory
+from langchain.chat_models import ChatOpenAI, ChatOllama, ChatAnthropic
+from langchain_groq import ChatGroq
+from langchain_openrouter.openrouter import OpenRouterLLM
+from langchain_mistralai import ChatMistralAI
+from langchain.chat_models.base import BaseChatModel
+from typing import Dict, Type
+import functools
+
 import discord
 import httpx
+from langchain_xai import ChatXAI
 from openai import AsyncOpenAI
 import yaml
 
@@ -41,10 +54,78 @@ MAX_MESSAGE_NODES = 100
 encoding="utf-8"
 
 
+PROVIDER_MODEL_MAP: Dict[str, Type[BaseChatModel]] = {
+    "openai": ChatOpenAI,
+    "ollama": ChatOllama,
+    "anthropic": ChatAnthropic,
+    "mistral": ChatMistralAI,
+    "x-ai": ChatXAI,
+    "groq": ChatGroq,
+    "openrouter": OpenRouterLLM
+    # etc.
+}
 
-def get_config(filename="config.yaml"):
+
+def get_langchain_model(config: dict) -> BaseChatModel:
+    """
+    Factory function to create appropriate LangChain chat model based on config
+    """
+    provider, model_name = config["model"].split("/", 1)
+
+    if provider not in PROVIDER_MODEL_MAP:
+        raise ValueError(f"Unsupported provider: {provider}. Supported providers: {list(PROVIDER_MODEL_MAP.keys())}")
+
+    model_class = PROVIDER_MODEL_MAP[provider]
+
+    # Get provider-specific config
+    provider_config = config["providers"][provider]
+
+    # Common parameters for all models
+    common_params = {
+        "streaming": True,
+        "model": model_name,
+    }
+
+    # Provider-specific parameter mapping
+    if provider == "openai":
+        common_params.update({
+            "openai_api_key": provider_config.get("api_key", "sk-no-key-required"),
+            "base_url": provider_config["base_url"],
+            "model_kwargs": config.get("extra_api_parameters", {})
+        })
+    elif provider == "ollama":
+        common_params.update({
+            "base_url": provider_config["base_url"],
+            "model_kwargs": config.get("extra_api_parameters", {})
+        })
+    # Add more provider-specific mappings as needed
+
+    return model_class(**common_params)
+
+
+@functools.lru_cache()
+def get_config(filename="config.yaml") -> dict:
+    """
+    Load and parse config file with caching
+    """
     with open(filename, "r", encoding=encoding) as file:
-        return yaml.safe_load(file)
+        config = yaml.safe_load(file)
+
+        # Validate required fields
+        required_fields = ["model", "providers"]
+        missing_fields = [field for field in required_fields if field not in config]
+        if missing_fields:
+            raise ValueError(f"Missing required config fields: {missing_fields}")
+
+        # Validate model format
+        if "/" not in config["model"]:
+            raise ValueError("Model must be in format: provider/model_name")
+
+        provider = config["model"].split("/")[0]
+        if provider not in config["providers"]:
+            raise ValueError(f"Provider '{provider}' from model string not found in providers config")
+
+        return config
 
 def load_character(name):
     chardef = ""
@@ -58,7 +139,7 @@ def load_character(name):
 
     return chardef, charname
 
-Character_definition, character_name = load_character("test")
+Character_definition, character_name = load_character("kal\'tsit")
 
 cfg = get_config()
 

@@ -1,4 +1,9 @@
 discord.py
+langchain
+langchain-mistralai
+langchain-groq
+langchain-xai
+langchain-openrouter
 httpx
 openai
 pyyaml
