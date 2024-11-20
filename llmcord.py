@@ -523,7 +523,6 @@ async def on_message(new_msg):
     response_contents = []
 
     edit_task = None
-    '''
     try:
         async with new_msg.channel.typing():
             async for chunk in llm.astream(formatted_prompt.to_messages()):
@@ -581,7 +580,6 @@ async def on_message(new_msg):
         for msg_id in sorted(msg_nodes.keys())[: num_nodes - MAX_MESSAGE_NODES]:
             async with msg_nodes.setdefault(msg_id, MsgNode()).lock:
                 msg_nodes.pop(msg_id, None)
-    '''
 
 
 laststatus = True
