@@ -1,0 +1,30 @@
+[
+  {
+    "keys": [
+      "test"
+    ],
+    "content": "and this should be added as context",
+    "enabled": true,
+    "insertion_order": 100,
+    "constant": false,
+    "selective": false,
+    "name": "TEST",
+    "comment": "TEST",
+    "case_sensitive": false,
+    "use_regex": false
+  },
+  {
+    "keys": [
+      "always"
+    ],
+    "content": "This should be constant that is always added!",
+    "enabled": true,
+    "insertion_order": 100,
+    "constant": true,
+    "selective": false,
+    "name": "TEST",
+    "comment": "TEST",
+    "case_sensitive": false,
+    "use_regex": false
+  }
+]

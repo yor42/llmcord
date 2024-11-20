@@ -11,3 +11,7 @@
 !config-example.yaml
 !docker-compose.yaml
 !requirements.txt
+
+!/characters
+!/lorebooks
+!/charcard

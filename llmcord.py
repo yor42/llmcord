@@ -1,4 +1,5 @@
 import asyncio
+import json
 from base64 import b64encode
 from dataclasses import dataclass, field
 from datetime import datetime as dt
@@ -9,6 +10,14 @@ import discord
 import httpx
 from openai import AsyncOpenAI
 import yaml
+
+from KeywordContextManager import KeywordContextManager
+
+context_manager = KeywordContextManager(
+    model_name="gpt-4o",
+    max_total_tokens=5000,
+    max_contexts= 10
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,11 +38,27 @@ EDIT_DELAY_SECONDS = 1
 
 MAX_MESSAGE_NODES = 100
 
+encoding="utf-8"
+
+
 
 def get_config(filename="config.yaml"):
-    with open(filename, "r") as file:
+    with open(filename, "r", encoding=encoding) as file:
         return yaml.safe_load(file)
 
+def load_character(name):
+    chardef = ""
+    charname = ""
+    with open("./characters/"+name+".json", "r", encoding=encoding) as file:
+        readjson = json.load(file)
+        chardef = readjson["description"]
+        charname = readjson["name"]
+    print(f"loaded character {charname}")
+    context_manager.load_contexts("./lorebooks/"+name+".json")
+
+    return chardef, charname
+
+Character_definition, character_name = load_character("kal\'tsit")
 
 cfg = get_config()
 
@@ -66,7 +91,6 @@ class MsgNode:
 
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
-
 @discord_client.event
 async def on_message(new_msg):
     global msg_nodes, last_task_time
@@ -78,40 +102,45 @@ async def on_message(new_msg):
     ):
         return
 
-    cfg = get_config()
+    config_file = get_config()
 
-    allowed_channel_ids = cfg["allowed_channel_ids"]
-    allowed_role_ids = cfg["allowed_role_ids"]
+    allowed_channel_ids = config_file["allowed_channel_ids"]
+    allowed_role_ids = config_file["allowed_role_ids"]
 
     if (allowed_channel_ids and not any(id in allowed_channel_ids for id in (new_msg.channel.id, getattr(new_msg.channel, "parent_id", None)))) or (
         allowed_role_ids and not any(role.id in allowed_role_ids for role in getattr(new_msg.author, "roles", []))
     ):
         return
 
-    provider, model = cfg["model"].split("/", 1)
-    base_url = cfg["providers"][provider]["base_url"]
-    api_key = cfg["providers"][provider].get("api_key", "sk-no-key-required")
+    provider, model = config_file["model"].split("/", 1)
+    base_url = config_file["providers"][provider]["base_url"]
+    api_key = config_file["providers"][provider].get("api_key", "sk-no-key-required")
     openai_client = AsyncOpenAI(base_url=base_url, api_key=api_key)
 
     accept_images: bool = any(x in model for x in VISION_MODEL_TAGS)
     accept_usernames: bool = any(x in provider for x in PROVIDERS_SUPPORTING_USERNAMES)
 
-    max_text = cfg["max_text"]
-    max_images = cfg["max_images"] if accept_images else 0
-    max_messages = cfg["max_messages"]
+    max_text = config_file["max_text"]
+    max_images = config_file["max_images"] if accept_images else 0
+    max_messages = config_file["max_messages"]
 
-    use_plain_responses: bool = cfg["use_plain_responses"]
+    use_plain_responses: bool = config_file["use_plain_responses"]
     max_message_length = 2000 if use_plain_responses else (4096 - len(STREAMING_INDICATOR))
-
-    # Build message chain and set user warnings
     messages = []
+    # Build message chain and set user warnings
+    if pre_system_prompt := config_file["pre_history_system_prompt"]:
+        full_pre_system_prompt = dict(role="system", content=str(pre_system_prompt).replace("{{char}}", Character_definition).replace("{{name}}", character_name))
+        messages.append(full_pre_system_prompt)
+
+    contexttext = ""
+    appendsize = 0;
     user_warnings = set()
     curr_msg = new_msg
     while curr_msg and len(messages) < max_messages:
         curr_node = msg_nodes.setdefault(curr_msg.id, MsgNode())
 
         async with curr_node.lock:
-            if curr_node.text == None:
+            if curr_node.text is None:
                 good_attachments = {type: [att for att in curr_msg.attachments if att.content_type and type in att.content_type] for type in ALLOWED_FILE_TYPES}
 
                 curr_node.text = "\n".join(
@@ -135,15 +164,15 @@ async def on_message(new_msg):
 
                 try:
                     if (
-                        curr_msg.reference == None
-                        and discord_client.user.mention not in curr_msg.content
+                        curr_msg.reference is None
+                            and discord_client.user.mention not in curr_msg.content
                         and (prev_msg_in_channel := ([m async for m in curr_msg.channel.history(before=curr_msg, limit=1)] or [None])[0])
                         and any(prev_msg_in_channel.type == type for type in (discord.MessageType.default, discord.MessageType.reply))
                         and prev_msg_in_channel.author == (discord_client.user if curr_msg.channel.type == discord.ChannelType.private else curr_msg.author)
                     ):
                         curr_node.next_msg = prev_msg_in_channel
                     else:
-                        next_is_thread_parent: bool = curr_msg.reference == None and curr_msg.channel.type == discord.ChannelType.public_thread
+                        next_is_thread_parent: bool = curr_msg.reference is None and curr_msg.channel.type == discord.ChannelType.public_thread
                         if next_msg_id := curr_msg.channel.id if next_is_thread_parent else getattr(curr_msg.reference, "message_id", None):
                             if next_is_thread_parent:
                                 curr_node.next_msg = curr_msg.channel.starter_message or await curr_msg.channel.parent.fetch_message(next_msg_id)
@@ -159,9 +188,13 @@ async def on_message(new_msg):
             else:
                 content = curr_node.text[:max_text]
 
+            if appendsize < config_file["max_context_depth"]:
+                contexttext = contexttext+" "+curr_node.text[:max_text]
+                appendsize=+1
+
             if content:
                 message = dict(content=content, role=curr_node.role)
-                if accept_usernames and curr_node.user_id != None:
+                if accept_usernames and curr_node.user_id is not None:
                     message["name"] = str(curr_node.user_id)
 
                 messages.append(message)
@@ -179,13 +212,20 @@ async def on_message(new_msg):
 
     logging.info(f"Message received (user ID: {new_msg.author.id}, attachments: {len(new_msg.attachments)}, conversation length: {len(messages)}):\n{new_msg.content}")
 
-    if system_prompt := cfg["system_prompt"]:
+    contexts = context_manager.get_relevant_contexts(contexttext)
+    formatted_contexts = context_manager.format_contexts(contexts)
+
+    if system_prompt := config_file["system_prompt"]:
+
+
         system_prompt_extras = [f"Today's date: {dt.now().strftime('%B %d %Y')}."]
         if accept_usernames:
-            system_prompt_extras.append("User's names are their Discord IDs and should be typed as '<@ID>'.")
+            system_prompt_extras.append("User's names follows Discord ID format and should be typed as '<@{USER_ID}>'.")
 
-        full_system_prompt = dict(role="system", content="\n".join([system_prompt] + system_prompt_extras))
+        full_system_prompt = dict(role="system", content="\n".join([system_prompt] + system_prompt_extras).replace("{{lorebook}}", formatted_contexts))
         messages.append(full_system_prompt)
+
+    print(messages)
 
     # Generate and send response message(s) (can be multiple if response is long)
     response_msgs = []
@@ -193,11 +233,12 @@ async def on_message(new_msg):
     prev_chunk = None
     edit_task = None
 
-    kwargs = dict(model=model, messages=messages[::-1], stream=True, extra_body=cfg["extra_api_parameters"])
+    kwargs = dict(model=model, messages=messages[::-1], stream=True, extra_body=config_file["extra_api_parameters"])
+    '''
     try:
         async with new_msg.channel.typing():
             async for curr_chunk in await openai_client.chat.completions.create(**kwargs):
-                prev_content = prev_chunk.choices[0].delta.content if prev_chunk != None and prev_chunk.choices[0].delta.content else ""
+                prev_content = prev_chunk.choices[0].delta.content if prev_chunk is not None and prev_chunk.choices[0].delta.content else ""
                 curr_content = curr_chunk.choices[0].delta.content or ""
 
                 if response_contents or prev_content:
@@ -221,13 +262,14 @@ async def on_message(new_msg):
                     if not use_plain_responses:
                         finish_reason = curr_chunk.choices[0].finish_reason
 
-                        ready_to_edit: bool = (edit_task == None or edit_task.done()) and dt.now().timestamp() - last_task_time >= EDIT_DELAY_SECONDS
+                        ready_to_edit: bool = (
+                                                          edit_task is None or edit_task.done()) and dt.now().timestamp() - last_task_time >= EDIT_DELAY_SECONDS
                         msg_split_incoming: bool = len(response_contents[-1] + curr_content) > max_message_length
-                        is_final_edit: bool = finish_reason != None or msg_split_incoming
-                        is_good_finish: bool = finish_reason != None and any(finish_reason.lower() == x for x in ("stop", "end_turn"))
+                        is_final_edit: bool = finish_reason is not None or msg_split_incoming
+                        is_good_finish: bool = finish_reason is not None and any(finish_reason.lower() == x for x in ("stop", "end_turn"))
 
                         if ready_to_edit or is_final_edit:
-                            while edit_task != None and not edit_task.done():
+                            while edit_task is not None and not edit_task.done():
                                 await asyncio.sleep(0)
 
                             embed.description = response_contents[-1] if is_final_edit else (response_contents[-1] + STREAMING_INDICATOR)
@@ -256,6 +298,7 @@ async def on_message(new_msg):
         for msg_id in sorted(msg_nodes.keys())[: num_nodes - MAX_MESSAGE_NODES]:
             async with msg_nodes.setdefault(msg_id, MsgNode()).lock:
                 msg_nodes.pop(msg_id, None)
+                '''
 
 
 async def main():

@@ -2,3 +2,5 @@ discord.py
 httpx
 openai
 pyyaml
+tiktoken
+pypng
