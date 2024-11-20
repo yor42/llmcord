@@ -6,13 +6,14 @@ from datetime import datetime as dt
 import logging
 from typing import Literal, Optional
 
-from langchain.chat_models import ChatOpenAI
-from langchain.schema import SystemMessage, HumanMessage, AIMessage
-from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.memory import ConversationBufferMemory
-from langchain.chat_models import ChatOpenAI, ChatOllama, ChatAnthropic
+from discord.app_commands import commands
+from discord.ext import commands
+from langchain.memory import ConversationBufferMemory, ConversationSummaryBufferMemory
+from langchain_community.chat_models import ChatOllama, ChatAnthropic
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_groq import ChatGroq
-from langchain_openrouter.openrouter import OpenRouterLLM
 from langchain_mistralai import ChatMistralAI
 from langchain.chat_models.base import BaseChatModel
 from typing import Dict, Type
@@ -61,47 +62,61 @@ PROVIDER_MODEL_MAP: Dict[str, Type[BaseChatModel]] = {
     "mistral": ChatMistralAI,
     "x-ai": ChatXAI,
     "groq": ChatGroq,
-    "openrouter": OpenRouterLLM
     # etc.
 }
 
 
-def get_langchain_model(config: dict) -> BaseChatModel:
+def get_langchain_model(config: dict, model_key: str = "model") -> BaseChatModel:
     """
     Factory function to create appropriate LangChain chat model based on config
+    Now accepts model_key parameter to specify which model config to use
     """
-    provider, model_name = config["model"].split("/", 1)
+    provider, model_name = config[model_key].split("/", 1)
 
     if provider not in PROVIDER_MODEL_MAP:
         raise ValueError(f"Unsupported provider: {provider}. Supported providers: {list(PROVIDER_MODEL_MAP.keys())}")
 
     model_class = PROVIDER_MODEL_MAP[provider]
-
-    # Get provider-specific config
     provider_config = config["providers"][provider]
+    extra_params = config.get("extra_api_parameters", {})
 
-    # Common parameters for all models
-    common_params = {
+    # Extract common parameters that should not be in model_kwargs
+    common_model_params = {
+        "temperature": extra_params.pop("temperature", None),
+        "max_tokens": extra_params.pop("max_tokens", None),
         "streaming": True,
         "model": model_name,
     }
 
+    # Remove None values
+    common_model_params = {k: v for k, v in common_model_params.items() if v is not None}
+
     # Provider-specific parameter mapping
-    if provider == "openai":
-        common_params.update({
+    provider_specific_params = {
+        "openai": {
             "openai_api_key": provider_config.get("api_key", "sk-no-key-required"),
             "base_url": provider_config["base_url"],
-            "model_kwargs": config.get("extra_api_parameters", {})
-        })
-    elif provider == "ollama":
-        common_params.update({
+            "model_kwargs": extra_params
+        },
+        "ollama": {
             "base_url": provider_config["base_url"],
-            "model_kwargs": config.get("extra_api_parameters", {})
-        })
-    # Add more provider-specific mappings as needed
+            "model_kwargs": extra_params
+        },
+        "anthropic": {
+            "anthropic_api_key": provider_config.get("api_key", "sk-no-key-required"),
+            "anthropic_api_url": provider_config["base_url"],
+            "model_kwargs": extra_params
+        }
+        # Add more provider-specific mappings as needed
+    }
 
-    return model_class(**common_params)
+    # Combine common and provider-specific parameters
+    model_params = {
+        **common_model_params,
+        **provider_specific_params[provider]
+    }
 
+    return model_class(**model_params)
 
 @functools.lru_cache()
 def get_config(filename="config.yaml") -> dict:
@@ -113,7 +128,7 @@ def get_config(filename="config.yaml") -> dict:
 
         # Validate required fields
         required_fields = ["model", "providers"]
-        missing_fields = [field for field in required_fields if field not in config]
+        missing_fields = [cfgfield for cfgfield in required_fields if cfgfield not in config]
         if missing_fields:
             raise ValueError(f"Missing required config fields: {missing_fields}")
 
@@ -128,8 +143,6 @@ def get_config(filename="config.yaml") -> dict:
         return config
 
 def load_character(name):
-    chardef = ""
-    charname = ""
     with open("./characters/"+name+".json", "r", encoding=encoding) as file:
         readjson = json.load(file)
         chardef = readjson["description"]
@@ -139,9 +152,14 @@ def load_character(name):
 
     return chardef, charname
 
+llm_enabled = True
+cfg = get_config()
 Character_definition, character_name = load_character("kal\'tsit")
 
-cfg = get_config()
+async def is_owner(ctx):
+    if ownerid := cfg["owner_id"]:
+        return ctx.author.id == ownerid
+    return False
 
 if client_id := cfg["client_id"]:
     logging.info(f"\n\nBOT INVITE URL:\nhttps://discord.com/api/oauth2/authorize?client_id={client_id}&permissions=412317273088&scope=bot\n")
@@ -150,12 +168,11 @@ intents = discord.Intents.default()
 intents.message_content = True
 activity = discord.CustomActivity(name=(cfg["status_message"] or "github.com/jakobdylanc/llmcord")[:128])
 discord_client = discord.Client(intents=intents, activity=activity)
-
+bot = commands.Bot(command_prefix="!", intents=intents)
 httpx_client = httpx.AsyncClient()
 
 msg_nodes = {}
 last_task_time = None
-
 
 @dataclass
 class MsgNode:
@@ -172,9 +189,20 @@ class MsgNode:
 
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
+@bot.command()
+@commands.check(is_owner)
+async def phone(ctx):
+    global llm_enabled
+    llm_enabled = not llm_enabled
+    if not llm_enabled:
+        await ctx.send(f"Dev just took {character_name}'s phone. RIP.")
+    else:
+        await ctx.send(f"Dev just gave {character_name}'s phone back. yay.")
+
 @discord_client.event
 async def on_message(new_msg):
     global msg_nodes, last_task_time
+
 
     if (
         new_msg.channel.type not in ALLOWED_CHANNEL_TYPES
@@ -193,36 +221,67 @@ async def on_message(new_msg):
     ):
         return
 
+    if not llm_enabled:
+        await new_msg.reply(f"There's no response. Dev probably took {character_name}'s phone. F in the chat, boys.")
+        return
+
+    try:
+        llm = get_langchain_model(config_file)
+
+        # Create a separate, lighter model for summarization
+        if "model_summarizer" in config_file:
+            summarizer_llm = get_langchain_model(config_file, "model_summarizer")
+        else:
+            logging.warning("No separate summarizer model specified, using main model for summarization")
+            summarizer_llm = llm
+    except ValueError as e:
+        logging.error(f"Failed to create LangChain model: {e}")
+        return
+
     provider, model = config_file["model"].split("/", 1)
-    base_url = config_file["providers"][provider]["base_url"]
-    api_key = config_file["providers"][provider].get("api_key", "sk-no-key-required")
-    openai_client = AsyncOpenAI(base_url=base_url, api_key=api_key)
 
     accept_images: bool = any(x in model for x in VISION_MODEL_TAGS)
     accept_usernames: bool = any(x in provider for x in PROVIDERS_SUPPORTING_USERNAMES)
+
+    # Build prompt template
+    pre_system_prompt = config_file["pre_history_system_prompt"]
+    system_prompt = config_file["system_prompt"]
+
+    system_prompt_extras = [f"Today's date: {dt.now().strftime('%B %d %Y')}."]
+    if accept_usernames:
+        system_prompt_extras.append("User mentions must be formatted as Discord mentions using the pattern '<@{USER_ID}>' where {USER_ID} is the numerical Discord ID. Example: user ID 123456789 should be written as '<@123456789>'. Always use this format when referring to users.")
 
     max_text = config_file["max_text"]
     max_images = config_file["max_images"] if accept_images else 0
     max_messages = config_file["max_messages"]
 
-    use_plain_responses: bool = config_file["use_plain_responses"]
-    max_message_length = 2000 if use_plain_responses else (4096 - len(STREAMING_INDICATOR))
-    messages = []
-    # Build message chain and set user warnings
-    if pre_system_prompt := config_file["pre_history_system_prompt"]:
-        full_pre_system_prompt = dict(role="system", content=str(pre_system_prompt).replace("{{char}}", Character_definition).replace("{{name}}", character_name))
-        messages.append(full_pre_system_prompt)
+    # Create memory with summarization using existing config values
+    memory = ConversationSummaryBufferMemory(
+        llm=summarizer_llm,
+        memory_key="chat_history",
+        max_token_limit=max_text * max_messages,  # Use existing limits to determine summary threshold
+        return_messages=True,
+        human_prefix="User",
+        ai_prefix=character_name
+    )
 
+    messages = []
+    all_messages = []  # Store all messages for memory
     contexttext = ""
     appendsize = 0
     user_warnings = set()
     curr_msg = new_msg
-    while curr_msg and len(messages) < max_messages:
+    use_plain_responses: bool = config_file["use_plain_responses"]
+    max_message_length = 2000 if use_plain_responses else (4096 - len(STREAMING_INDICATOR))
+
+    while curr_msg:
         curr_node = msg_nodes.setdefault(curr_msg.id, MsgNode())
 
         async with curr_node.lock:
             if curr_node.text is None:
-                good_attachments = {type: [att for att in curr_msg.attachments if att.content_type and type in att.content_type] for type in ALLOWED_FILE_TYPES}
+                good_attachments = {
+                    type: [att for att in curr_msg.attachments if att.content_type and type in att.content_type] for
+                    type in ALLOWED_FILE_TYPES}
 
                 curr_node.text = "\n".join(
                     ([curr_msg.content] if curr_msg.content else [])
@@ -233,7 +292,8 @@ async def on_message(new_msg):
                     curr_node.text = curr_node.text.replace(discord_client.user.mention, "", 1).lstrip()
 
                 curr_node.images = [
-                    dict(type="image_url", image_url=dict(url=f"data:{att.content_type};base64,{b64encode((await httpx_client.get(att.url)).content).decode('utf-8')}"))
+                    dict(type="image_url", image_url=dict(
+                        url=f"data:{att.content_type};base64,{b64encode((await httpx_client.get(att.url)).content).decode('utf-8')}"))
                     for att in good_attachments["image"]
                 ]
 
@@ -241,92 +301,133 @@ async def on_message(new_msg):
 
                 curr_node.user_id = curr_msg.author.id if curr_node.role == "user" else None
 
-                curr_node.has_bad_attachments = len(curr_msg.attachments) > sum(len(att_list) for att_list in good_attachments.values())
+                curr_node.has_bad_attachments = len(curr_msg.attachments) > sum(
+                    len(att_list) for att_list in good_attachments.values())
 
                 try:
                     if (
-                        curr_msg.reference is None
+                            curr_msg.reference is None
                             and discord_client.user.mention not in curr_msg.content
-                        and (prev_msg_in_channel := ([m async for m in curr_msg.channel.history(before=curr_msg, limit=1)] or [None])[0])
-                        and any(prev_msg_in_channel.type == type for type in (discord.MessageType.default, discord.MessageType.reply))
-                        and prev_msg_in_channel.author == (discord_client.user if curr_msg.channel.type == discord.ChannelType.private else curr_msg.author)
+                            and (prev_msg_in_channel :=
+                    ([m async for m in curr_msg.channel.history(before=curr_msg, limit=1)] or [None])[0])
+                            and any(prev_msg_in_channel.type == type for type in
+                                    (discord.MessageType.default, discord.MessageType.reply))
+                            and prev_msg_in_channel.author == (
+                    discord_client.user if curr_msg.channel.type == discord.ChannelType.private else curr_msg.author)
                     ):
                         curr_node.next_msg = prev_msg_in_channel
                     else:
                         next_is_thread_parent: bool = curr_msg.reference is None and curr_msg.channel.type == discord.ChannelType.public_thread
-                        if next_msg_id := curr_msg.channel.id if next_is_thread_parent else getattr(curr_msg.reference, "message_id", None):
+                        if next_msg_id := curr_msg.channel.id if next_is_thread_parent else getattr(curr_msg.reference,
+                                                                                                    "message_id", None):
                             if next_is_thread_parent:
-                                curr_node.next_msg = curr_msg.channel.starter_message or await curr_msg.channel.parent.fetch_message(next_msg_id)
+                                curr_node.next_msg = curr_msg.channel.starter_message or await curr_msg.channel.parent.fetch_message(
+                                    next_msg_id)
                             else:
-                                curr_node.next_msg = curr_msg.reference.cached_message or await curr_msg.channel.fetch_message(next_msg_id)
+                                curr_node.next_msg = curr_msg.reference.cached_message or await curr_msg.channel.fetch_message(
+                                    next_msg_id)
 
                 except (discord.NotFound, discord.HTTPException, AttributeError):
                     logging.exception("Error fetching next message in the chain")
                     curr_node.fetch_next_failed = True
 
             if curr_node.images[:max_images]:
-                content = ([dict(type="text", text=curr_node.text[:max_text])] if curr_node.text[:max_text] else []) + curr_node.images[:max_images]
+                content = ([dict(type="text", text=curr_node.text[:max_text])] if curr_node.text[
+                                                                                  :max_text] else []) + curr_node.images[
+                                                                                                        :max_images]
             else:
                 content = curr_node.text[:max_text]
-
-            if appendsize < config_file["max_context_depth"]:
-                contexttext = contexttext+" "+curr_node.text[:max_text]
-                appendsize=+1
 
             if content:
                 message = dict(content=content, role=curr_node.role)
                 if accept_usernames and curr_node.user_id is not None:
                     message["name"] = str(curr_node.user_id)
 
-                messages.append(message)
+                # Store messages to handle reverse order
+                all_messages.insert(0, message)  # Insert at beginning to maintain chronological order
 
-            if len(curr_node.text) > max_text:
-                user_warnings.add(f"⚠️ Max {max_text:,} characters per message")
-            if len(curr_node.images) > max_images:
-                user_warnings.add(f"⚠️ Max {max_images} image{'' if max_images == 1 else 's'} per message" if max_images > 0 else "⚠️ Can't see images")
-            if curr_node.has_bad_attachments:
-                user_warnings.add("⚠️ Unsupported attachments")
-            if curr_node.fetch_next_failed or (curr_node.next_msg and len(messages) == max_messages):
-                user_warnings.add(f"⚠️ Only using last {len(messages)} message{'' if len(messages) == 1 else 's'}")
+                # Only add to display messages if within limit
+                if len(messages) < max_messages:
+                    messages.insert(0, message)  # Insert at beginning for display messages too
+
+            # Update context text for current window only
+            if appendsize < config_file["max_context_depth"] and len(messages) < max_messages:
+                contexttext = contexttext + " " + curr_node.text[:max_text]
+                appendsize += 1
+
+            # Add warnings only for displayed messages
+            if len(messages) < max_messages:
+                if len(curr_node.text) > max_text:
+                    user_warnings.add(f"⚠️ Max {max_text:,} characters per message")
+                if len(curr_node.images) > max_images:
+                    user_warnings.add(
+                        f"⚠️ Max {max_images} image{'' if max_images == 1 else 's'} per message" if max_images > 0 else "⚠️ Can't see images")
+                if curr_node.has_bad_attachments:
+                    user_warnings.add("⚠️ Unsupported attachments")
 
             curr_msg = curr_node.next_msg
+        # Add warning about summarized messages if applicable
+    if len(all_messages) > max_messages:
+        user_warnings.add(f"⚠️ {len(all_messages) - max_messages} earlier messages have been summarized")
+
+    for message in all_messages:
+        if message["role"] == "user":
+            memory.chat_memory.add_messages(
+                [HumanMessage(content=message["content"])]
+            )
+        else:
+            memory.chat_memory.add_messages(
+                [AIMessage(
+                    content=message["content"],
+                    name=character_name
+                )]
+            )
 
     logging.info(f"Message received (user ID: {new_msg.author.id}, attachments: {len(new_msg.attachments)}, conversation length: {len(messages)}):\n{new_msg.content}")
 
-    contexts = context_manager.get_relevant_contexts(contexttext)
-    formatted_contexts = context_manager.format_contexts(contexts)
+    formatted_contexts = context_manager.get_formatted_relevent_context(contexttext)
 
-    if system_prompt := config_file["system_prompt"]:
+    prompt = ChatPromptTemplate.from_messages([
+        # Pre-history system prompt
+        SystemMessage(content=str(pre_system_prompt).replace("{{char}}", Character_definition).replace("{{name}}",
+                                                                                                       character_name)) if pre_system_prompt else None,
 
+        # Chat history placeholder
+        MessagesPlaceholder(variable_name="chat_history"),
 
-        system_prompt_extras = [f"Today's date: {dt.now().strftime('%B %d %Y')}."]
-        if accept_usernames:
-            system_prompt_extras.append("User's names follows Discord ID format and should be typed as '<@{USER_ID}>'.")
+        # System prompt with context
+        SystemMessage(content="\n".join([system_prompt] + system_prompt_extras).replace("{{lorebook}}",
+                                                                                        formatted_contexts)) if system_prompt else None,
+    ])
 
-        full_system_prompt = dict(role="system", content="\n".join([system_prompt] + system_prompt_extras).replace("{{lorebook}}", formatted_contexts))
-        messages.append(full_system_prompt)
+    # Add this code to print the formatted prompt
+    chat_history = memory.load_memory_variables({})
+    formatted_prompt = prompt.format_prompt(chat_history=chat_history["chat_history"])
 
-    print(messages)
+    # Add this code to print the formatted prompt
+    print("\nFormatted Prompt Messages:")
+    for message in formatted_prompt.to_messages():
+        print(f"\n[{message.type}]")
+        print(message.content)
+    print("\n---End of Prompt---\n")
 
     # Generate and send response message(s) (can be multiple if response is long)
     response_msgs = []
     response_contents = []
-    prev_chunk = None
+
     edit_task = None
 
-    kwargs = dict(model=model, messages=messages[::-1], stream=True, extra_body=config_file["extra_api_parameters"])
     try:
         async with new_msg.channel.typing():
-            async for curr_chunk in await openai_client.chat.completions.create(**kwargs):
-                prev_content = prev_chunk.choices[0].delta.content if prev_chunk is not None and prev_chunk.choices[0].delta.content else ""
-                curr_content = curr_chunk.choices[0].delta.content or ""
+            async for chunk in llm.astream(formatted_prompt.to_messages()):
+                curr_content = chunk.content or ""
 
-                if response_contents or prev_content:
-                    if response_contents == [] or len(response_contents[-1] + prev_content) > max_message_length:
+                if response_contents or curr_content:
+                    if response_contents == [] or len(response_contents[-1]) > max_message_length:
                         response_contents.append("")
 
                         if not use_plain_responses:
-                            embed = discord.Embed(description=(prev_content + STREAMING_INDICATOR), color=EMBED_COLOR_INCOMPLETE)
+                            embed = discord.Embed(description=(curr_content + STREAMING_INDICATOR), color=EMBED_COLOR_INCOMPLETE)
                             for warning in sorted(user_warnings):
                                 embed.add_field(name=warning, value="", inline=False)
 
@@ -337,35 +438,30 @@ async def on_message(new_msg):
                             response_msgs.append(response_msg)
                             last_task_time = dt.now().timestamp()
 
-                    response_contents[-1] += prev_content
+                    response_contents[-1] += curr_content
 
                     if not use_plain_responses:
-                        finish_reason = curr_chunk.choices[0].finish_reason
-
                         ready_to_edit: bool = (
-                                                          edit_task is None or edit_task.done()) and dt.now().timestamp() - last_task_time >= EDIT_DELAY_SECONDS
-                        msg_split_incoming: bool = len(response_contents[-1] + curr_content) > max_message_length
-                        is_final_edit: bool = finish_reason is not None or msg_split_incoming
-                        is_good_finish: bool = finish_reason is not None and any(finish_reason.lower() == x for x in ("stop", "end_turn"))
+                            (edit_task is None or edit_task.done()) and
+                            dt.now().timestamp() - last_task_time >= EDIT_DELAY_SECONDS
+                        )
+                        msg_split_incoming: bool = len(response_contents[-1]) > max_message_length
+                        is_final_edit: bool = msg_split_incoming
 
                         if ready_to_edit or is_final_edit:
                             while edit_task is not None and not edit_task.done():
                                 await asyncio.sleep(0)
 
                             embed.description = response_contents[-1] if is_final_edit else (response_contents[-1] + STREAMING_INDICATOR)
-                            embed.color = EMBED_COLOR_COMPLETE if msg_split_incoming or is_good_finish else EMBED_COLOR_INCOMPLETE
+                            embed.color = EMBED_COLOR_COMPLETE if msg_split_incoming else EMBED_COLOR_INCOMPLETE
                             edit_task = asyncio.create_task(response_msgs[-1].edit(embed=embed))
                             last_task_time = dt.now().timestamp()
 
-                prev_chunk = curr_chunk
-
-        if use_plain_responses:
-            for content in response_contents:
-                reply_to_msg = new_msg if response_msgs == [] else response_msgs[-1]
-                response_msg = await reply_to_msg.reply(content=content, suppress_embeds=True)
-                msg_nodes[response_msg.id] = MsgNode(next_msg=new_msg)
-                await msg_nodes[response_msg.id].lock.acquire()
-                response_msgs.append(response_msg)
+            # Add final edit with complete status after stream ends
+            if not use_plain_responses and response_msgs:
+                embed.description = response_contents[-1]
+                embed.color = EMBED_COLOR_COMPLETE
+                await response_msgs[-1].edit(embed=embed)
     except:
         logging.exception("Error while generating response")
 
@@ -379,9 +475,20 @@ async def on_message(new_msg):
             async with msg_nodes.setdefault(msg_id, MsgNode()).lock:
                 msg_nodes.pop(msg_id, None)
 
+# Optional: Add status indicator to show LLM state
+async def update_status():
+    while True:
+        status_text = cfg["status_message"] or "github.com/jakobdylanc/llmcord"
+        if not llm_enabled:
+            status_text = "Got phone taken away"
+        activity = discord.CustomActivity(name=status_text[:128])
+        await discord_client.change_presence(activity=activity)
+        await asyncio.sleep(60)
 
 async def main():
-    await discord_client.start(cfg["bot_token"])
+    async with asyncio.TaskGroup() as tg:
+        tg.create_task(discord_client.start(cfg["bot_token"]))
+        tg.create_task(update_status())
 
-
+bot.run(cfg["bot_token"])
 asyncio.run(main())

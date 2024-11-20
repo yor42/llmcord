@@ -4,6 +4,9 @@ langchain-mistralai
 langchain-groq
 langchain-xai
 langchain-openrouter
+langchain-community
+langchain-core
+langchain-openai
 httpx
 openai
 pyyaml

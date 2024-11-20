@@ -147,3 +147,9 @@ class KeywordContextManager:
             return ""
 
         return "\n\n".join(contexts)
+
+    def get_formatted_relevent_context(self, user_input: str, current_prompt_tokens: int = 0):
+        """Format contexts for insertion into prompt"""
+        contexts = self.get_relevant_contexts(user_input, current_prompt_tokens)
+
+        return self.format_contexts(contexts)
