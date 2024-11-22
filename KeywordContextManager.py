@@ -40,12 +40,20 @@ class KeywordContextManager:
             # Pre-sort contexts by insertion_order for faster runtime sorting
             # self.contexts.sort(key=lambda x: (-x.get('insertion_order', 100)))
 
+            if "bookVersion" in ctx and ctx['bookVersion'] == 2:
+                ctx['keys'] = ctx['key'].split(", ")
+                ctx['case_sensitive'] = ctx["extentions"]["risu_case_sensitive"]
+                ctx['constant'] = ctx["alwaysActive"]
+                ctx['use_regex'] = ctx["useRegex"]
+                ctx['name'] = ctx["comment"]
+
+            keywordlist = ctx['keys']
             # Store the full context data
             current_index = len(self.contexts)  # Get current index before appending
             self.contexts.append(ctx)
 
             # Create inverted index for fast keyword lookup
-            for keyword in ctx['keys']:
+            for keyword in keywordlist:
                 keyword = keyword.lower().strip()
                 self.keyword_map[keyword].append(current_index)  # Use stored index
 

@@ -54,7 +54,5 @@ extra_api_parameters:
   max_tokens: 4096
   temperature: 1.0
 
-pre_history_system_prompt: You are an discord chatbot.
-
-
-system_prompt:
+# internal setting
+current_character:

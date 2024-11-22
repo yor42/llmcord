@@ -23,7 +23,7 @@ import functools
 import discord
 import httpx
 from langchain_xai import ChatXAI
-from openai import AsyncOpenAI
+import os
 import yaml
 
 from KeywordContextManager import KeywordContextManager
@@ -54,6 +54,10 @@ EDIT_DELAY_SECONDS = 1
 MAX_MESSAGE_NODES = 100
 
 encoding="utf-8"
+
+current_prompt_json = []
+
+config_filename = "config.yaml"
 
 
 PROVIDER_MODEL_MAP: Dict[str, Type[BaseChatModel]] = {
@@ -127,11 +131,14 @@ def get_langchain_model(config: dict, model_key: str = "model") -> BaseChatModel
         )
 
 @functools.lru_cache()
-def get_config(filename="config.yaml") -> dict:
+def get_config() -> dict:
+
+    global config_filename
+
     """
     Load and parse config file with caching
     """
-    with open(filename, "r", encoding=encoding) as file:
+    with open(config_filename, "r", encoding=encoding) as file:
         config = yaml.safe_load(file)
 
         # Validate required fields
@@ -162,7 +169,12 @@ async def load_character_async(name: str):
             activitytext = readjson["activity"]
 
         print(f"loaded character {charname}")
-        context_manager.load_contexts(f"./lorebooks/{name}.json")
+
+        contextjson = f"./lorebooks/{name}.json"
+
+        if os.path.isfile(contextjson):
+            context_manager.load_contexts(f"./lorebooks/{name}.json")
+            print(f"loaded lorebook {name}")
 
         return chardef, charname, activitytext
     except FileNotFoundError:
@@ -220,20 +232,25 @@ def build_prompt_from_template(template: list, character_def: str, char_name: st
 current_prompt_template = "default"  # Default prompt template name
 
 llm_enabled = True
-cfg = get_config()
 Character_definition, character_name, activtext= "", "", ""
 
+config_file = get_config()
+
+
+allowed_channel_ids = config_file["allowed_channel_ids"]
+allowed_role_ids = config_file["allowed_role_ids"]
+
 async def is_owner(ctx):
-    if ownerid := cfg["owner_id"]:
+    if ownerid := config_file["owner_id"]:
         return ctx.author.id == ownerid
     return False
 
-if client_id := cfg["client_id"]:
+if client_id := config_file["client_id"]:
     logging.info(f"\n\nBOT INVITE URL:\nhttps://discord.com/api/oauth2/authorize?client_id={client_id}&permissions=412317273088&scope=bot\n")
 
 intents = discord.Intents.default()
 intents.message_content = True
-activity = discord.CustomActivity(name=(cfg["status_message"] or "github.com/jakobdylanc/llmcord")[:128])
+activity = discord.CustomActivity(name=(config_file["status_message"] or "github.com/jakobdylanc/llmcord")[:128])
 bot = commands.Bot(command_prefix="!", intents=intents, activity = activity)
 httpx_client = httpx.AsyncClient()
 
@@ -255,68 +272,14 @@ class MsgNode:
 
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
-@bot.command()
-@commands.check(is_owner)
-async def phone(ctx):
-    global llm_enabled
-    llm_enabled = not llm_enabled
-    if not llm_enabled:
-        await ctx.send(f"Dev just took {character_name}'s phone. RIP.")
-    else:
-        await ctx.send(f"Dev just gave {character_name}'s phone back. yay.")
-
-
-@bot.command()
-@commands.check(is_owner)
-async def switch_character(ctx, name: str):
-    """Switch to a different character"""
-    global Character_definition, character_name, activtext
-
-    try:
-        # Load new character
-        new_chardef, new_charname, activtext = await load_character_async(name)
-
-        # Update global variables
-        Character_definition = new_chardef
-        character_name = new_charname
-
-        await ctx.send(f"Successfully switched to character: {character_name}")
-
-        # Update bot's status if needed
-        if hasattr(discord_client, 'user'):
-            status_text = activtext or "github.com/jakobdylanc/llmcord"
-            act = discord.Activity(type=discord.ActivityType.custom,name=status_text)
-            await bot.change_presence(status= discord.Status.online, activity=act)
-
-    except ValueError as e:
-        await ctx.send(f"Error loading character: {str(e)}")
-    except Exception as e:
-        logging.error(f"Error switching character: {str(e)}")
-        await ctx.send("An unexpected error occurred while switching characters")
-
-current_prompt_json = []
-
-
-@bot.command()
-@commands.check(is_owner)
-async def switch_prompt(ctx, name: str):
-    """Switch to a different prompt template"""
-    global current_prompt_json
-    try:
-        # Test loading the prompt template
-        current_prompt_json = load_prompt_template_async(name)
-        await ctx.send(f"Successfully switched to prompt template: {name}")
-    except ValueError as e:
-        await ctx.send(f"Error loading prompt template: {str(e)}")
-    except Exception as e:
-        logging.error(f"Error switching prompt template: {str(e)}")
-        await ctx.send("An unexpected error occurred while switching prompt template")
-
-
 @bot.event
 async def on_message(new_msg):
-    global msg_nodes, last_task_time
+    global msg_nodes, last_task_time, config_file
 
+    if new_msg.author.bot or new_msg.channel.type not in ALLOWED_CHANNEL_TYPES:
+        return
+
+    await bot.process_commands(new_msg)
 
     if (
         new_msg.channel.type not in ALLOWED_CHANNEL_TYPES
@@ -324,11 +287,6 @@ async def on_message(new_msg):
         or new_msg.author.bot
     ):
         return
-
-    config_file = get_config()
-
-    allowed_channel_ids = config_file["allowed_channel_ids"]
-    allowed_role_ids = config_file["allowed_role_ids"]
 
     if (allowed_channel_ids and not any(id in allowed_channel_ids for id in (new_msg.channel.id, getattr(new_msg.channel, "parent_id", None)))) or (
         allowed_role_ids and not any(role.id in allowed_role_ids for role in getattr(new_msg.author, "roles", []))
@@ -356,10 +314,6 @@ async def on_message(new_msg):
 
     accept_images: bool = any(x in model for x in VISION_MODEL_TAGS)
     accept_usernames: bool = any(x in provider for x in PROVIDERS_SUPPORTING_USERNAMES)
-
-    # Build prompt template
-    pre_system_prompt = config_file["pre_history_system_prompt"]
-    system_prompt = config_file["system_prompt"]
 
     time_prompt = f"Today's date: {dt.now().strftime('%B %d %Y')}."
     usernameprompt = ""
@@ -602,11 +556,11 @@ async def update_status():
 
 async def initialize_bot():
     """Initialize the bot and load the initial character"""
-    global Character_definition, character_name, activtext, current_prompt_json
+    global Character_definition, character_name, activtext, current_prompt_json, config_file
 
     try:
-        Character_definition, character_name, activtext = await load_character_async("kal\'tsit")
-        logging.info(f"Successfully loaded initial character: {character_name}")
+        Character_definition, character_name, activtext = await load_character_async(config_file['current_character'])
+        logging.info(f"Successfully loaded initial character: {character_name}, Definition exists: {bool(Character_definition)}")
         current_prompt_json = load_prompt_template("english")
 
     except Exception as e:
@@ -630,7 +584,7 @@ async def main():
     try:
         logging.info("Starting Discord bot...")
         # Only start the bot, not both client and bot
-        await bot.start(cfg["bot_token"])
+        await bot.start(config_file["bot_token"])
     except Exception as e:
         logging.error(f"Error starting Discord bot: {e}")
     finally:
@@ -644,9 +598,79 @@ async def setup_hook():
     # Only create the status update task, don't initialize again
     bot.loop.create_task(update_status())
 
-if __name__ == "__main__":
-    logging.info("Starting application...")
-    asyncio.run(main())
+@bot.command(aliases=['switchchar', 'changechar'])
+@commands.check(is_owner)
+@commands.cooldown(2, 3600, commands.BucketType.default)  # Allow twice per hour
+async def switch_character_and_pfp(ctx, name: str):
+    global Character_definition, character_name, activtext
+
+    try:
+        # Load new character
+        new_chardef, new_charname, activtext = await load_character_async(name)
+
+        # Update global variables
+        Character_definition = new_chardef
+        character_name = new_charname
+
+        act = discord.CustomActivity(name=(activtext or "github.com/jakobdylanc/llmcord")[:128])
+        await bot.change_presence(status=discord.Status.online, activity=act)
+        pfppath = f'./pfp/{name}.png'
+        if os.path.isfile(pfppath):
+            fp = open(pfppath, 'rb')
+            pfp = fp.read()
+            await bot.user.edit(username=new_charname, avatar=pfp)
+        else:
+            await bot.user.edit(username=new_charname)
+
+        await ctx.send(
+            f"Successfully switched to character: {character_name}, Definition exists: {bool(Character_definition)}")
+        config_file['current_character'] = name
+
+        with open(config_filename, 'w') as f:
+            yaml.safe_dump(config_file, f, default_flow_style=False)
+
+
+    except ValueError as e:
+        await ctx.send(f"Error loading character: {str(e)}")
+    except Exception as e:
+        logging.error(f"Error switching character: {str(e)}")
+        await ctx.send("An unexpected error occurred while switching characters")
+
+# Handle cooldown errors
+@switch_character_and_pfp.error
+async def change_bot_error(ctx, error):
+    if isinstance(error, commands.CommandOnCooldown):
+        await ctx.send(f"This command is on cooldown. Please try again after {round(error.retry_after)} seconds.")
+    else:
+        await ctx.send("An error occurred while processing the command.")
+
+
+@bot.command()
+@commands.check(is_owner)
+async def switch_prompt(ctx, name: str):
+    """Switch to a different prompt template"""
+    global current_prompt_json
+    try:
+        # Test loading the prompt template
+        current_prompt_json = load_prompt_template(name)
+        await ctx.send(f"Successfully switched to prompt template: {name}")
+    except ValueError as e:
+        await ctx.send(f"Error loading prompt template: {str(e)}")
+    except Exception as e:
+        logging.error(f"Error switching prompt template: {str(e)}")
+        await ctx.send("An unexpected error occurred while switching prompt template")
+
+@bot.command()
+@commands.check(is_owner)
+async def phone(ctx):
+    global llm_enabled
+    llm_enabled = not llm_enabled
+    if not llm_enabled:
+        await ctx.send(f"Dev just took {character_name}'s phone. RIP.")
+    else:
+        await ctx.send(f"Dev just gave {character_name}'s phone back. yay.")
+
+
 
 if __name__ == "__main__":
     logging.info("Starting application...")
