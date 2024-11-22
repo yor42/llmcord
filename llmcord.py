@@ -176,7 +176,7 @@ async def load_character_async(name: str):
             context_manager.load_contexts(f"./lorebooks/{name}.json")
             print(f"loaded lorebook {name}")
 
-        return chardef, charname, activitytext
+        return chardef, charname, activitytext, name
     except FileNotFoundError:
         raise ValueError(f"Character '{name}' not found")
     except json.JSONDecodeError:
@@ -232,7 +232,7 @@ def build_prompt_from_template(template: list, character_def: str, char_name: st
 current_prompt_template = "default"  # Default prompt template name
 
 llm_enabled = True
-Character_definition, character_name, activtext= "", "", ""
+Character_definition, character_name, activtext, charid= "", "", "", ""
 
 config_file = get_config()
 
@@ -447,7 +447,7 @@ async def on_message(new_msg):
             memory.chat_memory.add_messages(
                 [AIMessage(
                     content=message["content"],
-                    name=character_name
+                    name=charid
                 )]
             )
 
@@ -556,10 +556,10 @@ async def update_status():
 
 async def initialize_bot():
     """Initialize the bot and load the initial character"""
-    global Character_definition, character_name, activtext, current_prompt_json, config_file
+    global Character_definition, character_name, activtext, current_prompt_json, config_file, charid
 
     try:
-        Character_definition, character_name, activtext = await load_character_async(config_file['current_character'])
+        Character_definition, character_name, activtext, charid = await load_character_async(config_file['current_character'])
         logging.info(f"Successfully loaded initial character: {character_name}, Definition exists: {bool(Character_definition)}")
         promptname = config_file['current_prompt']
         current_prompt_json = load_prompt_template(promptname)
@@ -604,11 +604,11 @@ async def setup_hook():
 @commands.check(is_owner)
 @commands.cooldown(2, 3600, commands.BucketType.default)  # Allow twice per hour
 async def switch_character_and_pfp(ctx, name: str):
-    global Character_definition, character_name, activtext
+    global Character_definition, character_name, activtext, charid
 
     try:
         # Load new character
-        new_chardef, new_charname, activtext = await load_character_async(name)
+        new_chardef, new_charname, activtext, charid = await load_character_async(name)
 
         # Update global variables
         Character_definition = new_chardef
