@@ -561,7 +561,9 @@ async def initialize_bot():
     try:
         Character_definition, character_name, activtext = await load_character_async(config_file['current_character'])
         logging.info(f"Successfully loaded initial character: {character_name}, Definition exists: {bool(Character_definition)}")
-        current_prompt_json = load_prompt_template("english")
+        promptname = config_file['current_prompt']
+        current_prompt_json = load_prompt_template(promptname)
+        logging.info(f"Successfully loaded prompt: {promptname}")
 
     except Exception as e:
         logging.error(f"Failed to load initial character: {e}")
@@ -659,6 +661,11 @@ async def switch_prompt(ctx, name: str):
     except Exception as e:
         logging.error(f"Error switching prompt template: {str(e)}")
         await ctx.send("An unexpected error occurred while switching prompt template")
+
+    config_file['current_prompt'] = name
+
+    with open(config_filename, 'w') as f:
+        yaml.safe_dump(config_file, f, default_flow_style=False)
 
 @bot.command()
 @commands.check(is_owner)

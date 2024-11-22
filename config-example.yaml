@@ -56,3 +56,4 @@ extra_api_parameters:
 
 # internal setting
 current_character:
+current_prompt:
