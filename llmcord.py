@@ -250,8 +250,7 @@ if client_id := config_file["client_id"]:
 
 intents = discord.Intents.default()
 intents.message_content = True
-activity = discord.CustomActivity(name=(config_file["status_message"] or "github.com/jakobdylanc/llmcord")[:128])
-bot = commands.Bot(command_prefix="!", intents=intents, activity = activity)
+bot = commands.Bot(command_prefix="!", intents=intents)
 httpx_client = httpx.AsyncClient()
 
 msg_nodes = {}
@@ -271,6 +270,11 @@ class MsgNode:
     fetch_next_failed: bool = False
 
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+async def update_status():
+    if activtext:
+        act = discord.CustomActivity(name=(activtext or "github.com/jakobdylanc/llmcord")[:128])
+        await bot.change_presence(status=discord.Status.online, activity=act)
 
 @bot.event
 async def on_message(new_msg):
@@ -535,28 +539,14 @@ async def on_message(new_msg):
             async with msg_nodes.setdefault(msg_id, MsgNode()).lock:
                 msg_nodes.pop(msg_id, None)
 
-
-laststatus = True
-
-# Optional: Add status indicator to show LLM state
-async def update_status():
-    global laststatus
-    while True:
-        if laststatus != llm_enabled:  # Only update when state changes
-            laststatus = llm_enabled  # Update laststatus before setting new status
-            status_text = activtext or "github.com/jakobdylanc/llmcord"
-            onlinestat = discord.Status.online
-            if not llm_enabled:
-                status_text = "Got phone taken away"
-                onlinestat = discord.Status.idle
-            act = discord.CustomActivity(name=status_text[:128])
-            await bot.change_presence(activity=act, status=onlinestat)
-        await asyncio.sleep(1)
+@bot.event
+async def on_ready():
+    await update_status()
 
 
 async def initialize_bot():
     """Initialize the bot and load the initial character"""
-    global Character_definition, character_name, activtext, current_prompt_json, config_file, charid
+    global Character_definition, character_name, activtext, current_prompt_json, config_file, charid, bot
 
     try:
         Character_definition, character_name, activtext, charid = await load_character_async(config_file['current_character'])
@@ -581,7 +571,6 @@ async def main():
     await initialize_bot()
 
     logging.info("Starting status update task...")
-    status_task = asyncio.create_task(update_status())
 
     try:
         logging.info("Starting Discord bot...")
@@ -591,14 +580,11 @@ async def main():
         logging.error(f"Error starting Discord bot: {e}")
     finally:
         logging.info("Cleaning up...")
-        status_task.cancel()
-        await bot.close()
 
 @bot.event
 async def setup_hook():
     """Built-in Discord.py setup hook that runs before the bot starts"""
     # Only create the status update task, don't initialize again
-    bot.loop.create_task(update_status())
 
 @bot.command(aliases=['switchchar', 'changechar'])
 @commands.check(is_owner)
@@ -613,9 +599,6 @@ async def switch_character_and_pfp(ctx, name: str):
         # Update global variables
         Character_definition = new_chardef
         character_name = new_charname
-
-        act = discord.CustomActivity(name=(activtext or "github.com/jakobdylanc/llmcord")[:128])
-        await bot.change_presence(status=discord.Status.online, activity=act)
         pfppath = f'./pfp/{name}.png'
         if os.path.isfile(pfppath):
             fp = open(pfppath, 'rb')
@@ -623,6 +606,8 @@ async def switch_character_and_pfp(ctx, name: str):
             await bot.user.edit(username=new_charname, avatar=pfp)
         else:
             await bot.user.edit(username=new_charname)
+
+        await update_status()
 
         await ctx.send(
             f"Successfully switched to character: {character_name}, Definition exists: {bool(Character_definition)}")
