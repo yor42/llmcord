@@ -36,16 +36,24 @@ class KeywordContextManager:
             # Pre-calculate token count for each context
             token_count = self.count_tokens(ctx['content'])
             ctx['token_count'] = token_count
+            ctx['keys'] = []
 
             # Pre-sort contexts by insertion_order for faster runtime sorting
             # self.contexts.sort(key=lambda x: (-x.get('insertion_order', 100)))
 
             if "bookVersion" in ctx and ctx['bookVersion'] == 2:
-                ctx['keys'] = ctx['key'].split(", ")
-                ctx['case_sensitive'] = ctx["extentions"]["risu_case_sensitive"]
+                ctx['keys'] = ctx['key'].split(",") if ctx.get('key') else []
+                ctx['keys'] = [key.strip() for key in ctx['keys'] if key.strip()]
+                if "extentions" in ctx:
+                    ctx['case_sensitive'] = ctx["extentions"]["risu_case_sensitive"]
+                else:
+                    ctx['case_sensitive'] = False
                 ctx['constant'] = ctx["alwaysActive"]
                 ctx['use_regex'] = ctx["useRegex"]
                 ctx['name'] = ctx["comment"]
+
+            if not ctx['keys']:
+                continue
 
             keywordlist = ctx['keys']
             # Store the full context data

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import traceback
 from base64 import b64encode
 from dataclasses import dataclass, field
 from datetime import datetime as dt
@@ -167,6 +168,10 @@ async def load_character_async(name: str):
             chardef = readjson["description"]
             charname = readjson["name"]
             activitytext = readjson["activity"]
+    except FileNotFoundError:
+        raise ValueError(f"Character '{name}' not found")
+
+    try:
 
         print(f"loaded character {charname}")
 
@@ -177,10 +182,8 @@ async def load_character_async(name: str):
             print(f"loaded lorebook {name}")
 
         return chardef, charname, activitytext, name
-    except FileNotFoundError:
-        raise ValueError(f"Character '{name}' not found")
-    except json.JSONDecodeError:
-        raise ValueError(f"Invalid JSON in character file '{name}'")
+    except json.JSONDecodeError as err:
+        raise ValueError(f"Invalid JSON in lorebook file '{name}'" + str(err))
 
 
 async def load_prompt_template_async(name: str) -> list:
@@ -621,6 +624,7 @@ async def switch_character_and_pfp(ctx, name: str):
         await ctx.send(f"Error loading character: {str(e)}")
     except Exception as e:
         logging.error(f"Error switching character: {str(e)}")
+        traceback.print_exc()
         await ctx.send("An unexpected error occurred while switching characters")
 
 # Handle cooldown errors
