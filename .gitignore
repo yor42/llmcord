@@ -1,14 +1,56 @@
+# Python environments and caches
 __pycache__/
 .pytest_cache/
 .venv/
 .venv314/
 *.py[cod]
-config.yaml
-data/
+
+# Local configuration and credentials; keep placeholder templates available
 .env
+.env.*
+!.env.example
+!.env.*.example
+config.yaml
+config.local.yaml
+config.*.local.yaml
+.secrets/
+secrets/
+.aws/
+credentials.json
+credentials.*.json
+service-account*.json
+
+# Conversation databases, SQLite sidecars, and backups at any location
+data/
+backups/
+*.db
+*.db-*
+*.db.*
+*.sqlite
+*.sqlite-*
+*.sqlite.*
+*.sqlite3
+*.sqlite3-*
+*.sqlite3.*
+
+# SSH keys and TLS certificates, including copies outside ~/.ssh
+.ssh/
+id_rsa*
+id_ecdsa*
+id_dsa*
+id_ed25519*
+id_xmss*
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+
+# Local runtime output, browser-test artifacts, and editor files
 .test-artifacts/
 .nicegui/
-*.ts.net.key
-*.ts.net.crt
+logs/
+*.log
 *.swp
 *.swo
