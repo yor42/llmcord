@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Sign in · llmcord{% endblock %}
+{% block content %}
+<main class="card" style="max-width:620px;margin:10vh auto">
+  <h1>Manage your skit worlds</h1>
+  <p>Sign in with Discord. You need administrator permission in the server to make changes.</p>
+  <a href="/login"><button>Sign in with Discord</button></a>
+  <p class="small muted">This dashboard is intended for a private Tailscale address: {{ base_url }}.</p>
+</main>
+{% endblock %}

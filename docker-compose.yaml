@@ -1,7 +1,36 @@
 services:
-  container:
+  migrate:
     build: .
-    network_mode: host
-    restart: unless-stopped
+    command: ["python", "migrate.py"]
+    env_file:
+      - .env
     volumes:
       - ./:/usr/src/app:ro
+      - ./data:/usr/src/app/data
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./:/usr/src/app:ro
+      - ./data:/usr/src/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  web:
+    build: .
+    command: ["python", "web_main.py"]
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./:/usr/src/app:ro
+      - ./data:/usr/src/app/data
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully

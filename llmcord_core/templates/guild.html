@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Server {{ guild_id }} · llmcord{% endblock %}
+{% block header %}<span class="muted">{{ user.username }}</span>{% endblock %}
+{% block content %}
+<p><a href="/">← Servers</a></p>
+<h1>Server setup</h1>
+<p class="muted">Create worlds and hubs, bind Discord channels, then add their characters and lore. Changes take effect on the next bot turn.</p>
+<div class="grid">
+  <section class="card">
+    <h2>Spaces</h2>
+    {% for space in spaces %}<div class="row"><strong>{{ space.name }}</strong> <span class="badge">{{ space.kind }}</span></div>{% else %}<p class="muted">No spaces yet.</p>{% endfor %}
+    <h3>Create space</h3>
+    <form action="/guild/{{ guild_id }}/spaces" method="post">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>Name<input name="name" maxlength="80" required></label>
+      <label>Kind<select name="kind"><option value="world">World</option><option value="hub">Hub</option></select></label>
+      <button>Create</button>
+    </form>
+  </section>
+  <section class="card">
+    <h2>Hub links</h2>
+    <p class="small muted">A hub can summon characters from linked worlds.</p>
+    {% for space in spaces if space.kind == 'hub' %}
+      <div class="row"><strong>{{ space.name }}</strong>
+      {% for world in spaces if world.kind == 'world' %}
+      <form class="inline" action="/guild/{{ guild_id }}/links" method="post">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="hub_id" value="{{ space.id }}"><input type="hidden" name="world_id" value="{{ world.id }}">
+        <span>{{ world.name }} {% if world.id in hub_links[space.id] %}✓{% endif %}</span>
+        <button class="secondary" name="enabled" value="{% if world.id in hub_links[space.id] %}no{% else %}yes{% endif %}">{% if world.id in hub_links[space.id] %}Unlink{% else %}Link{% endif %}</button>
+      </form>{% endfor %}</div>
+    {% else %}<p class="muted">Create a hub to link worlds.</p>{% endfor %}
+  </section>
+  <section class="card wide">
+    <h2>Channels and casts</h2>
+    <form class="inline" action="/guild/{{ guild_id }}/bindings" method="post">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>Discord text channel<select name="channel_id" required>{% for channel in channels %}<option value="{{ channel.id }}">#{{ channel.name }}</option>{% endfor %}</select></label>
+      <label>Space<select name="space_id" required>{% for space in spaces %}<option value="{{ space.id }}">{{ space.name }}</option>{% endfor %}</select></label>
+      <button>Bind channel</button>
+    </form>
+    {% if not channels %}<p class="warning">Discord channels could not be loaded. Check that the bot is in this server.</p>{% endif %}
+    {% for binding in bindings %}
+      <div class="row"><h3>#{{ (channels|selectattr('id','equalto',binding.channel_id|string)|list|first).name if channels|selectattr('id','equalto',binding.channel_id|string)|list else binding.channel_id }}</h3>
+      <p class="small muted">Space: {{ (spaces|selectattr('id','equalto',binding.space_id)|list|first).name }}. Binding again resets casts and ambient mode.</p>
+      <div class="columns">
+        <form action="/guild/{{ guild_id }}/casts" method="post">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="channel_id" value="{{ binding.channel_id }}">
+          <label>Default cast (up to five)<select name="character_id" multiple size="{{ [cast_choices[binding.channel_id]|length, 3]|max }}">
+            {% for character in cast_choices[binding.channel_id] %}<option value="{{ character.id }}" {% if character.id in cast_selected[binding.channel_id] %}selected{% endif %}>{{ character.name }}</option>{% endfor %}
+          </select></label><button>Save cast</button>
+        </form>
+        <form action="/guild/{{ guild_id }}/ambient" method="post">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="channel_id" value="{{ binding.channel_id }}">
+          <p>Ambient mode: <strong>{% if binding.ambient %}on{% else %}off{% endif %}</strong></p>
+          <button class="secondary" name="enabled" value="{% if binding.ambient %}no{% else %}yes{% endif %}">{% if binding.ambient %}Disable{% else %}Enable{% endif %} ambient</button>
+        </form>
+      </div></div>
+    {% else %}<p class="muted">No channels bound yet.</p>{% endfor %}
+  </section>
+  <section class="card wide">
+    <h2>Characters</h2>
+    <p class="small muted">Import SillyTavern V2/V3 JSON or PNG cards. The preview shows the card before saving. Characters belong to their home world.</p>
+    <form class="inline" action="/guild/{{ guild_id }}/characters/import" method="post" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>Home world<select name="world_id" required>{% for space in spaces if space.kind == 'world' %}<option value="{{ space.id }}">{{ space.name }}</option>{% endfor %}</select></label>
+      <label>Card file<input type="file" name="file" accept=".json,.png,application/json,image/png" required></label>
+      <button>Preview card</button>
+    </form>
+    {% for character in characters %}
+      <div class="row">
+        <div class="inline">{% if character.avatar %}<img class="avatar" src="/guild/{{ guild_id }}/characters/{{ character.id }}/avatar" alt="Avatar for {{ character.name }}">{% endif %}<strong>{{ character.name }}</strong> <span class="badge">{{ (spaces|selectattr('id','equalto',character.world_id)|list|first).name }}</span>{% if character.archived %}<span class="badge">Archived</span>{% endif %}</div>
+        <details><summary>Edit character</summary>
+          <form action="/guild/{{ guild_id }}/characters/{{ character.id }}" method="post">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <label>Name<input name="name" value="{{ character.name }}" required></label>
+            <label>Home world<select name="world_id">{% for space in spaces if space.kind == 'world' %}<option value="{{ space.id }}" {% if space.id == character.world_id %}selected{% endif %}>{{ space.name }}</option>{% endfor %}</select></label>
+            {% for field,label in [('description','Description'),('personality','Personality'),('scenario','Scenario'),('first_mes','Opening line'),('mes_example','Example dialogue')] %}
+            <label>{{ label }}<textarea name="{{ field }}">{{ card_fields[character.id].get(field,'') }}</textarea></label>{% endfor %}
+            <label><input type="checkbox" name="confirm_move" value="yes"> Confirm if moving to another world (affected casts are cleared)</label>
+            <button>Save character</button>
+          </form>
+          <form action="/guild/{{ guild_id }}/characters/{{ character.id }}/archive" method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary" name="archived" value="{% if character.archived %}no{% else %}yes{% endif %}">{% if character.archived %}Restore{% else %}Archive{% endif %}</button></form>
+        </details>
+      </div>
+    {% else %}<p class="muted">No characters imported yet.</p>{% endfor %}
+  </section>
+  <section class="card wide">
+    <h2>World, hub, and channel lore</h2>
+    <form action="/guild/{{ guild_id }}/lore" method="post">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>Scope<select name="scope" required>{% for space in spaces %}<option value="space:{{ space.id }}">{{ space.kind }}: {{ space.name }}</option>{% endfor %}{% for binding in bindings %}<option value="channel:{{ binding.channel_id }}">channel: {{ binding.channel_id }}</option>{% endfor %}</select></label>
+      <label>Keywords (comma separated; leave blank for always active)<input name="keys"></label>
+      <label>Lore text<textarea name="content" required></textarea></label><button>Add lore</button>
+    </form>
+    {% for item in lore %}<div class="row"><span class="badge">{{ item.scope_kind }} {{ item.scope_id }}</span> {% if item.pinned %}<span class="badge">Pinned</span>{% endif %}
+      <form action="/guild/{{ guild_id }}/lore/{{ item.id }}" method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><label>Text<textarea name="content">{{ item.content }}</textarea></label><button>Save</button></form>
+      {% if not item.pinned %}<form action="/guild/{{ guild_id }}/lore/{{ item.id }}/pin" method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary">Pin</button></form>{% endif %}
+      <form class="inline" action="/guild/{{ guild_id }}/lore/{{ item.id }}/promote" method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><label>Copy to<select name="scope">{% for space in spaces %}<option value="space:{{ space.id }}">{{ space.kind }}: {{ space.name }}</option>{% endfor %}{% for binding in bindings %}<option value="channel:{{ binding.channel_id }}">channel: {{ binding.channel_id }}</option>{% endfor %}</select></label><button class="secondary">Promote</button></form>
+      <form action="/guild/{{ guild_id }}/lore/{{ item.id }}/delete" method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="danger">Delete</button></form>
+    </div>{% else %}<p class="muted">No shared lore yet.</p>{% endfor %}
+  </section>
+  <section class="card wide">
+    <h2>Named lorebooks</h2>
+    <p class="small muted">A guild book activates only in the worlds or hubs you select. A channel book applies to its bound channel and threads.</p>
+    <form class="inline" action="/guild/{{ guild_id }}/books" method="post"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <label>Name<input name="name" required></label>
+      <label>Scope<select name="target_kind"><option value="guild">Guild book</option><option value="channel">Channel book</option></select></label>
+      <label>Channel (for channel books)<select name="target_id"><option value="0">None</option>{% for binding in bindings %}<option value="{{ binding.channel_id }}">{{ binding.channel_id }}</option>{% endfor %}</select></label><button>Create book</button>
+    </form>
+    {% for book in books %}<div class="row">
+      <h3>{{ book.name }} <span class="badge">{{ book.target_kind }}{% if book.target_kind == 'channel' %} {{ book.target_id }}{% endif %}</span></h3>
+      <p class="small muted">{{ book_entries[book.id]|length }} entries · revision {{ book.revision }}</p>
+      {% if book.target_kind == 'guild' %}
+        {% for space in spaces %}<form class="inline" action="/guild/{{ guild_id }}/books/{{ book.id }}/assign" method="post">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="space_id" value="{{ space.id }}">
+          <span>{{ space.name }} {% if space.id in links[book.id] %}✓{% endif %}</span>
+          <button class="secondary" name="enabled" value="{% if space.id in links[book.id] %}no{% else %}yes{% endif %}">{% if space.id in links[book.id] %}Disable{% else %}Enable{% endif %}</button>
+        </form>{% endfor %}
+      {% endif %}
+      <form class="inline" action="/guild/{{ guild_id }}/books/{{ book.id }}/preview" method="post" enctype="multipart/form-data"><input type="hidden" name="csrf" value="{{ csrf }}"><label>JSON lorebook<input type="file" name="file" accept=".json,application/json" required></label><button>Preview sync</button></form>
+      <details><summary>Imported entries</summary>{% for entry in book_entries[book.id] %}<form action="/guild/{{ guild_id }}/books/{{ book.id }}/entries/{{ entry.id }}" method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><label>{{ entry.uid }}<textarea name="content">{{ entry.content }}</textarea></label>{% for warning in book_entry_rules[entry.id].get('unsupported',[]) %}<p class="warning">{{ warning }}</p>{% endfor %}<button class="secondary">Save local edit</button></form>{% else %}<p>No entries yet.</p>{% endfor %}</details>
+    </div>{% else %}<p class="muted">No lorebooks yet.</p>{% endfor %}
+  </section>
+</div>
+{% endblock %}

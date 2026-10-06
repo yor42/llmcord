@@ -1,59 +1,40 @@
-# Discord settings:
-
-bot_token:
-client_id:
-status_message:
-
-allowed_channel_ids: []
-allowed_role_ids: []
-
-max_text: 100000
-max_images: 5
-max_messages: 25
-max_context_tokens: 10000
-max_context_depth: 3
-
-use_plain_responses: false
-
-
-# LLM settings:
-
-providers:
-  anthropic:
-    base_url: https://api.anthropic.com/v1/
-    api_key:
-  openai:
-    base_url: https://api.openai.com/v1
-    api_key:
-  x-ai:
-    base_url: https://api.x.ai/v1
-    api_key:
-  mistral:
-    base_url: https://api.mistral.ai/v1
-    api_key:
-  groq:
-    base_url: https://api.groq.com/openai/v1
-    api_key:
-  openrouter:
-    base_url: https://openrouter.ai/api/v1
-    api_key:
-  ollama:
-    base_url: http://localhost:11434/v1
-  oobabooga:
-    base_url: http://localhost:5000/v1
-  jan:
-    base_url: http://localhost:1337/v1
-  lmstudio:
-    base_url: http://localhost:1234/v1
-
-model: openai/chatgpt-4o-latest
-model_summarizer: openai/gpt-4o-2024-08-06
-owner_id:
-
-extra_api_parameters:
-  max_tokens: 4096
-  temperature: 1.0
-
-# internal setting
-current_character:
-current_prompt:
+discord:
+  token_env: DISCORD_BOT_TOKEN
+  # Set for fast command registration while developing in one server.
+  development_guild_id:
+database_path: data/llmcord.sqlite3
+history_retention_days: 90
+models:
+  dialogue: openai/main
+  director: openai/main
+  memory: openai/main
+  profiles:
+    openai/main:
+      provider: openai
+      model: YOUR_OPENAI_MODEL
+      api_key_env: OPENAI_API_KEY
+      context_tokens: 32000
+      supports_images: true
+    anthropic/main:
+      provider: anthropic
+      model: YOUR_ANTHROPIC_MODEL
+      api_key_env: ANTHROPIC_API_KEY
+      context_tokens: 32000
+      supports_images: true
+    ollama/main:
+      provider: compatible
+      model: YOUR_LOCAL_MODEL
+      # In Compose, use host.docker.internal if Ollama runs on the Pi host.
+      # Use the model server's LAN or tailnet address if it runs elsewhere.
+      base_url: http://localhost:11434/v1
+      context_tokens: 8192
+      supports_images: false
+limits:
+  max_input_tokens: 12000
+  max_output_tokens: 700
+  max_images: 3
+  max_attachment_bytes: 8388608
+  max_speakers: 3
+  recent_messages: 12
+  recent_window_seconds: 600
+  ambient_cooldown_seconds: 120

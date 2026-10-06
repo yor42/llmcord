@@ -1,0 +1,9 @@
+.git
+.venv
+.venv314
+__pycache__
+data
+.env
+config.yaml
+*.sqlite3
+*.pyc
