@@ -23,7 +23,10 @@ class ModelAdapterTests(unittest.IsolatedAsyncioTestCase):
         model.clients['test'] = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
         request = compile_prompt(default_bundle(), 'dialogue', {'card_post_history': 'FINAL'}, [TurnMessage('user', 'INPUT')], 'compatible', 4000)
         await model.text_compiled('dialogue', request)
-        self.assertEqual(create.call_args.kwargs['messages'][-2:], [{'role': 'user', 'content': 'INPUT'}, {'role': 'system', 'content': 'FINAL'}])
+        sent = create.call_args.kwargs['messages']
+        self.assertEqual(sent[-3], {'role': 'user', 'content': 'INPUT'})
+        self.assertEqual(sent[-2], {'role': 'system', 'content': request.messages[-2].text})
+        self.assertEqual(sent[-1], {'role': 'system', 'content': 'FINAL'})
         self.assertNotEqual(create.call_args.kwargs['messages'][0]['content'], '')
 
     async def test_structured_contract_rejects_wrong_types(self):

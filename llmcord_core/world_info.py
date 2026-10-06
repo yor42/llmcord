@@ -16,7 +16,10 @@ def _seed(turn_id: int, key: str) -> int:
 def _key_matches(key: str, text: str, rule: dict) -> bool:
     if not key:
         return False
-    if key.startswith("/") and key.rfind("/") > 0:
+    regex_key = key.startswith("/") and key.rfind("/") > 0
+    if rule.get('regex_enabled') is True and not regex_key:
+        return False
+    if rule.get('regex_enabled') is not False and regex_key:
         end = key.rfind("/")
         pattern, flags = key[1:end], key[end + 1:]
         if len(pattern) > 500 or not set(flags) <= set("gimsuyd"):
@@ -124,7 +127,7 @@ def evaluate(store, guild_id: int, scopes: list[tuple[str, int]], query: str,
             sticky = last is not None and age <= rule.get("sticky", 0)
             cooldown = last is not None and not sticky and age <= (
                 rule.get("sticky", 0) + rule.get("cooldown", 0))
-            if cooldown or not _secondary_matches(rule, text) or not (rule.get("constant") or matched or sticky):
+            if cooldown or (not rule.get('constant') and not _secondary_matches(rule, text)) or not (rule.get("constant") or matched or sticky):
                 continue
             probability = rule.get("probability", 100) if rule.get("use_probability") else 100
             if not sticky and random.Random(_seed(response_id, item.entry_key)).randrange(100) >= probability:

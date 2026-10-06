@@ -10,6 +10,7 @@ from .world_info import evaluate
 from .models import DIRECTOR_SCHEMA, MEMORY_SCHEMA, ImageInput, ModelGateway, TurnMessage
 from .store import Store
 from .prompts import compile_prompt
+from .errors import error_detail
 
 
 @dataclass(frozen=True)
@@ -41,7 +42,7 @@ class Engine:
         snapshot = scene.preset or self.store.active_preset(scene.guild_id)
         role = {'extraction': 'memory', 'summary': 'memory', 'images': 'dialogue'}.get(purpose, purpose)
         budget = min(self.settings.limits['max_input_tokens'], self.settings.profile(role).context_tokens - (max_tokens or self.settings.limits['max_output_tokens']))
-        return compile_prompt(snapshot['bundle'], purpose, values, history or [], self.settings.profile(role).provider, budget, contract=contract, images=images, protected_history_index=protected_history_index, lore_injections=lore_injections)
+        return compile_prompt(snapshot['bundle'], purpose, values, history or [], self.settings.profile(role).prompt_provider, budget, contract=contract, images=images, protected_history_index=protected_history_index, lore_injections=lore_injections)
 
     async def purpose_text(self, scene, purpose, payload, max_tokens, images=None):
         request = self.compile(scene, purpose, {'payload': payload}, images=images, max_tokens=max_tokens)
@@ -89,7 +90,7 @@ class Engine:
                 ids = [cast[0]["id"]]
             return [eligible[ident] for ident in ids[:self.settings.limits["max_speakers"]]]
         except Exception as error:
-            logging.error("Director failed: %s", type(error).__name__)
+            logging.error("Director failed: %s", error_detail(error))
             return [] if scene.ambient else [cast[0]]
 
     def record_user(self, scene: SceneContext, stored_text: str | None = None) -> int:
@@ -102,7 +103,7 @@ class Engine:
         try:
             return (await self.purpose_text(scene, 'images', scene.text or 'Describe these images', 250, scene.images)).strip()[:1500]
         except Exception as error:
-            logging.error("Image description failed: %s", type(error).__name__)
+            logging.error("Image description failed: %s", error_detail(error))
             return "Image attached; description unavailable."
 
     async def _history(self, scene: SceneContext, target_character_id: int) -> tuple[str, list[TurnMessage], list[int]]:
@@ -126,7 +127,7 @@ class Engine:
                 summary = await self.purpose_text(scene, 'summary', payload, 600)
                 self.store.save_summary(scene.user_message_id, summary)
             except Exception as error:
-                logging.error("Branch summarization failed: %s", type(error).__name__)
+                logging.error("Branch summarization failed: %s", error_detail(error))
                 summary = (summary + "\n" + payload)[-2000:]
         history = []
         for row in unsummarized:
@@ -240,7 +241,7 @@ class Engine:
             if summary.strip():
                 self.store.save_summary(last_message_id, summary.strip())
         except Exception as error:
-            logging.error("Scene summarization failed: %s", type(error).__name__)
+            logging.error("Scene summarization failed: %s", error_detail(error))
 
     async def extract_memories(self, scene: SceneContext, speakers: list, lines: list[tuple[str, str]], root_id: int) -> None:
         if not lines:
@@ -261,4 +262,4 @@ class Engine:
                     if isinstance(fact, str) and 3 < len(fact) <= 300:
                         self.store.add_encounter(scene.guild_id, character["id"], scene.space_id, fact.strip(), scene.user_message_id)
             except Exception as error:
-                logging.error("Memory extraction failed: %s", type(error).__name__)
+                logging.error("Memory extraction failed: %s", error_detail(error))

@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from .avatars import AvatarPublisher
+from .config import prompt_provider
 from .models import TurnMessage
 from .prompts import compile_prompt
 
@@ -23,7 +24,7 @@ class AdminService:
         self.providers, self.budgets = {}, {}
         for purpose, role in {'dialogue': 'dialogue', 'director': 'director', 'extraction': 'memory', 'summary': 'memory', 'images': 'dialogue'}.items():
             profile = profiles.get(models.get(role, models.get('dialogue')), {})
-            self.providers[purpose] = profile.get('provider', 'compatible')
+            self.providers[purpose] = prompt_provider(profile.get('provider', 'compatible'), profile.get('base_url'))
             self.budgets[purpose] = min(raw.get('limits', {}).get('max_input_tokens', 12000), profile.get('context_tokens', 32000) - raw.get('limits', {}).get('max_output_tokens', 700))
 
     async def run(self, ident, guild_id, csrf, operation, action=None, detail=None):

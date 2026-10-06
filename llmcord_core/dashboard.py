@@ -63,7 +63,7 @@ def mount_dashboard(app):
     original_event = core.sio.handlers['/']['event']
     original_handshake = core.sio.handlers['/']['handshake']
 
-    async def socket_allowed(sid, message, supplied_environ=None):
+    async def socket_allowed(sid, message, supplied_environ=None, *, check_permissions=True):
         client = Client.instances.get(message.get('client_id', ''))
         if not client:
             return False
@@ -77,7 +77,7 @@ def mount_dashboard(app):
         if not ident or ident.value != binding[0]:
             return False
         try:
-            if binding[1] is not None:
+            if binding[1] is not None and check_permissions:
                 await app.state.auth.guard(binding[0], binding[1])
             else:
                 await app.state.auth.session(binding[0])
@@ -107,7 +107,10 @@ def mount_dashboard(app):
     for name in ('javascript_response', 'ack', 'log'):
         original = core.sio.handlers['/'][name]
         async def guarded_socket(sid, message, original=original):
-            if await socket_allowed(sid, message):
+            # Delivery acknowledgements and JS results do not read guild data or
+            # invoke admin actions. Recheck session/cookie binding here; action
+            # events, uploads and AdminService operations still check Discord.
+            if await socket_allowed(sid, message, check_permissions=False):
                 value = original(sid, message)
                 if inspect.isawaitable(value):
                     await value
@@ -148,7 +151,7 @@ def mount_dashboard(app):
             with ui.card().classes('mx-auto mt-20 p-8 max-w-xl'):
                 ui.label('llmcord').classes('text-3xl font-bold')
                 ui.label('Manage your characters, worlds, lore, and prompt presets.')
-                ui.link('Sign in with Discord', '/login').classes('text-lg')
+                ui.link('Sign in with Discord', app.state.base_url + '/login').classes('text-lg')
             return
         ui.context.client.llmcord_binding = (request.cookies['llmcord_session'], None)
         guilds = await app.state.auth.discord_get('/users/@me/guilds', 'Bearer ' + session['access'])
@@ -156,7 +159,7 @@ def mount_dashboard(app):
         for guild in guilds:
             if guild.get('owner') or int(guild.get('permissions', '0')) & 8:
                 with ui.card().classes('w-full max-w-xl'):
-                    ui.link(guild['name'], f"/admin/guild/{guild['id']}").classes('text-xl')
+                    ui.link(guild['name'], f"/guild/{guild['id']}").classes('text-xl')
         signout(app, session)
 
     @ui.page('/guild/{guild_id}', response_timeout=30)
@@ -165,7 +168,7 @@ def mount_dashboard(app):
         ui.context.client.llmcord_binding = (request.cookies['llmcord_session'], guild_id)
         ctx = LiveContext(app, request, guild_id, session)
         with ui.header().classes('items-center justify-between bg-slate-900'):
-            ui.link('llmcord / Servers', '/admin/').classes('text-white text-xl')
+            ui.link('llmcord / Servers', '/').classes('text-white text-xl')
             ui.label(session['user']['username'])
         ui.label('Server administration').classes('text-3xl font-bold mt-4')
         ui.label('Changes apply on the next bot turn. Prompt drafts require activation.').classes('text-slate-400')
@@ -175,13 +178,13 @@ def mount_dashboard(app):
             lore = ui.tab('Lore')
             imports = ui.tab('Imports')
             prompts = ui.tab('Prompt presets')
-        with ui.tab_panels(tabs, value=setup).classes('w-full'):
+        with ui.tab_panels(tabs, value=characters if request.query_params.get('tab') == 'characters' else setup).classes('w-full'):
             with ui.tab_panel(setup):
                 await setup_panel(ctx)
             with ui.tab_panel(characters):
                 characters_panel(ctx)
             with ui.tab_panel(lore):
-                lore_panel(ctx)
+                lore_panel(ctx, on_import=lambda: tabs.set_value(imports))
             with ui.tab_panel(imports):
                 imports_panel(ctx)
             with ui.tab_panel(prompts):
@@ -266,10 +269,26 @@ async def setup_panel(ctx):
 def characters_panel(ctx):
     from nicegui import ui
     store, gid = ctx.store, ctx.guild_id
+    def reload_characters(_):
+        ui.navigate.to(f'/guild/{gid}?tab=characters')
     worlds = {r['id']: r['name'] for r in store.list_spaces(gid) if r['kind'] == 'world'}
+    def new_character():
+        with ui.dialog() as dialog, ui.card().classes('w-full max-w-lg'):
+            ui.label('Create character').classes('text-xl font-bold')
+            ui.label('Start with an empty card, then add a description, personality, and dialogue examples.')
+            name = ui.input('Character name').classes('w-full')
+            world = ui.select(worlds, value=next(iter(worlds), None), label='Home world').classes('w-full')
+            with ui.row():
+                ui.button('Cancel', on_click=dialog.close)
+                ctx.button('Create', lambda: store.create_character(gid, world.value, name.value or ''),
+                           'character.create', then=reload_characters)
+        dialog.open()
+    ui.button('Create character', icon='add', on_click=new_character).set_enabled(bool(worlds))
+    if not worlds:
+        ui.label('Create a home world in Server setup first.')
     rows = store.all('SELECT * FROM characters WHERE guild_id=? ORDER BY name', (gid,))
     for row in rows:
-        with ui.expansion(row['name'] + (' · Archived' if row['archived'] else '')).classes('w-full border rounded-lg'):
+        with ui.expansion(row['name'] + (' · Archived' if row['archived'] else '')).classes('w-full border rounded-lg character-card'):
             card = json.loads(row['card'])
             if row['avatar']:
                 ui.image(f"/guild/{gid}/characters/{row['id']}/avatar").classes('w-24 h-24')
@@ -295,11 +314,22 @@ def characters_panel(ctx):
                         store._remove_from_thread_casts(row['id'])
                     store.bump_owner(gid, 'character', row['id'])
                 return True
-            ctx.button('Save character', save, 'character.edit', {'id': row['id']}, then=lambda _: ui.navigate.reload())
+            ctx.button('Save character', save, 'character.edit', {'id': row['id']}, then=reload_characters)
             def archive(row=row):
                 store.archive_character(gid, row['id'], not row['archived'])
                 return True
-            ctx.button('Restore' if row['archived'] else 'Archive', archive, 'character.archive', {'id': row['id']}, then=lambda _: ui.navigate.reload())
+            ctx.button('Restore' if row['archived'] else 'Archive', archive, 'character.archive', {'id': row['id']}, then=reload_characters)
+            def confirm_delete(row=row, revision=revision):
+                with ui.dialog() as dialog, ui.card().classes('w-full max-w-lg'):
+                    ui.label(f"Delete {row['name']}?").classes('text-xl font-bold')
+                    ui.label('Permanently delete this character, its lore, memories, and saved avatars, and remove it from all casts. Past Discord messages remain.')
+                    ui.label('This cannot be undone. Use Archive if you may want to restore the character later.')
+                    with ui.row():
+                        ui.button('Cancel', on_click=dialog.close)
+                        ctx.button('Delete permanently', lambda: store.delete_character(gid, row['id'], revision),
+                                   'character.delete', {'id': row['id']}, then=reload_characters, color='negative')
+                dialog.open()
+            ui.button('Delete character', icon='delete', color='negative', on_click=confirm_delete)
             ui.label('Emotion avatars').classes('text-xl font-bold')
             for slot in store.avatar_slots(gid, row['id']):
                 avatar_editor(ctx, row['id'], slot)
@@ -313,7 +343,7 @@ def characters_panel(ctx):
                     return True
                 ctx.button('Add emotion', add_slot, 'avatar.slot.create', then=lambda _: ui.navigate.reload())
     if not rows:
-        ui.label('Import a character card in Imports to get started.')
+        ui.label('Create an empty character here or import a character card in Imports to get started.')
 
 
 def avatar_editor(ctx, character_id, slot):
@@ -343,90 +373,9 @@ def avatar_editor(ctx, character_id, slot):
             ctx.button('Remove emotion', delete, 'avatar.slot.delete', then=lambda _: ui.navigate.reload())
 
 
-def lore_panel(ctx):
-    from nicegui import ui
-    owners = ctx.service.owners(ctx.guild_id)
-    options = {f"{o['kind']}:{o['id']}": o['label'] for o in owners}
-    ui.label('Lore workspace').classes('text-xl font-bold')
-    ui.label('Drag an entry into another owner to move it. Priority determines selection, independently of visual order.')
-    if not owners:
-        ui.label('Create a world or import a character first.')
-        return
-    with ui.row().classes('w-full items-end'):
-        left = ui.select(options, value=next(iter(options)), label='Left owner', with_input=True).classes('flex-1')
-        right = ui.select(options, value=list(options)[-1], label='Right owner', with_input=True).classes('flex-1')
-        query = ui.input('Search content and keywords').classes('flex-1')
-    editor = ui.column().classes('w-full')
-    board = ui.row().classes('w-full items-start flex-nowrap overflow-auto')
-    pages = {}
-
-    @ui.refreshable
-    def render_board():
-        for control in (left, right):
-            kind, ident = control.value.split(':', 1)
-            ident = int(ident)
-            with ui.column().classes('flex-1 min-w-80 bg-slate-900 rounded-lg p-4') as container:
-                container.lore_owner = (kind, ident)
-                ui.label(options[control.value]).classes('text-lg font-bold owner-heading')
-                entries = ctx.store.admin_entries(ctx.guild_id, kind, ident)
-                if query.value:
-                    entries = [entry for entry in entries if query.value.casefold() in (entry['content'] + ' ' + ' '.join(entry['rule']['keys'])).casefold()]
-                page_key = (control.id, control.value)
-                page_number = min(pages.get(page_key, 1), max(1, (len(entries) + 49) // 50))
-                ui.label(f'{len(entries)} entries · page {page_number}').classes('owner-heading text-slate-400')
-                if len(entries) > 50:
-                    pagination = ui.select(list(range(1, (len(entries) + 49) // 50 + 1)), value=page_number, label='Page').classes('owner-heading')
-                    async def page_changed(event, page_key=page_key):
-                        if await ctx.run(lambda: True):
-                            pages[page_key] = event.value
-                            render_board.refresh()
-                    pagination.on_value_change(page_changed)
-                owner_revision = ctx.store.owner_revision(ctx.guild_id, kind, ident)
-                container.lore_revision = owner_revision
-                for entry in entries[(page_number - 1) * 50:page_number * 50]:
-                    searchable = entry['content'] + ' ' + ' '.join(entry['rule']['keys'])
-                    if query.value and query.value.casefold() not in searchable.casefold():
-                        continue
-                    with ui.card().classes('w-full lore-entry') as tile:
-                        tile.lore_entry = entry
-                        with ui.row().classes('items-center'):
-                            ui.icon('drag_indicator').classes('drag-handle cursor-grab')
-                            ui.label(' · '.join(entry['rule']['keys']) or 'No keywords').classes('font-bold')
-                        ui.label(entry['content'][:220])
-                        ui.label(f"Priority {entry['rule']['order']} · {'Enabled' if entry['rule']['enabled'] else 'Disabled'}")
-                        async def edit(entry=entry):
-                            fresh = await ctx.run(lambda: ctx.store.admin_entry(ctx.guild_id, entry['ref']))
-                            if fresh:
-                                editor.clear()
-                                with editor:
-                                    entry_editor(ctx, fresh, options, render_board.refresh)
-                        ui.button('Edit / transfer', on_click=edit)
-                async def moved(event):
-                    entry = getattr(event.item, 'lore_entry', None)
-                    target = getattr(event.target, 'lore_owner', None)
-                    if not entry or not target:
-                        render_board.refresh()
-                        return
-                    await ctx.run(lambda: ctx.store.transfer_entry(ctx.guild_id, entry['ref'], *target, entry['revision'], target_revision=event.target.lore_revision), 'lore.move', {'key': entry['entry_key'], 'destination': target})
-                    render_board.refresh()
-                container.make_sortable(handle='.drag-handle', group='guild-lore', on_end=moved, options={'draggable': '.lore-entry'})
-                async def add(kind=kind, ident=ident):
-                    if await ctx.run(lambda: True):
-                        editor.clear()
-                        with editor:
-                            entry_editor(ctx, {'owner_kind': kind, 'owner_id': ident, 'content': '', 'rule': normalize_entry('new', {}).rule, 'pinned': False}, options, render_board.refresh)
-                ui.button('New entry', on_click=add).classes('owner-heading')
-                def download(kind=kind, ident=ident):
-                    ui.download.content(pretty(ctx.store.export_lore(ctx.guild_id, kind, ident)), 'lorebook.json')
-                    return True
-                ctx.button('Export owner', download)
-    with board:
-        render_board()
-    async def refresh():
-        if await ctx.run(lambda: True):
-            render_board.refresh()
-    for control in (left, right, query):
-        control.on_value_change(lambda _: refresh())
+def lore_panel(ctx, on_import=None):
+    from .lore_workspace import render_lore_workspace
+    render_lore_workspace(ctx, entry_editor, on_import=on_import)
 
 
 def entry_editor(ctx, entry, owners, refresh):
@@ -438,7 +387,7 @@ def entry_editor(ctx, entry, owners, refresh):
         controls = {}
         for key in ('keys', 'secondary_keys'):
             controls[key] = ui.input(key.replace('_', ' ').title(), value=pretty(rule[key])).props('hint="JSON string array; preserves commas inside regex"').classes('w-full')
-        controls['order'] = ui.number('Priority (higher values selected first)', value=rule['order'], precision=0)
+        controls['order'] = ui.number('Priority / insertion order (higher values appear later)', value=rule['order'], precision=0)
         with ui.row():
             controls['enabled'] = ui.checkbox('Enabled', value=rule['enabled'])
             controls['constant'] = ui.checkbox('Always active', value=rule['constant'])
@@ -450,6 +399,9 @@ def entry_editor(ctx, entry, owners, refresh):
                 if key == 'original':
                     with ui.expansion('Preserved import fields / unsupported feature remapping').classes('w-full'):
                         controls[key] = ui.textarea('Original fields (JSON)', value=pretty(value)).classes('w-full')
+                elif key == 'regex_enabled':
+                    controls[key] = ui.select({'auto': 'Detect /pattern/flags automatically', 'regex': 'Regex patterns', 'literal': 'Literal keywords'},
+                        value='auto' if value is None else 'regex' if value else 'literal', label='Keyword matching')
                 elif type(value) is bool:
                     controls[key] = ui.checkbox(key.replace('_', ' ').title(), value=value)
                 elif type(value) is int:
@@ -464,7 +416,9 @@ def entry_editor(ctx, entry, owners, refresh):
                 ui.label(warning).classes('text-amber-300')
         def collect():
             for key, control in controls.items():
-                if key == 'original' or key == 'scan_depth' or isinstance(rule.get(key), list):
+                if key == 'regex_enabled':
+                    rule[key] = {'auto': None, 'regex': True, 'literal': False}[control.value]
+                elif key == 'original' or key == 'scan_depth' or isinstance(rule.get(key), list):
                     rule[key] = json.loads(control.value or ('null' if key == 'scan_depth' else '{}'))
                 elif type(rule.get(key)) is int:
                     rule[key] = int(control.value)
@@ -564,6 +518,8 @@ def imports_panel(ctx):
                 changes = store.preview_import(gid, 'book', book['id'], imported)
                 area.clear()
                 with area:
+                    label = 'RisuAI' if imported.source_format == 'risu' else 'SillyTavern'
+                    ui.label(f'{label} lorebook detected · {len(imported.entries)} entries').classes('font-bold')
                     decisions = import_changes(changes)
                     expires = __import__('time').time() + 900
                     def apply():
@@ -616,7 +572,7 @@ def presets_panel(ctx):
                         ui.number('Depth', precision=0).bind_value(b, 'depth', backward=lambda v: int(v or 0))
                         ui.number('Injection order', precision=0).bind_value(b, 'order', backward=lambda v: int(v or 0))
                         ui.number('Trimming priority', precision=0).bind_value(b, 'priority', backward=lambda v: int(v or 0))
-                    ui.select({'': 'Exact placement', 'top_system': 'Move to top-level system instructions', 'user': 'Convert late system block to user instructions'}, label='Anthropic adaptation').bind_value(b, 'adaptation').classes('w-full')
+                    ui.select({'': 'Exact placement', 'top_system': 'Move to top-level system instructions', 'user': 'Convert late system block to user instructions'}, label='System instruction placement').bind_value(b, 'adaptation').classes('w-full')
                     with ui.expansion('Preserved import fields and compatibility remapping').classes('w-full'):
                         raw = ui.textarea('Original prompt fields (JSON)', value=pretty(b['raw'])).classes('w-full')
                         state['raw_controls'][b['id']] = (b, raw)

@@ -1,0 +1,30 @@
+discord:
+  token_env: DISCORD_BOT_TOKEN
+  # DISCORD_GUILD_ID in the environment overrides this for private testing.
+  development_guild_id:
+database_path: data/llmcord.sqlite3
+history_retention_days: 90
+models:
+  dialogue: google/flash
+  director: google/flash
+  memory: google/flash
+  profiles:
+    google/flash:
+      provider: compatible
+      model: gemini-3.8-flash
+      api_key_env: GEMINI_API_KEY
+      base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+      reasoning_effort: low
+      structured_outputs: true
+      context_tokens: 1048576
+      supports_images: true
+limits:
+  max_input_tokens: 12000
+  # Allow room for thinking as well as visible dialogue/JSON.
+  max_output_tokens: 4096
+  max_images: 3
+  max_attachment_bytes: 8388608
+  max_speakers: 3
+  recent_messages: 12
+  recent_window_seconds: 600
+  ambient_cooldown_seconds: 120

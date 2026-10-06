@@ -8,3 +8,7 @@ data/
 .env
 .test-artifacts/
 .nicegui/
+*.ts.net.key
+*.ts.net.crt
+*.swp
+*.swo

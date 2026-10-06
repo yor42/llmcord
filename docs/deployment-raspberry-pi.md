@@ -2,6 +2,8 @@
 
 This deployment runs the bot and admin dashboard as separate Docker Compose services against one SQLite database. The web service listens on the Pi's loopback interface and Tailscale Serve publishes it to your tailnet over HTTPS.
 
+For a native installation without Docker, including a Gemini 3.8 Flash configuration, use [Native Pi hosting and live testing](live-testing-pi.md).
+
 ## Before you start
 
 - Use a **64-bit** Raspberry Pi OS. Docker directs 64-bit Raspberry Pi OS users to its [Debian arm64 installation guide](https://docs.docker.com/engine/install/debian/).
@@ -24,7 +26,7 @@ chmod 600 .env
 
 Edit `config.yaml` to select real model IDs for `dialogue`, `director`, and `memory`. Edit `.env` with `DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `WEB_BASE_URL`, and any selected cloud model API keys. Set `WEB_BASE_URL` to the Pi's exact Tailscale HTTPS origin, with no trailing slash or path, for example `https://my-pi.my-tailnet.ts.net`.
 
-The bot reads `database_path` from `config.yaml`; the web and migration services read `LLMCORD_DATABASE_PATH` from `.env`. Set them to the same path. The examples use `data/llmcord.sqlite3`. Both containers mount `./data` for SQLite, including its WAL files and migration backups.
+All services use `LLMCORD_DATABASE_PATH` when set. Otherwise the bot reads `database_path` from `config.yaml`, while web and migration default to `data/llmcord.sqlite3`. Use the same path for every service. Both containers mount `./data` for SQLite, including its WAL files and migration backups.
 
 Do not commit `.env`, `config.yaml`, the database, or its backups. These paths are covered by `.gitignore` or live under the ignored `data/` directory.
 

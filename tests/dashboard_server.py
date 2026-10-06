@@ -12,10 +12,14 @@ from llmcord_core.web import create_app
 
 def main():
     port = int(os.environ['LLMCORD_TEST_PORT'])
-    state = {'admin': True}
+    state = {'admin': True, 'guild_checks': 0}
     async def discord_api(request):
         if request.url.path.endswith('/users/@me/guilds'):
-            return httpx.Response(200, json=[{'id': '1', 'name': 'Test server', 'permissions': '8' if state['admin'] else '0'}])
+            state['guild_checks'] += 1
+            if state['guild_checks'] == 1:
+                return httpx.Response(429, json={'retry_after': 0.05})
+            return httpx.Response(200, json=[{'id': '1', 'name': 'Test server', 'permissions': '8' if state['admin'] else '0'}],
+                                  headers={'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset-After': '0.05'})
         if request.method == 'POST' and request.url.path.endswith('/messages'):
             return httpx.Response(200, json={'id': '900', 'attachments': [{'url': 'https://cdn.discordapp.com/attachments/100/900/image.png?ex=test'}]})
         return httpx.Response(200, json=[{'id': '100', 'name': 'scene', 'type': 0},
@@ -35,6 +39,7 @@ def main():
     @app.get('/_test/state')
     async def snapshot():
         return {'spaces': [dict(r) for r in store.list_spaces(1)],
+            'characters': [dict(r) for r in store.all('SELECT id,guild_id,world_id,name,card,archived FROM characters')],
             'lore': [dict(r) for r in store.all('SELECT * FROM lore')],
             'books': [dict(r) for r in store.all('SELECT * FROM lorebook_entries')],
             'presets': [dict(r) for r in store.list_presets(1)], 'active': store.active_preset(1)['id'],
@@ -51,6 +56,14 @@ def main():
     @app.post('/_test/revoke')
     async def revoke():
         state['admin'] = False
+        return {'ok': True}
+
+    @app.post('/_test/change-lore')
+    async def change_lore(request: Request):
+        value = await request.json()
+        row = store.entry_by_key(1, value['key'])
+        store.save_entry(1, row['owner_kind'], row['owner_id'], value['content'], row['rule'],
+                         ref=row['ref'], expected_revision=row['revision'])
         return {'ok': True}
 
     @app.post('/_test/restore')

@@ -7,3 +7,7 @@ data
 config.yaml
 *.sqlite3
 *.pyc
+*.ts.net.key
+*.ts.net.crt
+*.swp
+*.swo

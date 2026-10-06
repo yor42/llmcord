@@ -1,0 +1,21 @@
+[Unit]
+Description=LLMcord Discord character bot
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=@PROJECT@
+EnvironmentFile=@PROJECT@/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStartPre=@PROJECT@/.venv/bin/python -m scripts.check_host --require-guild
+ExecStartPre=@PROJECT@/.venv/bin/python migrate.py
+ExecStart=@PROJECT@/.venv/bin/python llmcord.py
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

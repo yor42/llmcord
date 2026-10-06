@@ -8,7 +8,9 @@ Start with the [documentation index](docs/README.md). It links to [getting start
 
 ## Set up
 
-1. Use Python 3.12 and install the pinned packages: `python -m pip install -r requirements.txt`.
+For native Raspberry Pi hosting with Google AI Studio and Gemini 3.8 Flash, use the [Pi hosting and live-testing guide](docs/live-testing-pi.md) and `config-gemini.yaml`.
+
+1. Use Python 3.12 or 3.13 and install the pinned packages: `python -m pip install -r requirements.txt`.
 2. Copy `config-example.yaml` to `config.yaml`. Set the `dialogue`, `director`, and `memory` model profiles and model names. Only profiles selected for those roles need credentials. For Ollama or another OpenAI-compatible server, set `provider: compatible` and its `base_url`.
 3. Set `DISCORD_BOT_TOKEN` and the API key environment variable for each selected cloud profile. Keep tokens out of the YAML file and version control.
 4. In the Discord developer portal, enable **Message Content Intent**. Invite the bot with permissions to read and send messages, read history, use application commands, and manage webhooks in the channels where characters will speak. Give it access to threads that will host scenes.
@@ -47,14 +49,14 @@ The offline suite covers spaces, lore isolation and promotion, branch histories,
 
 Use a 64-bit Raspberry Pi OS. Install Docker Engine and the Compose plugin following the [Debian arm64 instructions](https://docs.docker.com/engine/install/debian/). Install Tailscale on the **Pi host** and join the Pi and your admin devices to the same tailnet. Enable [MagicDNS and HTTPS certificates](https://tailscale.com/docs/how-to/set-up-https-certificates) in the tailnet.
 
-1. Copy `config-example.yaml` to `config.yaml` and `.env.example` to `.env`. Enter your Discord bot token, OAuth client ID and secret, model credentials, and the Pi's exact Tailscale HTTPS name in `WEB_BASE_URL`, such as `https://my-pi.my-tailnet.ts.net`. Keep `.env` private. `LLMCORD_DATABASE_PATH` and `database_path` in YAML must name the same file.
+1. Copy `config-example.yaml` to `config.yaml` and `.env.example` to `.env`. Enter your Discord bot token, OAuth client ID and secret, model credentials, and the Pi's exact Tailscale HTTPS name in `WEB_BASE_URL`, such as `https://my-pi.my-tailnet.ts.net`. Keep `.env` private. Set `LLMCORD_DATABASE_PATH` for all services; it overrides the bot's YAML database path.
 2. In the Discord developer portal, register the exact OAuth redirect `https://my-pi.my-tailnet.ts.net/auth/callback` for the same Discord application as the bot. Replace the example name with your Pi's actual HTTPS name. The dashboard requests `identify` and `guilds`; each page and change checks the user's server administrator permission with Discord.
 3. Run `docker compose up --build -d`. The migration service runs before the bot and web services and creates a dated SQLite backup when upgrading an existing database. Both services share `./data`. The dashboard is published only on the Pi's `127.0.0.1:8080`.
 4. On the Pi host, run `sudo tailscale serve --bg 8080`. Check `tailscale serve status`, then open `WEB_BASE_URL` from a tailnet device. [Tailscale Serve](https://tailscale.com/docs/reference/tailscale-cli/serve) provides the private HTTPS proxy; no public router port forwarding is needed.
 
 In the dashboard, create worlds and a hub, link worlds to the hub, bind Discord text channels, import V2/V3 JSON or PNG character cards, choose default casts, and edit characters or channel lore. Card import has a preview; reusing a name requires explicit replacement. Characters always have a home world. The dashboard can also toggle ambient mode per channel; first check explicit conversations in a private Discord test channel.
 
-Create a named **guild lorebook** and enable it for selected worlds or hubs, or create a **channel lorebook** for one bound channel and its threads. Import a JSON entry array or SillyTavern `entries`-by-ID object. The preview lists adds, updates, removals, and conflicts. Locally edited imported entries require a keep/import choice. Handwritten lore remains separate. A hub guest receives books enabled for its own home world, hub books, and the current channel book; it does not receive another guest's world books. `/context` records activated entries and their source book on each saved response.
+Create a named **guild lorebook** and enable it for selected worlds or hubs, or create a **channel lorebook** for one bound channel and its threads. Import a JSON entry array, SillyTavern `entries` object/array, or RisuAI version-1 lorebook export. The preview lists adds, updates, removals, and conflicts. Locally edited imported entries require a keep/import choice. Handwritten lore remains separate. A hub guest receives books enabled for its own home world, hub books, and the current channel book; it does not receive another guest's world books. `/context` records activated entries and their source book on each saved response.
 
 The World Info evaluator supports keyword and JavaScript regex matching, constants, secondary filters, ordering, probability, groups, recursion, timing, character filters, and Discord-applicable prompt positions. Rules tied to SillyTavern-only surfaces such as author-note slots, outlets, vectors, or automation IDs are preserved and flagged in the dashboard; they remain inactive until remapped. Behavior that depends on SillyTavern's exact prompt assembly may differ in Discord scenes, so review imported entries in a private test channel.
 

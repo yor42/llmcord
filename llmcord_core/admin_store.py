@@ -204,7 +204,7 @@ class AdminStore:
     def save_entry(self, guild_id, kind, owner_id, content, rule, pinned=False, ref=None, expected_revision=None):
         from .lorebooks import validate_rule
         self.validate_owner(guild_id, kind, owner_id)
-        rule = validate_rule(rule)
+        rule = validate_rule(rule, content)
         if not content.strip():
             raise ValueError('Lore content cannot be empty')
         with self.write_admin():
@@ -227,9 +227,39 @@ class AdminStore:
             row = self.admin_entry(guild_id, ref)
             if row['revision'] != expected_revision:
                 raise ConflictError('Entry changed; reload before deleting')
-            self.db.execute("UPDATE import_entries SET disposition='deleted' WHERE guild_id=? AND entry_key=?", (guild_id, row['entry_key']))
-            self.db.execute(f"DELETE FROM {row['table']} WHERE id=?", (row['id'],))
-            self.bump_owner(guild_id, row['owner_kind'], row['owner_id'])
+            self._delete_entry_locked(guild_id, row)
+
+    def _delete_entry_locked(self, guild_id, row):
+        self.db.execute("UPDATE import_entries SET disposition='deleted' WHERE guild_id=? AND entry_key=?", (guild_id, row['entry_key']))
+        self.db.execute(f"DELETE FROM {row['table']} WHERE id=?", (row['id'],))
+        self.bump_owner(guild_id, row['owner_kind'], row['owner_id'])
+
+    def _selected_entries_locked(self, guild_id, entries):
+        if not entries or len(entries) > 2000:
+            raise ValueError('Select between 1 and 2000 lore entries')
+        rows, seen = [], set()
+        for entry in entries:
+            row = self.entry_by_key(guild_id, entry['entry_key'])
+            if not row or row['entry_key'] in seen or row['revision'] != entry['revision'] or (row['owner_kind'], row['owner_id']) != (entry['owner_kind'], entry['owner_id']):
+                raise ConflictError('A selected lore entry changed; select it again before continuing')
+            seen.add(row['entry_key'])
+            rows.append(row)
+        return rows
+
+    def delete_entries(self, guild_id, entries):
+        with self.write_admin():
+            rows = self._selected_entries_locked(guild_id, entries)
+            for row in rows:
+                self._delete_entry_locked(guild_id, row)
+        return len(rows)
+
+    def transfer_entries(self, guild_id, entries, kind, owner_id):
+        # Appending independent entries does not require the destination's
+        # snapshot revision. Validate each source inside the same transaction.
+        with self.write_admin():
+            self.validate_owner(guild_id, kind, owner_id)
+            rows = self._selected_entries_locked(guild_id, entries)
+            return [self._transfer_entry_locked(guild_id, row, kind, owner_id, False) for row in rows]
 
     def transfer_entry(self, guild_id, ref, kind, owner_id, expected_revision, copy=False, target_revision=None):
         self.validate_owner(guild_id, kind, owner_id)
@@ -237,21 +267,25 @@ class AdminStore:
             row = self.admin_entry(guild_id, ref)
             if row['revision'] != expected_revision or (target_revision is not None and self.owner_revision(guild_id, kind, owner_id) != target_revision):
                 raise ConflictError('Lore changed; reload before transferring')
-            if not copy and (kind, owner_id) == (row['owner_kind'], row['owner_id']):
-                return ref
-            same_table = (kind == 'book') == (row['owner_kind'] == 'book')
-            new_ref = self.insert_admin_entry(guild_id, kind, owner_id, row['content'], row['rule'], row['pinned'], None if copy else row['entry_key'], row['source_message_id'], row['promoted_from']) if copy or not same_table else ref
-            if not copy:
-                if new_ref == ref:
-                    if kind == 'book':
-                        self.db.execute('UPDATE lorebook_entries SET book_id=?,uid=?,revision=revision+1 WHERE id=?', (owner_id, 'local-' + uuid.uuid4().hex, row['id']))
-                    else:
-                        self.db.execute('UPDATE lore SET scope_kind=?,scope_id=?,revision=revision+1 WHERE id=?', (kind, owner_id, row['id']))
+            return self._transfer_entry_locked(guild_id, row, kind, owner_id, copy)
+
+    def _transfer_entry_locked(self, guild_id, row, kind, owner_id, copy):
+        ref = row['ref']
+        if not copy and (kind, owner_id) == (row['owner_kind'], row['owner_id']):
+            return ref
+        same_table = (kind == 'book') == (row['owner_kind'] == 'book')
+        new_ref = self.insert_admin_entry(guild_id, kind, owner_id, row['content'], row['rule'], row['pinned'], None if copy else row['entry_key'], row['source_message_id'], row['promoted_from']) if copy or not same_table else ref
+        if not copy:
+            if new_ref == ref:
+                if kind == 'book':
+                    self.db.execute('UPDATE lorebook_entries SET book_id=?,uid=?,revision=revision+1 WHERE id=?', (owner_id, 'local-' + uuid.uuid4().hex, row['id']))
                 else:
-                    self.db.execute(f"DELETE FROM {row['table']} WHERE id=?", (row['id'],))
-                self.db.execute("UPDATE import_entries SET disposition='moved' WHERE guild_id=? AND entry_key=?", (guild_id, row['entry_key']))
-                self.bump_owner(guild_id, row['owner_kind'], row['owner_id'])
-            self.bump_owner(guild_id, kind, owner_id)
+                    self.db.execute('UPDATE lore SET scope_kind=?,scope_id=?,revision=revision+1 WHERE id=?', (kind, owner_id, row['id']))
+            else:
+                self.db.execute(f"DELETE FROM {row['table']} WHERE id=?", (row['id'],))
+            self.db.execute("UPDATE import_entries SET disposition='moved' WHERE guild_id=? AND entry_key=?", (guild_id, row['entry_key']))
+            self.bump_owner(guild_id, row['owner_kind'], row['owner_id'])
+        self.bump_owner(guild_id, kind, owner_id)
         return new_ref
 
     def preview_import(self, guild_id, kind, owner_id, imported):
@@ -371,6 +405,50 @@ class AdminStore:
         return {'character_id': existing['id'], 'revision': self.owner_revision(guild_id, 'character', existing['id']), 'conflicts': conflicts,
                 'changes': self.preview_import(guild_id, 'character', existing['id'], self.card_book(card))}
 
+    def _create_character_locked(self, guild_id, world_id, name, card, avatar=None):
+        # Deleted characters retain an owner-revision tombstone. Never reuse an
+        # ID: historical replies and a bot turn in progress may still reference it.
+        ident = self.one("SELECT COALESCE(MAX(id),0)+1 AS next_id FROM (SELECT id FROM characters UNION ALL SELECT owner_id FROM owner_revisions WHERE kind='character' UNION ALL SELECT character_id FROM nodes WHERE character_id IS NOT NULL)")['next_id']
+        self.db.execute('INSERT INTO characters(id,guild_id,world_id,name,card,avatar) VALUES(?,?,?,?,?,?)',
+                        (ident, guild_id, world_id, name, json.dumps(card), avatar))
+        from .avatars import DEFAULT_SLOTS
+        for key in DEFAULT_SLOTS:
+            self.db.execute('INSERT INTO avatar_slots(character_id,slot_key,label) VALUES(?,?,?)', (ident, key, key.title()))
+        return ident
+
+    def create_character(self, guild_id, world_id, name):
+        name = name.strip()
+        if not name:
+            raise ValueError('Character name cannot be empty')
+        with self.write_admin():
+            world = self.space_by_id(world_id)
+            if not world or world['guild_id'] != guild_id or world['kind'] != 'world':
+                raise ValueError('Choose a home world in this server')
+            if self.character(guild_id, name):
+                raise ValueError('This character name already exists')
+            card = {'name': name, **{field: '' for field in ('description', 'personality', 'scenario', 'first_mes', 'mes_example', 'system_prompt', 'post_history_instructions')}}
+            ident = self._create_character_locked(guild_id, world_id, name, card)
+            self.bump_owner(guild_id, 'character', ident)
+        return ident
+
+    def delete_character(self, guild_id, character_id, expected_revision):
+        with self.write_admin():
+            self.validate_owner(guild_id, 'character', character_id)
+            if self.owner_revision(guild_id, 'character', character_id) != expected_revision:
+                raise ConflictError('Character changed; reload before deleting')
+            for entry in self.admin_entries(guild_id, 'character', character_id):
+                self._delete_entry_locked(guild_id, entry)
+            self.db.execute("DELETE FROM candidates WHERE guild_id=? AND scope_kind='character' AND scope_id=?", (guild_id, character_id))
+            for table in ('personal_memories', 'encounters', 'avatar_assets'):
+                self.db.execute(f'DELETE FROM {table} WHERE guild_id=? AND character_id=?', (guild_id, character_id))
+            self.db.execute('DELETE FROM webhooks WHERE character_id=?', (character_id,))
+            self.db.execute('DELETE FROM card_imports WHERE character_id=?', (character_id,))
+            self.db.execute("DELETE FROM import_entries WHERE guild_id=? AND source_kind='character' AND source_id=?", (guild_id, character_id))
+            self.db.execute('DELETE FROM characters WHERE guild_id=? AND id=?', (guild_id, character_id))
+            self._prune_character_casts(guild_id, character_id)
+            self.bump_owner(guild_id, 'character', character_id)
+        return True
+
     def apply_card(self, guild_id, world_id, card, resolutions=None, expected_revision=None):
         resolutions = resolutions or {}
         with self.write_admin():
@@ -386,13 +464,12 @@ class AdminStore:
             manual = existing['avatar_manual'] if existing else 0
             if card.avatar and (not manual or resolutions.get('avatar') == 'import'):
                 avatar, manual = card.avatar, 0
-            self.db.execute('INSERT INTO characters(guild_id,world_id,name,card,avatar,avatar_manual) VALUES(?,?,?,?,?,?) ON CONFLICT(guild_id,name) DO UPDATE SET world_id=excluded.world_id,card=excluded.card,avatar=excluded.avatar,avatar_manual=excluded.avatar_manual',
-                (guild_id, world_id, card.name, json.dumps(data), avatar, manual))
-            ident = self.character(guild_id, card.name)['id']
-            if not existing:
-                from .avatars import DEFAULT_SLOTS
-                for key in DEFAULT_SLOTS:
-                    self.db.execute('INSERT OR IGNORE INTO avatar_slots(character_id,slot_key,label) VALUES(?,?,?)', (ident, key, key.title()))
+            if existing:
+                ident = existing['id']
+                self.db.execute('UPDATE characters SET world_id=?,card=?,avatar=?,avatar_manual=? WHERE id=?',
+                                (world_id, json.dumps(data), avatar, manual, ident))
+            else:
+                ident = self._create_character_locked(guild_id, world_id, card.name, data, avatar)
             self.apply_import_locked(guild_id, 'character', ident, self.card_book(card), resolutions)
             self.db.execute('INSERT INTO card_imports VALUES(?,?) ON CONFLICT(character_id) DO UPDATE SET baseline_json=excluded.baseline_json', (ident, json.dumps(card.data)))
             self._prune_character_casts(guild_id, ident)

@@ -1,0 +1,22 @@
+[Unit]
+Description=LLMcord private administration dashboard
+StartLimitIntervalSec=300
+StartLimitBurst=5
+After=llmcord-bot.service
+
+[Service]
+Type=simple
+WorkingDirectory=@PROJECT@
+EnvironmentFile=@PROJECT@/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStartPre=@PROJECT@/.venv/bin/python -m scripts.check_host --web-only
+ExecStartPre=@PROJECT@/.venv/bin/python migrate.py
+ExecStart=@PROJECT@/.venv/bin/python web_main.py
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

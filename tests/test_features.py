@@ -18,7 +18,7 @@ from llmcord_core.cards import ParsedCard, parse_card
 from llmcord_core.engine import Engine, SceneContext
 from llmcord_core.lore import LoreMatch, lore_scopes
 from llmcord_core.lorebooks import export_entry, normalize_entry, parse_lorebook, validate_rule
-from llmcord_core.models import TurnMessage
+from llmcord_core.models import ImageInput, TurnMessage
 from llmcord_core.prompts import block, compatibility, compile_prompt, default_bundle, export_preset, parse_preset, validate_bundle
 from llmcord_core.store import SCHEMA, Store
 from llmcord_core.web import create_app
@@ -206,13 +206,46 @@ class AdministrationTests(unittest.TestCase):
 
 
 class PromptTests(unittest.TestCase):
+    def test_gemini_combines_system_context_and_preserves_mapped_history_and_trace(self):
+        bundle = default_bundle()
+        bundle['purposes']['dialogue'] = [
+            block('main', content='FIRST'),
+            block('description', 'description'),
+            block('history', 'history', role='user'),
+            block('mapped', content='MAPPED', adaptation='user'),
+            block('final', content='FINAL', adaptation='top_system'),
+        ]
+        history = [TurnMessage('user', 'INPUT', [ImageInput('image/png', b'image')])]
+        request = compile_prompt(bundle, 'dialogue', {'description': 'BACKGROUND'}, history, 'gemini', 4000, contract='CONTRACT')
+        self.assertEqual(request.messages, [
+            TurnMessage('system', 'CONTRACT\n\nFIRST\n\nBACKGROUND\n\nFINAL'),
+            history[0], TurnMessage('user', 'MAPPED'),
+        ])
+        self.assertEqual(request.history_indices, [0])
+        self.assertIn('description', request.sources)
+        self.assertIn('final', request.included)
+        self.assertIn('mapped: user', request.adaptations)
+        self.assertIn('final: top_system', request.adaptations)
+        self.assertIn('gemini: combined system instructions', request.adaptations)
+        bundle['purposes']['dialogue'][1]['priority'] = 0
+        trimmed = compile_prompt(bundle, 'dialogue', {'description': 'BACKGROUND ' * 1000}, history, 'gemini', 1800, contract='CONTRACT')
+        self.assertIn('description', trimmed.omitted)
+        self.assertNotIn('description', trimmed.sources)
+        self.assertNotIn('BACKGROUND', trimmed.messages[0].text)
+        self.assertEqual(trimmed.messages[1], history[0])
+
     def test_actual_post_history_and_anthropic_adaptation(self):
         values = {'char': 'Alice', 'card_post_history': 'FINAL'}
         history = [TurnMessage('user', 'INPUT')]
         rendered = compile_prompt(default_bundle(), 'dialogue', values, history, 'compatible', 4000)
-        self.assertEqual([m.text for m in rendered.messages][-2:], ['INPUT', 'FINAL'])
+        self.assertEqual(rendered.messages[-3].text, 'INPUT')
+        self.assertEqual(rendered.messages[-2].role, 'system')
+        self.assertIn('Alice', rendered.messages[-2].text)
+        self.assertNotIn('{{char}}', rendered.messages[-2].text)
+        self.assertEqual(rendered.messages[-1].text, 'FINAL')
         anthropic = compile_prompt(default_bundle(), 'dialogue', values, history, 'anthropic', 4000)
         self.assertIn('card_post_history: top_system', anthropic.adaptations)
+        self.assertIn('character_voice: top_system', anthropic.adaptations)
         self.assertEqual(anthropic.messages[-1].text, 'INPUT')
 
     def test_dynamic_lore_requires_explicit_anthropic_mapping(self):

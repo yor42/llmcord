@@ -20,6 +20,7 @@ from .engine import Engine, SceneContext
 from .models import ImageInput, ModelGateway
 from .store import Store
 from .avatars import emotion_stream
+from .errors import error_detail, error_stack
 
 
 def split_discord(text: str, limit: int = 1900) -> list[str]:
@@ -61,6 +62,10 @@ class SkitBot(commands.Bot):
         else:
             await self.tree.sync()
         self.cleanup_task = asyncio.create_task(self._cleanup_loop())
+
+    async def on_ready(self):
+        logging.info("Discord connected as %s; servers=%d; command scope=%s",
+                     self.user, len(self.guilds), self.settings.development_guild_id or "global")
 
     async def _cleanup_loop(self):
         while True:
@@ -168,7 +173,7 @@ class SkitBot(commands.Bot):
         except discord.Forbidden as error:
             raise ValueError("I need Manage Webhooks permission in this channel") from error
         except discord.HTTPException as error:
-            raise ValueError("Could not create a character webhook; check the channel webhook limit") from error
+            raise ValueError("Could not create a character webhook: " + error_detail(error)) from error
         self.store.save_webhook_id(parent_channel.id, character["id"], webhook.id)
         self.webhook_defaults[key] = identity
         return webhook
@@ -192,55 +197,103 @@ class SkitBot(commands.Bot):
         return selected
 
     async def run_scene(self, scene: SceneContext, channel):
+        progress = None
+
+        async def update_progress(content):
+            nonlocal progress
+            try:
+                if progress:
+                    await progress.edit(content=content, allowed_mentions=discord.AllowedMentions.none())
+                else:
+                    progress = await channel.send(content, silent=True,
+                        allowed_mentions=discord.AllowedMentions.none())
+                return True
+            except discord.DiscordException as error:
+                logging.warning('Generation status update failed: %s', error_detail(error))
+                return False
+
+        async def clear_progress(fallback='Generation stopped.'):
+            nonlocal progress
+            if progress:
+                try:
+                    await progress.delete()
+                except discord.DiscordException as error:
+                    logging.warning('Generation status cleanup failed: %s', error_detail(error))
+                    await update_progress(fallback)
+                progress = None
+
+        stage = 'speaker selection'
         try:
+            if not scene.ambient:
+                await update_progress('⏳ Generating a reply…')
             scene = replace(scene, preset=scene.preset or self.store.active_preset(scene.guild_id))
             speakers = await self.engine.speakers(scene)
             if not speakers:
                 if not scene.ambient:
-                    await channel.send("No active character is available here. Use /cast set or /summon.", allowed_mentions=discord.AllowedMentions.none())
+                    if await update_progress("No active character is available here. Use /cast set or /summon."):
+                        progress = None
                 return
+            if scene.ambient:
+                await update_progress('⏳ Generating a reply…')
+            stage = 'image description'
             image_description = await self.engine.describe_images(scene)
             stored_text = scene.text + (f"\n[Image description: {image_description}]" if image_description else "")
+            stage = 'saving scene input'
             root_id = self.engine.record_user(scene, stored_text)
             preceding: list[tuple[str, str]] = []
             parent_message_id = scene.user_message_id
             completed = []
             for character in speakers:
+                name = discord.utils.escape_markdown(character['name'])
+                await update_progress(f'⏳ **{name}** is generating a reply…')
+                stage = 'preparing character prompt'
                 request, sources = await self.engine.prepare_dialogue(scene, character, preceding)
                 system = '\n\n'.join(m.text for m in request.messages if m.role == 'system')
                 messages = [m for m in request.messages if m.role != 'system']
+                stage = 'webhook setup'
                 webhook = await self._webhook(channel, character)
-                thread = channel if isinstance(channel, discord.Thread) else None
+                thread_options = {'thread': channel} if isinstance(channel, discord.Thread) else {}
                 slots = {row['slot_key']: row for row in self.store.usable_avatars(scene.guild_id, character['id'])}
                 emotion, chosen_avatar, placeholder = 'neutral', slots['neutral'], None
                 pieces, last_edit = [], 0.0
                 try:
+                    stage = 'dialogue generation'
                     stream = self.models.stream_compiled('dialogue', request) if hasattr(self.models, 'stream_compiled') else self.models.stream_text('dialogue', system, messages)
                     async for event in emotion_stream(stream, slots):
                         if event.emotion is not None:
                             emotion = event.emotion
+                            stage = 'avatar lookup'
                             chosen_avatar = await self.resolve_avatar(slots.get(emotion, slots['neutral']), slots['neutral'])
-                            placeholder = await webhook.send('…', thread=thread, wait=True, silent=True,
+                            stage = 'webhook delivery'
+                            placeholder = await webhook.send('…', **thread_options, wait=True, silent=True,
                                 username=character['name'], avatar_url=chosen_avatar['url'], allowed_mentions=discord.AllowedMentions.none())
+                            stage = 'dialogue generation'
                             continue
                         pieces.append(event.text)
                         current = "".join(pieces)
                         if time.monotonic() - last_edit > 1.2 and len(current) < 1800:
+                            stage = 'webhook delivery'
                             await placeholder.edit(content=current + " ▌", allowed_mentions=discord.AllowedMentions.none())
                             last_edit = time.monotonic()
+                            stage = 'dialogue generation'
                     line = re.sub(r'<emotion>[^\n]*?</emotion>\s*', '', "".join(pieces)).strip()
                     chunks = split_discord(line)
+                    stage = 'webhook delivery'
                     await placeholder.edit(content=chunks[0], allowed_mentions=discord.AllowedMentions.none())
                 except Exception:
                     if placeholder:
-                        await placeholder.delete()
+                        try:
+                            await placeholder.delete()
+                        except Exception as cleanup_error:
+                            logging.warning('Failed response cleanup: %s', error_detail(cleanup_error))
                     raise
                 outgoing = [placeholder]
                 for chunk in chunks[1:]:
-                    outgoing.append(await webhook.send(chunk, thread=thread, wait=True, silent=True,
+                    outgoing.append(await webhook.send(chunk, **thread_options, wait=True, silent=True,
                         username=character['name'], avatar_url=chosen_avatar['url'],
                         allowed_mentions=discord.AllowedMentions.none()))
                 for posted, chunk in zip(outgoing, chunks):
+                    stage = 'saving character reply'
                     self.store.record_node(posted.id, scene.guild_id, scene.channel_id,
                         parent_message_id, None, character["id"], chunk,
                         sources=sources["messages"])
@@ -250,15 +303,27 @@ class SkitBot(commands.Bot):
                     parent_message_id = posted.id
                 preceding.append((character["name"], line))
                 completed.append(character)
+            await clear_progress('Reply sent.')
             if scene.ambient:
                 self.store.mark_ambient_response(scene.channel_id)
+            stage = 'memory extraction'
             await self.engine.extract_memories(scene, completed, preceding, root_id)
+            stage = 'scene summary'
             await self.engine.summarize_scene(parent_message_id, scene)
         except Exception as error:
-            logging.error("Scene failed: %s", type(error).__name__)
-            explanation = str(error) if isinstance(error, ValueError) else "Please check the model and webhook settings."
-            await channel.send(f"Character response failed: {explanation[:180]}",
-                allowed_mentions=discord.AllowedMentions.none())
+            explanation = error_detail(error)
+            logging.error('Scene failed during %s: %s\n%s', stage, explanation, error_stack(error))
+            failure = f"Character response failed during {stage}: {explanation}"
+            if progress:
+                try:
+                    await progress.edit(content=failure, allowed_mentions=discord.AllowedMentions.none())
+                    progress = None
+                except discord.DiscordException:
+                    await channel.send(failure, allowed_mentions=discord.AllowedMentions.none())
+            else:
+                await channel.send(failure, allowed_mentions=discord.AllowedMentions.none())
+        finally:
+            await clear_progress()
 
 
 def register_commands(bot: SkitBot) -> None:
@@ -619,8 +684,10 @@ def register_commands(bot: SkitBot) -> None:
         elif isinstance(error, app_commands.CommandInvokeError) and isinstance(error.original, (ValueError, sqlite3.IntegrityError)):
             message = str(error.original)
         else:
-            logging.error("Command failed: %s", type(error).__name__)
-            message = "Command failed. Check the bot logs."
+            original = getattr(error, 'original', error)
+            detail = error_detail(original)
+            logging.error('Command failed: %s\n%s', detail, error_stack(original))
+            message = "Command failed: " + detail
         if interaction.response.is_done():
             await interaction.followup.send(message[:1900], ephemeral=True)
         else:

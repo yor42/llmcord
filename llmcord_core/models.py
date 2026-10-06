@@ -137,7 +137,8 @@ class ModelGateway:
                 messages=self._anthropic_input(messages), max_tokens=limit)
             return "".join(block.text for block in response.content if block.type == "text")
         response = await client.chat.completions.create(model=profile.model,
-            messages=([{"role": "system", "content": system}] if system else []) + self._chat_input(messages), max_tokens=limit)
+            messages=([{"role": "system", "content": system}] if system else []) + self._chat_input(messages), max_tokens=limit,
+            **({"reasoning_effort": profile.reasoning_effort} if profile.reasoning_effort else {}))
         return response.choices[0].message.content or ""
 
     async def stream_text(self, role: str, system: str, messages: list[TurnMessage], max_tokens: int | None = None) -> AsyncIterator[str]:
@@ -159,7 +160,8 @@ class ModelGateway:
         else:
             stream = await client.chat.completions.create(model=profile.model,
                 messages=([{"role": "system", "content": system}] if system else []) + self._chat_input(messages),
-                max_tokens=limit, stream=True)
+                max_tokens=limit, stream=True,
+                **({"reasoning_effort": profile.reasoning_effort} if profile.reasoning_effort else {}))
             async for chunk in stream:
                 delta = chunk.choices[0].delta.content if chunk.choices else None
                 if delta:
@@ -184,6 +186,17 @@ class ModelGateway:
                 if block.type == "tool_use" and block.name == schema_name:
                     return validate_result(block.input, schema)
             raise ValueError("Model returned no structured result")
+        if profile.structured_outputs:
+            response = await client.chat.completions.create(model=profile.model,
+                messages=([{"role": "system", "content": system}] if system else []) + self._chat_input(messages),
+                max_tokens=limit,
+                response_format={"type": "json_schema", "json_schema": {"name": schema_name, "schema": schema, "strict": True}},
+                **({"reasoning_effort": profile.reasoning_effort} if profile.reasoning_effort else {}))
+            choice = response.choices[0]
+            try:
+                return validate_result(json.loads(choice.message.content or ''), schema)
+            except (json.JSONDecodeError, ValueError) as error:
+                raise ValueError(f"Model returned invalid {schema_name} JSON (finish reason: {choice.finish_reason})") from error
         instruction = f"{system}\nReturn only JSON matching this schema: {json.dumps(schema)}"
         for attempt in range(2):
             raw = await self.text(role, instruction, messages, limit)

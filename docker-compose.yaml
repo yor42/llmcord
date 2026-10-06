@@ -26,6 +26,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      WEB_HOST: 0.0.0.0
     volumes:
       - ./:/usr/src/app:ro
       - ./data:/usr/src/app/data

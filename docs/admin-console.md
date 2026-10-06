@@ -8,13 +8,21 @@ Use **Server setup** to create worlds and hubs, link worlds, bind channels, choo
 
 **Characters** edits card fields, including main and post-history instructions, moves home worlds with confirmation, and archives or restores characters. Card instructions are added to the selected guild prompt structure. Post-history instructions are placed after conversation history when the provider permits it.
 
+Choose **Create character**, enter a name and home world, and choose **Create** to start with empty card fields and the default emotion slots. Create a world in Server setup first if none exists. Names must be unique within the server.
+
+**Delete character** opens a confirmation. **Delete permanently** removes the character, its owned lore, personal memories, encounters, saved avatar data, and channel/thread cast assignments. Past chat history and Discord messages remain; lore previously moved to another owner also remains. Archive is available when you want to restore a character later. Deletion rejects changes made since the page was loaded, and character IDs are never reused for a new character.
+
 ## Lore workspace
 
 Choose an owner on each side of **Lore**: character, channel, world/hub, named book, or an existing thread-local lore owner. Search filters content and keywords; lists show 50 entries per page.
 
-Dragging an entry into another owner moves it. **Edit / transfer** also offers Move and Copy. Copies are independent; moves retain their activation identity, rule settings, and source-message provenance. Transfers only work within the selected server. Moving channel lore to a character makes it follow that character; moving character lore into a channel shares it with eligible characters there.
+Drag an entry by its handle onto the other navy drop area, including its padding or an empty list. The workspace shows **Saving lore changes…** and waits for that move to finish before accepting another drag. Lists update after the saved change, and the destination opens the page containing the moved entries. Drops within the same owner do not change insertion priority.
 
-The editor includes enabled, constant, pinned, keyword, and priority fields plus advanced matching, probability, grouping, recursion, timing, character filters, and placement settings. Keyword arrays use JSON so a comma inside a regex is preserved. Higher priority values win when the World Info budget is constrained; selected entries are assembled in ascending order. Priority zero is valid.
+Each entry has **Move left/right** and **Delete** shortcuts beside **Edit / transfer**. Check individual entries or use **Select page**, then choose **Move selected left/right** or **Delete selected**. Selection can span pages and owners; **Clear selection** resets it. Deletes show a confirmation with the selected count and a preview. Bulk moves and deletes either complete for the entire selection or leave it unchanged if an entry was edited, moved, or removed in another session. After a conflict, both lists reload and selection clears so you can review current data.
+
+**Edit / transfer** also offers Move and Copy. Copies are independent; moves retain their activation identity, rule settings, and source-message provenance. Transfers only work within the selected server. Moving channel lore to a character makes it follow that character; moving character lore into a channel shares it with eligible characters there.
+
+The editor includes enabled, constant, pinned, keyword, and priority fields plus advanced matching, probability, grouping, recursion, timing, character filters, and placement settings. Keyword arrays use JSON so a comma inside a regex is preserved. Within each prompt position, entries are assembled in ascending priority: higher values appear later in the context. Higher priority values also win when the World Info budget is constrained. Priority zero is valid.
 
 Unsupported imported features remain visible and inactive. Use the preserved import-fields editor to remove unavailable dependencies, and choose a supported placement. Export retains effective settings and unknown source fields.
 
@@ -22,7 +30,13 @@ Owner exports retain imported source IDs and include a `llmcord_pinned` field fo
 
 ## Imports
 
-**Imports** previews V2/V3 JSON/PNG character cards and standalone lorebook JSON. Select a home world or destination book before uploading. Review changes and resolve every conflict before applying. Previews expire after 15 minutes; a changed owner revision requires another preview.
+The **Import lorebook** button in **Lore** opens **Imports**. Under **Named lorebooks**, enter a book name, choose guild or channel scope, and click **Create book**. Expand the book, choose **Upload JSON lorebook for preview**, resolve any conflicts, and click **Apply lorebook sync**. Enable guild books in the desired worlds or hubs; channel books apply to their bound channel and threads.
+
+**Imports** previews V2/V3 JSON/PNG character cards and standalone lorebook JSON. Lorebooks accept entry arrays, SillyTavern `entries` objects/arrays, and RisuAI version-1 exports (`type: risu`, `ver: 1`, `data: [...]`). The preview identifies the format. Select a home world or destination book before uploading. Review changes and resolve every conflict before applying. Previews expire after 15 minutes; a changed owner revision requires another preview.
+
+RisuAI primary/secondary keywords, selective matching, insertion order (including zero), always-active flags, and regex toggles are mapped to runtime rules. **Keyword matching** in the lore editor can explicitly select literal keys, regex patterns, or automatic detection of `/pattern/flags` syntax. Original entry fields, folder references, and unknown metadata are retained. Folder records are inactive metadata; the editor does not recreate RisuAI's folder tree. Other RisuAI modes, `@@` decorators, and content macros beyond `{{char}}`/`{{user}}` are preserved and flagged as inactive until rewritten or remapped. Exports use the existing llmcord/SillyTavern entry structure and retain source fields; this adds import support, not a RisuAI-format exporter.
+
+RisuAI entry IDs are used when present. Exports without IDs use array indices for reimport matching, so keep their entry order stable when syncing into an existing book. The original export wrapper is retained with the book.
 
 Reimports preserve manual additions. An imported entry that was edited, moved, or deleted requires a decision if its source changes. Keeping the local decision does not recreate it in its previous owner. Character text and manually uploaded default avatars also have conflict choices. Moving a character's home world can prune ineligible casts.
 
@@ -33,6 +47,10 @@ For older databases, known embedded-card entries are tracked conservatively. Unm
 Each server has its own preset library and active revision. The built-in default is read-only: edit it and choose **Save draft** to create a copy. Other presets can be renamed by changing their name and saving, duplicated with **Save as new preset**, or deleted once inactive.
 
 Each bundle contains separate configurations for dialogue, director selection, memory extraction, summaries, and image descriptions. Purposes missing from an imported native bundle inherit the built-in defaults.
+
+The built-in dialogue prompt asks for a character's next fictional Discord reply, with knowledge, motives, and reactions grounded in their card. Chat questions are things the character may react to rather than tasks they must always solve. A short reminder after history reinforces the character's voice, followed by any card-specific post-history instructions. This follows SillyTavern's [main prompt and post-history approach](https://docs.sillytavern.app/usage/prompts/); the wording is tailored to casual Discord conversations. Saved custom presets keep their own instructions.
+
+For a stronger individual voice, add contrasting dialogue examples to the character card: an ordinary interaction, an unexpected request, and something the character actually knows about. Examples should demonstrate their phrasing and temperament, not just describe them. Start a fresh conversation when comparing prompt changes; earlier replies can encourage the model to repeat their style.
 
 Blocks support ordering, enabling, custom text, context markers, roles, and dialogue-history injection depth/order. Trimming priority is separate from display order. Required input markers, structured-output schemas, and the emotion-header contract remain present. Eligibility, consent, world-lore isolation, and branch visibility are enforced before the renderer receives data.
 
@@ -48,7 +66,7 @@ Supported substitutions are `{{char}}`, `{{user}}`, `{{description}}`, `{{person
 
 The import preview adds editable llmcord context markers, including card instructions, local memories, summaries, recent messages, and depth-injected lore. Review these alongside imported ordering. Unknown macros, markers, extension dependencies, generation triggers, and prefills need explicit disabling or remapping before activation. Edit a block's preserved fields to clear unsupported `injection_trigger` values or set `extension` to false. A separate checkbox disables an imported assistant prefill.
 
-Anthropic only accepts system instructions at the top level. For imported late or depth-injected system blocks, choose **Move to top-level system instructions**, **Convert late system block to user instructions**, or disable the block. The built-in default uses the top-level adaptation and reports it in preview and traces.
+Anthropic and Google's Gemini endpoint use system instructions at the top level. For imported late or depth-injected system blocks, choose **Move to top-level system instructions**, **Convert late system block to user instructions**, or disable the block. The built-in default uses the top-level adaptation and reports it in preview and traces. On Google's OpenAI-compatible endpoint, system blocks are combined into one message in their original system order after budget trimming, so earlier character details and response contracts are preserved. The assembled preview shows this same request.
 
 **Export full native bundle** preserves all purposes, mappings, revisions' content, and import metadata. **Export SillyTavern dialogue preset** exports only dialogue and requires a JSON array of explicitly omitted nonportable block IDs, or an equivalent supported marker mapping. Different before/after World Info wrappers cannot be represented by SillyTavern's one global wrapper.
 

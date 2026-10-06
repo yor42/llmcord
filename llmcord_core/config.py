@@ -4,6 +4,14 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
+
+
+def prompt_provider(provider: str, base_url: str | None = None) -> str:
+    """Use Gemini's system-instruction rules for its official compatible endpoint."""
+    if provider == 'compatible' and urlparse(base_url or '').hostname == 'generativelanguage.googleapis.com':
+        return 'gemini'
+    return provider
 
 
 @dataclass(frozen=True)
@@ -14,6 +22,12 @@ class ModelProfile:
     supports_images: bool
     api_key_env: str | None = None
     base_url: str | None = None
+    reasoning_effort: str | None = None
+    structured_outputs: bool = False
+
+    @property
+    def prompt_provider(self) -> str:
+        return prompt_provider(self.provider, self.base_url)
 
 
 @dataclass(frozen=True)
@@ -48,6 +62,8 @@ def load_settings(path: str | Path = "config.yaml") -> Settings:
             context_tokens=int(value["context_tokens"]),
             supports_images=bool(value.get("supports_images", False)),
             api_key_env=value.get("api_key_env"), base_url=value.get("base_url"),
+            reasoning_effort=value.get("reasoning_effort"),
+            structured_outputs=bool(value.get("structured_outputs", False)),
         )
         for name, value in models.get("profiles", {}).items()
     }
@@ -57,10 +73,12 @@ def load_settings(path: str | Path = "config.yaml") -> Settings:
     for name, profile in profiles.items():
         if profile.provider not in {"openai", "anthropic", "compatible"}:
             raise ValueError(f"Unsupported provider in {name}")
-        if name in choices.values() and profile.provider != "compatible" and not os.environ.get(profile.api_key_env or ""):
+        if name in choices.values() and (profile.provider != "compatible" or profile.api_key_env) and not os.environ.get(profile.api_key_env or ""):
             raise ValueError(f"API key environment variable is missing for {name}")
         if profile.provider == "compatible" and not profile.base_url:
             raise ValueError(f"base_url is required for {name}")
+        if profile.reasoning_effort is not None and (profile.provider != "compatible" or profile.reasoning_effort not in {"none", "minimal", "low", "medium", "high"}):
+            raise ValueError(f"Invalid compatible reasoning_effort in {name}")
     defaults = {
         "max_input_tokens": 12000, "max_output_tokens": 700,
         "max_images": 3, "max_attachment_bytes": 8 * 1024 * 1024,
@@ -70,13 +88,15 @@ def load_settings(path: str | Path = "config.yaml") -> Settings:
     limits = {key: int(raw.get("limits", {}).get(key, value)) for key, value in defaults.items()}
     if any(value <= 0 for value in limits.values()) or limits["max_speakers"] > 3:
         raise ValueError("Limits must be positive and max_speakers cannot exceed 3")
-    guild_id = discord.get("development_guild_id")
+    guild_id = os.environ.get("DISCORD_GUILD_ID") or discord.get("development_guild_id")
+    if guild_id and int(guild_id) <= 0:
+        raise ValueError("DISCORD_GUILD_ID must be a positive server ID")
     retention = int(raw.get("history_retention_days", 90))
     if retention <= 0:
         raise ValueError("history_retention_days must be positive")
     return Settings(
         token=token, development_guild_id=int(guild_id) if guild_id else None,
-        database_path=Path(raw.get("database_path", "data/llmcord.sqlite3")),
+        database_path=Path(os.environ.get("LLMCORD_DATABASE_PATH") or raw.get("database_path", "data/llmcord.sqlite3")),
         history_retention_days=retention, profiles=profiles,
         dialogue=choices["dialogue"], director=choices["director"],
         memory=choices["memory"], limits=limits,

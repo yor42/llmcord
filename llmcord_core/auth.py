@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import logging
 import secrets
 import time
 
+import httpx
 from fastapi import HTTPException
 
 DISCORD_API = 'https://discord.com/api/v10'
@@ -14,12 +17,55 @@ class AuthService:
     def __init__(self, app):
         self.app = app
         self.refresh_locks = {}
+        self.request_locks = {}
+        self.retry_at = {}
+
+    @staticmethod
+    def retry_delay(response):
+        value = response.headers.get('Retry-After') or response.headers.get('X-RateLimit-Reset-After')
+        if value is None:
+            try:
+                value = response.json().get('retry_after', 1)
+            except (ValueError, AttributeError):
+                value = 1
+        try:
+            return max(0.0, float(value))
+        except (TypeError, ValueError):
+            return 1.0
 
     async def discord_get(self, path, token):
-        response = await self.app.state.http.get(DISCORD_API + path, headers={'Authorization': token})
-        if response.status_code >= 400:
-            raise HTTPException(502, 'Discord authentication is unavailable')
-        return response.json()
+        key = (path, hashlib.sha256(token.encode()).digest())
+        deadline = time.monotonic() + 20
+        async with self.request_locks.setdefault(key, asyncio.Lock()):
+            for attempt in range(3):
+                delay = max(0, self.retry_at.get(key, 0) - time.monotonic())
+                if delay:
+                    if time.monotonic() + delay >= deadline:
+                        raise HTTPException(503, 'Discord permission checks are temporarily rate limited. Please try again shortly.',
+                                            headers={'Retry-After': str(max(1, int(delay) + 1))})
+                    await asyncio.sleep(delay)
+                try:
+                    response = await self.app.state.http.get(DISCORD_API + path, headers={'Authorization': token})
+                except httpx.RequestError:
+                    logging.warning('Discord permission request failed: path=%s network_error', path)
+                    raise HTTPException(503, 'Cannot reach Discord to check permissions. Please try again shortly.') from None
+                if response.headers.get('X-RateLimit-Remaining') == '0' or response.status_code == 429:
+                    self.retry_at[key] = time.monotonic() + self.retry_delay(response)
+                if response.status_code == 429:
+                    logging.warning('Discord permission request rate limited: path=%s retry_after=%.2f', path, self.retry_delay(response))
+                    continue
+                if response.status_code == 401:
+                    # Invalidate only sessions using the rejected access token.
+                    for ident, session in list(self.app.state.sessions.items()):
+                        if 'Bearer ' + session['access'] == token:
+                            self.app.state.sessions.pop(ident, None)
+                    raise HTTPException(401, 'Discord session expired. Please sign in again.')
+                if response.status_code >= 400:
+                    logging.warning('Discord permission request failed: path=%s status=%d', path, response.status_code)
+                    detail = 'Discord denied the permission check. Please sign in again.' if response.status_code == 403 else 'Discord permission checks are unavailable. Please try again shortly.'
+                    raise HTTPException(403 if response.status_code == 403 else 502, detail)
+                return response.json()
+        raise HTTPException(503, 'Discord permission checks are temporarily rate limited. Please try again shortly.')
 
     async def session(self, ident):
         session = self.app.state.sessions.get(ident)

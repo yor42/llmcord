@@ -1,4 +1,4 @@
-"""SillyTavern World Info import and normalization.
+"""SillyTavern and RisuAI lorebook import and normalization.
 
 The original entry is retained so a later release can interpret fields that have
 no Discord prompt equivalent. Unsupported placements are deliberately inactive.
@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -34,6 +35,7 @@ class ImportedEntry:
 class ImportedBook:
     raw_json: str
     entries: dict[str, ImportedEntry]
+    source_format: str = 'sillytavern'
 
 
 def _strings(value: Any) -> list[str]:
@@ -42,7 +44,7 @@ def _strings(value: Any) -> list[str]:
     return [str(part).strip() for part in value if str(part).strip()] if isinstance(value, list) else []
 
 
-def normalize_entry(uid: str, entry: dict) -> ImportedEntry:
+def normalize_entry(uid: str, entry: dict, *, source_format: str | None = None) -> ImportedEntry:
     content = entry.get("content", "")
     if not isinstance(content, str):
         raise ValueError(f"Entry {uid} has no text content")
@@ -56,6 +58,15 @@ def normalize_entry(uid: str, entry: dict) -> ImportedEntry:
         position = int(position)
     position = positions.get(position, position)
     unsupported = []
+    risu = source_format == 'risu' or any(key in entry for key in ('insertorder', 'secondkey', 'useRegex', 'mode'))
+    mode = entry.get('mode', 'normal')
+    if risu and mode != 'normal':
+        unsupported.append('RisuAI folder marker is preserved as inactive metadata' if mode == 'folder'
+                           else f'RisuAI mode {mode} requires unsupported activation behavior')
+    if risu and re.search(r'(?m)^\s*@@[A-Za-z_]', content):
+        unsupported.append('RisuAI @@ decorators require explicit remapping')
+    if risu and any(macro.strip() not in {'char', 'user'} for macro in re.findall(r'\{\{(.*?)\}\}', content, re.DOTALL)):
+        unsupported.append('RisuAI content macros require explicit remapping')
     if position not in {"before_char", "after_char", "before_examples",
             "after_examples", "in_chat"}:
         unsupported.append(f"Placement {position} needs a SillyTavern-only prompt surface")
@@ -72,10 +83,11 @@ def normalize_entry(uid: str, entry: dict) -> ImportedEntry:
     role = {0: "system", 1: "user", 2: "assistant"}.get(role, role)
     rule = {
         "keys": _strings(entry.get("key", entry.get("keys", []))),
-        "secondary_keys": _strings(entry.get("keysecondary", entry.get("secondary_keys", []))),
+        "secondary_keys": _strings(entry.get("keysecondary", entry.get("secondary_keys", entry.get('secondkey', [])))),
         "constant": bool(entry.get("constant", entry.get("alwaysActive", False))),
-        "enabled": bool(entry.get("enabled", not entry.get("disable", False))),
-        "order": int(entry.get("order", entry.get("insertion_order", 100)) if entry.get("order", entry.get("insertion_order", 100)) is not None else 100),
+        "enabled": bool(entry.get("enabled", not entry.get("disable", False))) and not (risu and mode == 'folder'),
+        "order": int(entry.get("order", entry.get("insertion_order", entry.get('insertorder', 100))) if entry.get("order", entry.get("insertion_order", entry.get('insertorder', 100))) is not None else 100),
+        "regex_enabled": entry.get('use_regex', entry.get('useRegex', False if risu else None)),
         "selective": bool(entry.get("selective", False)),
         "selective_logic": int(entry.get("selectiveLogic", entry.get("selective_logic", 0)) or 0),
         "case_sensitive": bool(entry.get("caseSensitive", entry.get("case_sensitive", False))),
@@ -116,7 +128,7 @@ def normalize_entry(uid: str, entry: dict) -> ImportedEntry:
 def export_entry(content: str, rule: dict) -> dict:
     """Overlay effective fields while retaining fields belonging to other tools."""
     raw = dict(rule.get('original', {}))
-    aliases = {'keys': 'key', 'secondary_keys': 'keysecondary', 'order': 'order',
+    aliases = {'keys': 'key', 'secondary_keys': 'keysecondary', 'order': 'order', 'regex_enabled': 'use_regex',
         'selective_logic': 'selectiveLogic', 'case_sensitive': 'caseSensitive',
         'whole_words': 'matchWholeWords', 'scan_depth': 'scanDepth',
         'use_probability': 'useProbability', 'group_weight': 'groupWeight',
@@ -134,7 +146,7 @@ def export_entry(content: str, rule: dict) -> dict:
     return raw
 
 
-def validate_rule(rule: dict) -> dict:
+def validate_rule(rule: dict, content: str | None = None) -> dict:
     if not isinstance(rule, dict):
         raise ValueError('Rule must be an object')
     default = normalize_entry('validation', {}).rule
@@ -155,6 +167,8 @@ def validate_rule(rule: dict) -> dict:
             raise ValueError(f'{key} cannot be negative')
     if effective['scan_depth'] is not None and (type(effective['scan_depth']) is not int or effective['scan_depth'] < 0):
         raise ValueError('Scan depth must be a nonnegative integer or null')
+    if effective['regex_enabled'] is not None and type(effective['regex_enabled']) is not bool:
+        raise ValueError('Regex enabled must be true, false, or null')
     if not 0 <= effective['probability'] <= 100 or effective['selective_logic'] not in range(4):
         raise ValueError('Invalid probability or secondary matching logic')
     if effective['role'] not in {'system', 'user', 'assistant'}:
@@ -162,7 +176,8 @@ def validate_rule(rule: dict) -> dict:
     if not isinstance(effective['original'], dict):
         raise ValueError('Original import must be an object')
     # Recompute warnings from the actual effective settings, not stale warnings.
-    normalized = normalize_entry('validation', export_entry('', effective)).rule
+    normalized = normalize_entry('validation', export_entry(
+        effective['original'].get('content', '') if content is None else content, effective)).rule
     effective['unsupported'] = normalized['unsupported']
     return effective
 
@@ -171,7 +186,23 @@ def parse_lorebook(data: bytes) -> ImportedBook:
     if len(data) > MAX_BOOK_BYTES:
         raise ValueError("Lorebook exceeds 8 MiB")
     raw = json.loads(data.decode("utf-8-sig"))
-    if isinstance(raw, list):
+    source_format = 'sillytavern'
+    if isinstance(raw, dict) and raw.get('type') == 'risu':
+        source_format = 'risu'
+        if type(raw.get('ver')) is not int or raw['ver'] != 1:
+            raise ValueError('Only RisuAI version-1 lorebook exports are supported')
+        if not isinstance(raw.get('data'), list):
+            raise ValueError('RisuAI lorebook data must be an entry array')
+        source = []
+        for index, item in enumerate(raw['data']):
+            ident = item.get('uid', item.get('id')) if isinstance(item, dict) else None
+            if ident is None or ident == '':
+                ident = index
+            # Child-mode records can deliberately reference another entry ID.
+            if isinstance(item, dict) and item.get('mode') == 'child':
+                ident = f'{ident}:child:{index}'
+            source.append((str(ident), item))
+    elif isinstance(raw, list):
         source = [(str(item.get("uid", index)) if isinstance(item, dict) else str(index), item)
                   for index, item in enumerate(raw)]
     elif isinstance(raw, dict) and isinstance(raw.get("entries"), dict):
@@ -180,12 +211,12 @@ def parse_lorebook(data: bytes) -> ImportedBook:
         source = [(str(item.get("id", index)) if isinstance(item, dict) else str(index), item)
                   for index, item in enumerate(raw["entries"])]
     else:
-        raise ValueError("Expected an entry array or an object with entries")
+        raise ValueError("Expected an entry array, an object with entries, or a RisuAI version-1 lorebook export")
     if len(source) > MAX_ENTRIES:
         raise ValueError("Lorebook has too many entries")
     entries = {}
     for uid, item in source:
         if not isinstance(item, dict) or uid in entries:
             raise ValueError(f"Invalid or duplicate lorebook entry {uid}")
-        entries[uid] = normalize_entry(uid, item)
-    return ImportedBook(json.dumps(raw, ensure_ascii=False), entries)
+        entries[uid] = normalize_entry(uid, item, source_format=source_format)
+    return ImportedBook(json.dumps(raw, ensure_ascii=False), entries, source_format)
