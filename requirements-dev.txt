@@ -1,0 +1,3 @@
+-r requirements.txt
+playwright==1.63.0
+trustme==1.2.1

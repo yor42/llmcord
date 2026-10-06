@@ -11,6 +11,7 @@ llmcord is a Discord character bot for casual group skits. Administrators arrang
 | [Lore, imports, and memory](lore-and-memory.md) | Understand what a character knows and how imports sync. |
 | [Raspberry Pi deployment](deployment-raspberry-pi.md) | Run bot and dashboard with Docker Compose and Tailscale Serve. |
 | [Architecture](architecture.md) | Find the relevant code and understand branches, storage, and model calls. |
+| [Admin console](admin-console.md) | Lore workspace, guild prompt presets, imports, and emotion avatars. |
 | [Verification](verification.md) | Run offline checks and validate a private Discord channel. |
 
 The [repository README](../README.md) contains the project overview and setup summary. The files here describe the current implementation. They do not require a documentation generator; GitHub renders them directly.

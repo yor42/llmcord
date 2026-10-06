@@ -4,6 +4,9 @@ import asyncio
 import logging
 import sqlite3
 import time
+import re
+import hashlib
+from dataclasses import replace
 from datetime import timedelta
 from typing import Literal
 
@@ -16,6 +19,7 @@ from .config import Settings
 from .engine import Engine, SceneContext
 from .models import ImageInput, ModelGateway
 from .store import Store
+from .avatars import emotion_stream
 
 
 def split_discord(text: str, limit: int = 1900) -> list[str]:
@@ -43,6 +47,9 @@ class SkitBot(commands.Bot):
         self.models = ModelGateway(settings)
         self.engine = Engine(self.store, self.models, settings)
         self.channel_locks: dict[int, asyncio.Lock] = {}
+        self.webhook_locks = {}
+        self.webhook_defaults = {}
+        self.checked_avatar_assets = {}
         self.cleanup_task: asyncio.Task | None = None
         register_commands(self)
 
@@ -134,7 +141,7 @@ class SkitBot(commands.Bot):
             return
         scene = SceneContext(message.guild.id, message.channel.id, parent_id,
             binding["space_id"], message.author.id, message.id, text,
-            reference_id if referenced else None, recent, images, ambient=not explicit)
+            reference_id if referenced else None, recent, images, ambient=not explicit, user_label=message.author.display_name)
         async with self.channel_locks.setdefault(message.channel.id, asyncio.Lock()):
             await self.run_scene(scene, message.channel)
 
@@ -142,10 +149,19 @@ class SkitBot(commands.Bot):
         parent_channel = channel.parent if isinstance(channel, discord.Thread) else channel
         if not isinstance(parent_channel, discord.TextChannel):
             raise ValueError("Character webhooks require a text channel or its thread")
+        key = (parent_channel.id, character['id'])
+        async with self.webhook_locks.setdefault(key, asyncio.Lock()):
+            return await self._webhook_locked(parent_channel, character, key)
+
+    async def _webhook_locked(self, parent_channel, character, key):
+        identity = (character['name'], hashlib.sha256(character['avatar'] or b'').hexdigest())
         webhook_id = self.store.webhook_id(parent_channel.id, character["id"])
         if webhook_id:
             for webhook in await parent_channel.webhooks():
                 if webhook.id == webhook_id and webhook.token:
+                    if self.webhook_defaults.get(key) != identity:
+                        webhook = await webhook.edit(name=character['name'][:80], avatar=character['avatar'])
+                        self.webhook_defaults[key] = identity
                     return webhook
         try:
             webhook = await parent_channel.create_webhook(name=character["name"][:80], avatar=character["avatar"], reason="llmcord character")
@@ -154,10 +170,30 @@ class SkitBot(commands.Bot):
         except discord.HTTPException as error:
             raise ValueError("Could not create a character webhook; check the channel webhook limit") from error
         self.store.save_webhook_id(parent_channel.id, character["id"], webhook.id)
+        self.webhook_defaults[key] = identity
         return webhook
+
+    async def resolve_avatar(self, selected, neutral):
+        """Validate published assets on first use after restart; fail to the default."""
+        ident = selected['asset_id']
+        if ident:
+            if ident not in self.checked_avatar_assets:
+                asset = self.store.one('SELECT * FROM avatar_assets WHERE id=?', (ident,))
+                try:
+                    channel = self.get_channel(asset['channel_id']) or await self.fetch_channel(asset['channel_id'])
+                    await channel.fetch_message(asset['message_id'])
+                    self.checked_avatar_assets[ident] = True
+                except (discord.DiscordException, AttributeError):
+                    self.checked_avatar_assets[ident] = False
+            if not self.checked_avatar_assets[ident]:
+                if selected['slot_key'] != 'neutral':
+                    return await self.resolve_avatar(neutral, neutral)
+                return {**neutral, 'url': None, 'asset_id': None}
+        return selected
 
     async def run_scene(self, scene: SceneContext, channel):
         try:
+            scene = replace(scene, preset=scene.preset or self.store.active_preset(scene.guild_id))
             speakers = await self.engine.speakers(scene)
             if not speakers:
                 if not scene.ambient:
@@ -170,34 +206,46 @@ class SkitBot(commands.Bot):
             parent_message_id = scene.user_message_id
             completed = []
             for character in speakers:
-                system, messages, sources = await self.engine.prompt_for(scene, character, preceding)
+                request, sources = await self.engine.prepare_dialogue(scene, character, preceding)
+                system = '\n\n'.join(m.text for m in request.messages if m.role == 'system')
+                messages = [m for m in request.messages if m.role != 'system']
                 webhook = await self._webhook(channel, character)
                 thread = channel if isinstance(channel, discord.Thread) else None
-                placeholder = await webhook.send("…", thread=thread, wait=True, silent=True,
-                    allowed_mentions=discord.AllowedMentions.none())
+                slots = {row['slot_key']: row for row in self.store.usable_avatars(scene.guild_id, character['id'])}
+                emotion, chosen_avatar, placeholder = 'neutral', slots['neutral'], None
                 pieces, last_edit = [], 0.0
                 try:
-                    async for delta in self.models.stream_text("dialogue", system, messages):
-                        pieces.append(delta)
+                    stream = self.models.stream_compiled('dialogue', request) if hasattr(self.models, 'stream_compiled') else self.models.stream_text('dialogue', system, messages)
+                    async for event in emotion_stream(stream, slots):
+                        if event.emotion is not None:
+                            emotion = event.emotion
+                            chosen_avatar = await self.resolve_avatar(slots.get(emotion, slots['neutral']), slots['neutral'])
+                            placeholder = await webhook.send('…', thread=thread, wait=True, silent=True,
+                                username=character['name'], avatar_url=chosen_avatar['url'], allowed_mentions=discord.AllowedMentions.none())
+                            continue
+                        pieces.append(event.text)
                         current = "".join(pieces)
                         if time.monotonic() - last_edit > 1.2 and len(current) < 1800:
                             await placeholder.edit(content=current + " ▌", allowed_mentions=discord.AllowedMentions.none())
                             last_edit = time.monotonic()
-                    line = "".join(pieces).strip()
+                    line = re.sub(r'<emotion>[^\n]*?</emotion>\s*', '', "".join(pieces)).strip()
                     chunks = split_discord(line)
                     await placeholder.edit(content=chunks[0], allowed_mentions=discord.AllowedMentions.none())
                 except Exception:
-                    await placeholder.delete()
+                    if placeholder:
+                        await placeholder.delete()
                     raise
                 outgoing = [placeholder]
                 for chunk in chunks[1:]:
                     outgoing.append(await webhook.send(chunk, thread=thread, wait=True, silent=True,
+                        username=character['name'], avatar_url=chosen_avatar['url'],
                         allowed_mentions=discord.AllowedMentions.none()))
                 for posted, chunk in zip(outgoing, chunks):
                     self.store.record_node(posted.id, scene.guild_id, scene.channel_id,
                         parent_message_id, None, character["id"], chunk,
                         sources=sources["messages"])
-                    self.store.save_trace(posted.id, {"character_id": character["id"], **sources})
+                    self.store.save_trace(posted.id, {"character_id": character["id"], 'emotion': emotion,
+                        'avatar_asset_id': chosen_avatar['asset_id'], **sources})
                     self.store.save_lore_activations(posted.id, sources.get("lore_activations", []))
                     parent_message_id = posted.id
                 preceding.append((character["name"], line))
@@ -205,7 +253,7 @@ class SkitBot(commands.Bot):
             if scene.ambient:
                 self.store.mark_ambient_response(scene.channel_id)
             await self.engine.extract_memories(scene, completed, preceding, root_id)
-            await self.engine.summarize_scene(parent_message_id)
+            await self.engine.summarize_scene(parent_message_id, scene)
         except Exception as error:
             logging.error("Scene failed: %s", type(error).__name__)
             explanation = str(error) if isinstance(error, ValueError) else "Please check the model and webhook settings."
@@ -410,7 +458,7 @@ def register_commands(bot: SkitBot) -> None:
         invitation = await interaction.original_response()
         scene = SceneContext(interaction.guild_id, interaction.channel.id, parent_id,
             binding["space_id"], interaction.user.id, invitation.id, prompt,
-            parent_message_id, recent, [], forced_character_id=row["id"])
+            parent_message_id, recent, [], forced_character_id=row["id"], user_label=interaction.user.display_name)
         async with bot.channel_locks.setdefault(interaction.channel.id, asyncio.Lock()):
             await bot.run_scene(scene, interaction.channel)
 
@@ -556,6 +604,12 @@ def register_commands(bot: SkitBot) -> None:
         text += f"\nBranch messages: {len(trace.get('messages', []))}"
         text += f"; nearby group messages: {len(trace.get('recent', []))}"
         text += f"\nPersonal memories: {len(trace.get('personal', []))}; character encounters: {len(trace.get('encounters', []))}"
+        preset = trace.get('preset', {})
+        if preset:
+            text += f"\nPreset: #{preset['id']} revision {preset['revision']}; emotion: {trace.get('emotion', 'neutral')}"
+            text += f"\nPrompt blocks: {len(preset.get('blocks', []))}; trimmed blocks: {len(preset.get('omitted', []))}"
+            if preset.get('adaptations'):
+                text += '\nProvider adaptations: ' + '; '.join(preset['adaptations'])[:300]
         await interaction.response.send_message(text[:1900], ephemeral=True)
 
     @bot.tree.error

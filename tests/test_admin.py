@@ -54,7 +54,7 @@ class LorebookTests(unittest.TestCase):
         for book, text in ((book_a, "A secret"), (book_b, "B secret"),
                            (book_h, "Hub event"), (book_c, "Cafe menu")):
             self.store.sync_lorebook(1, book, parse_lorebook(payload({"1": {
-                "key": ["tell"], "content": text}})), {}, 0)
+                "key": ["tell"], "content": text}})), {}, self.store.lorebook(1, book)['revision'])
         scopes = lore_scopes(self.store, self.alice, self.h, 300)
         found = evaluate(self.store, 1, scopes, "tell", 1000,
             character=self.store.character_by_id(self.alice))
@@ -68,8 +68,8 @@ class LorebookTests(unittest.TestCase):
         updated = parse_lorebook(payload({"1": {"key": ["tell"], "content": "New import"}}))
         self.assertEqual(self.store.preview_lorebook_sync(1, book_a, updated)[0]["status"], "conflict")
         with self.assertRaises(ValueError):
-            self.store.sync_lorebook(1, book_a, updated, {}, 1)
-        self.store.sync_lorebook(1, book_a, updated, {"1": "keep"}, 1)
+            self.store.sync_lorebook(1, book_a, updated, {}, self.store.lorebook(1, book_a)['revision'])
+        self.store.sync_lorebook(1, book_a, updated, {"1": "keep"}, self.store.lorebook(1, book_a)["revision"])
         self.assertEqual(self.store.lorebook_entries(book_a)[0]["content"], "Locally edited")
 
     def test_rules_and_branch_activation(self):
@@ -116,9 +116,9 @@ class LorebookTests(unittest.TestCase):
                 connection.execute("PRAGMA user_version=1")
             connection.close()
             store = Store(database)
-            self.assertEqual(store.one("PRAGMA user_version")[0], 2)
+            self.assertEqual(store.one("PRAGMA user_version")[0], 3)
             store.close()
-            backups = list(Path(directory).glob("old.sqlite3.pre-v2-*.sqlite3"))
+            backups = list(Path(directory).glob("old.sqlite3.pre-v3-*.sqlite3"))
             self.assertEqual(len(backups), 1)
             with sqlite3.connect(backups[0]) as original:
                 self.assertEqual(original.execute("SELECT value FROM legacy_marker").fetchone()[0],
@@ -141,7 +141,7 @@ class WebTests(unittest.TestCase):
                     return httpx.Response(200, json=[{"id": "100", "name": "chat", "type": 0}])
                 return httpx.Response(404)
             http = httpx.AsyncClient(transport=httpx.MockTransport(discord_api))
-            app = create_app(Path(directory) / "web.sqlite3", "https://pi.test", "client", "secret", "bot", http)
+            app = create_app(Path(directory) / "web.sqlite3", "https://pi.test", "client", "secret", "bot", http, enable_dashboard=False)
             with TestClient(app, base_url="https://pi.test") as client:
                 self.assertEqual(client.get("/guild/1").status_code, 401)
                 login = client.get("/login", follow_redirects=False)

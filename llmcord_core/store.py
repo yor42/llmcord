@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+import threading
 from contextlib import closing
 from pathlib import Path
 from typing import Any
+from .admin_store import AdminStore
 
 
 SCHEMA = """
@@ -126,7 +128,7 @@ CREATE TABLE IF NOT EXISTS admin_audit (
 """
 
 
-class Store:
+class Store(AdminStore):
     def __init__(self, path: str | Path = ":memory:"):
         existing = str(path) != ":memory:" and Path(path).exists()
         if str(path) != ":memory:":
@@ -137,8 +139,11 @@ class Store:
         self.db.execute("PRAGMA busy_timeout=5000")
         self.db.execute("PRAGMA journal_mode=WAL")
         old_version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if existing and old_version < 2:
-            backup = Path(str(path) + f".pre-v2-{int(time.time())}.sqlite3")
+        if old_version > 3:
+            self.db.close()
+            raise ValueError('Database is newer than this application')
+        if existing and old_version < 3:
+            backup = Path(str(path) + f".pre-v3-{time.time_ns()}.sqlite3")
             with closing(sqlite3.connect(backup)) as target:
                 self.db.backup(target)
         self.db.executescript(SCHEMA)
@@ -148,7 +153,9 @@ class Store:
         columns = {row[1] for row in self.db.execute("PRAGMA table_info(lore)")}
         if "rule_json" not in columns:
             self.db.execute("ALTER TABLE lore ADD COLUMN rule_json TEXT NOT NULL DEFAULT '{}'")
-        self.db.execute("PRAGMA user_version=2")
+        self.admin_lock = threading.RLock()
+        self.migrate_admin()
+        self.db.execute("PRAGMA user_version=3")
         self.db.commit()
 
     def close(self) -> None:
@@ -197,6 +204,9 @@ class Store:
         space = self.space_by_id(space_id)
         if not space or space["guild_id"] != guild_id:
             raise ValueError("Space does not belong to this server")
+        existing = self.channel(channel_id)
+        if existing and existing['guild_id'] != guild_id:
+            raise ValueError('Channel belongs to another server')
         self.execute("INSERT INTO channels(channel_id,guild_id,space_id) VALUES(?,?,?) ON CONFLICT(channel_id) DO UPDATE SET space_id=excluded.space_id,default_cast='[]',active_cast='[]',ambient=0", (channel_id, guild_id, space_id))
 
     def channel(self, channel_id: int) -> sqlite3.Row | None:
@@ -227,22 +237,8 @@ class Store:
         return row["reset_at"] if row else 0.0
 
     def add_character(self, guild_id: int, world_id: int, name: str, card: dict, avatar: bytes | None, entries: list[dict]) -> int:
-        world = self.space_by_id(world_id)
-        if not world or world["guild_id"] != guild_id or world["kind"] != "world":
-            raise ValueError("Characters must have a home world in this server")
-        previous = self.character(guild_id, name)
-        moved = bool(previous and previous["world_id"] != world_id)
-        with self.db:
-            self.db.execute("INSERT INTO characters(guild_id,world_id,name,card,avatar) VALUES(?,?,?,?,?) ON CONFLICT(guild_id,name) DO UPDATE SET world_id=excluded.world_id,card=excluded.card,avatar=excluded.avatar", (guild_id, world_id, name, json.dumps(card), avatar))
-            row = self.one("SELECT id FROM characters WHERE guild_id=? AND name=?", (guild_id, name))
-            character_id = row["id"]
-            self.db.execute("DELETE FROM lore WHERE scope_kind='character' AND scope_id=?", (character_id,))
-            for entry in entries:
-                self.db.execute("INSERT INTO lore(guild_id,scope_kind,scope_id,content,keys_json,constant,insertion_order,enabled,rule_json) VALUES(?,'character',?,?,?,?,?,?,?)", (guild_id, character_id, entry["content"], json.dumps(entry["keys"]), int(entry["constant"]), entry["insertion_order"], int(entry["enabled"]), json.dumps(entry.get("rule", {}))))
-            self._prune_character_casts(guild_id, character_id)
-            if moved:
-                self._remove_from_thread_casts(character_id)
-        return character_id
+        from .cards import ParsedCard
+        return self.apply_card(guild_id, world_id, ParsedCard(name, card, entries, avatar))
 
     def character(self, guild_id: int, name: str) -> sqlite3.Row | None:
         return self.one("SELECT * FROM characters WHERE guild_id=? AND name=?", (guild_id, name))
@@ -289,7 +285,10 @@ class Store:
     def add_lore(self, guild_id: int, scope_kind: str, scope_id: int, content: str, keys: list[str] | None = None, constant: bool = False, order: int = 100, source_id: int | None = None, promoted_from: int | None = None, pinned: bool = False) -> int:
         if scope_kind not in {"character", "space", "channel", "thread"} or not content.strip():
             raise ValueError("Invalid lore scope or empty content")
-        return self.execute("INSERT INTO lore(guild_id,scope_kind,scope_id,content,keys_json,constant,insertion_order,source_message_id,promoted_from,pinned) VALUES(?,?,?,?,?,?,?,?,?,?)", (guild_id, scope_kind, scope_id, content.strip(), json.dumps(keys or []), int(constant), order, source_id, promoted_from, int(pinned)))
+        with self.write_admin():
+            ident = self.db.execute("INSERT INTO lore(guild_id,scope_kind,scope_id,content,keys_json,constant,insertion_order,source_message_id,promoted_from,pinned) VALUES(?,?,?,?,?,?,?,?,?,?)", (guild_id, scope_kind, scope_id, content.strip(), json.dumps(keys or []), int(constant), order, source_id, promoted_from, int(pinned))).lastrowid
+            self.bump_owner(guild_id, scope_kind, scope_id)
+        return ident
 
     def lore_row(self, guild_id: int, lore_id: int) -> sqlite3.Row | None:
         return self.one("SELECT * FROM lore WHERE guild_id=? AND id=?", (guild_id, lore_id))
@@ -298,21 +297,27 @@ class Store:
         return self.all("SELECT * FROM lore WHERE guild_id=? AND scope_kind=? AND scope_id=? AND enabled=1 ORDER BY insertion_order,id", (guild_id, scope_kind, scope_id))
 
     def delete_lore(self, guild_id: int, lore_id: int) -> None:
-        self.execute("DELETE FROM lore WHERE guild_id=? AND id=?", (guild_id, lore_id))
+        row = self.lore_row(guild_id, lore_id)
+        if row:
+            self.delete_entry(guild_id, f"lore:{lore_id}", row["revision"])
 
     def pin_lore(self, guild_id: int, lore_id: int) -> None:
-        self.execute("UPDATE lore SET pinned=1 WHERE guild_id=? AND id=?", (guild_id, lore_id))
+        row = self.admin_entry(guild_id, f"lore:{lore_id}")
+        self.save_entry(guild_id, row["owner_kind"], row["owner_id"], row["content"], row["rule"], True, row["ref"], row["revision"])
 
     def edit_lore(self, guild_id: int, lore_id: int, content: str) -> None:
-        if not content.strip() or not self.lore_row(guild_id, lore_id):
-            raise ValueError("Lore entry not found or content is empty")
-        self.execute("UPDATE lore SET content=? WHERE guild_id=? AND id=?", (content.strip(), guild_id, lore_id))
+        row = self.admin_entry(guild_id, f'lore:{lore_id}')
+        self.save_entry(guild_id, row['owner_kind'], row['owner_id'], content, row['rule'], row['pinned'], row['ref'], row['revision'])
 
     def promote_lore(self, guild_id: int, lore_id: int, scope_kind: str, scope_id: int) -> int:
         source = self.lore_row(guild_id, lore_id)
         if not source:
             raise ValueError("Lore entry not found")
-        return self.add_lore(guild_id, scope_kind, scope_id, source["content"], json.loads(source["keys_json"]), bool(source["constant"]), source["insertion_order"], source["source_message_id"], lore_id, True)
+        row = self.admin_entry(guild_id, f'lore:{lore_id}')
+        ref = self.transfer_entry(guild_id, row['ref'], scope_kind, scope_id, row['revision'], copy=True)
+        ident = int(ref.split(':')[1])
+        self.execute('UPDATE lore SET promoted_from=?,source_message_id=? WHERE id=?', (lore_id, source['source_message_id'], ident))
+        return ident
 
     def record_node(self, message_id: int, guild_id: int, channel_id: int, parent_id: int | None, author_id: int | None, character_id: int | None, content: str, context: list[dict] | None = None, sources: list[int] | None = None, created_at: float | None = None) -> int:
         parent = self.node(parent_id) if parent_id else None
@@ -450,10 +455,12 @@ class Store:
         book, space = self.lorebook(guild_id, book_id), self.space_by_id(space_id)
         if not book or book["target_kind"] != "guild" or not space or space["guild_id"] != guild_id:
             raise ValueError("Choose a guild book and space in this server")
-        if enabled:
-            self.execute("INSERT OR IGNORE INTO lorebook_space_links VALUES(?,?)", (book_id, space_id))
-        else:
-            self.execute("DELETE FROM lorebook_space_links WHERE book_id=? AND space_id=?", (book_id, space_id))
+        with self.write_admin():
+            if enabled:
+                self.db.execute("INSERT OR IGNORE INTO lorebook_space_links VALUES(?,?)", (book_id, space_id))
+            else:
+                self.db.execute("DELETE FROM lorebook_space_links WHERE book_id=? AND space_id=?", (book_id, space_id))
+            self.bump_owner(guild_id, 'book', book_id)
 
     def lorebook_links(self, book_id: int) -> list[int]:
         return [row["space_id"] for row in self.all(
@@ -473,67 +480,15 @@ class Store:
                 ORDER BY e.id""", (guild_id, channel_id, *space_ids))
 
     def preview_lorebook_sync(self, guild_id: int, book_id: int, imported) -> list[dict]:
-        from .lorebooks import digest
-        if not self.lorebook(guild_id, book_id):
-            raise ValueError("Lorebook not found")
-        current = {row["uid"]: row for row in self.lorebook_entries(book_id)}
-        changes = []
-        for uid, entry in imported.entries.items():
-            row = current.pop(uid, None)
-            if not row:
-                status = "add"
-            elif row["source_hash"] == entry.source_hash:
-                status = "unchanged"
-            elif digest({"content": row["content"], "rule": json.loads(row["rule_json"])}) != row["local_hash"]:
-                status = "conflict"
-            else:
-                status = "update"
-            changes.append({"uid": uid, "status": status, "warnings": entry.warnings,
-                "before": row["content"] if row else "", "after": entry.content})
-        for uid, row in current.items():
-            local_changed = digest({"content": row["content"],
-                "rule": json.loads(row["rule_json"])}) != row["local_hash"]
-            changes.append({"uid": uid, "status": "conflict" if local_changed else "remove",
-                "warnings": (), "before": row["content"], "after": ""})
-        return changes
+        return self.preview_import(guild_id, 'book', book_id, imported)
 
     def sync_lorebook(self, guild_id: int, book_id: int, imported,
                       resolutions: dict[str, str], expected_revision: int) -> list[dict]:
-        changes = self.preview_lorebook_sync(guild_id, book_id, imported)
-        book = self.lorebook(guild_id, book_id)
-        if book["revision"] != expected_revision:
-            raise ValueError("Lorebook changed since preview; preview again")
-        for change in changes:
-            if change["status"] == "conflict" and resolutions.get(change["uid"]) not in {"keep", "import"}:
-                raise ValueError(f"Resolve conflict for entry {change['uid']}")
-        with self.db:
-            for change in changes:
-                uid, status = change["uid"], change["status"]
-                entry = imported.entries.get(uid)
-                if status == "unchanged" or (status == "conflict" and resolutions.get(uid) == "keep"):
-                    continue
-                if entry is None:
-                    self.db.execute("DELETE FROM lorebook_entries WHERE book_id=? AND uid=?", (book_id, uid))
-                elif status == "add":
-                    self.db.execute("""INSERT INTO lorebook_entries
-                        (book_id,uid,content,rule_json,source_hash,local_hash)
-                        VALUES(?,?,?,?,?,?)""", (book_id, uid, entry.content,
-                        json.dumps(entry.rule, ensure_ascii=False), entry.source_hash, entry.local_hash))
-                else:
-                    self.db.execute("""UPDATE lorebook_entries SET content=?,rule_json=?,
-                        source_hash=?,local_hash=? WHERE book_id=? AND uid=?""",
-                        (entry.content, json.dumps(entry.rule, ensure_ascii=False),
-                         entry.source_hash, entry.local_hash, book_id, uid))
-            self.db.execute("UPDATE lorebooks SET original_json=?,revision=revision+1 WHERE id=?",
-                (imported.raw_json, book_id))
-        return changes
+        return self.sync_admin_book(guild_id, book_id, imported, resolutions, expected_revision)
 
     def edit_lorebook_entry(self, guild_id: int, entry_id: int, content: str) -> None:
-        row = self.one("""SELECT e.id FROM lorebook_entries e JOIN lorebooks b ON b.id=e.book_id
-            WHERE e.id=? AND b.guild_id=?""", (entry_id, guild_id))
-        if not row or not content.strip():
-            raise ValueError("Lorebook entry not found or empty")
-        self.execute("UPDATE lorebook_entries SET content=? WHERE id=?", (content.strip(), entry_id))
+        row = self.admin_entry(guild_id, f'book-entry:{entry_id}')
+        self.save_entry(guild_id, 'book', row['owner_id'], content, row['rule'], row['pinned'], row['ref'], row['revision'])
 
     def save_lore_activations(self, node_id: int, entry_keys: list[str]) -> None:
         with self.db:
@@ -556,6 +511,7 @@ class Store:
                 (int(archived), guild_id, character_id))
             if archived:
                 self._prune_character_casts(guild_id, character_id)
+            self.bump_owner(guild_id, 'character', character_id)
 
     def cast_impact(self, guild_id: int, character_id: int, new_world_id: int) -> list[int]:
         impacted = []
@@ -608,3 +564,4 @@ class Store:
             self._prune_character_casts(guild_id, character_id)
             if moved:
                 self._remove_from_thread_casts(character_id)
+            self.bump_owner(guild_id, 'character', character_id)

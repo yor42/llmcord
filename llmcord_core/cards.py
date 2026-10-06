@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import json
-from io import BytesIO
 from dataclasses import dataclass
 
 from .lorebooks import normalize_entry
@@ -51,12 +50,8 @@ def parse_card(filename: str, data: bytes) -> ParsedCard:
     filename = filename.lower()
     if filename.endswith(".png"):
         raw = _embedded_png_card(data)
-        from PIL import Image
-        with Image.open(BytesIO(data)) as image:
-            image.thumbnail((256, 256))
-            buffer = BytesIO()
-            image.convert("RGBA").save(buffer, format="PNG", optimize=True)
-            avatar = buffer.getvalue()
+        from .avatars import normalize_avatar
+        avatar = normalize_avatar(data)
     elif filename.endswith(".json"):
         raw, avatar = json.loads(data.decode("utf-8")), None
     else:
@@ -76,7 +71,7 @@ def parse_card(filename: str, data: bytes) -> ParsedCard:
     if not isinstance(book, dict):
         book = {}
     entries = []
-    for entry in book.get("entries", []):
+    for index, entry in enumerate(book.get("entries", [])):
         if not isinstance(entry, dict) or not isinstance(entry.get("content"), str):
             continue
         keys = entry.get("keys", entry.get("key", []))
@@ -84,13 +79,16 @@ def parse_card(filename: str, data: bytes) -> ParsedCard:
             keys = [part.strip() for part in keys.split(",")]
         if not isinstance(keys, list):
             keys = []
-        normalized = normalize_entry(str(entry.get("id", len(entries))), entry)
+        normalized = normalize_entry(str(entry.get("id", entry.get('uid', index))), entry)
+        if any(old['uid'] == normalized.uid for old in entries):
+            raise ValueError('Duplicate character lore entry ID')
         entries.append({
+            "uid": normalized.uid,
             "content": entry["content"],
             "keys": [str(key).strip() for key in keys if str(key).strip()],
             "constant": bool(entry.get("constant", entry.get("alwaysActive", False))),
             "enabled": bool(entry.get("enabled", True)),
-            "insertion_order": int(entry.get("insertion_order") or 100),
+            "insertion_order": normalized.rule['order'],
             "rule": normalized.rule,
         })
     return ParsedCard(name=name, data=card, entries=entries, avatar=avatar)

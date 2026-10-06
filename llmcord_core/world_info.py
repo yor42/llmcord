@@ -57,7 +57,7 @@ def collect_entries(store, guild_id: int, scopes: list[tuple[str, int]], charact
             if row["pinned"]:
                 rule = {**rule, "constant": True}
             rows.append(LoreMatch(row["id"], row["content"], kind, scope_id, "",
-                f"lore:{row['id']}", rule.get("position", "after_char"),
+                row['entry_key'] or f"lore:{row['id']}", rule.get("position", "after_char"),
                 int(rule.get("depth", 0)), str(rule.get("role", "system")), "", rule))
     if character:
         world_id = character["world_id"]
@@ -65,8 +65,10 @@ def collect_entries(store, guild_id: int, scopes: list[tuple[str, int]], charact
         channel_id = next((value for kind, value in scopes if kind == "channel"), 0)
         for row in store.active_lorebook_entries(guild_id, world_id, current_space, channel_id):
             rule = json.loads(row["rule_json"])
+            if row['pinned']:
+                rule = {**rule, 'constant': True}
             rows.append(LoreMatch(row["id"], row["content"], "lorebook", row["book_id"], "",
-                f"book:{row['book_id']}:{row['uid']}", rule.get("position", "after_char"),
+                row['entry_key'] or f"book:{row['book_id']}:{row['uid']}", rule.get("position", "after_char"),
                 int(rule.get("depth", 0)), str(rule.get("role", "system")), row["book_name"], rule))
     return rows
 

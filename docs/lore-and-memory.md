@@ -36,7 +36,7 @@ It also accepts an object whose `entries` value is an array. Entry IDs are stabl
 
 Use **Preview sync** before applying an import. The preview labels each entry as added, updated, removed, unchanged, or conflicted. A conflict means an imported entry changed in the file after its local copy was edited. Choose **Keep local edit** or **Use imported entry** for each conflict; applying without a choice is rejected. Handwritten world, hub, channel, and thread lore is stored separately and is never deleted by a lorebook sync. An import preview expires after 15 minutes, and a changed book revision requires another preview.
 
-V2/V3 character cards can also carry `character_book.entries`. They use the same World Info evaluator as standalone books. A PNG card supplies a thumbnail avatar; a JSON card has no image by itself. Reimport a card to update its embedded entries.
+V2/V3 character cards can also carry `character_book.entries`. They use the same World Info evaluator as standalone books. A PNG card supplies a thumbnail avatar; a JSON card has no image by itself. Edit embedded entries in the Lore workspace or reimport with conflict review.
 
 ## World Info evaluation
 

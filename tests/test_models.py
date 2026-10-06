@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock
 
 from llmcord_core.config import ModelProfile, Settings
 from llmcord_core.models import ImageInput, ModelGateway, TurnMessage
+from llmcord_core.models import DIRECTOR_SCHEMA, validate_result
+from llmcord_core.prompts import compile_prompt, default_bundle
 
 
 def gateway(provider):
@@ -15,6 +17,21 @@ def gateway(provider):
 
 
 class ModelAdapterTests(unittest.IsolatedAsyncioTestCase):
+    async def test_compiled_request_preserves_late_system_message(self):
+        model = gateway('compatible')
+        create = AsyncMock(return_value=SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content='Hello'))]))
+        model.clients['test'] = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+        request = compile_prompt(default_bundle(), 'dialogue', {'card_post_history': 'FINAL'}, [TurnMessage('user', 'INPUT')], 'compatible', 4000)
+        await model.text_compiled('dialogue', request)
+        self.assertEqual(create.call_args.kwargs['messages'][-2:], [{'role': 'user', 'content': 'INPUT'}, {'role': 'system', 'content': 'FINAL'}])
+        self.assertNotEqual(create.call_args.kwargs['messages'][0]['content'], '')
+
+    async def test_structured_contract_rejects_wrong_types(self):
+        with self.assertRaises(ValueError):
+            validate_result({'speakers': [True]}, DIRECTOR_SCHEMA)
+        with self.assertRaises(ValueError):
+            validate_result({'speakers': [1], 'unexpected': 'field'}, DIRECTOR_SCHEMA)
+
     async def test_openai_responses_text_and_schema(self):
         model = gateway("openai")
         create = AsyncMock(return_value=SimpleNamespace(output_text='{"speakers":[1]}'))

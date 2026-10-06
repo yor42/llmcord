@@ -34,6 +34,12 @@ flowchart LR
 | [`llmcord_core/cards.py`](../llmcord_core/cards.py) | V2/V3 JSON and PNG character-card parsing. |
 | [`llmcord_core/web.py`](../llmcord_core/web.py) | Discord OAuth, administrator checks, CSRF, and dashboard actions. |
 | [`llmcord_core/templates/`](../llmcord_core/templates/) | Server-rendered dashboard pages. |
+| [`llmcord_core/dashboard.py`](../llmcord_core/dashboard.py) | NiceGUI pages, reusable editors, authenticated live events, and uploads. |
+| [`llmcord_core/auth.py`](../llmcord_core/auth.py) | Discord authorization shared by HTTP and live callbacks. |
+| [`llmcord_core/admin.py`](../llmcord_core/admin.py) | Shared admin orchestration and sample-only prompt previews. |
+| [`llmcord_core/admin_store.py`](../llmcord_core/admin_store.py) | Versioned presets, lore identities/import provenance, ownership transfers, and avatar metadata. |
+| [`llmcord_core/prompts.py`](../llmcord_core/prompts.py) | Preset import/export, bounded macros, ordered messages, adaptations, and trimming. |
+| [`llmcord_core/avatars.py`](../llmcord_core/avatars.py) | Image validation, Discord publication, and bounded emotion-header parsing. |
 
 ## Scene flow
 
@@ -44,6 +50,10 @@ flowchart LR
 5. The memory adapter extracts facts and a branch summary. Repeated shared facts become local durable lore after evidence from separate scene roots. Personal facts are written only with consent.
 
 SQLite runs in WAL mode with a busy timeout. Schema version is held in `PRAGMA user_version`; migration backs up an existing older database before upgrading. Compose orders the migration service before bot and web startup.
+
+The current schema is v3. Administration writes use transactions with revision checks. Lore activation identities survive moves between the existing lore tables; an import ledger tracks baselines and moved/deleted dispositions. Guild preset activation points to an immutable revision. Each scene captures that revision before its first model call. Provider gateways consume the renderer's ordered messages, with explicit adaptations for Anthropic's top-level system field.
+
+NiceGUI runs inside FastAPI under `/admin/` with one web worker. Existing form routes remain available for compatibility/testing and reuse the same authorization/storage services. Character avatars remain in SQLite; published Discord CDN assets provide per-message avatar overrides without exposing the private dashboard. An emotion header is resolved before the webhook placeholder is posted and is excluded from stored dialogue.
 
 ## Rewinds and retention
 

@@ -41,7 +41,7 @@ Replies to an older character line branch from that line's saved parent chain. A
 
 The `openai` adapter uses Responses, `anthropic` uses Messages, and `compatible` uses an OpenAI-style chat endpoint. All prompt state comes from SQLite, so changing providers does not depend on provider-hosted conversation state. Image attachments are bounded by the configured count and size and require a dialogue profile with `supports_images: true`. Text attachments are supported. Replies stream through character webhooks and are split below Discord's message limit.
 
-The offline suite covers spaces, lore isolation and promotion, branch histories, consent, director choices, card parsing, lorebook sync, and web authorization. Before using ambient mode in a real server, validate webhook permissions and identities, reply routing in channels and threads, and restart recovery in a private test channel. Those live Discord checks require your bot token and server and are not part of the offline suite.
+The offline suite covers spaces, lore isolation and promotion, branch histories, consent, director choices, card parsing, lorebook sync, and web authorization. The NiceGUI admin console also provides a full lore-rule editor, drag-and-drop transfers, customizable emotion avatars, and versioned prompt presets per server; see [Admin console](docs/admin-console.md). Before using ambient mode in a real server, validate webhook permissions and identities, reply routing in channels and threads, and restart recovery in a private test channel. Those live Discord checks require your bot token and server and are not part of the offline suite.
 
 ## Private admin dashboard on a Raspberry Pi 5
 

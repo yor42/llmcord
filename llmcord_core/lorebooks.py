@@ -75,7 +75,7 @@ def normalize_entry(uid: str, entry: dict) -> ImportedEntry:
         "secondary_keys": _strings(entry.get("keysecondary", entry.get("secondary_keys", []))),
         "constant": bool(entry.get("constant", entry.get("alwaysActive", False))),
         "enabled": bool(entry.get("enabled", not entry.get("disable", False))),
-        "order": int(entry.get("order", entry.get("insertion_order", 100)) or 100),
+        "order": int(entry.get("order", entry.get("insertion_order", 100)) if entry.get("order", entry.get("insertion_order", 100)) is not None else 100),
         "selective": bool(entry.get("selective", False)),
         "selective_logic": int(entry.get("selectiveLogic", entry.get("selective_logic", 0)) or 0),
         "case_sensitive": bool(entry.get("caseSensitive", entry.get("case_sensitive", False))),
@@ -111,6 +111,60 @@ def normalize_entry(uid: str, entry: dict) -> ImportedEntry:
     }
     return ImportedEntry(uid, content, rule, digest(entry), digest({"content": content,
         "rule": rule}), tuple(unsupported))
+
+
+def export_entry(content: str, rule: dict) -> dict:
+    """Overlay effective fields while retaining fields belonging to other tools."""
+    raw = dict(rule.get('original', {}))
+    aliases = {'keys': 'key', 'secondary_keys': 'keysecondary', 'order': 'order',
+        'selective_logic': 'selectiveLogic', 'case_sensitive': 'caseSensitive',
+        'whole_words': 'matchWholeWords', 'scan_depth': 'scanDepth',
+        'use_probability': 'useProbability', 'group_weight': 'groupWeight',
+        'group_override': 'groupOverride', 'use_group_scoring': 'useGroupScoring',
+        'exclude_recursion': 'excludeRecursion', 'prevent_recursion': 'preventRecursion',
+        'delay_until_recursion': 'delayUntilRecursion', 'recursion_level': 'recursionLevel',
+        'character_filter_names': 'characterFilterNames', 'character_filter_tags': 'characterFilterTags',
+        'character_filter_exclude': 'characterFilterExclude',
+        'match_character_description': 'matchCharacterDescription',
+        'match_character_personality': 'matchCharacterPersonality', 'match_scenario': 'matchScenario'}
+    for key, value in rule.items():
+        if key not in {'original', 'unsupported'}:
+            raw[aliases.get(key, key)] = value
+    raw.update(content=content, enabled=rule.get('enabled', True), disable=not rule.get('enabled', True))
+    return raw
+
+
+def validate_rule(rule: dict) -> dict:
+    if not isinstance(rule, dict):
+        raise ValueError('Rule must be an object')
+    default = normalize_entry('validation', {}).rule
+    unknown = set(rule) - set(default)
+    if unknown:
+        raise ValueError('Unknown effective rule fields: ' + ', '.join(sorted(unknown)))
+    effective = {**default, **rule}
+    for key, value in default.items():
+        actual = effective[key]
+        if isinstance(value, bool) and not isinstance(actual, bool):
+            raise ValueError(f'{key} must be true or false')
+        if type(value) is int and type(actual) is not int:
+            raise ValueError(f'{key} must be an integer')
+        if isinstance(value, list) and key != 'unsupported' and (not isinstance(actual, list) or not all(isinstance(x, str) for x in actual)):
+            raise ValueError(f'{key} must be a list of strings')
+    for key in ('depth', 'sticky', 'cooldown', 'delay', 'recursion_level', 'group_weight'):
+        if effective[key] < 0:
+            raise ValueError(f'{key} cannot be negative')
+    if effective['scan_depth'] is not None and (type(effective['scan_depth']) is not int or effective['scan_depth'] < 0):
+        raise ValueError('Scan depth must be a nonnegative integer or null')
+    if not 0 <= effective['probability'] <= 100 or effective['selective_logic'] not in range(4):
+        raise ValueError('Invalid probability or secondary matching logic')
+    if effective['role'] not in {'system', 'user', 'assistant'}:
+        raise ValueError('Invalid message role')
+    if not isinstance(effective['original'], dict):
+        raise ValueError('Original import must be an object')
+    # Recompute warnings from the actual effective settings, not stale warnings.
+    normalized = normalize_entry('validation', export_entry('', effective)).rule
+    effective['unsupported'] = normalized['unsupported']
+    return effective
 
 
 def parse_lorebook(data: bytes) -> ImportedBook:

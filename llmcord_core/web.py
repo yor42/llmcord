@@ -5,6 +5,7 @@ import json
 import secrets
 import sqlite3
 import time
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
@@ -17,6 +18,9 @@ from fastapi.templating import Jinja2Templates
 from .cards import parse_card
 from .lorebooks import MAX_BOOK_BYTES, parse_lorebook
 from .store import Store
+from .auth import AuthService
+from .admin import AdminService
+from .admin_store import ConflictError
 
 
 DISCORD_API = "https://discord.com/api/v10"
@@ -25,7 +29,7 @@ TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
 def create_app(database_path: str | Path, base_url: str, client_id: str,
-               client_secret: str, bot_token: str, oauth_http: httpx.AsyncClient | None = None) -> FastAPI:
+               client_secret: str, bot_token: str, oauth_http: httpx.AsyncClient | None = None, *, enable_dashboard: bool = True, config_path: str = "config.yaml") -> FastAPI:
     base_url = base_url.rstrip("/")
     parsed_url = urlparse(base_url)
     if parsed_url.scheme != "https" or not parsed_url.hostname:
@@ -66,55 +70,36 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
         response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
-        response.headers["Content-Security-Policy"] = "default-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"
+        policy = "default-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"
+        if request.url.path.startswith('/admin'):
+            nonce = secrets.token_urlsafe(24)
+            policy += f"; script-src 'self' 'nonce-{nonce}' 'unsafe-eval'; img-src 'self' data: blob:; connect-src 'self' {base_url.replace('https://', 'wss://')}; font-src 'self' data:"
+            if 'text/html' in response.headers.get('content-type', ''):
+                body = b''.join([part async for part in response.body_iterator]).decode('utf-8')
+                body = re.sub(r'<script(?=[\s>])', f'<script nonce="{nonce}"', body)
+                headers = dict(response.headers)
+                headers.pop('content-length', None)
+                response = Response(body, status_code=response.status_code, headers=headers, background=response.background)
+        response.headers["Content-Security-Policy"] = policy
         return response
 
-    async def discord_get(path: str, token: str):
-        response = await app.state.http.get(DISCORD_API + path,
-            headers={"Authorization": token})
-        if response.status_code >= 400:
-            raise HTTPException(502, "Discord authentication is unavailable")
-        return response.json()
+    app.state.auth = AuthService(app)
+    app.state.admin = AdminService(app, config_path)
+    discord_get = app.state.auth.discord_get
+    session_for = app.state.auth.session_for
+    require_admin = app.state.auth.require_admin
 
-    async def session_for(request: Request) -> dict:
-        ident = request.cookies.get("llmcord_session", "")
-        session = app.state.sessions.get(ident)
-        if not session or session["expires"] < time.time():
-            raise HTTPException(401, "Sign in with Discord")
-        if session["token_expires"] < time.time() + 30:
-            response = await app.state.http.post(DISCORD_API + "/oauth2/token",
-                data={"grant_type": "refresh_token", "refresh_token": session["refresh"],
-                      "client_id": client_id, "client_secret": client_secret})
-            if response.status_code >= 400:
-                app.state.sessions.pop(ident, None)
-                raise HTTPException(401, "Discord session expired")
-            tokens = response.json()
-            session.update(access=tokens["access_token"], refresh=tokens["refresh_token"],
-                token_expires=time.time() + int(tokens["expires_in"]))
-        return session
-
-    async def require_admin(request: Request, guild_id: int, mutate: bool = False) -> dict:
-        session = await session_for(request)
-        if mutate:
-            origin = request.headers.get("origin")
-            if origin and origin.rstrip("/") != base_url:
-                raise HTTPException(403, "Invalid request origin")
-            form = await request.form()
-            if not secrets.compare_digest(str(form.get("csrf", "")), session["csrf"]):
-                raise HTTPException(403, "Invalid form token")
-        guilds = await discord_get("/users/@me/guilds", "Bearer " + session["access"])
-        allowed = any(int(guild["id"]) == guild_id and
-            (guild.get("owner") or int(guild.get("permissions", "0")) & ADMINISTRATOR)
-            for guild in guilds)
-        if not allowed:
-            raise HTTPException(403, "Server administrator permission required")
-        return session
+    @app.exception_handler(ConflictError)
+    async def conflicting_value(_request, error):
+        return PlainTextResponse(str(error), status_code=409)
 
     def redirect(guild_id: int):
         return RedirectResponse(f"/guild/{guild_id}", status_code=303)
 
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request):
+        if enable_dashboard:
+            return RedirectResponse('/admin/', status_code=303)
         try:
             session = await session_for(request)
         except HTTPException:
@@ -180,6 +165,8 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
     @app.get("/guild/{guild_id}", response_class=HTMLResponse)
     async def guild_page(request: Request, guild_id: int):
         session = await require_admin(request, guild_id)
+        if enable_dashboard:
+            return RedirectResponse(f'/admin/guild/{guild_id}', status_code=303)
         store = app.state.store
         channels_response = await app.state.http.get(
             f"{DISCORD_API}/guilds/{guild_id}/channels",
@@ -245,17 +232,19 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
         upload: UploadFile = form["file"]
         if not upload.filename or not upload.filename.lower().endswith((".json", ".png")):
             raise HTTPException(400, "Upload a JSON or PNG character card")
-        card = parse_card(upload.filename, await upload.read(8 * 1024 * 1024 + 1))
+        data = await upload.read(8 * 1024 * 1024 + 1)
+        await upload.close()
+        card = parse_card(upload.filename, data)
         world_id = int(form["world_id"])
         world = app.state.store.space_by_id(world_id)
         if not world or world["guild_id"] != guild_id or world["kind"] != "world":
             raise HTTPException(400, "Choose a home world in this server")
         existing = app.state.store.character(guild_id, card.name)
-        session["card_preview"] = {"world_id": world_id, "card": card,
+        session["card_preview"] = {"world_id": world_id, "card": card, "changes": app.state.store.preview_card(guild_id, world_id, card),
             "expires": time.time() + 900}
         return TEMPLATES.TemplateResponse(request, "card_preview.html", {
             "guild_id": guild_id, "card": card, "world": world,
-            "existing": existing, "csrf": session["csrf"]})
+            "existing": existing, "csrf": session["csrf"], 'changes': session['card_preview']['changes']})
 
     @app.post("/guild/{guild_id}/characters/apply")
     async def apply_character(request: Request, guild_id: int):
@@ -267,8 +256,7 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
         existing = app.state.store.character(guild_id, card.name)
         if existing and form.get("replace") != "yes":
             raise HTTPException(409, "Confirm replacing the existing card")
-        ident = app.state.store.add_character(guild_id, preview["world_id"],
-            card.name, card.data, card.avatar, card.entries)
+        ident = app.state.store.apply_card(guild_id, preview["world_id"], card, {key[8:]: str(value) for key, value in form.items() if key.startswith("resolve:")}, preview["changes"]["revision"])
         session.pop("card_preview", None)
         app.state.store.audit(guild_id, int(session["user"]["id"]), "character.import", {"id": ident})
         return redirect(guild_id)
@@ -281,6 +269,14 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
         if not row or not row["avatar"]:
             raise HTTPException(404, "Avatar not found")
         return Response(row["avatar"], media_type="image/png")
+
+    @app.get('/guild/{guild_id}/characters/{character_id}/avatars/{slot_key}')
+    async def emotion_avatar(request: Request, guild_id: int, character_id: int, slot_key: str):
+        await require_admin(request, guild_id)
+        row = app.state.store.avatar_slot(guild_id, character_id, slot_key)
+        if not row['image']:
+            raise HTTPException(404, 'Avatar not found')
+        return Response(row['image'], media_type='image/png')
 
     @app.get("/guild/{guild_id}/card-preview/avatar")
     async def preview_avatar(request: Request, guild_id: int):
@@ -423,7 +419,9 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
         upload: UploadFile = form["file"]
         if not upload.filename or not upload.filename.lower().endswith(".json"):
             raise HTTPException(400, "Upload a JSON lorebook")
-        imported = parse_lorebook(await upload.read(MAX_BOOK_BYTES + 1))
+        data = await upload.read(MAX_BOOK_BYTES + 1)
+        await upload.close()
+        imported = parse_lorebook(data)
         book = app.state.store.lorebook(guild_id, book_id)
         if not book:
             raise HTTPException(404, "Lorebook not found")
@@ -457,4 +455,7 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
         app.state.store.audit(guild_id, int(session["user"]["id"]), "book.entry.edit", {"id": entry_id})
         return redirect(guild_id)
 
+    if enable_dashboard:
+        from .dashboard import mount_dashboard
+        mount_dashboard(app)
     return app

@@ -9,6 +9,26 @@ from typing import Any, AsyncIterator
 from .config import Settings
 
 
+def validate_result(value, schema):
+    """Validate the object/array/scalar schema used by our structured calls."""
+    kind = schema.get('type')
+    valid = {'object': isinstance(value, dict), 'array': isinstance(value, list),
+        'string': isinstance(value, str), 'integer': type(value) is int,
+        'boolean': type(value) is bool, 'number': type(value) in {int, float}, 'null': value is None}
+    if kind and not valid.get(kind, False):
+        raise ValueError('Model result does not match the required output schema')
+    if isinstance(value, dict):
+        properties = schema.get('properties', {})
+        if set(schema.get('required', [])) - set(value) or (schema.get('additionalProperties') is False and set(value) - set(properties)):
+            raise ValueError('Model result has missing or unexpected fields')
+        for key in set(value) & set(properties):
+            validate_result(value[key], properties[key])
+    elif isinstance(value, list) and 'items' in schema:
+        for item in value:
+            validate_result(item, schema['items'])
+    return value
+
+
 @dataclass(frozen=True)
 class ImageInput:
     media_type: str
@@ -44,6 +64,24 @@ class ModelGateway:
                     kwargs["base_url"] = profile.base_url
                 self.clients[profile_name] = AsyncOpenAI(**kwargs)
         return self.clients[profile_name]
+
+    def compiled_input(self, role, request):
+        if self.settings.profile(role).provider == 'anthropic':
+            return '\n\n'.join(m.text for m in request.messages if m.role == 'system'), [m for m in request.messages if m.role != 'system']
+        return '', request.messages
+
+    async def text_compiled(self, role, request, max_tokens=None):
+        system, messages = self.compiled_input(role, request)
+        return await self.text(role, system, messages, max_tokens)
+
+    async def stream_compiled(self, role, request):
+        system, messages = self.compiled_input(role, request)
+        async for delta in self.stream_text(role, system, messages):
+            yield delta
+
+    async def structured_compiled(self, role, request, schema_name, schema):
+        system, messages = self.compiled_input(role, request)
+        return await self.structured(role, system, messages, schema_name, schema)
 
     @staticmethod
     def _openai_input(messages: list[TurnMessage]) -> list[dict]:
@@ -99,7 +137,7 @@ class ModelGateway:
                 messages=self._anthropic_input(messages), max_tokens=limit)
             return "".join(block.text for block in response.content if block.type == "text")
         response = await client.chat.completions.create(model=profile.model,
-            messages=[{"role": "system", "content": system}, *self._chat_input(messages)], max_tokens=limit)
+            messages=([{"role": "system", "content": system}] if system else []) + self._chat_input(messages), max_tokens=limit)
         return response.choices[0].message.content or ""
 
     async def stream_text(self, role: str, system: str, messages: list[TurnMessage], max_tokens: int | None = None) -> AsyncIterator[str]:
@@ -120,7 +158,7 @@ class ModelGateway:
                     yield chunk
         else:
             stream = await client.chat.completions.create(model=profile.model,
-                messages=[{"role": "system", "content": system}, *self._chat_input(messages)],
+                messages=([{"role": "system", "content": system}] if system else []) + self._chat_input(messages),
                 max_tokens=limit, stream=True)
             async for chunk in stream:
                 delta = chunk.choices[0].delta.content if chunk.choices else None
@@ -136,7 +174,7 @@ class ModelGateway:
             response = await client.responses.create(model=profile.model, instructions=system,
                 input=self._openai_input(messages), max_output_tokens=limit,
                 text={"format": {"type": "json_schema", "name": schema_name, "schema": schema, "strict": True}})
-            return json.loads(response.output_text)
+            return validate_result(json.loads(response.output_text), schema)
         if profile.provider == "anthropic":
             response = await client.messages.create(model=profile.model, system=system,
                 messages=self._anthropic_input(messages), max_tokens=limit,
@@ -144,7 +182,7 @@ class ModelGateway:
                 tool_choice={"type": "tool", "name": schema_name})
             for block in response.content:
                 if block.type == "tool_use" and block.name == schema_name:
-                    return block.input
+                    return validate_result(block.input, schema)
             raise ValueError("Model returned no structured result")
         instruction = f"{system}\nReturn only JSON matching this schema: {json.dumps(schema)}"
         for attempt in range(2):
@@ -152,10 +190,10 @@ class ModelGateway:
             try:
                 value = json.loads(raw.strip().removeprefix("```json").removesuffix("```").strip())
                 if isinstance(value, dict):
-                    return value
-            except json.JSONDecodeError:
+                    return validate_result(value, schema)
+            except (json.JSONDecodeError, ValueError):
                 pass
-            instruction += "\nYour previous result was not a JSON object. Try again."
+            instruction += "\nYour previous result did not match the required JSON schema. Try again."
         raise ValueError("Compatible model returned invalid JSON")
 
     async def close(self) -> None:

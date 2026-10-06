@@ -57,6 +57,8 @@ The dashboard is designed for the Pi's Tailscale HTTPS address. A visitor signs 
 
 From a server page, an admin can create spaces, link worlds to hubs, bind channels, choose default casts, toggle ambient mode, add/edit/pin/promote/delete shared lore, manage characters, and manage named lorebooks. Changes are read from SQLite on the bot's next turn; there is no separate publish step.
 
-For a card, select its home world and upload a V2/V3 `.json` or `.png` file. The preview shows its name, description, personality, scenario, opening line, lore-entry count, and PNG avatar when present. Saving an existing name requires a replacement confirmation. Reimporting replaces that character's card, avatar, and character-book entries. Editing the home world can remove the character from casts where it is no longer eligible. Archived characters are not eligible for scenes.
+For a card, select its home world and upload a V2/V3 `.json` or `.png` file. The preview shows its name, description, personality, scenario, opening line, lore-entry count, and PNG avatar when present. Saving an existing name requires a replacement confirmation. Reimports preview local conflicts and preserve manual additions and avatars unless explicitly replaced. Editing the home world can remove the character from casts where it is no longer eligible. Archived characters are not eligible for scenes.
 
-The dashboard edits the main text fields of an imported card. Reimport the card to change its embedded character book. For named guild and channel lorebooks, use the [import workflow](lore-and-memory.md#importing-sillytavern-lorebooks).
+The dashboard edits the main text fields of an imported card. Use the Lore workspace to edit its embedded character entries. For named guild and channel lorebooks, use the [import workflow](lore-and-memory.md#importing-sillytavern-lorebooks).
+
+See [Admin console](admin-console.md) for the NiceGUI workspace, rule transfers, emotion avatars, and per-server prompt presets.
