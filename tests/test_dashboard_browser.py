@@ -176,10 +176,29 @@ class DashboardBrowserTests(unittest.TestCase):
         self.assertTrue(any(row['character_id'] == blank['id'] for row in self.state()['slots']))
         character = page.locator('.character-card').filter(has=page.get_by_text('Browser blank', exact=True))
         character.get_by_text('Browser blank', exact=True).click()
+        character.get_by_text('Fallback static avatar', exact=True).click()
+        fallback = character.locator('.fallback-avatar')
+        from PIL import Image
+        from io import BytesIO
+        portrait = BytesIO()
+        Image.new('RGB', (50, 50), 'green').save(portrait, 'PNG')
+        fallback.locator('input[type=file]').set_input_files({'name': 'fallback.png', 'mimeType': 'image/png', 'buffer': portrait.getvalue()})
+        page.get_by_text('Fallback image ready; save it to keep it', exact=True).wait_for()
+        with page.expect_navigation():
+            fallback.get_by_role('button', name='Save fallback avatar', exact=True).click()
+        self.assertTrue(next(row for row in self.state()['characters'] if row['id'] == blank['id'])['has_static_avatar'])
+        self.assertFalse(self.state()['assets'])
+        self.assertFalse(any(slot['has_image'] for slot in self.state()['slots'] if slot['character_id'] == blank['id']))
+        character.get_by_text('Browser blank', exact=True).click()
         character.get_by_label('Description', exact=True).fill('A character created without an import')
         with page.expect_navigation():
             character.get_by_role('button', name='Save character', exact=True).click()
         self.assertEqual(json.loads(next(row for row in self.state()['characters'] if row['id'] == blank['id'])['card'])['description'], 'A character created without an import')
+        character.get_by_text('Browser blank', exact=True).click()
+        character.get_by_text('Fallback static avatar', exact=True).click()
+        with page.expect_navigation():
+            fallback.get_by_role('button', name='Remove fallback avatar', exact=True).click()
+        self.assertFalse(next(row for row in self.state()['characters'] if row['id'] == blank['id'])['has_static_avatar'])
         character.get_by_text('Browser blank', exact=True).click()
         character.get_by_role('button', name='Delete character', exact=True).click()
         dialog.get_by_text('Delete Browser blank?', exact=True).wait_for()

@@ -76,11 +76,13 @@ Imported generation settings, models, endpoints, and credentials are retained as
 
 In **Server setup**, select a private text channel for avatar assets. Explicitly deny **View Channel** to `@everyone`, then allow the bot to view it, read history, send messages, and attach files. A private channel controls channel access; published images are Discord CDN assets.
 
-Each character starts with neutral, happy, sad, angry, surprised, and embarrassed slots. Labels and descriptions are editable; additional slots use stable lowercase keys. Neutral is required and uses the character's default avatar. Other slots may be removed.
+Each character starts with neutral, happy, sad, angry, surprised, and embarrassed slots. Labels and descriptions are editable; additional slots use stable lowercase keys. Neutral is required but its image is optional. Other slots may be removed. Emotion images are separate from the static fallback.
+
+In **Characters → Fallback static avatar**, upload an image and choose **Save fallback avatar**. Imported card portraits automatically serve as static fallbacks. This avatar is used when the selected emotion has no usable image, including characters with no emotion images. No asset channel or separate publication is needed for the fallback. **Remove fallback avatar** clears it; **Remove emotion image** clears an image without deleting its emotion slot.
 
 Upload static PNG, JPEG, or WebP images up to 8 MiB and 16 megapixels. Images are normalized to PNG thumbnails no larger than 256 pixels. Save a slot, then choose **Publish / repair image**. Only published usable slots are offered to the model, alongside neutral. Replacing an image retains older published assets for historical messages.
 
-The dialogue model selects one emotion before visible text streams. The bot chooses the avatar before creating its placeholder, and continuation chunks use the same avatar. Headers are removed from saved dialogue, summaries, and extraction inputs. Unknown/malformed headers or missing assets fall back to neutral/default. Assets are checked on first use after a bot restart; repair deleted assets from the console.
+The dialogue model selects one emotion before visible text streams. The bot chooses the avatar before creating its placeholder, and continuation chunks use the same avatar. Headers are removed from saved dialogue, summaries, and extraction inputs. Unknown/malformed headers select neutral; a missing or unavailable emotion image uses the static fallback. With neither image configured, Discord shows the webhook's default icon. Assets are checked on first use after a bot restart; repair deleted assets from the console. Response traces identify whether the avatar came from an emotion image, the static fallback, or Discord's default.
 
 ## Deployment and security
 

@@ -170,7 +170,7 @@ class AdministrationTests(unittest.TestCase):
         lore = self.store.admin_entries(1, 'character', self.character)[0]
         self.store.save_entry(1, 'character', self.character, 'Local lore', lore['rule'], ref=lore['ref'], expected_revision=lore['revision'])
         self.store.save_entry(1, 'character', self.character, 'Manual addition', normalize_entry('manual', {}).rule)
-        self.store.save_avatar(1, self.character, 'neutral', 'Neutral', '', png())
+        self.store.save_static_avatar(1, self.character, png(), self.store.owner_revision(1, 'character', self.character))
         second = ParsedCard(first.name, first.data, [{**first.entries[0], 'content': 'New imported'}], png('blue'))
         preview = self.store.preview_card(1, self.world, second)
         self.assertIn('avatar', preview['conflicts'])

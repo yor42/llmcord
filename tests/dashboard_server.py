@@ -39,12 +39,12 @@ def main():
     @app.get('/_test/state')
     async def snapshot():
         return {'spaces': [dict(r) for r in store.list_spaces(1)],
-            'characters': [dict(r) for r in store.all('SELECT id,guild_id,world_id,name,card,archived FROM characters')],
+            'characters': [dict(r) for r in store.all('SELECT id,guild_id,world_id,name,card,archived,avatar IS NOT NULL AS has_static_avatar FROM characters')],
             'lore': [dict(r) for r in store.all('SELECT * FROM lore')],
             'books': [dict(r) for r in store.all('SELECT * FROM lorebook_entries')],
             'presets': [dict(r) for r in store.list_presets(1)], 'active': store.active_preset(1)['id'],
             'active_bundle': store.active_preset(1)['bundle'], 'assets': [dict(r) for r in store.all('SELECT * FROM avatar_assets')],
-            'slots': [{'character_id': r['character_id'], 'slot_key': r['slot_key'], 'label': r['label']} for r in store.all('SELECT * FROM avatar_slots')]}
+            'slots': [{'character_id': r['character_id'], 'slot_key': r['slot_key'], 'label': r['label'], 'has_image': bool(r['image'])} for r in store.all('SELECT * FROM avatar_slots')]}
 
     @app.get('/_test/uploads')
     async def uploads():

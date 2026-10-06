@@ -178,22 +178,21 @@ class SkitBot(commands.Bot):
         self.webhook_defaults[key] = identity
         return webhook
 
-    async def resolve_avatar(self, selected, neutral):
-        """Validate published assets on first use after restart; fail to the default."""
+    async def resolve_avatar(self, selected):
+        """Prefer the emotion image; None uses the webhook's static fallback."""
         ident = selected['asset_id']
         if ident:
             if ident not in self.checked_avatar_assets:
                 asset = self.store.one('SELECT * FROM avatar_assets WHERE id=?', (ident,))
                 try:
-                    channel = self.get_channel(asset['channel_id']) or await self.fetch_channel(asset['channel_id'])
-                    await channel.fetch_message(asset['message_id'])
-                    self.checked_avatar_assets[ident] = True
+                    if asset:
+                        channel = self.get_channel(asset['channel_id']) or await self.fetch_channel(asset['channel_id'])
+                        await channel.fetch_message(asset['message_id'])
+                    self.checked_avatar_assets[ident] = bool(asset)
                 except (discord.DiscordException, AttributeError):
                     self.checked_avatar_assets[ident] = False
             if not self.checked_avatar_assets[ident]:
-                if selected['slot_key'] != 'neutral':
-                    return await self.resolve_avatar(neutral, neutral)
-                return {**neutral, 'url': None, 'asset_id': None}
+                return {**selected, 'url': None, 'asset_id': None}
         return selected
 
     async def run_scene(self, scene: SceneContext, channel):
@@ -263,7 +262,7 @@ class SkitBot(commands.Bot):
                         if event.emotion is not None:
                             emotion = event.emotion
                             stage = 'avatar lookup'
-                            chosen_avatar = await self.resolve_avatar(slots.get(emotion, slots['neutral']), slots['neutral'])
+                            chosen_avatar = await self.resolve_avatar(slots.get(emotion, slots['neutral']))
                             stage = 'webhook delivery'
                             placeholder = await webhook.send('…', **thread_options, wait=True, silent=True,
                                 username=character['name'], avatar_url=chosen_avatar['url'], allowed_mentions=discord.AllowedMentions.none())
@@ -298,6 +297,7 @@ class SkitBot(commands.Bot):
                         parent_message_id, None, character["id"], chunk,
                         sources=sources["messages"])
                     self.store.save_trace(posted.id, {"character_id": character["id"], 'emotion': emotion,
+                        'avatar_source': 'emotion' if chosen_avatar['asset_id'] else 'static' if character['avatar'] else 'default',
                         'avatar_asset_id': chosen_avatar['asset_id'], **sources})
                     self.store.save_lore_activations(posted.id, sources.get("lore_activations", []))
                     parent_message_id = posted.id

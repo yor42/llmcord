@@ -290,8 +290,6 @@ def characters_panel(ctx):
     for row in rows:
         with ui.expansion(row['name'] + (' · Archived' if row['archived'] else '')).classes('w-full border rounded-lg character-card'):
             card = json.loads(row['card'])
-            if row['avatar']:
-                ui.image(f"/guild/{gid}/characters/{row['id']}/avatar").classes('w-24 h-24')
             name = ui.input('Name', value=row['name'])
             world = ui.select(worlds, value=row['world_id'], label='Home world')
             fields = {field: ui.textarea(label, value=card.get(field, '')).classes('w-full') for field, label in
@@ -330,7 +328,9 @@ def characters_panel(ctx):
                                    'character.delete', {'id': row['id']}, then=reload_characters, color='negative')
                 dialog.open()
             ui.button('Delete character', icon='delete', color='negative', on_click=confirm_delete)
+            static_avatar_editor(ctx, row)
             ui.label('Emotion avatars').classes('text-xl font-bold')
+            ui.label('The selected emotion image is used first. If unavailable, the fallback static avatar is used.')
             for slot in store.avatar_slots(gid, row['id']):
                 avatar_editor(ctx, row['id'], slot)
             with ui.row().classes('items-end'):
@@ -344,6 +344,35 @@ def characters_panel(ctx):
                 ctx.button('Add emotion', add_slot, 'avatar.slot.create', then=lambda _: ui.navigate.reload())
     if not rows:
         ui.label('Create an empty character here or import a character card in Imports to get started.')
+
+
+def static_avatar_editor(ctx, character):
+    from nicegui import ui
+    with ui.expansion('Fallback static avatar').classes('w-full fallback-avatar'):
+        if character['avatar']:
+            ui.image(f"/guild/{ctx.guild_id}/characters/{character['id']}/avatar").classes('w-24 h-24')
+        else:
+            ui.label('No static fallback set. Import a card portrait or upload one here.')
+        ui.label('Used when the selected emotion has no usable image. No asset channel or publication is needed.')
+        state = {'image': None}
+        revision = ctx.store.owner_revision(ctx.guild_id, 'character', character['id'])
+        async def upload(event):
+            state['image'] = normalize_avatar(await event.file.read())
+            ui.notify('Fallback image ready; save it to keep it')
+        ctx.upload(upload, 'Upload fallback avatar')
+        def save():
+            if state['image'] is None:
+                raise ValueError('Upload a fallback image before saving')
+            ctx.store.save_static_avatar(ctx.guild_id, character['id'], state['image'], revision)
+            return True
+        def reload(_):
+            ui.navigate.to(f'/guild/{ctx.guild_id}?tab=characters')
+        ctx.button('Save fallback avatar', save, 'avatar.fallback.edit', {'character': character['id']}, then=reload)
+        if character['avatar']:
+            def remove():
+                ctx.store.save_static_avatar(ctx.guild_id, character['id'], None, revision)
+                return True
+            ctx.button('Remove fallback avatar', remove, 'avatar.fallback.delete', {'character': character['id']}, then=reload)
 
 
 def avatar_editor(ctx, character_id, slot):
@@ -366,6 +395,11 @@ def avatar_editor(ctx, character_id, slot):
         async def publish():
             return await ctx.service.avatars.publish(ctx.guild_id, character_id, slot['slot_key'], repair=True)
         ctx.button('Publish / repair image', publish, 'avatar.publish', {'character': character_id, 'slot': slot['slot_key']})
+        if slot['image']:
+            def remove_image():
+                ctx.store.clear_avatar_image(ctx.guild_id, character_id, slot['slot_key'], slot['revision'])
+                return True
+            ctx.button('Remove emotion image', remove_image, 'avatar.image.delete', {'character': character_id, 'slot': slot['slot_key']}, then=lambda _: ui.navigate.to(f'/guild/{ctx.guild_id}?tab=characters'))
         if slot['slot_key'] != 'neutral':
             def delete():
                 ctx.store.delete_avatar(ctx.guild_id, character_id, slot['slot_key'], slot['revision'])

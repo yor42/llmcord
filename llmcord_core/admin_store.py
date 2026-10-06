@@ -533,10 +533,18 @@ class AdminStore:
     def avatar_slots(self, guild_id, character_id):
         self.validate_owner(guild_id, 'character', character_id)
         stored = {r['slot_key']: dict(r) for r in self.all('SELECT * FROM avatar_slots WHERE character_id=?', (character_id,))}
-        character = self.character_by_id(character_id)
         stored.setdefault('neutral', {'character_id': character_id, 'slot_key': 'neutral', 'label': 'Neutral', 'description': '', 'image': None, 'revision': 0})
-        stored['neutral']['image'] = character['avatar']
         return list(stored.values())
+
+    def save_static_avatar(self, guild_id, character_id, image, expected_revision):
+        from .avatars import normalize_avatar
+        image = normalize_avatar(image) if image is not None else None
+        with self.write_admin():
+            self.validate_owner(guild_id, 'character', character_id)
+            if self.owner_revision(guild_id, 'character', character_id) != expected_revision:
+                raise ConflictError('Character changed; reload before saving the fallback avatar')
+            self.db.execute('UPDATE characters SET avatar=?,avatar_manual=1 WHERE guild_id=? AND id=?', (image, guild_id, character_id))
+            self.bump_owner(guild_id, 'character', character_id)
 
     def avatar_slot(self, guild_id, character_id, key):
         row = next((r for r in self.avatar_slots(guild_id, character_id) if r['slot_key'] == key), None)
@@ -556,8 +564,14 @@ class AdminStore:
             blob = image if image is not None else current['image'] if current else None
             self.db.execute('INSERT INTO avatar_slots VALUES(?,?,?,?,?,1) ON CONFLICT(character_id,slot_key) DO UPDATE SET label=excluded.label,description=excluded.description,image=excluded.image,revision=revision+1',
                 (character_id, key, label.strip(), description, blob))
-            if key == 'neutral' and image is not None:
-                self.db.execute('UPDATE characters SET avatar=?,avatar_manual=1 WHERE id=?', (image, character_id))
+            self.bump_owner(guild_id, 'character', character_id)
+
+    def clear_avatar_image(self, guild_id, character_id, key, expected_revision):
+        with self.write_admin():
+            row = self.avatar_slot(guild_id, character_id, key)
+            if row['revision'] != expected_revision:
+                raise ConflictError('Avatar slot changed; reload')
+            self.db.execute('UPDATE avatar_slots SET image=NULL,revision=revision+1 WHERE character_id=? AND slot_key=?', (character_id, key))
             self.bump_owner(guild_id, 'character', character_id)
 
     def delete_avatar(self, guild_id, character_id, key, expected_revision):
