@@ -58,6 +58,15 @@ def pretty(value):
     return json.dumps(value, ensure_ascii=False, indent=2)
 
 
+def rejection_notice(error):
+    """Negative-notification text for a live event rejected after the client was confirmed bound to its session."""
+    if not isinstance(error, HTTPException):
+        return None
+    if error.status_code == 401:
+        return 'Your Discord sign-in expired. Sign in again.'
+    return str(error.detail or 'This action was rejected')
+
+
 def mount_dashboard(app):
     from nicegui import Client, core, ui
 
@@ -65,28 +74,32 @@ def mount_dashboard(app):
     original_event = core.sio.handlers['/']['event']
     original_handshake = core.sio.handlers['/']['handshake']
 
-    async def socket_allowed(sid, message, supplied_environ=None, *, check_permissions=True):
+    async def socket_check(sid, message, supplied_environ=None, *, check_permissions=True):
         # The live-call security boundary (SEC-03): the client must be bound to this cookie's session; CORS above limits origins.
+        # Returns (allowed, client, error); client/error are set only once the client is confirmed bound to this session.
         client = Client.instances.get(message.get('client_id', ''))
         if not client:
-            return False
+            return False, None, None
         binding = getattr(client, 'llmcord_binding', None)
         if binding is None:
-            return False
+            return False, None, None
         environ = supplied_environ or core.sio.get_environ(sid) or {}
         cookies = SimpleCookie()
         cookies.load(environ.get('HTTP_COOKIE', ''))
         ident = cookies.get('llmcord_session')
         if not ident or ident.value != binding[0]:
-            return False
+            return False, None, None
         try:
             if binding[1] is not None and check_permissions:
                 await app.state.auth.guard(binding[0], binding[1])
             else:
                 await app.state.auth.session(binding[0])
-            return True
-        except HTTPException:
-            return False
+            return True, client, None
+        except HTTPException as error:
+            return False, client, error
+
+    async def socket_allowed(sid, message, supplied_environ=None, *, check_permissions=True):
+        return (await socket_check(sid, message, supplied_environ, check_permissions=check_permissions))[0]
 
     @core.sio.on('handshake')
     async def handshake(sid, message):
@@ -96,8 +109,13 @@ def mount_dashboard(app):
 
     @core.sio.on('event')
     async def event(sid, message):
-        if await socket_allowed(sid, message):
+        allowed, client, error = await socket_check(sid, message)
+        if allowed:
             original_event(sid, message)
+        elif client is not None and (notice := rejection_notice(error)):
+            # The event itself is still dropped; only the bound client is told why.
+            with client:
+                ui.notify(notice, type='negative', timeout=8000)
 
     original_connect = core.sio.handlers['/']['connect']
     @core.sio.on('connect')

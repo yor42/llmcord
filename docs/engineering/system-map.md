@@ -127,7 +127,7 @@ sequenceDiagram
     Br->>IO: event
     IO->>A: guard  [check]
     alt guard fails / rate limited
-      IO--xBr: event silently dropped
+      IO--xBr: event dropped; bound client gets a negative notice
     else ok
       IO->>Svc: handler → ctx.run(op)
       Svc->>A: guard (csrf/origin pass by construction, SEC-03)  [check]
@@ -163,7 +163,7 @@ Uploads (`/admin/_nicegui/client/*/upload/*`) run `guard` with the `X-CSRF-Token
 | Dependency | Used by | Purpose | Failure behavior |
 | --- | --- | --- | --- |
 | Discord gateway and REST (`discord.py==2.6.4`) | bot | Events, commands, webhooks, history | discord.py reconnects; a webhook failure fails the turn, and the error is posted publicly (SEC-05) |
-| Discord OAuth2 and `/users/@me/guilds` (`httpx`) | web | Login, token refresh, every authorization check | 401 drops the session; 429 or `Remaining: 0` makes the next check sleep; network error → 503; a socket event is silently dropped (PERF-01) |
+| Discord OAuth2 and `/users/@me/guilds` (`httpx`) | web | Login, token refresh, every authorization check | 401 drops the session; 429 or `Remaining: 0` makes the next check sleep; network error → 503; a rejected socket event is dropped and the bound client is notified (PERF-01, R2 step 5) |
 | Discord REST with the bot token (`httpx`) | web | Guild channel list; avatar publication to the asset channel | Publish raises `ValueError` and shows a notify |
 | Model providers: `openai==2.6.1`, `anthropic==0.69.0`, OpenAI-compatible | bot (web only builds previews) | Director, dialogue stream, image description, memory, summary | SDK default timeouts and retries (REL-02) |
 | `mini-racer==0.14.1` (V8) | bot | JS-compatible regex lore keys | Exceptions → no match; new isolate per match (REL-03) |

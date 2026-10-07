@@ -14,7 +14,7 @@ from llmcord_core.web import create_app
 
 def main():
     port = int(os.environ['LLMCORD_TEST_PORT'])
-    state = {'admin': True, 'guild_checks': 0, 'permission_delay': 0}
+    state = {'admin': True, 'guild_checks': 0, 'permission_delay': 0, 'rate_limited': False}
     # Opt-in benchmark knobs (scripts/bench_dashboard.py); unset keeps the browser-test behavior.
     bench = os.environ.get('LLMCORD_BENCH') == '1'
     latency = float(os.environ.get('LLMCORD_BENCH_DISCORD_LATENCY', '0'))
@@ -30,6 +30,9 @@ def main():
             if delay:
                 await asyncio.sleep(delay)
             state['guild_checks'] += 1
+            if state['rate_limited']:
+                # /_test/rate-limit: Discord keeps answering 429, so the guard gives up with a 503.
+                return httpx.Response(429, json={'retry_after': 0.01})
             if state['guild_checks'] == 1 and not bench:
                 return httpx.Response(429, json={'retry_after': 0.05})
             return httpx.Response(200, json=[{'id': '1', 'name': 'Test server', 'permissions': '8' if state['admin'] else '0'}],
@@ -57,6 +60,9 @@ def main():
     # A second session for tests that must not depend on the workflow test (which expires the first one).
     app.state.sessions['browser-search-session'] = {'user': {'id': '4', 'username': 'Test admin'}, 'expires': time.time() + 3600,
         'token_expires': time.time() + 3600, 'csrf': 'browser-search-csrf', 'access': 'test', 'refresh': 'test'}
+    # Its own session for the rejected-live-event test, which revokes, rate-limits and finally expires it.
+    app.state.sessions['browser-reject-session'] = {'user': {'id': '4', 'username': 'Test admin'}, 'expires': time.time() + 3600,
+        'token_expires': time.time() + 3600, 'csrf': 'browser-reject-csrf', 'access': 'test', 'refresh': 'test'}
 
     # Count lore board renders (PERF-01): render_board loads each side through AdminStore.admin_entries.
     counters = Counter()
@@ -139,17 +145,25 @@ def main():
         app.state.auth.forget_guilds()
         return {'ok': True}
 
+    @app.post('/_test/rate-limit')
+    async def rate_limit():
+        state['rate_limited'] = True
+        # Drop cached guild lists (as if the TTL elapsed) so the next guard asks Discord and gets the 429s.
+        app.state.auth.forget_guilds()
+        return {'ok': True}
+
     @app.post('/_test/restore')
     async def restore():
         state['admin'] = True
+        state['rate_limited'] = False
         # Stand-in for the 300 s guild-list TTL (PERF-01 / D1) elapsing after access was restored: the revoke
         # check cached a non-admin guild list, so drop it for the next guard to see the restored permission.
         app.state.auth.forget_guilds()
         return {'ok': True}
 
     @app.post('/_test/expire')
-    async def expire():
-        app.state.sessions['browser-test-session']['expires'] = 0
+    async def expire(session: str = 'browser-test-session'):
+        app.state.sessions[session]['expires'] = 0
         return {'ok': True}
 
     @app.post('/_test/stop')

@@ -545,6 +545,62 @@ class DashboardBrowserTests(unittest.TestCase):
         self.assertFalse(any(r['name'] == 'Forbidden' for r in self.state()['spaces']))
         self.assertFalse(self.errors, self.errors)
 
+    def test_rejected_live_event_notifies_bound_client(self):
+        """PERF-01 (fixed): a live event rejected by the permission check is dropped but the user is told why.
+
+        A bound client with a matching cookie clicks "Create space" after (1) admin permission is revoked (403),
+        (2) Discord keeps rate limiting the guild check (503), and (3) the session expires (401). Each time the
+        handler must not run, and the user should see why: the 403/503 detail in a negative notification, and a
+        sign-in prompt (notification or redirect) for the 401.
+        """
+        import re
+        from playwright.sync_api import expect
+        # Own context and session: this test revokes access and expires its session.
+        context = self.browser.new_context(ignore_https_errors=True, viewport={'width': 1400, 'height': 1000})
+        context.add_cookies([{'name': 'llmcord_session', 'value': 'browser-reject-session', 'url': self.url,
+                              'secure': True, 'httpOnly': True, 'sameSite': 'Lax'}])
+        original_page, errors = self.page, []
+        def post(path):
+            self.assertEqual(context.request.post(self.url + path).status, 200)
+        try:
+            post('/_test/restore')
+            page = self.page = context.new_page()
+            page.on('pageerror', lambda e: errors.append(e.stack or str(e)))
+            page.goto(self.url + '/admin/guild/1')
+            page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
+            page.get_by_role('tab', name='Server setup', exact=True).click()
+            page.get_by_label('Space name', exact=True).fill('Rejected')
+            page.wait_for_timeout(200)
+            create = page.get_by_role('button', name='Create space', exact=True)
+            notification = page.locator('.q-notification')
+            def created():
+                return any(r['name'] == 'Rejected' for r in self.state()['spaces'])
+
+            # 403: admin permission revoked (revoke also drops the cached guild list, as if the TTL elapsed).
+            post('/_test/revoke')
+            create.click(force=True)
+            expect(notification.filter(has_text=re.compile('administrator permission', re.I))).to_be_visible(timeout=4000)
+            self.assertFalse(created())
+            post('/_test/restore')
+
+            # 503: Discord rate limits every retry of the guild check.
+            post('/_test/rate-limit')
+            create.click(force=True)
+            expect(notification.filter(has_text=re.compile('try again shortly', re.I))).to_be_visible(timeout=4000)
+            self.assertFalse(created())
+            post('/_test/restore')
+
+            # 401: the session expired. Either a notification or a redirect to a sign-in page is acceptable.
+            post('/_test/expire?session=browser-reject-session')
+            create.click(force=True)
+            expect(page.get_by_text(re.compile('sign in', re.I)).first).to_be_visible(timeout=4000)
+            self.assertFalse(created())
+            self.assertFalse(errors, errors)
+        finally:
+            self.page = original_page
+            context.request.post(self.url + '/_test/restore')
+            context.close()
+
     def test_lore_search_is_debounced(self):
         """PERF-01 (fixed): typing in the lore search box re-renders the board once, after typing pauses, not per keystroke.
 

@@ -23,7 +23,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 
 | ID | Title | Sev | Conf | Label |
 | --- | --- | --- | --- | --- |
-| PERF-01 | Discord guild check on every event, request and action — **Partly resolved (R2 step 1, guild-list cache)** | high | CONFIRMED | incorrect |
+| PERF-01 | Discord guild check on every event, request and action — **Resolved in R2 (steps 1, 3–5)** | high | CONFIRMED | incorrect |
 | PERF-02 | Lore workspace N+1 and in-Python search/pagination | medium | CONFIRMED | fragile |
 | PERF-03 | Avatar slot reads load every blob | low | CONFIRMED | fragile |
 | PERF-04 | No gzip; CSP middleware buffers every `/admin` HTML response | low | CONFIRMED | unconventional |
@@ -74,7 +74,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
   - **Every HTTP route** through `require_admin` (`auth.py:105-107`). This includes each avatar image GET (`llmcord_core/web.py:264-279`). Those images are also sent with `Cache-Control: no-store` (`web.py:70`), so the browser refetches them, and re-checks Discord, on every render.
 - **Amplifiers:**
   - **Lore search.** Each value change calls `ctx.run(lambda: True)`, then re-renders the board (`llmcord_core/lore_workspace.py:220-225`).
-  - **Silent drops.** A failed or rate-limited check makes `socket_allowed` return False, and the event is dropped with no message (`dashboard.py:85-87`, `:98-99`).
+  - **Silent drops.** A failed or rate-limited check makes `socket_allowed` return False, and the event is dropped with no message (`dashboard.py:85-87`, `:98-99`). *(Fixed in R2 step 5, see Status.)*
   - **Full reloads.** Most mutations end in `ui.navigate.reload()`, which re-renders all five tab panels eagerly (`dashboard.py:183-194`; e.g. `:242`, `:253`, `:267`, `:370`, `:575`, `:712`).
 - **Why it matters:** see `perf-baseline.md`. Typing 10 characters triggers 21 guild checks. When Discord reports Remaining 0, they queue behind each other and the search settles about 20 s later.
 - **Direction:**
@@ -84,7 +84,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
   - Let avatar GETs be privately cacheable.
   - Surface rejected events to the user.
   - Revocation latency becomes the TTL. That is a product decision (see the roadmap).
-- **Status:** Partly resolved in R2 step 1 (branch `rework/r2-auth-perf`): the guild list is cached per session for 300 s (D1), invalidated on 401, sign-out, expiry and failed refresh; concurrent checks share one call; the picker pages use the same cache. Step 3: the lore search input is debounced (Quasar `debounce=300`), so a typing burst costs one board render instead of one per keystroke; the per-action guard and `ctx.run(lambda: True)` probes stay because they no longer call Discord within the TTL. Step 4: stored avatar 200 responses (`/characters/{c}/avatar`, `/avatars/{slot}`) are `private, max-age=300` via an endpoint allow-list in `security_headers`; all other responses stay `no-store`; image URLs carry `?v=<sha256[:12]>` so uploads show at once. A cached image stays viewable in the same browser profile for up to 300 s after logout or revocation (consistent with D1; no `Vary: Cookie`). Still open: silent drops (R2 step 5).
+- **Status:** Partly resolved in R2 step 1 (branch `rework/r2-auth-perf`): the guild list is cached per session for 300 s (D1), invalidated on 401, sign-out, expiry and failed refresh; concurrent checks share one call; the picker pages use the same cache. Step 3: the lore search input is debounced (Quasar `debounce=300`), so a typing burst costs one board render instead of one per keystroke; the per-action guard and `ctx.run(lambda: True)` probes stay because they no longer call Discord within the TTL. Step 4: stored avatar 200 responses (`/characters/{c}/avatar`, `/avatars/{slot}`) are `private, max-age=300` via an endpoint allow-list in `security_headers`; all other responses stay `no-store`; image URLs carry `?v=<sha256[:12]>` so uploads show at once. A cached image stays viewable in the same browser profile for up to 300 s after logout or revocation (consistent with D1; no `Vary: Cookie`). Step 5: a rejected live event from a client confirmed bound to the requesting session (live `client_id`, binding present, cookie equals binding) now shows a negative notification — 401 "Your Discord sign-in expired. Sign in again.", other HTTPExceptions their detail (403 admin permission, 502/503 try again shortly); the event is still dropped. Unknown, unbound or cookie-mismatched clients stay silent. Pinned by browser test `test_rejected_live_event_notifies_bound_client`. Follow-ups (low): repeated rejections are not deduplicated (one toast per event); no offline test of `rejection_notice` or of the silent path; the guarded `javascript_response`/`ack`/`log` handlers still drop silently.
 
 ### PERF-02: Lore workspace N+1 and in-Python search/pagination
 - **Severity:** medium. **Confidence:** CONFIRMED. **Label:** fragile.
