@@ -189,3 +189,119 @@ def install_session(app, ident="session", user_id="4", csrf="csrf", access="acce
     app.state.sessions[ident] = {"user": {"id": user_id, "username": "Admin"}, "expires": time.time() + 3600,
                                  "token_expires": time.time() + 3600, "csrf": csrf, "access": access, "refresh": "refresh"}
     return ident
+
+
+def not_found(text="Unknown Webhook") -> discord.NotFound:
+    return discord.NotFound(SimpleNamespace(status=404, reason="Not Found"), text)
+
+
+class FakeSentMessage:
+    """A message posted by a fake webhook or channel; records edits and deletion."""
+
+    def __init__(self, ident, content):
+        self.id, self.content, self.edits, self.deleted = ident, content, [], False
+
+    async def edit(self, *, content, **kwargs):
+        self.content = content
+        self.edits.append(content)
+
+    async def delete(self):
+        self.deleted = True
+
+
+class FakeHook:
+    """Fake ``discord.Webhook`` owned by a ``FakeTextChannel``. A dead hook (deleted on Discord) raises
+    ``discord.NotFound`` from ``send``/``edit``. ``fail_next_chunk`` makes the next non-placeholder send raise
+    ``NotFound`` and kills the hook (deleted mid-turn)."""
+
+    def __init__(self, channel, ident, name, avatar, token="hook-token"):
+        self.channel, self.id, self.token, self.name, self.avatar = channel, ident, token, name, avatar
+        self.dead, self.fail_next_chunk = False, False
+        self.send_attempts, self.posts, self.options, self.edits = 0, [], [], []
+
+    def _touch(self):
+        if self in self.channel.doomed:
+            self.channel.kill(self)
+        if self.dead:
+            raise not_found()
+
+    async def edit(self, *, name=None, avatar=None, **kwargs):
+        self._touch()
+        self.edits.append({"name": name, "avatar": avatar})
+        self.name, self.avatar = name, avatar
+        return self
+
+    async def send(self, content, **kwargs):
+        self.send_attempts += 1
+        self._touch()
+        if self.fail_next_chunk and content != "…":
+            self.fail_next_chunk = False
+            self.channel.kill(self)
+            raise not_found()
+        message = FakeSentMessage(self.channel.next_id(), content)
+        self.posts.append(message)
+        self.options.append(kwargs)
+        return message
+
+
+class FakeTextChannel(discord.TextChannel):
+    """Passes ``isinstance(channel, discord.TextChannel)`` so ``SkitBot._webhook`` runs for real.
+
+    ``hooks`` is the live webhook list Discord would return; ``listings``/``creates`` count API calls.
+    ``doom(hook)`` models a webhook deleted on Discord right before the bot's next touch: the next
+    ``webhooks()`` listing still includes it (then it dies), and any ``send``/``edit`` on it raises ``NotFound``.
+    ``create_error`` is raised by ``create_webhook``; ``dead_on_create`` makes new hooks already deleted.
+    ``fetch_message`` raises ``NotFound`` for ids in ``missing`` and counts calls in ``fetches``."""
+
+    def __init__(self, ident=100):  # deliberately skips discord.TextChannel.__init__
+        self.id = ident
+        self.hooks, self.doomed, self.sent, self.missing = [], set(), [], set()
+        self.listings = self.creates = self.fetches = 0
+        self.create_error, self.dead_on_create = None, False
+        self._next_id = 2000
+
+    def next_id(self):
+        self._next_id += 1
+        return self._next_id
+
+    def kill(self, hook):
+        hook.dead = True
+        self.doomed.discard(hook)
+        if hook in self.hooks:
+            self.hooks.remove(hook)
+
+    def doom(self, hook):
+        self.doomed.add(hook)
+
+    @property
+    def errors(self):
+        return [m.content for m in self.sent if not m.deleted and m.content.startswith("Character response failed")]
+
+    async def webhooks(self):
+        self.listings += 1
+        snapshot = list(self.hooks)
+        for hook in list(self.doomed):
+            self.kill(hook)
+        return snapshot
+
+    async def create_webhook(self, *, name, avatar=None, reason=None):
+        self.creates += 1
+        if self.create_error:
+            raise self.create_error
+        hook = FakeHook(self, 900 + self.creates, name, avatar)
+        if self.dead_on_create:
+            hook.dead = True
+        else:
+            self.hooks.append(hook)
+        return hook
+
+    async def send(self, content=None, **kwargs):
+        message = FakeSentMessage(self.next_id(), content)
+        self.sent.append(message)
+        return message
+
+    async def fetch_message(self, ident):
+        self.fetches += 1
+        if ident in self.missing:
+            raise discord.NotFound(SimpleNamespace(status=404, reason="Not Found"), "Unknown Message")
+        return SimpleNamespace(id=ident)

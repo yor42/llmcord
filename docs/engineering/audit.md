@@ -250,6 +250,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
   - `checked_avatar_assets` never re-validates, so an asset message deleted later is still used (`discord_bot.py:184-199`).
   - `_webhook_locked` calls `parent_channel.webhooks()` for every speaker on every turn (`:168`).
 - **Direction:** cache the webhook objects, add TTLs, and re-check an asset after a delivery failure.
+- **Status:** Mostly resolved in R3 step 2 (branch `rework/r3-turn-reliability`): webhook objects are cached (no listing per speaker per turn), a deleted webhook is replaced and the send retried once in the same turn, and emotion-asset checks expire after 600 s. Still open (low): `channel_locks`, `webhook_locks`, `webhook_defaults`, `webhooks` and `checked_avatar_assets` are not bounded; only NotFound invalidates a cached webhook.
 
 ### REL-05: Shutdown order can skip `store.close()`
 - **Status:** Resolved in R1 (branch `rework/r1-correctness`): `close()` uses try/finally so the store and parent close always run.

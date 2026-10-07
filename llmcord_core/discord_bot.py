@@ -24,6 +24,8 @@ from .errors import error_detail, error_stack
 from .usage import capture_usage, reply_footer
 from .identity import discord_identity, message_context
 
+AVATAR_ASSET_CHECK_TTL = 600
+
 
 def split_discord(text: str, limit: int = 1900) -> list[str]:
     chunks = []
@@ -51,6 +53,7 @@ class SkitBot(commands.Bot):
         self.engine = Engine(self.store, self.models, settings)
         self.channel_locks: dict[int, asyncio.Lock] = {}
         self.webhook_locks = {}
+        self.webhooks = {}
         self.webhook_defaults = {}
         self.checked_avatar_assets = {}
         self.cleanup_task: asyncio.Task | None = None
@@ -160,6 +163,15 @@ class SkitBot(commands.Bot):
         async with self.channel_locks.setdefault(message.channel.id, asyncio.Lock()):
             await self.run_scene(scene, message.channel)
 
+    @staticmethod
+    def _webhook_key(channel, character):
+        parent_channel = channel.parent if isinstance(channel, discord.Thread) else channel
+        return (getattr(parent_channel, 'id', None), character['id'])
+
+    def _forget_webhook(self, key):
+        self.webhooks.pop(key, None)
+        self.webhook_defaults.pop(key, None)
+
     async def _webhook(self, channel, character):
         parent_channel = channel.parent if isinstance(channel, discord.Thread) else channel
         if not isinstance(parent_channel, discord.TextChannel):
@@ -168,16 +180,31 @@ class SkitBot(commands.Bot):
         async with self.webhook_locks.setdefault(key, asyncio.Lock()):
             return await self._webhook_locked(parent_channel, character, key)
 
+    async def _webhook_identity(self, webhook, character, key, identity):
+        if self.webhook_defaults.get(key) != identity:
+            try:
+                webhook = await webhook.edit(name=character['name'][:80], avatar=character['avatar'])
+            except discord.NotFound:
+                self._forget_webhook(key)
+                return None
+            self.webhook_defaults[key] = identity
+        self.webhooks[key] = webhook
+        return webhook
+
     async def _webhook_locked(self, parent_channel, character, key):
         identity = (character['name'], hashlib.sha256(character['avatar'] or b'').hexdigest())
+        if key in self.webhooks:
+            webhook = await self._webhook_identity(self.webhooks[key], character, key, identity)
+            if webhook:
+                return webhook
         webhook_id = self.store.webhook_id(parent_channel.id, character["id"])
         if webhook_id:
             for webhook in await parent_channel.webhooks():
                 if webhook.id == webhook_id and webhook.token:
-                    if self.webhook_defaults.get(key) != identity:
-                        webhook = await webhook.edit(name=character['name'][:80], avatar=character['avatar'])
-                        self.webhook_defaults[key] = identity
-                    return webhook
+                    webhook = await self._webhook_identity(webhook, character, key, identity)
+                    if webhook:
+                        return webhook
+                    break
         try:
             webhook = await parent_channel.create_webhook(name=character["name"][:80], avatar=character["avatar"], reason="llmcord character")
         except discord.Forbidden as error:
@@ -185,6 +212,7 @@ class SkitBot(commands.Bot):
         except discord.HTTPException as error:
             raise ValueError("Could not create a character webhook: " + error_detail(error)) from error
         self.store.save_webhook_id(parent_channel.id, character["id"], webhook.id)
+        self.webhooks[key] = webhook
         self.webhook_defaults[key] = identity
         return webhook
 
@@ -192,16 +220,17 @@ class SkitBot(commands.Bot):
         """Prefer the emotion image; None uses the webhook's static fallback."""
         ident = selected['asset_id']
         if ident:
-            if ident not in self.checked_avatar_assets:
+            checked = self.checked_avatar_assets.get(ident)
+            if checked is None or time.monotonic() - checked[1] > AVATAR_ASSET_CHECK_TTL:
                 asset = self.store.one('SELECT * FROM avatar_assets WHERE id=?', (ident,))
                 try:
                     if asset:
                         channel = self.get_channel(asset['channel_id']) or await self.fetch_channel(asset['channel_id'])
                         await channel.fetch_message(asset['message_id'])
-                    self.checked_avatar_assets[ident] = bool(asset)
+                    self.checked_avatar_assets[ident] = (bool(asset), time.monotonic())
                 except (discord.DiscordException, AttributeError):
-                    self.checked_avatar_assets[ident] = False
-            if not self.checked_avatar_assets[ident]:
+                    self.checked_avatar_assets[ident] = (False, time.monotonic())
+            if not self.checked_avatar_assets[ident][0]:
                 return {**selected, 'url': None, 'asset_id': None}
         return selected
 
@@ -288,8 +317,16 @@ class SkitBot(commands.Bot):
                                 stage = 'avatar lookup'
                                 chosen_avatar = await self.resolve_avatar(slots.get(emotion, slots['neutral']))
                                 stage = 'webhook delivery'
-                                placeholder = await webhook.send('…', **thread_options, wait=True, silent=True,
-                                    username=character['name'], avatar_url=chosen_avatar['url'], allowed_mentions=discord.AllowedMentions.none())
+                                try:
+                                    placeholder = await webhook.send('…', **thread_options, wait=True, silent=True,
+                                        username=character['name'], avatar_url=chosen_avatar['url'], allowed_mentions=discord.AllowedMentions.none())
+                                except discord.NotFound:
+                                    self._forget_webhook(self._webhook_key(channel, character))
+                                    stage = 'webhook setup'
+                                    webhook = await self._webhook(channel, character)
+                                    stage = 'webhook delivery'
+                                    placeholder = await webhook.send('…', **thread_options, wait=True, silent=True,
+                                        username=character['name'], avatar_url=chosen_avatar['url'], allowed_mentions=discord.AllowedMentions.none())
                                 stage = 'dialogue generation'
                                 continue
                             pieces.append(event.text)
@@ -305,7 +342,9 @@ class SkitBot(commands.Bot):
                     chunks = split_discord(line, limit=min(1900, 2000 - len(footer)))
                     stage = 'webhook delivery'
                     await placeholder.edit(content=chunks[0] + footer, allowed_mentions=discord.AllowedMentions.none())
-                except Exception:
+                except Exception as error:
+                    if isinstance(error, discord.NotFound):
+                        self._forget_webhook(self._webhook_key(channel, character))
                     if placeholder:
                         try:
                             await placeholder.delete()
@@ -313,10 +352,14 @@ class SkitBot(commands.Bot):
                             logging.warning('Failed response cleanup: %s', error_detail(cleanup_error))
                     raise
                 outgoing = [placeholder]
-                for chunk in chunks[1:]:
-                    outgoing.append(await webhook.send(chunk + footer, **thread_options, wait=True, silent=True,
-                        username=character['name'], avatar_url=chosen_avatar['url'],
-                        allowed_mentions=discord.AllowedMentions.none()))
+                try:
+                    for chunk in chunks[1:]:
+                        outgoing.append(await webhook.send(chunk + footer, **thread_options, wait=True, silent=True,
+                            username=character['name'], avatar_url=chosen_avatar['url'],
+                            allowed_mentions=discord.AllowedMentions.none()))
+                except discord.NotFound:
+                    self._forget_webhook(self._webhook_key(channel, character))
+                    raise
                 for posted, chunk in zip(outgoing, chunks):
                     stage = 'saving character reply'
                     self.store.record_node(posted.id, scene.guild_id, scene.channel_id,
