@@ -28,8 +28,10 @@ class AdminService:
             self.providers[purpose] = prompt_provider(profile.get('provider', 'compatible'), profile.get('base_url'))
             self.budgets[purpose] = min(raw.get('limits', {}).get('max_input_tokens', 12000), profile.get('context_tokens', 32000) - raw.get('limits', {}).get('max_output_tokens', 700))
 
-    async def run(self, ident, guild_id, csrf, operation, action=None, detail=None):
-        session = await self.auth.guard(ident, guild_id, csrf, self.app.state.base_url)
+    async def run(self, ident, guild_id, operation, action=None, detail=None):
+        # Live (socket.io) calls carry no per-request CSRF/origin: the boundary is the socket's cookie-to-client
+        # binding plus socket.io CORS (cors_allowed_origins, dashboard.mount_dashboard), and this per-action admin guard (SEC-03).
+        session = await self.auth.guard(ident, guild_id)
         result = operation()
         if inspect.isawaitable(result):
             result = await result

@@ -104,7 +104,7 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
             session = await session_for(request)
         except HTTPException:
             return TEMPLATES.TemplateResponse(request, "login.html", {"base_url": base_url})
-        guilds = await discord_get("/users/@me/guilds", "Bearer " + session["access"])
+        guilds = await app.state.auth.guilds(session)
         allowed = [guild for guild in guilds if guild.get("owner") or
             int(guild.get("permissions", "0")) & ADMINISTRATOR]
         return TEMPLATES.TemplateResponse(request, "index.html",

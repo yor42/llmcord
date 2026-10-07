@@ -349,6 +349,7 @@ class DashboardBrowserTests(unittest.TestCase):
         right_list = page.locator('.lore-drop-right')
         # Edge drops and another attempted drag while a save is pending must
         # neither lose entries nor submit an operation against stale DOM IDs.
+        # (/_test/delay-permission drops the guild-list cache so the save's guard really refetches and is slow.)
         self.assertEqual(self.context.request.post(self.url + '/_test/delay-permission').status, 200)
         self.drag_lore(left_list.locator('.lore-entry').filter(has_text='Bulk A'), right_list, edge=True)
         self.drag_lore(left_list.locator('.lore-entry').filter(has_text='Bulk B'), right_list, edge=True, require_started=False)
@@ -527,10 +528,13 @@ class DashboardBrowserTests(unittest.TestCase):
         page.get_by_role('tab', name='Server setup', exact=True).click()
         page.get_by_label('Space name', exact=True).fill('Forbidden')
         page.wait_for_timeout(200)
+        # /_test/revoke also drops cached guild lists, simulating the 300 s TTL (PERF-01 / D1) having elapsed;
+        # the live event below must then be rejected on the refetch.
         self.context.request.post(self.url + '/_test/revoke')
         page.get_by_role('button', name='Create space', exact=True).click(force=True)
         page.wait_for_timeout(300)
         self.assertFalse(any(r['name'] == 'Forbidden' for r in self.state()['spaces']))
+        # /_test/restore likewise drops the cached (non-admin) guild list, as if the TTL had elapsed.
         self.context.request.post(self.url + '/_test/restore')
         page.goto(self.url + '/admin/guild/1')
         page.get_by_label('Space name', exact=True).fill('Forbidden')
@@ -540,3 +544,65 @@ class DashboardBrowserTests(unittest.TestCase):
         page.wait_for_timeout(300)
         self.assertFalse(any(r['name'] == 'Forbidden' for r in self.state()['spaces']))
         self.assertFalse(self.errors, self.errors)
+
+    def test_lore_search_is_debounced(self):
+        """PERF-01 (fixed): typing in the lore search box re-renders the board once, after typing pauses, not per keystroke.
+
+        The board loads each side through ``AdminStore.admin_entries``, so one render is two counted calls.
+        Ten keystrokes 30 ms apart arrive well inside a ~300 ms debounce window, so a debounced search
+        renders once at the end. The bound allows two renders (four calls) for one scheduling hiccup
+        mid-burst; before the fix every keystroke rendered (about ten renders, twenty calls).
+        """
+        # Own context and session: the workflow test revokes access and expires its session.
+        context = self.browser.new_context(ignore_https_errors=True, viewport={'width': 1400, 'height': 1000})
+        context.add_cookies([{'name': 'llmcord_session', 'value': 'browser-search-session', 'url': self.url,
+                              'secure': True, 'httpOnly': True, 'sameSite': 'Lax'}])
+        original_page, errors = self.page, []
+        try:
+            self.assertEqual(context.request.post(self.url + '/_test/restore').status, 200)
+            owner = context.request.post(self.url + '/_test/seed-search-lore').json()['owner']
+            page = self.page = context.new_page()
+            page.on('pageerror', lambda e: errors.append(e.stack or str(e)))
+            page.goto(f'{self.url}/admin/guild/1?owner={owner}')
+            page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
+            page.get_by_role('tab', name='Lore', exact=True).click()
+            kind, ident = owner.split(':')
+            self.lore_idle({'left': [kind, int(ident)]})
+            left = page.locator('.lore-drop-left')
+            left.locator('.lore-entry').filter(has_text='Lightning storms close the harbor').wait_for()
+
+            self.assertEqual(context.request.post(self.url + '/_test/counters/reset').status, 200)
+            box = page.get_by_label('Search content and keywords', exact=True)
+            box.click()
+            box.press_sequentially('lighthouse', delay=30)
+
+            # Settle: the filtered board is drawn and no further renders arrive for 0.6 s.
+            page.wait_for_function("""() => {
+                const tiles = [...document.querySelectorAll('.lore-drop-left .lore-entry')].map(t => t.innerText);
+                return tiles.length === 2 && tiles.some(t => t.includes('Mara keeps the lighthouse lamp burning'))
+                    && tiles.some(t => t.includes('Ships steer by the north beacon'));
+            }""", timeout=30000)
+            renders, stable = None, 0
+            for _ in range(100):
+                current = context.request.get(self.url + '/_test/counters').json().get('admin_entries', 0)
+                stable = stable + 1 if current == renders else 0
+                renders = current
+                if stable >= 3:
+                    break
+                page.wait_for_timeout(200)
+            self.lore_idle()
+
+            # Correctness: the full query filters exactly as before (content or keywords, case-insensitive).
+            self.assertEqual(box.input_value(), 'lighthouse')
+            tiles = left.locator('.lore-entry').all_inner_texts()
+            self.assertEqual(len(tiles), 2, tiles)
+            self.assertFalse(any('Lightning storms' in tile for tile in tiles), tiles)
+            page.locator('.lore-panel-left').get_by_text('2 entries · page 1', exact=True).wait_for()
+            self.assertEqual(page.locator('.lore-drop-right .lore-entry').count(), 0)
+            self.assertFalse(errors, errors)
+
+            # Debounce: at most two board renders (two admin_entries calls each) for the whole burst.
+            self.assertLessEqual(renders, 4, f'admin_entries called {renders} times while typing 10 characters')
+        finally:
+            self.page = original_page
+            context.close()

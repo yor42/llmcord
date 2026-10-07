@@ -85,3 +85,13 @@ The pre-bootstrap run, with the same seed and host, gave: cold load 2.17 s (late
 ## Updating this baseline
 
 A change claiming a dashboard performance improvement must re-run the bench with the same seed on the same host. It then adds a new dated section here, rather than overwriting this one, and updates any count-based characterization tests in `tests/test_web_auth_boundaries.py` in the same change (see `tests/CLAUDE.md`).
+
+## 2026-10-07: R2 step 1, guild-list cache (count tests only, bench pending)
+
+`AuthService.guilds(session)` caches `/users/@me/guilds` per session for 300 s (D1). The count-based tests changed deliberately:
+- `test_web_auth_boundaries.py`: 5 avatar GETs went from 5 guild checks to 1 (`test_repeated_avatar_requests_check_discord_once`). The `no-store` header is unchanged until R2 step 4.
+- `test_auth_cache.py` (new): repeat guards within the TTL cost 1 call, concurrent cold guards cost 1, the picker page plus a guild page cost 1, and guards queued behind a 401 cost 1.
+
+The bench has not been re-run for this step. The dated bench section (two runs, same seed and host) comes at the end of R2, after the debounce and probe removal (steps 2–3), which also affect the lore-search numbers.
+
+R2 step 3 (same day): the lore search box is debounced (300 ms). The browser test `test_lore_search_is_debounced` counts `AdminStore.admin_entries` calls through a test-only wrapper in `tests/dashboard_server.py`: a 10-character burst at 30 ms per key gives 2 calls (1 board render), down from 20 (10 renders). The bench server now runs through that counting wrapper too; its overhead is negligible.

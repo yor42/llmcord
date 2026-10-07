@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, patch
 import httpx
 from fastapi import HTTPException
 
+from helpers import ShiftedClock
+
 from llmcord_core.auth import AuthService
 
 
@@ -26,11 +28,16 @@ class AuthRateLimitTests(unittest.IsolatedAsyncioTestCase):
             calls.append(request)
             return responses.pop(0)
         auth = self.service(handler)
-        auth.app.state.sessions['session'] = {'expires': time.time() + 60,
-            'token_expires': time.time() + 60, 'access': 'token', 'csrf': 'csrf'}
-        await auth.guard('session', 1)
-        with self.assertRaises(HTTPException) as error:
+        # Session and token outlive the clock shift below, so only the guild-list cache goes stale.
+        auth.app.state.sessions['session'] = {'expires': time.time() + 3600,
+            'token_expires': time.time() + 3600, 'access': 'token', 'csrf': 'csrf'}
+        with ShiftedClock() as clock:
             await auth.guard('session', 1)
+            # PERF-01 / D1: guild lists are cached for 300 s, so revocation only shows up after the TTL.
+            # Advance past it so the second guard refetches instead of reusing the stale admin list.
+            clock.advance(301)
+            with self.assertRaises(HTTPException) as error:
+                await auth.guard('session', 1)
         self.assertEqual(error.exception.status_code, 403)
         self.assertEqual(len(calls), 3)
 

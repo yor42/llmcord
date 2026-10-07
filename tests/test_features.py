@@ -372,7 +372,7 @@ class AsyncFeatureTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([s['slot_key'] for s in store.usable_avatars(1, c)], ['neutral'])
         store.close()
 
-    async def test_live_service_rechecks_permission_csrf_and_expiry(self):
+    async def test_live_service_rechecks_permission_and_expiry(self):
         allowed = [True]
         async def api(request):
             return httpx.Response(200, json=[{'id': '1', 'permissions': '8' if allowed[0] else '0'}])
@@ -380,15 +380,13 @@ class AsyncFeatureTests(unittest.IsolatedAsyncioTestCase):
             app = create_app(':memory:', 'https://pi.test', 'client', 'secret', 'bot', http, enable_dashboard=False)
             app.state.sessions['s'] = {'user': {'id': '4'}, 'csrf': 'token', 'expires': time.time() + 100, 'token_expires': time.time() + 100, 'access': 'a'}
             service = app.state.admin
-            with self.assertRaises(HTTPException):
-                await service.run('s', 1, 'wrong', lambda: service.store.create_space(1, 'Bad', 'world'))
             allowed[0] = False
             with self.assertRaises(HTTPException):
-                await service.run('s', 1, 'token', lambda: service.store.create_space(1, 'Bad', 'world'))
+                await service.run('s', 1, lambda: service.store.create_space(1, 'Bad', 'world'))
             allowed[0] = True
             app.state.sessions['s']['expires'] = 0
             with self.assertRaises(HTTPException):
-                await service.run('s', 1, 'token', lambda: service.store.create_space(1, 'Bad', 'world'))
+                await service.run('s', 1, lambda: service.store.create_space(1, 'Bad', 'world'))
             self.assertFalse(service.store.list_spaces(1))
             service.store.close()
 

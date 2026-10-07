@@ -30,7 +30,7 @@ class LiveContext:
     async def run(self, operation, action=None, detail=None):
         from nicegui import ui
         try:
-            return await self.service.run(self.ident, self.guild_id, self.csrf, operation, action, detail)
+            return await self.service.run(self.ident, self.guild_id, operation, action, detail)
         except (ValueError, HTTPException, sqlite3.IntegrityError, TypeError, KeyError) as error:
             message = error.detail if isinstance(error, HTTPException) else 'This name already exists' if isinstance(error, sqlite3.IntegrityError) else 'Choose valid values for all required fields' if isinstance(error, (TypeError, KeyError)) else str(error)
             ui.notify(message, type='negative', timeout=8000)
@@ -66,6 +66,7 @@ def mount_dashboard(app):
     original_handshake = core.sio.handlers['/']['handshake']
 
     async def socket_allowed(sid, message, supplied_environ=None, *, check_permissions=True):
+        # The live-call security boundary (SEC-03): the client must be bound to this cookie's session; CORS above limits origins.
         client = Client.instances.get(message.get('client_id', ''))
         if not client:
             return False
@@ -156,7 +157,7 @@ def mount_dashboard(app):
                 ui.link('Sign in with Discord', app.state.base_url + '/login').classes('text-lg')
             return
         ui.context.client.llmcord_binding = (request.cookies['llmcord_session'], None)
-        guilds = await app.state.auth.discord_get('/users/@me/guilds', 'Bearer ' + session['access'])
+        guilds = await app.state.auth.guilds(session)
         ui.label('Your servers').classes('text-3xl font-bold')
         for guild in guilds:
             if guild.get('owner') or int(guild.get('permissions', '0')) & 8:

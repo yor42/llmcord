@@ -54,6 +54,19 @@ def main():
         seed_benchmark(store, world, os.environ.get('LLMCORD_BENCH_SEED', '10,500'))
     app.state.sessions['browser-test-session'] = {'user': {'id': '4', 'username': 'Test admin'}, 'expires': time.time() + 3600,
         'token_expires': time.time() + 3600, 'csrf': 'browser-test-csrf', 'access': 'test', 'refresh': 'test'}
+    # A second session for tests that must not depend on the workflow test (which expires the first one).
+    app.state.sessions['browser-search-session'] = {'user': {'id': '4', 'username': 'Test admin'}, 'expires': time.time() + 3600,
+        'token_expires': time.time() + 3600, 'csrf': 'browser-search-csrf', 'access': 'test', 'refresh': 'test'}
+
+    # Count lore board renders (PERF-01): render_board loads each side through AdminStore.admin_entries.
+    counters = Counter()
+    admin_store = app.state.admin.store
+    original_admin_entries = admin_store.admin_entries
+    def counting_admin_entries(guild_id, kind, owner_id):
+        counters['admin_entries'] += 1
+        counters[f'admin_entries:{kind}:{owner_id}'] += 1
+        return original_admin_entries(guild_id, kind, owner_id)
+    admin_store.admin_entries = counting_admin_entries
 
     @app.get('/_test/state')
     async def snapshot():
@@ -84,9 +97,30 @@ def main():
         calls.clear()
         return {'ok': True}
 
+    @app.get('/_test/counters')
+    async def get_counters():
+        return dict(counters)
+
+    @app.post('/_test/counters/reset')
+    async def reset_counters():
+        counters.clear()
+        return {'ok': True}
+
+    @app.post('/_test/seed-search-lore')
+    async def seed_search_lore():
+        # World (space) lore for the debounced-search test; only the first two contain the full query.
+        for content, keys in (('Mara keeps the lighthouse lamp burning', ['keeper']),
+                              ('Ships steer by the north beacon', ['lighthouse']),
+                              ('Lightning storms close the harbor', ['weather'])):
+            store.add_lore(1, 'space', world, content, keys)
+        return {'ok': True, 'owner': f'space:{world}'}
+
     @app.post('/_test/revoke')
     async def revoke():
         state['admin'] = False
+        # Stand-in for the 300 s guild-list TTL (PERF-01 / D1) elapsing after Discord revoked access:
+        # drop every cached guild list so the next guard refetches and sees the revocation.
+        app.state.auth.forget_guilds()
         return {'ok': True}
 
     @app.post('/_test/change-lore')
@@ -100,11 +134,17 @@ def main():
     @app.post('/_test/delay-permission')
     async def delay_permission():
         state['permission_delay'] = 0.5
+        # The delay only applies to a real Discord fetch; with the 300 s guild-list cache (PERF-01 / D1) the next
+        # guard would hit the cache, so drop it to keep the next save pending for the delay.
+        app.state.auth.forget_guilds()
         return {'ok': True}
 
     @app.post('/_test/restore')
     async def restore():
         state['admin'] = True
+        # Stand-in for the 300 s guild-list TTL (PERF-01 / D1) elapsing after access was restored: the revoke
+        # check cached a non-admin guild list, so drop it for the next guard to see the restored permission.
+        app.state.auth.forget_guilds()
         return {'ok': True}
 
     @app.post('/_test/expire')

@@ -11,6 +11,7 @@ import httpx
 from fastapi import HTTPException
 
 DISCORD_API = 'https://discord.com/api/v10'
+GUILD_CACHE_TTL = 300  # seconds a session's guild list is reused (roadmap D1)
 
 
 class AuthService:
@@ -89,13 +90,37 @@ class AuthService:
     async def session_for(self, request):
         return await self.session(request.cookies.get('llmcord_session', ''))
 
-    async def guard(self, ident, guild_id, csrf=None, origin=None):
-        session = await self.session(ident)
+    def current(self, session):
+        return session['expires'] >= time.time() and any(s is session for s in self.app.state.sessions.values())
+
+    def forget_guilds(self, session=None):
+        for s in [session] if session is not None else list(self.app.state.sessions.values()):
+            s.pop('guild_cache', None)
+
+    async def guilds(self, session):
+        # Cached on the session dict, so sign-out, 401, failed refresh and expiry drop it with the session.
+        async with session.setdefault('guild_lock', asyncio.Lock()):
+            if not self.current(session):  # e.g. queued behind a fetch that got a Discord 401
+                raise HTTPException(401, 'Discord session expired')
+            cached = session.get('guild_cache')
+            if cached and time.monotonic() - cached[0] < GUILD_CACHE_TTL:
+                return cached[1]
+            fetched_at = time.monotonic()
+            guilds = await self.discord_get('/users/@me/guilds', 'Bearer ' + session['access'])
+            if self.current(session):
+                session['guild_cache'] = (fetched_at, guilds)
+            return guilds
+
+    def check_origin(self, origin):
         if origin and origin.rstrip('/') != self.app.state.base_url:
             raise HTTPException(403, 'Invalid request origin')
+
+    async def guard(self, ident, guild_id, csrf=None, origin=None):
+        session = await self.session(ident)
+        self.check_origin(origin)
         if csrf is not None and not secrets.compare_digest(str(csrf), session['csrf']):
             raise HTTPException(403, 'Invalid form token')
-        guilds = await self.discord_get('/users/@me/guilds', 'Bearer ' + session['access'])
+        guilds = await self.guilds(session)
         if self.app.state.sessions.get(ident) is not session or session['expires'] < time.time():
             raise HTTPException(401, 'Discord session expired')
         if not any(int(g['id']) == guild_id and (g.get('owner') or int(g.get('permissions', '0')) & 8) for g in guilds):
@@ -104,8 +129,10 @@ class AuthService:
 
     async def require_admin(self, request, guild_id, mutate=False):
         ident = request.cookies.get('llmcord_session', '')
-        csrf = None
+        origin, csrf = request.headers.get('origin'), None
         if mutate:
-            await self.session(ident)  # reject unauthenticated posts before parsing the body
+            # Reject unauthenticated or cross-origin posts before parsing the body (SEC-01).
+            await self.session(ident)
+            self.check_origin(origin)
             csrf = str((await request.form()).get('csrf', ''))
-        return await self.guard(ident, guild_id, csrf, request.headers.get('origin'))
+        return await self.guard(ident, guild_id, csrf, origin)

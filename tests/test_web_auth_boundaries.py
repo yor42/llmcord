@@ -43,13 +43,17 @@ class WebAuthBoundaryTests(unittest.TestCase):
     def tearDown(self):
         self.client.__exit__(None, None, None)
 
-    def test_each_avatar_request_rechecks_discord_admin(self):
-        """PERF-01: no caching of the admin decision; N image requests cost N Discord calls."""
+    def test_avatar_responses_are_no_store(self):
+        """Characterization (PERF-01): avatar images are served with `Cache-Control: no-store` (changes in R2.4)."""
+        response = self.client.get(f"/guild/1/characters/{self.character}/avatar")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+
+    def test_repeated_avatar_requests_check_discord_once(self):
+        """PERF-01 (fixed): N avatar requests in one session within the TTL cost one Discord guild-list call."""
         for _ in range(5):
-            response = self.client.get(f"/guild/1/characters/{self.character}/avatar")
-            self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.headers["cache-control"], "no-store")
-        self.assertEqual(self.calls[GUILDS], 5)
+            self.assertEqual(self.client.get(f"/guild/1/characters/{self.character}/avatar").status_code, 200)
+        self.assertEqual(self.calls[GUILDS], 1)
 
     def test_legacy_guild_page_cost(self):
         """PERF-01: one legacy page render = one user-token check plus one bot-token channel fetch."""
@@ -104,6 +108,36 @@ class WebAuthBoundaryTests(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(parsed, [])
         self.assertEqual(self.calls[GUILDS], 0)
+
+    def test_cross_origin_body_is_not_parsed(self):
+        """SEC-01 (fixed): a mutating request with a valid session but a foreign Origin is rejected with 403 before its
+        multipart body is parsed."""
+        parsed = []
+        original = Request.form
+
+        def counting_form(request, *args, **kwargs):
+            parsed.append(request.url.path)
+            return original(request, *args, **kwargs)
+        with patch.object(Request, "form", counting_form):
+            response = self.client.post("/guild/1/characters/import", headers={"origin": "https://evil.test"},
+                                        files={"file": ("a.json", b"x" * 1024, "application/json")})
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(parsed, [])
+
+    def test_cross_origin_without_session_is_401(self):
+        """SEC-01: a foreign Origin with no session is still 401 (session is checked before origin), body unparsed."""
+        self.client.cookies.clear()
+        parsed = []
+        original = Request.form
+
+        def counting_form(request, *args, **kwargs):
+            parsed.append(request.url.path)
+            return original(request, *args, **kwargs)
+        with patch.object(Request, "form", counting_form):
+            response = self.client.post("/guild/1/characters/import", headers={"origin": "https://evil.test"},
+                                        files={"file": ("a.json", b"x" * 1024, "application/json")})
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(parsed, [])
 
     def test_logout_requires_csrf_and_clears_session(self):
         self.assertEqual(self.client.post("/logout", data={"csrf": "csrf"}, follow_redirects=False).status_code, 303)

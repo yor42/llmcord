@@ -34,7 +34,7 @@ def render_lore_workspace(ctx, entry_editor, on_import=None, on_entry_import=Non
             initial_owner = getattr(ctx, 'lore_owner', None)
             left = ui.select(options, value=initial_owner if initial_owner in options else next(iter(options)), label='Left owner', with_input=True).classes('flex-1')
             right = ui.select(options, value=list(options)[-1], label='Right owner', with_input=True).classes('flex-1')
-            query = ui.input('Search content and keywords').classes('flex-1')
+            query = ui.input('Search content and keywords').props('debounce=300').classes('flex-1')
         toolbar = ui.row().classes('w-full items-center')
         editor = ui.column().classes('w-full')
         board = ui.row().classes('w-full items-stretch flex-nowrap overflow-auto')

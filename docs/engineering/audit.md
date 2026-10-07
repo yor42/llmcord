@@ -23,7 +23,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 
 | ID | Title | Sev | Conf | Label |
 | --- | --- | --- | --- | --- |
-| PERF-01 | Discord guild check on every event, request and action | high | CONFIRMED | incorrect |
+| PERF-01 | Discord guild check on every event, request and action — **Partly resolved (R2 step 1, guild-list cache)** | high | CONFIRMED | incorrect |
 | PERF-02 | Lore workspace N+1 and in-Python search/pagination | medium | CONFIRMED | fragile |
 | PERF-03 | Avatar slot reads load every blob | low | CONFIRMED | fragile |
 | PERF-04 | No gzip; CSP middleware buffers every `/admin` HTML response | low | CONFIRMED | unconventional |
@@ -35,7 +35,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 | BUG-05 | `migrate.py` ignores `config.yaml` `database_path` — **Resolved (R1, branch `rework/r1-correctness`)** | low | CONFIRMED | fragile |
 | SEC-01 | Mutating legacy routes parse the body before auth — **Resolved (R1, branch `rework/r1-correctness`)** | medium | CONFIRMED (test) | incorrect |
 | SEC-02 | Legacy Jinja POST routes still live | medium | CONFIRMED | fragile |
-| SEC-03 | Live-call CSRF and origin checks pass by construction | low | CONFIRMED | unconventional |
+| SEC-03 | Live-call CSRF and origin checks pass by construction — **Resolved (R2 step 2)** | low | CONFIRMED | unconventional |
 | SEC-04 | Unbounded in-memory auth state; sessions lost on restart | low | CONFIRMED | fragile |
 | SEC-05 | Slash commands not guild-only or permission-gated; errors public | medium | CONFIRMED | incorrect |
 | SEC-06 | `archive_character` cross-guild touches global thread casts | low | CONFIRMED (test) | fragile |
@@ -84,6 +84,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
   - Let avatar GETs be privately cacheable.
   - Surface rejected events to the user.
   - Revocation latency becomes the TTL. That is a product decision (see the roadmap).
+- **Status:** Partly resolved in R2 step 1 (branch `rework/r2-auth-perf`): the guild list is cached per session for 300 s (D1), invalidated on 401, sign-out, expiry and failed refresh; concurrent checks share one call; the picker pages use the same cache. Step 3: the lore search input is debounced (Quasar `debounce=300`), so a typing burst costs one board render instead of one per keystroke; the per-action guard and `ctx.run(lambda: True)` probes stay because they no longer call Discord within the TTL. Still open: avatar `no-store` and silent drops (R2 steps 4–5).
 
 ### PERF-02: Lore workspace N+1 and in-Python search/pagination
 - **Severity:** medium. **Confidence:** CONFIRMED. **Label:** fragile.
@@ -162,7 +163,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 ## Security
 
 ### SEC-01: Mutating legacy routes parse the body before auth
-- **Status:** Resolved in R1 (branch `rework/r1-correctness`): `require_admin(mutate=True)` validates the session before `request.form()`.
+- **Status:** Resolved in R1 (branch `rework/r1-correctness`): `require_admin(mutate=True)` validates the session before `request.form()`. R2 step 2 added the origin check before the body too (session → origin → body). Remaining gap: `/logout` (`web.py:154-158`) checks the session but parses the body before checking origin; low impact, tracked as an R2 follow-up.
 - **Severity:** medium. **Confidence:** CONFIRMED (test in `tests/test_web_auth_boundaries.py`, expectedFailure). **Label:** incorrect.
 - **Evidence:** `require_admin(mutate=True)` awaits `request.form()` before `guard` checks the session (`auth.py:105-107`). Unauthenticated multipart bodies are parsed and spooled to disk. The suite shows `ResourceWarning: unclosed SpooledTemporaryFile`.
 - **Why it matters:** an unauthenticated client can make the Pi write upload bodies to disk, bounded only by python-multipart limits.
@@ -189,6 +190,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
   - So the checks in `guard` can never fail for live calls.
   - Protection actually comes from the cookie-to-client binding (`dashboard.py:76-79`) and socket.io CORS (`:64`).
 - **Direction:** document it as the real boundary, and drop the redundant arguments so the code does not imply a check that does not exist.
+- **Status:** Resolved in R2 step 2 (branch `rework/r2-auth-perf`): `AdminService.run(ident, guild_id, operation, ...)` no longer takes csrf and calls `guard(ident, guild_id)`; comments in `admin.py` and `dashboard.py` `socket_allowed` name the real boundary (cookie-to-client binding, socket.io CORS, per-action admin guard). Upload requests still check `X-CSRF-Token` and Origin. Note: a missing `Origin` header is accepted (csrf still has to match on form routes and uploads).
 
 ### SEC-04: Unbounded in-memory auth state; sessions lost on restart
 - **Severity:** low. **Confidence:** CONFIRMED. **Label:** fragile.

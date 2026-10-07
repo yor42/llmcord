@@ -1,6 +1,6 @@
 # Rework roadmap
 
-**Status:** approved by the user on 2026-10-07. R1 in progress on branch `rework/r1-correctness`. All decisions D1–D10 taken (see "Decisions taken").
+**Status:** approved by the user on 2026-10-07. R1 committed (`1f21be3`, branch `rework/r1-correctness`). R2 in progress on branch `rework/r2-auth-perf`. All decisions D1–D10 taken (see "Decisions taken").
 
 Every phase goes through the `orchestrate-change` skill: test-writer → implementer → `scripts/verify.sh` → change-reviewer. Finding IDs refer to `audit.md`.
 
@@ -42,7 +42,7 @@ R1 and R2 are independent and could swap. R1 goes first because its tests alread
 - **Risk:** low.
   - BUG-01 changes behavior for future `/lore add` calls only. Rows already created with keys stay pinned unless a migration unpins them (open decision D7).
   - BUG-05 must not move an existing deployment's database: the env var keeps precedence.
-- **Status:** complete on branch `rework/r1-correctness` (uncommitted); `verify.sh --browser` PASS, 165 tests, 0 expected failures.
+- **Status:** complete, committed as `1f21be3` on branch `rework/r1-correctness`; `verify.sh --browser` PASS, 165 tests, 0 expected failures.
 - **Progress:** SEC-01 done (reviewed; follow-ups: expired-session ordering test, origin check before form parse → R2). BUG-02 + REL-05 done (reviewed). BUG-04 done (reviewed). BUG-01 done (reviewed). BUG-05 done (reviewed; deployment note in audit). Test tidy pass done (fixed known-defect tests renamed per `tests/CLAUDE.md`).
 - **Order inside the phase:** SEC-01, then BUG-02 + REL-05, then BUG-04, then BUG-01, then BUG-05.
 - **Verification:**
@@ -76,6 +76,8 @@ R1 and R2 are independent and could swap. R1 goes first because its tests alread
   - `--browser`.
   - `--bench`, twice, on the same host, with a new dated section in `perf-baseline.md`.
   - A test that a revoked admin loses access within the TTL, and immediately on a 401.
+- **Status:** in progress on branch `rework/r2-auth-perf`.
+- **Progress:** step 1 done (reviewed twice): `AuthService.guilds()` caches the guild list per session for 300 s (D1), coalesces concurrent fetches, never caches errors, and is dropped with the session on 401, sign-out, expiry or failed refresh; `forget_guilds()` resets it (used by the browser fixture). `verify.sh --browser` PASS, 186 tests, 0 expected failures. Bench deferred to the end of R2. Step 2 done (reviewed): origin is checked before the form body (session → origin → body); SEC-03 resolved (`AdminService.run` drops csrf, live calls guard without csrf/origin, real boundary documented); 195 tests, 0 expected failures. Follow-ups: `/logout` origin-before-body, and a positive test for a mutate with the correct Origin. Note: with the cache, step 2's "drop the duplicate check" became "keep the per-action guard", since a cached check costs no Discord call. Step 3 done (reviewed): lore search debounced at 300 ms (`lore_workspace.py`, Quasar prop); a 10-character burst = 1 board render (was 10), pinned by browser test `test_lore_search_is_debounced`; probes kept (free under the cache, they surface errors).
 
 ## R3: Bot turn reliability
 
