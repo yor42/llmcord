@@ -335,6 +335,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Direction:** keep them when the space is unchanged; when it changes, prune ineligible characters and say so.
 
 ### UX-04: Inconsistent name matching across commands
+- **Status:** resolved in R4 step 3 (shared resolver + autocomplete).
 - **Severity:** low. **Confidence:** CONFIRMED (characterization test). **Label:** incorrect.
 - **Evidence:** `/cast set` and `/cast default` match names case-insensitively. `/cast add`, `/cast remove`, `/summon` and `/character info` need an exact match.
 - **Direction:** one resolver, with autocomplete.
@@ -348,7 +349,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Direction:** part of the dashboard UX phase.
 
 ### UX-06: Admin commands visible to all; inconsistent option names
-- **Status:** admin visibility resolved in R4 step 2b (`/admin` group, D11). Option-name consistency and `/context` jargon pending (R4 step 3).
+- **Status:** admin visibility resolved in R4 step 2b (`/admin` group, D11). Option names made consistent in R4 step 3; `/context` jargon pending (R5 wording).
 - **Severity:** low. **Confidence:** CONFIRMED. **Label:** preference.
 - **Evidence:**
   - Admin commands are visible to everyone (see SEC-05).

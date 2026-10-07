@@ -51,7 +51,7 @@ Create three Discord text channels such as `#world-a`, `#world-b`, and `#hub`. A
 2. Run `/admin space bind` in any channel, choosing each Discord channel and its matching space.
 3. Run `/admin space allow_world` twice to link `A` and `B` to `Hub`.
 4. Import a V2/V3 card with `/admin character import`, choosing its home world. The [example cards](../examples/cards) are small JSON samples.
-5. Use `/admin cast default` in each channel to choose its default cast. Names are comma separated; the maximum cast size is five.
+5. Use `/admin cast default` in each channel to choose its default cast. The `characters` option takes comma-separated names; the maximum cast size is five.
 6. Mention the bot or reply to a character line in a bound channel. Use `/context` after a response to inspect the saved lore and memory references.
 
 Members can use `/cast set`, `/cast add`, and `/cast remove` to adjust the active cast, or `/summon` to invite one eligible character for a turn. See the [server guide](server-guide.md) for the complete command map. Leave ambient mode off until explicit turns work in a private test channel.

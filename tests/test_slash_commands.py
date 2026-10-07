@@ -53,17 +53,18 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(interaction.replies, ["This channel is not bound to a world or hub"])
 
     async def test_cast_set_is_case_insensitive(self):
+        """Regression (UX-04): /cast set resolves each comma-separated name case-insensitively (unique matches).
+        The shared resolver's full rules are pinned in tests/test_name_resolution.py."""
         interaction = FakeInteraction()
         await invoke(self.bot, "cast set", interaction, "alice, BOB")
         self.assertEqual(self.store.get_cast(100), [self.alice, self.bob])
 
-    async def test_cast_add_is_case_sensitive(self):
-        """Characterization (UX-04): /cast add uses exact-name lookup unlike /cast set."""
+    async def test_cast_add_is_case_insensitive(self):
+        """UX-04: /cast add resolves a unique case-insensitive name like /cast set does (previously it needed the exact name
+        and replied "Character not found")."""
         interaction = FakeInteraction()
         await invoke(self.bot, "cast add", interaction, "alice")
-        self.assertEqual(interaction.replies, ["Character not found"])
-        await invoke(self.bot, "cast add", FakeInteraction(), "Alice")
-        self.assertEqual(self.store.get_cast(100), [self.alice])
+        self.assertEqual(self.store.get_cast(100), [self.alice], interaction.replies)
 
     async def test_cast_remove_and_show(self):
         self.store.set_cast(100, None, [self.alice, self.bob])
@@ -73,11 +74,17 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(show.replies, ["Bob"])
 
     async def test_cast_rejects_ineligible_character(self):
+        """Regression (UX-04): a character from a world not bound here is refused and the cast is unchanged. The wording
+        is not pinned: previously "Character is not eligible in this space"; once /cast add resolves among eligible
+        characters only, a "No character named Carol" style reply is equally correct."""
         other = self.store.create_space(1, "Other", "world")
         self.store.add_character(1, other, "Carol", {"name": "Carol"}, None, [])
         interaction = FakeInteraction()
         await invoke(self.bot, "cast add", interaction, "Carol")
-        self.assertEqual(interaction.replies, ["Character is not eligible in this space"])
+        self.assertEqual(len(interaction.replies), 1, interaction.replies)
+        self.assertRegex(interaction.replies[0], r"(?i)carol|not eligible")
+        self.assertNotIn("Added", interaction.replies[0])
+        self.assertEqual(self.store.get_cast(100), [])
 
     async def test_memory_consent_lifecycle(self):
         user = 9

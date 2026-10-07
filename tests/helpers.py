@@ -86,7 +86,7 @@ class MemoryModels(FakeModels):
 
 class FakeResponse:
     def __init__(self):
-        self.sent, self._done = [], False
+        self.sent, self._done, self.choices = [], False, None
 
     def is_done(self):
         return self._done
@@ -96,6 +96,11 @@ class FakeResponse:
         self._done = True
 
     async def defer(self, **kwargs):
+        self._done = True
+
+    async def autocomplete(self, choices):
+        """Records the choices an autocomplete callback answered with (``None`` until it answers)."""
+        self.choices = list(choices)
         self._done = True
 
 
@@ -162,6 +167,17 @@ async def invoke(bot, path: str, interaction: FakeInteraction, *args, **kwargs):
         await bot.tree.on_error(interaction, error)
     except Exception as error:  # discord.py wraps callback errors the same way
         await bot.tree.on_error(interaction, app_commands.CommandInvokeError(cmd, error))
+
+
+async def autocomplete(bot, path: str, option: str, interaction: FakeInteraction, current: str) -> list:
+    """Run the autocomplete callback of ``option`` on command ``path`` the way discord.py 2.6 dispatches it
+    (``Command._invoke_autocomplete``: autocomplete checks, cog binding, then ``interaction.response.autocomplete``)
+    and return the choices it answered with. ``option`` is the synced (Discord-facing) option name. Raises
+    ``app_commands.CommandSignatureMismatch`` when the option has no autocomplete callback, and propagates any
+    exception the callback raises."""
+    interaction.response.choices = None
+    await command(bot, path)._invoke_autocomplete(interaction, option, SimpleNamespace(**{option: current}))
+    return interaction.response.choices
 
 
 def discord_transport(admin_guilds=(1,), calls: Counter | None = None, rate_limited=False, *,

@@ -57,6 +57,8 @@ Commands marked **Admin** live under `/admin` and require Discord server adminis
 | `/admin scene delete` | Admin | Delete a stored scene and its branches by root message ID. |
 | `/context` | Member | Inspect the last saved character line, or supply a message ID. |
 
+Character and space options (`character`, `characters`, `space`, `hub`, `world`) suggest matching names as you type. A name matches exactly first, then ignoring case; if several names differ only by case, type the exact one. In `characters`, separate names with commas; suggestions complete the last name.
+
 Discord presents the parameters for each slash command. Most command responses are ephemeral, including context and memory listings. Character skit lines appear in the channel.
 
 ## Admin dashboard

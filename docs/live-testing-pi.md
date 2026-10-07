@@ -96,9 +96,9 @@ To upgrade, stop both services, back up the entire `data/` directory, update cod
 Keep ambient mode off during explicit testing. In a private test text channel:
 
 1. Run `/admin space create` with kind `world` and name `Test World`.
-2. Run `/admin space bind` with the current channel and `Test World`.
-3. Run `/admin character import` with `Test World` and upload `examples/cards/mira.json` (or your own JSON/PNG card). Confirm the actual character name with `/character list`.
-4. Run `/admin cast default` with that name, then mention the bot with a short greeting. A generation status appears before model calls and updates to name the current character. It disappears after replies finish, or becomes an error message if generation fails. Ambient turns show status only when a speaker is selected.
+2. Run `/admin space bind` with the current `channel` and `Test World` as `space`.
+3. Run `/admin character import` with `Test World` as `world` and upload `examples/cards/mira.json` (or your own JSON/PNG card). Confirm the actual character name with `/character list`.
+4. Run `/admin cast default` with that name in `characters`, then mention the bot with a short greeting. A generation status appears before model calls and updates to name the current character. It disappears after replies finish, or becomes an error message if generation fails. Ambient turns show status only when a speaker is selected.
 5. Confirm the answer uses the character's webhook name. Reply to it and check `/context` for the resulting line.
 6. Restart the bot service, then reply again. Confirm the cast, previous scene, and webhook identity survive.
 

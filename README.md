@@ -25,10 +25,10 @@ The database is created at `data/llmcord.sqlite3` by default. Run `python -m uni
 For three channels, `#world-a`, `#world-b`, and `#hub`:
 
 1. `/admin space create world A`, `/admin space create world B`, `/admin space create hub Hub`.
-2. Bind each text channel using `/admin space bind`.
+2. Bind each text channel using `/admin space bind` (options `channel` and `space`).
 3. `/admin space allow_world Hub A` and `/admin space allow_world Hub B`.
-4. Import cards with `/admin character import` and the home world name. JSON and PNG V2/V3 cards work; PNGs supply the avatar. The `examples/cards` directory has two small example cards.
-5. Set a channel's default cast with `/admin cast default` and comma-separated character names. Members can use `/cast set`, `/cast add`, and `/cast remove` to change the active cast in a channel or thread. A hub's `/summon` can invite any eligible guest for one turn without changing that cast.
+4. Import cards with `/admin character import`, giving the home `world`. JSON and PNG V2/V3 cards work; PNGs supply the avatar. The `examples/cards` directory has two small example cards.
+5. Set a channel's default cast with `/admin cast default` and comma-separated names in `characters`. Members can use `/cast set`, `/cast add`, and `/cast remove` to change the active cast in a channel or thread. A hub's `/summon` can invite any eligible guest for one turn without changing that cast.
 6. Mention the bot or reply to one of its character lines to begin. `/admin ambient on` is an optional admin setting per channel. Ambient participation waits for at least two human messages and a 120-second cooldown, and the director can stay silent. Test explicit turns first.
 
 World channels only admit their home world's characters. Hub channels admit characters from linked worlds, but only active cast members join ambiently. Threads inherit their parent channel's space, lore, and ambient setting; they keep separate casts and message histories.

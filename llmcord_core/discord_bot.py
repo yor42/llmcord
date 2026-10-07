@@ -18,6 +18,7 @@ from .cards import parse_card
 from .config import Settings
 from .engine import Engine, SceneContext
 from .models import ImageInput, ModelGateway
+from .names import resolve, resolve_space, suggest
 from .store import Store
 from .avatars import emotion_stream
 from .errors import error_detail, error_stack, reference_id, user_detail
@@ -461,6 +462,61 @@ def register_commands(bot: SkitBot) -> None:
         if not interaction.guild:
             raise ValueError("Use this command in a server.")
 
+    def eligible_rows(interaction: discord.Interaction):
+        if not interaction.guild or not interaction.channel:
+            return []
+        _, binding = bot.location(interaction.channel)
+        return bot.store.eligible_characters(interaction.guild_id, binding["space_id"]) if binding else []
+
+    def guild_characters(guild_id: int):
+        return bot.store.all("SELECT * FROM characters WHERE guild_id=? AND archived=0 ORDER BY name", (guild_id,))
+
+    def cast_rows(interaction: discord.Interaction):
+        """Eligible characters plus current cast members (a member can go stale after a hub unlinks its world)."""
+        if not interaction.guild or not interaction.channel:
+            return []
+        parent_id, binding = bot.location(interaction.channel)
+        if not binding:
+            return []
+        rows = {row["id"]: row for row in bot.store.eligible_characters(interaction.guild_id, binding["space_id"])}
+        for ident in bot.store.get_cast(interaction.channel.id, parent_id):
+            row = bot.store.character_by_id(ident)
+            if row and row["guild_id"] == interaction.guild_id:
+                rows.setdefault(ident, row)
+        return sorted(rows.values(), key=lambda row: row["name"])
+
+    def eligible_character(interaction: discord.Interaction, binding, text: str):
+        return resolve(bot.store.eligible_characters(interaction.guild_id, binding["space_id"]), text, "character",
+                       " available here")
+
+    def eligible_ids(interaction: discord.Interaction, binding, text: str) -> list[int]:
+        rows = bot.store.eligible_characters(interaction.guild_id, binding["space_id"])
+        return [resolve(rows, part, "character", " available here")["id"] for part in text.split(",") if part.strip()]
+
+    def guild_space(interaction: discord.Interaction, text: str, kind: str | None = None):
+        return resolve_space(bot.store.list_spaces(interaction.guild_id), text, kind)
+
+    def safe_choices(source):
+        async def complete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+            if not interaction.guild:
+                return []
+            try:
+                return source(interaction, current)
+            except Exception as error:
+                logging.warning("Autocomplete failed: %s", error_detail(error))
+                return []
+        return complete
+
+    character_choices = safe_choices(lambda interaction, current: suggest([row["name"] for row in eligible_rows(interaction)], current))
+    characters_choices = safe_choices(lambda interaction, current: suggest([row["name"] for row in eligible_rows(interaction)], current, many=True))
+    cast_member_choices = safe_choices(lambda interaction, current: suggest([row["name"] for row in cast_rows(interaction)], current))
+    guild_character_choices = safe_choices(lambda interaction, current: suggest(
+        [row["name"] for row in guild_characters(interaction.guild_id)], current))
+
+    def space_choices(kind: str | None = None):
+        return safe_choices(lambda interaction, current: suggest(
+            [row["name"] for row in bot.store.list_spaces(interaction.guild_id) if kind is None or row["kind"] == kind], current))
+
     def local_scope(interaction: discord.Interaction) -> tuple[str, int]:
         return ("thread", interaction.channel.id) if isinstance(interaction.channel, discord.Thread) else ("channel", interaction.channel.id)
 
@@ -491,33 +547,30 @@ def register_commands(bot: SkitBot) -> None:
 
     @admin_space.command(name="bind", description="Bind a text channel to a world or hub")
     @app_commands.checks.has_permissions(administrator=True)
-    async def space_bind(interaction: discord.Interaction, channel: discord.TextChannel, space_name: str):
+    @app_commands.autocomplete(space=space_choices())
+    async def space_bind(interaction: discord.Interaction, channel: discord.TextChannel, space: str):
         require_guild(interaction)
-        chosen = bot.store.space(interaction.guild_id, space_name)
-        if not chosen:
-            raise ValueError("Space not found")
+        chosen = guild_space(interaction, space)
         bot.store.bind_channel(interaction.guild_id, channel.id, chosen["id"])
-        await interaction.response.send_message(f"Bound {channel.mention} to {chosen['kind']} {space_name}.", ephemeral=True)
+        await interaction.response.send_message(f"Bound {channel.mention} to {chosen['kind']} {chosen['name']}.", ephemeral=True)
 
     @admin_space.command(name="allow_world", description="Allow a world's characters in a hub")
     @app_commands.checks.has_permissions(administrator=True)
-    async def space_allow(interaction: discord.Interaction, hub_name: str, world_name: str):
+    @app_commands.autocomplete(hub=space_choices("hub"), world=space_choices("world"))
+    async def space_allow(interaction: discord.Interaction, hub: str, world: str):
         require_guild(interaction)
-        hub, world = bot.store.space(interaction.guild_id, hub_name), bot.store.space(interaction.guild_id, world_name)
-        if not hub or not world:
-            raise ValueError("Hub or world not found")
-        bot.store.link_world(interaction.guild_id, hub["id"], world["id"])
-        await interaction.response.send_message(f"{world_name} is now available in {hub_name}.", ephemeral=True)
+        hub_row, world_row = guild_space(interaction, hub, "hub"), guild_space(interaction, world, "world")
+        bot.store.link_world(interaction.guild_id, hub_row["id"], world_row["id"])
+        await interaction.response.send_message(f"{world_row['name']} is now available in {hub_row['name']}.", ephemeral=True)
 
     @admin_space.command(name="disallow_world", description="Remove a world's characters from a hub")
     @app_commands.checks.has_permissions(administrator=True)
-    async def space_disallow(interaction: discord.Interaction, hub_name: str, world_name: str):
+    @app_commands.autocomplete(hub=space_choices("hub"), world=space_choices("world"))
+    async def space_disallow(interaction: discord.Interaction, hub: str, world: str):
         require_guild(interaction)
-        hub, world = bot.store.space(interaction.guild_id, hub_name), bot.store.space(interaction.guild_id, world_name)
-        if not hub or not world:
-            raise ValueError("Hub or world not found")
-        bot.store.unlink_world(interaction.guild_id, hub["id"], world["id"])
-        await interaction.response.send_message(f"{world_name} is no longer linked to {hub_name}.", ephemeral=True)
+        hub_row, world_row = guild_space(interaction, hub, "hub"), guild_space(interaction, world, "world")
+        bot.store.unlink_world(interaction.guild_id, hub_row["id"], world_row["id"])
+        await interaction.response.send_message(f"{world_row['name']} is no longer linked to {hub_row['name']}.", ephemeral=True)
 
     bot.tree.add_command(space)
 
@@ -525,17 +578,16 @@ def register_commands(bot: SkitBot) -> None:
 
     @admin_character.command(name="import", description="Import a V2/V3 JSON or PNG character card")
     @app_commands.checks.has_permissions(administrator=True)
-    async def character_import(interaction: discord.Interaction, world_name: str, attachment: discord.Attachment):
+    @app_commands.autocomplete(world=space_choices("world"))
+    async def character_import(interaction: discord.Interaction, world: str, attachment: discord.Attachment):
         require_guild(interaction)
-        world = bot.store.space(interaction.guild_id, world_name)
-        if not world or world["kind"] != "world":
-            raise ValueError("Choose an existing world")
+        home = guild_space(interaction, world, "world")
         if attachment.size > 8 * 1024 * 1024:
             raise ValueError("Card exceeds 8 MiB")
         await interaction.response.defer(ephemeral=True)
         parsed = parse_card(attachment.filename, await attachment.read())
-        ident = bot.store.add_character(interaction.guild_id, world["id"], parsed.name, parsed.data, parsed.avatar, parsed.entries)
-        await interaction.followup.send(f"Imported {parsed.name} (#{ident}) into {world_name} with {len(parsed.entries)} lore entries.", ephemeral=True)
+        ident = bot.store.add_character(interaction.guild_id, home["id"], parsed.name, parsed.data, parsed.avatar, parsed.entries)
+        await interaction.followup.send(f"Imported {parsed.name} (#{ident}) into {home['name']} with {len(parsed.entries)} lore entries.", ephemeral=True)
 
     @character.command(name="list", description="List characters available here")
     async def character_list(interaction: discord.Interaction):
@@ -545,11 +597,10 @@ def register_commands(bot: SkitBot) -> None:
         await interaction.response.send_message(text[:1900], ephemeral=True)
 
     @character.command(name="info", description="Show a character's home world")
-    async def character_info(interaction: discord.Interaction, name: str):
+    @app_commands.autocomplete(character=guild_character_choices)
+    async def character_info(interaction: discord.Interaction, character: str):
         require_guild(interaction)
-        row = bot.store.character(interaction.guild_id, name)
-        if not row:
-            raise ValueError("Character not found")
+        row = resolve(guild_characters(interaction.guild_id), character, "character", " in this server")
         world = bot.store.space_by_id(row["world_id"])
         await interaction.response.send_message(f"{row['name']} — home world: {world['name']}", ephemeral=True)
 
@@ -558,38 +609,38 @@ def register_commands(bot: SkitBot) -> None:
     cast = app_commands.Group(name="cast", description="Manage this channel or thread's active cast")
 
     @cast.command(name="set", description="Set the active cast with comma-separated names")
-    async def cast_set(interaction: discord.Interaction, names: str):
+    @app_commands.autocomplete(characters=characters_choices)
+    async def cast_set(interaction: discord.Interaction, characters: str):
         parent_id, binding = await binding_for(interaction)
-        eligible = {row["name"].casefold(): row for row in bot.store.eligible_characters(interaction.guild_id, binding["space_id"])}
-        requested = [part.strip() for part in names.split(",") if part.strip()]
-        if not requested:
+        ids = eligible_ids(interaction, binding, characters)
+        if not ids:
             raise ValueError("Give one or more character names")
-        try:
-            ids = [eligible[name.casefold()]["id"] for name in requested]
-        except KeyError as error:
-            raise ValueError(f"Character not available here: {error.args[0]}") from error
         bot.store.set_cast(interaction.channel.id, parent_id, ids)
-        await interaction.response.send_message(f"Active cast: {', '.join(requested)}", ephemeral=True)
+        names = [bot.store.character_by_id(ident)["name"] for ident in dict.fromkeys(ids)]
+        await interaction.response.send_message(f"Active cast: {', '.join(names)}", ephemeral=True)
 
     @cast.command(name="add", description="Add an eligible character to the active cast")
-    async def cast_add(interaction: discord.Interaction, name: str):
+    @app_commands.autocomplete(character=character_choices)
+    async def cast_add(interaction: discord.Interaction, character: str):
         parent_id, binding = await binding_for(interaction)
-        row = bot.store.character(interaction.guild_id, name)
-        if not row:
-            raise ValueError("Character not found")
+        row = eligible_character(interaction, binding, character)
         current = bot.store.get_cast(interaction.channel.id, parent_id)
         bot.store.set_cast(interaction.channel.id, parent_id, [*current, row["id"]])
-        await interaction.response.send_message(f"Added {name} to the active cast.", ephemeral=True)
+        await interaction.response.send_message(f"Added {row['name']} to the active cast.", ephemeral=True)
 
     @cast.command(name="remove", description="Remove a character from the active cast")
-    async def cast_remove(interaction: discord.Interaction, name: str):
-        parent_id, _ = await binding_for(interaction)
-        row = bot.store.character(interaction.guild_id, name)
-        if not row:
-            raise ValueError("Character not found")
+    @app_commands.autocomplete(character=cast_member_choices)
+    async def cast_remove(interaction: discord.Interaction, character: str):
+        parent_id, binding = await binding_for(interaction)
+        row = resolve(cast_rows(interaction), character, "character", " available here or in the cast")
+        eligible = {item["id"] for item in bot.store.eligible_characters(interaction.guild_id, binding["space_id"])}
         current = bot.store.get_cast(interaction.channel.id, parent_id)
-        bot.store.set_cast(interaction.channel.id, parent_id, [ident for ident in current if ident != row["id"]])
-        await interaction.response.send_message(f"Removed {name} from the active cast.", ephemeral=True)
+        kept = [ident for ident in current if ident != row["id"] and ident in eligible]
+        bot.store.set_cast(interaction.channel.id, parent_id, kept)
+        message = f"Removed {row['name']} from the active cast."
+        if dropped := len([ident for ident in current if ident != row["id"]]) - len(kept):
+            message += f" Also dropped {dropped} character(s) no longer available here."
+        await interaction.response.send_message(message, ephemeral=True)
 
     @cast.command(name="show", description="Show this channel or thread's active cast")
     async def cast_show(interaction: discord.Interaction):
@@ -600,13 +651,10 @@ def register_commands(bot: SkitBot) -> None:
 
     @admin_cast.command(name="default", description="Set the channel's default cast")
     @app_commands.checks.has_permissions(administrator=True)
-    async def cast_default(interaction: discord.Interaction, names: str):
+    @app_commands.autocomplete(characters=characters_choices)
+    async def cast_default(interaction: discord.Interaction, characters: str):
         parent_id, binding = await binding_for(interaction)
-        eligible = {row["name"].casefold(): row["id"] for row in bot.store.eligible_characters(interaction.guild_id, binding["space_id"])}
-        try:
-            ids = [eligible[name.strip().casefold()] for name in names.split(",") if name.strip()]
-        except KeyError as error:
-            raise ValueError(f"Character not available here: {error.args[0]}") from error
+        ids = eligible_ids(interaction, binding, characters)
         bot.store.set_cast(interaction.channel.id, parent_id, ids, default=True)
         await interaction.response.send_message("Channel default cast updated.", ephemeral=True)
 
@@ -636,14 +684,10 @@ def register_commands(bot: SkitBot) -> None:
     bot.tree.add_command(ambient)
 
     @bot.tree.command(name="summon", description="Invite an eligible character for one turn")
-    async def summon(interaction: discord.Interaction, character_name: str, prompt: str):
+    @app_commands.autocomplete(character=character_choices)
+    async def summon(interaction: discord.Interaction, character: str, prompt: str):
         parent_id, binding = await binding_for(interaction)
-        row = bot.store.character(interaction.guild_id, character_name)
-        if not row:
-            raise ValueError("Character not found")
-        eligible = {item["id"] for item in bot.store.eligible_characters(interaction.guild_id, binding["space_id"])}
-        if row["id"] not in eligible:
-            raise ValueError("This character cannot be summoned here")
+        row = eligible_character(interaction, binding, character)
         cutoff = interaction.created_at - timedelta(seconds=bot.settings.limits["recent_window_seconds"])
         reset_at = bot.store.scene_reset_at(interaction.channel.id)
         latest = bot.store.latest_character_node(interaction.channel.id)
@@ -746,12 +790,13 @@ def register_commands(bot: SkitBot) -> None:
 
     @admin_lore.command(name="promote", description="Copy lore into a channel or world/hub")
     @app_commands.checks.has_permissions(administrator=True)
-    async def lore_promote(interaction: discord.Interaction, lore_id: int, destination: Literal["channel", "space"], space_name: str = ""):
+    @app_commands.autocomplete(space=space_choices())
+    async def lore_promote(interaction: discord.Interaction, lore_id: int, destination: Literal["channel", "space"], space: str = ""):
         _, binding = await binding_for(interaction)
         if destination == "channel":
             target_kind, target_id = "channel", binding["channel_id"]
         else:
-            target = bot.store.space(interaction.guild_id, space_name) if space_name else bot.store.space_by_id(binding["space_id"])
+            target = guild_space(interaction, space) if space.strip() else bot.store.space_by_id(binding["space_id"])
             if not target or target["guild_id"] != interaction.guild_id:
                 raise ValueError("Destination space not found")
             target_kind, target_id = "space", target["id"]

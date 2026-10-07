@@ -1,7 +1,7 @@
 """Admin commands live under one hidden ``/admin`` group (SEC-05, UX-06; decision D11, R4 step 2b).
 
-Tests named ``test_known_defect_*`` are ``expectedFailure``: they assert the intended behavior for an
-objectively incorrect current behavior and will report "unexpected success" once fixed.
+Also pins the admin commands' option names (UX-06, R4 step 3); member option names and the shared name resolver are
+pinned in tests/test_name_resolution.py.
 """
 import inspect
 import unittest
@@ -41,20 +41,20 @@ MEMBER_SURFACE = {
 ADMIN_PATHS = {f"admin {group} {name}" for group, names in ADMIN_SURFACE.items() for name in names}
 MEMBER_PATHS = {group if names is None else f"{group} {name}"
                 for group, names in MEMBER_SURFACE.items() for name in (names or [None])}
-# Option names each admin command had before the move (moving must not change what admins type).
+# Synced option names of each admin command (UX-06, R4 step 3: ``space``/``hub``/``world``/``characters``).
 ADMIN_OPTIONS = {
     "admin space create": ["kind", "name"],
-    "admin space bind": ["channel", "space_name"],
-    "admin space allow_world": ["hub_name", "world_name"],
-    "admin space disallow_world": ["hub_name", "world_name"],
-    "admin character import": ["world_name", "attachment"],
-    "admin cast default": ["names"],
+    "admin space bind": ["channel", "space"],
+    "admin space allow_world": ["hub", "world"],
+    "admin space disallow_world": ["hub", "world"],
+    "admin character import": ["world", "attachment"],
+    "admin cast default": ["characters"],
     "admin ambient on": [],
     "admin ambient off": [],
     "admin lore add": ["content", "keys", "scope"],
     "admin lore pin": ["lore_id"],
     "admin lore edit": ["lore_id", "content"],
-    "admin lore promote": ["lore_id", "destination", "space_name"],
+    "admin lore promote": ["lore_id", "destination", "space"],
     "admin lore delete": ["lore_id"],
     "admin scene delete": ["root_message_id"],
 }
@@ -111,9 +111,11 @@ class AdminSurfaceTests(unittest.TestCase):
         """SEC-05/UX-06 (D11): every invocable path is either a listed admin or a listed member command."""
         self.assertEqual(set(leaf_commands(self.bot)), ADMIN_PATHS | MEMBER_PATHS)
 
-    def test_admin_commands_keep_their_options(self):
-        """UX-06 (D11): moving under ``/admin`` keeps each command's option names and order."""
-        found = {path: [param.name for param in command(self.bot, path).parameters] for path in ADMIN_OPTIONS}
+    def test_admin_commands_use_consistent_option_names(self):
+        """UX-06: each admin command's synced option names and order are ``ADMIN_OPTIONS`` (previously ``space_name``,
+        ``hub_name``, ``world_name`` and ``names``)."""
+        found = {path: [option["name"] for option in command(self.bot, path).to_dict(self.bot.tree).get("options", [])]
+                 for path in ADMIN_OPTIONS}
         self.assertEqual(found, ADMIN_OPTIONS)
 
     def test_admin_payload_is_hidden_and_guild_only(self):

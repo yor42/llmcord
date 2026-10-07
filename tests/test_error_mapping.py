@@ -115,7 +115,7 @@ class TurnFailureTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_turn_failure_public_message_is_generic(self):
         """UX-07/SEC-05 (D3): a failed turn posts one public message without the error type, provider text, model
-        name or credentials (today it posts 'Character response failed during <stage>: <error_detail>')."""
+        name or credentials (previously it posted 'Character response failed during <stage>: <error_detail>')."""
         await self.mention_turn(provider_error())
         self.assertEqual(len(self.channel.errors), 1, self.channel.errors)
         self.assert_generic(self.channel.errors[0])
@@ -354,8 +354,9 @@ class CommandErrorTests(unittest.IsolatedAsyncioTestCase):
         self.store.close()
 
     async def test_duplicate_space_says_already_exists(self):
-        """UX-07: a UNIQUE conflict (duplicate /admin space create) becomes a plain ephemeral "already exists" message with no
-        sqlite text, table or column names (today the raw 'UNIQUE constraint failed: spaces.guild_id, ...' is sent)."""
+        """UX-07 (fixed): a UNIQUE conflict (duplicate /admin space create) becomes a plain ephemeral "already exists"
+        message with no sqlite text, table or column names; the raw 'UNIQUE constraint failed: ...' never reaches the
+        user."""
         interaction = FakeInteraction(admin=True)
         await invoke(self.bot, "admin space create", interaction, "world", "Harbor")
         self.assertEqual(len(interaction.replies), 1, interaction.replies)
@@ -382,7 +383,7 @@ class CommandErrorTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_unexpected_error_is_generic_with_logged_reference(self):
         """UX-07/SEC-05: any other exception becomes a generic ephemeral reply with a reference id, without the
-        exception type or text; the ERROR log line has the same id and the detail (today: 'Command failed: KeyError: ...')."""
+        exception type or text; the ERROR log line has the same id and the detail (previously: 'Command failed: KeyError: ...')."""
         interaction = FakeInteraction(admin=True)
 
         def broken(_guild_id):
@@ -494,7 +495,7 @@ class DefiniteOutcomeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_memory_forget_reports_removed(self):
         """UX-07: /memory forget on your own memory says it was removed (e.g. "Memory #N removed.") and deletes it
-        (today: "Memory removed if it belonged to you.")."""
+        (previously: "Memory removed if it belonged to you.")."""
         mine = self.remember(1, 9, self.alice, "Likes tea")
         self.assert_removed_reply(await self.forget(mine), mine)
         self.assertEqual(self.store.personal(1, 9), [])
