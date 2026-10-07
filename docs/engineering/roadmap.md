@@ -110,6 +110,7 @@ R1 and R2 are independent and could swap. R1 goes first because its tests alread
 
 ## R4: Discord command surface and messages
 
+- **Progress:** branch `rework/r4-command-surface` (from `main` at `3ea7e7a`). Step 1 done (reviewed): per D3, a failed turn posts a generic public message with a reference ID (`ref xxxxxx`); the ERROR log carries the same ref, the stage, the full detail and the stack. `/summon` invokers also get an ephemeral notice with the stage and ref; the sanitized provider detail is shown only for provider stages (speaker selection, image description, dialogue generation), timeouts read "The model provider did not respond in time" (unifies the R3 `ReadTimeout`/`APITimeoutError` wording), other stages say "internal error". A failing public post or followup is logged, never raised. Slash command errors: our `ValueError` text passes through, UNIQUE `IntegrityError` → "That already exists.", anything else → generic message with a logged ref. `/memory forget` and `/lore delete` state the outcome (store methods return bool; scoping unchanged — `/lore delete` is guild-wide). Pinned by `tests/test_error_mapping.py` (25 tests); 329 tests, 0 expected failures. Follow-ups (low): `PROVIDER_STAGES` matches stage label strings; error redaction still keys off env var name suffixes, not the configured `api_key_env` values.
 - **Problem:**
   - **SEC-05:** commands are not guild-only and have no `default_permissions`; provider errors are posted publicly.
   - **UX-06:** admin commands are visible to everyone; option names are inconsistent.

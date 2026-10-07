@@ -20,12 +20,13 @@ from .engine import Engine, SceneContext
 from .models import ImageInput, ModelGateway
 from .store import Store
 from .avatars import emotion_stream
-from .errors import error_detail, error_stack
+from .errors import error_detail, error_stack, reference_id, user_detail
 from .usage import capture_usage, reply_footer
 from .identity import discord_identity, message_context
 
 AVATAR_ASSET_CHECK_TTL = 600
 MEMORY_WAIT_SECONDS = 15
+PROVIDER_STAGES = {'speaker selection', 'image description', 'dialogue generation'}
 MEMORY_CLOSE_SECONDS = 5
 
 
@@ -243,7 +244,7 @@ class SkitBot(commands.Bot):
                 return {**selected, 'url': None, 'asset_id': None}
         return selected
 
-    async def run_scene(self, scene: SceneContext, channel):
+    async def run_scene(self, scene: SceneContext, channel, interaction=None):
         previous = self.memory_tasks.get(channel.id)
         if previous and not previous.done():
             _, pending = await asyncio.wait({previous}, timeout=MEMORY_WAIT_SECONDS)
@@ -251,7 +252,7 @@ class SkitBot(commands.Bot):
                 logging.warning('Memory task for channel %s still running after %ss; continuing without it',
                                 channel.id, MEMORY_WAIT_SECONDS)
         with capture_usage(scene.guild_id):
-            return await self._run_scene(scene, channel)
+            return await self._run_scene(scene, channel, interaction)
 
     def _schedule_memory(self, channel_id, scene, completed, preceding, root_id, parent_message_id):
         previous = self.memory_tasks.get(channel_id)
@@ -280,7 +281,7 @@ class SkitBot(commands.Bot):
         self.memory_tasks[channel_id] = task
         task.add_done_callback(forget)
 
-    async def _run_scene(self, scene: SceneContext, channel):
+    async def _run_scene(self, scene: SceneContext, channel, interaction=None):
         progress = None
         model_label = discord.utils.escape_markdown(self.settings.profile('dialogue').model[:120])
 
@@ -420,17 +421,28 @@ class SkitBot(commands.Bot):
                 self.store.mark_ambient_response(scene.channel_id)
             self._schedule_memory(channel.id, scene, completed, preceding, root_id, parent_message_id)
         except Exception as error:
-            explanation = error_detail(error)
-            logging.error('Scene failed during %s: %s\n%s', stage, explanation, error_stack(error))
-            failure = f"Character response failed during {stage}: {explanation}"
-            if progress:
-                try:
-                    await progress.edit(content=failure, allowed_mentions=discord.AllowedMentions.none())
-                    progress = None
-                except discord.DiscordException:
+            ref = reference_id()
+            logging.error('Scene failed during %s [ref %s]: %s\n%s', stage, ref, error_detail(error), error_stack(error))
+            failure = f"The character couldn't reply (ref {ref}). An admin can find details in the bot log."
+            try:
+                if progress:
+                    try:
+                        await progress.edit(content=failure, allowed_mentions=discord.AllowedMentions.none())
+                        progress = None
+                    except discord.DiscordException:
+                        await channel.send(failure, allowed_mentions=discord.AllowedMentions.none())
+                else:
                     await channel.send(failure, allowed_mentions=discord.AllowedMentions.none())
-            else:
-                await channel.send(failure, allowed_mentions=discord.AllowedMentions.none())
+            except discord.DiscordException as post_error:
+                logging.warning('Public failure notice failed [ref %s]: %s', ref, error_detail(post_error))
+            if interaction:
+                detail = (user_detail(error) if stage in PROVIDER_STAGES
+                          else 'internal error. An admin can find details in the bot log.')
+                try:
+                    await interaction.followup.send(f"Your turn failed during {stage} (ref {ref}): {detail}"[:1900],
+                        ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+                except Exception as notify_error:
+                    logging.warning('Private failure notice failed [ref %s]: %s', ref, error_detail(notify_error))
         finally:
             await clear_progress()
 
@@ -636,7 +648,7 @@ def register_commands(bot: SkitBot) -> None:
             mentioned_users=[discord_identity(member) for ident in re.findall(r'<@!?(\d+)>', prompt)
                              if (member := interaction.guild.get_member(int(ident))) and not member.bot])
         async with bot.channel_locks.setdefault(interaction.channel.id, asyncio.Lock()):
-            await bot.run_scene(scene, interaction.channel)
+            await bot.run_scene(scene, interaction.channel, interaction)
 
     memory = app_commands.Group(name="memory", description="Control your personal character memories")
 
@@ -661,8 +673,11 @@ def register_commands(bot: SkitBot) -> None:
 
     @memory.command(name="forget", description="Remove one of your personal memories")
     async def memory_forget(interaction: discord.Interaction, memory_id: int):
-        bot.store.forget_personal(interaction.guild_id, interaction.user.id, memory_id)
-        await interaction.response.send_message("Memory removed if it belonged to you.", ephemeral=True)
+        if bot.store.forget_personal(interaction.guild_id, interaction.user.id, memory_id):
+            message = f"Memory #{memory_id} removed."
+        else:
+            message = f"No memory #{memory_id} of yours was found."
+        await interaction.response.send_message(message, ephemeral=True)
 
     bot.tree.add_command(memory)
 
@@ -719,8 +734,11 @@ def register_commands(bot: SkitBot) -> None:
     @lore.command(name="delete", description="Delete a lore entry")
     @app_commands.checks.has_permissions(administrator=True)
     async def lore_delete(interaction: discord.Interaction, lore_id: int):
-        bot.store.delete_lore(interaction.guild_id, lore_id)
-        await interaction.response.send_message("Lore entry deleted if present.", ephemeral=True)
+        if bot.store.delete_lore(interaction.guild_id, lore_id):
+            message = f"Deleted lore #{lore_id}."
+        else:
+            message = f"No lore #{lore_id} in this server."
+        await interaction.response.send_message(message, ephemeral=True)
 
     bot.tree.add_command(lore)
 
@@ -792,13 +810,17 @@ def register_commands(bot: SkitBot) -> None:
     async def command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
         if isinstance(error, app_commands.MissingPermissions):
             message = "Only server administrators can use that command."
-        elif isinstance(error, app_commands.CommandInvokeError) and isinstance(error.original, (ValueError, sqlite3.IntegrityError)):
+        elif isinstance(error, app_commands.CommandInvokeError) and isinstance(error.original, ValueError):
             message = str(error.original)
+        elif (isinstance(error, app_commands.CommandInvokeError) and isinstance(error.original, sqlite3.IntegrityError)
+              and str(error.original).startswith('UNIQUE')):
+            message = "That already exists."
         else:
             original = getattr(error, 'original', error)
-            detail = error_detail(original)
-            logging.error('Command failed: %s\n%s', detail, error_stack(original))
-            message = "Command failed: " + detail
+            ref = reference_id()
+            logging.error('Command %s failed [ref %s]: %s\n%s', getattr(getattr(error, 'command', None), 'qualified_name', '?'),
+                          ref, error_detail(original), error_stack(original))
+            message = f"Something went wrong (ref {ref}). The error was logged."
         if interaction.response.is_done():
             await interaction.followup.send(message[:1900], ephemeral=True)
         else:

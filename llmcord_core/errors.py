@@ -3,7 +3,11 @@ from __future__ import annotations
 
 import os
 import re
+import secrets
+import sys
 import traceback
+
+TIMEOUT_TYPES = (('httpx', 'TimeoutException'), ('openai', 'APITimeoutError'), ('anthropic', 'APITimeoutError'))
 
 
 def error_detail(error: Exception, limit: int = 1000) -> str:
@@ -34,3 +38,21 @@ def error_detail(error: Exception, limit: int = 1000) -> str:
 def error_stack(error: Exception) -> str:
     # Frame locations aid debugging; omit exception bodies and local variables.
     return ''.join(traceback.format_list(traceback.extract_tb(error.__traceback__)))
+
+
+def reference_id() -> str:
+    # Short token shown to users and logged with the detail so an admin can match the two.
+    return secrets.token_hex(3)
+
+
+def is_timeout(error: Exception) -> bool:
+    # Only modules already loaded can have raised their timeout types; avoids importing optional SDKs.
+    for module, name in TIMEOUT_TYPES:
+        kind = getattr(sys.modules.get(module), name, None)
+        if isinstance(kind, type) and isinstance(error, kind):
+            return True
+    return False
+
+
+def user_detail(error: Exception) -> str:
+    return 'The model provider did not respond in time' if is_timeout(error) else error_detail(error)

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from collections import Counter
 from datetime import datetime, timezone
@@ -20,8 +21,8 @@ LIMITS = {"max_input_tokens": 12000, "max_output_tokens": 700, "max_images": 3,
           "summary_every_messages": 1, "extraction_every_turns": 1}
 
 
-def make_settings(**limits) -> Settings:
-    profile = ModelProfile("compatible", "test", 16000, False, base_url="http://localhost/v1")
+def make_settings(model: str = "test", **limits) -> Settings:
+    profile = ModelProfile("compatible", model, 16000, False, base_url="http://localhost/v1")
     return Settings("token", None, ":memory:", 90, {"test": profile}, "test", "test", "test", {**LIMITS, **limits})
 
 
@@ -109,10 +110,12 @@ class FakeFollowup:
 class FakeInteraction:
     """Minimal discord.Interaction stand-in for invoking app-command callbacks directly."""
 
-    def __init__(self, guild_id=1, channel_id=100, user_id=9, admin=False):
+    def __init__(self, guild_id=1, channel_id=100, user_id=9, admin=False, channel=None):
         self.guild_id = guild_id
         self.guild = SimpleNamespace(id=guild_id, get_member=lambda _ident: None) if guild_id else None
-        self.channel = SimpleNamespace(id=channel_id, mention=f"<#{channel_id}>") if channel_id else None
+        if channel is None and channel_id:
+            channel = SimpleNamespace(id=channel_id, mention=f"<#{channel_id}>")
+        self.channel = channel
         self.user = SimpleNamespace(id=user_id, display_name="Tester", bot=False)
         self.permissions = discord.Permissions(administrator=admin)
         self.created_at = datetime.now(timezone.utc)
@@ -121,6 +124,10 @@ class FakeInteraction:
     @property
     def replies(self) -> list[str]:
         return [content for content, _ in self.response.sent + self.followup.sent]
+
+    async def original_response(self):
+        """The public reply sent through ``response.send_message`` (``/summon`` uses its id as the scene input)."""
+        return SimpleNamespace(id=7000 + len(self.response.sent))
 
 
 def command(bot, path: str):
@@ -228,6 +235,21 @@ def install_session(app, ident="session", user_id="4", csrf="csrf", access="acce
     return ident
 
 
+REFERENCE_PATTERN = re.compile(r"(?i)\bref\b[\s:#.-]*([0-9a-z]{4,})")
+
+
+def reference_ids(text: str) -> list[str]:
+    """Reference tokens in a user-facing error (``ref a1b2c3``, ``Ref: A1B2C3``; UX-07/SEC-05 per D3). The format
+    is deliberately loose: tests pin that the same token appears in the reply and the log, not its shape."""
+    return REFERENCE_PATTERN.findall(text or "")
+
+
+def is_turn_failure(content: str) -> bool:
+    """A public turn-failure message: the pre-D3 ``Character response failed during <stage>: <detail>`` text, or a
+    generic message carrying a reference id (D3)."""
+    return bool(content) and (content.startswith("Character response failed") or bool(reference_ids(content)))
+
+
 def not_found(text="Unknown Webhook") -> discord.NotFound:
     return discord.NotFound(SimpleNamespace(status=404, reason="Not Found"), text)
 
@@ -312,7 +334,7 @@ class FakeTextChannel(discord.TextChannel):
 
     @property
     def errors(self):
-        return [m.content for m in self.sent if not m.deleted and m.content.startswith("Character response failed")]
+        return [m.content for m in self.sent if not m.deleted and is_turn_failure(m.content)]
 
     async def webhooks(self):
         self.listings += 1
@@ -336,6 +358,11 @@ class FakeTextChannel(discord.TextChannel):
         message = FakeSentMessage(self.next_id(), content)
         self.sent.append(message)
         return message
+
+    async def history(self, **kwargs):
+        """Empty channel history (``/summon`` scans it for recent context)."""
+        return
+        yield
 
     async def fetch_message(self, ident):
         self.fetches += 1

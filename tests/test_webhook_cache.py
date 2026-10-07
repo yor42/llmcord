@@ -31,7 +31,7 @@ class WebhookCacheTests(unittest.IsolatedAsyncioTestCase):
         self.bot.engine.models = self.bot.models = FakeModels([self.alice])
         self.channel = FakeTextChannel(100)
         self.turns = 0
-        logging.disable(logging.ERROR)  # scene failures below are expected and asserted via channel.errors
+        logging.disable(logging.ERROR)  # expected scene failures; failed_turn() re-enables logging to assert on it
 
     def tearDown(self):
         logging.disable(logging.NOTSET)
@@ -41,6 +41,17 @@ class WebhookCacheTests(unittest.IsolatedAsyncioTestCase):
         self.turns += 1
         await self.bot.run_scene(SceneContext(1, 100, None, self.world, 9, 1000 + self.turns, "Hi", None, [], []),
                                  self.channel)
+
+    async def failed_turn(self) -> str:
+        """Run a turn expected to fail; return its logged ERROR text. Stage and detail are pinned in the log, which
+        carries them before and after D3 (public turn failures become generic; tests/test_error_mapping.py)."""
+        logging.disable(logging.NOTSET)
+        try:
+            with self.assertLogs(level="ERROR") as logs:
+                await self.turn()
+        finally:
+            logging.disable(logging.ERROR)
+        return "\n".join(record.getMessage() for record in logs.records if record.levelname == "ERROR")
 
     def rename(self, name):
         self.store.execute("UPDATE characters SET name=? WHERE id=?", (name, self.alice))
@@ -96,10 +107,10 @@ class WebhookCacheTests(unittest.IsolatedAsyncioTestCase):
         character = self.store.character_by_id(self.alice)
         with self.assertRaisesRegex(ValueError, "Manage Webhooks"):
             await self.bot._webhook(self.channel, character)
-        await self.turn()
+        logged = await self.failed_turn()
         self.assertEqual(len(self.channel.errors), 1)
-        self.assertIn("during webhook setup", self.channel.errors[0])
-        self.assertIn("Manage Webhooks", self.channel.errors[0])
+        self.assertIn("webhook setup", logged)
+        self.assertIn("Manage Webhooks", logged)
         self.assertIsNone(self.store.webhook_id(100, self.alice))
 
     async def test_webhook_deleted_between_turns_is_replaced(self):
@@ -122,10 +133,10 @@ class WebhookCacheTests(unittest.IsolatedAsyncioTestCase):
         old = self.channel.hooks[0]
         self.assertGreater(len(old.posts), 1)
         old.fail_next_chunk = True
-        await self.turn()
+        logged = await self.failed_turn()
         self.assertEqual(len(self.channel.errors), 1)
-        self.assertIn("during webhook delivery", self.channel.errors[0])
-        self.assertIn("404", self.channel.errors[0])
+        self.assertIn("webhook delivery", logged)
+        self.assertIn("404", logged)
         attempts, listings = old.send_attempts, self.channel.listings
         self.bot.engine.models = self.bot.models = FakeModels([self.alice])
         await self.turn()
@@ -139,10 +150,10 @@ class WebhookCacheTests(unittest.IsolatedAsyncioTestCase):
         """Characterization (REL-04): when every webhook is gone by the time it is used, the turn fails as a
         webhook-delivery error after one retry (no unbounded loop)."""
         self.channel.dead_on_create = True
-        await self.turn()
+        logged = await self.failed_turn()
         self.assertEqual(len(self.channel.errors), 1)
-        self.assertIn("during webhook delivery", self.channel.errors[0])
-        self.assertIn("Unknown Webhook", self.channel.errors[0])
+        self.assertIn("webhook delivery", logged)
+        self.assertIn("Unknown Webhook", logged)
         self.assertEqual(self.channel.creates, 2)
 
     # --- REL-04 (fixed): cached webhooks -------------------------------------------------------

@@ -2,6 +2,8 @@
 
 Tests named ``test_known_defect_*`` are ``expectedFailure``: they assert the intended behavior
 for an objectively incorrect current behavior and will report "unexpected success" once fixed.
+Command error mapping and definite /memory forget and /lore delete replies (UX-07, SEC-05 per D3) are pinned in
+tests/test_error_mapping.py.
 """
 import unittest
 
@@ -35,12 +37,6 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
         listing = FakeInteraction()
         await invoke(self.bot, "space list", listing)
         self.assertIn("hub: Plaza", listing.replies[0])
-
-    async def test_duplicate_space_reports_integrity_error_text(self):
-        """Characterization: the raw sqlite message reaches the user (UX-07)."""
-        interaction = FakeInteraction(admin=True)
-        await invoke(self.bot, "space create", interaction, "world", "Harbor")
-        self.assertIn("UNIQUE constraint failed", interaction.replies[0])
 
     async def test_rebinding_channel_resets_cast_and_ambient(self):
         """Characterization (UX-03): /space bind silently clears casts and ambient."""
@@ -135,14 +131,6 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
         interaction = FakeInteraction()
         await invoke(self.bot, "context", interaction)
         self.assertEqual(interaction.replies, ["No saved context for that character line"])
-
-    async def test_unexpected_error_is_reported_with_detail(self):
-        """Characterization (UX-07): non-ValueError failures surface as 'Command failed: <Type>: ...'."""
-        interaction = FakeInteraction(admin=True)
-        self.store.list_spaces = lambda _gid: (_ for _ in ()).throw(KeyError("boom"))
-        with self.assertLogs(level="ERROR"):
-            await invoke(self.bot, "space list", interaction)
-        self.assertTrue(interaction.replies[0].startswith("Command failed: KeyError"))
 
 
 if __name__ == "__main__":

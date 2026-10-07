@@ -6,7 +6,7 @@ from pathlib import Path
 from llmcord_core.config import ModelProfile, Settings
 from llmcord_core.discord_bot import SkitBot, split_discord
 from llmcord_core.engine import SceneContext
-from helpers import drain_memory_tasks
+from helpers import drain_memory_tasks, is_turn_failure
 
 
 class FakeModels:
@@ -66,7 +66,7 @@ class FakeChannel:
     @property
     def errors(self):
         return [message.content for message in self.messages
-                if not message.deleted and message.content.startswith('Character response failed')]
+                if not message.deleted and is_turn_failure(message.content)]
 
     async def send(self, content, **kwargs):
         message = FakeMessage(5000 + len(self.messages), content)
@@ -194,9 +194,16 @@ class DiscordFlowTests(unittest.IsolatedAsyncioTestCase):
         bot._webhook = webhook
         channel = FakeChannel(100)
         try:
-            await bot.run_scene(SceneContext(1, 100, None, world, 9, 1000, 'Hello', None, [], []), channel)
+            # The stage and original error are pinned in the logged ERROR line, which carries them both before
+            # and after D3 (public turn failures become generic; see tests/test_error_mapping.py, UX-07/SEC-05).
+            with self.assertLogs(level='ERROR') as logs:
+                await bot.run_scene(SceneContext(1, 100, None, world, 9, 1000, 'Hello', None, [], []), channel)
+            failures = [record.getMessage() for record in logs.records if record.levelname == 'ERROR']
+            self.assertEqual(len(failures), 1, failures)
+            self.assertIn('webhook delivery', failures[0])
+            self.assertIn('RuntimeError: Webhook edit rejected', failures[0])
+            self.assertNotIn('Cleanup also failed', failures[0])
             self.assertEqual(len(channel.errors), 1)
-            self.assertIn('during webhook delivery: RuntimeError: Webhook edit rejected', channel.errors[0])
             self.assertNotIn('Cleanup also failed', channel.errors[0])
             self.assertFalse(channel.messages[0].deleted)
             self.assertEqual(len(channel.messages), 1)

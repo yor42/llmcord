@@ -359,10 +359,11 @@ class Store(AdminStore):
         table = 'guild_lore_entries' if scope_kind == 'guild' else 'lore'
         return self.all(f"SELECT * FROM {table} WHERE guild_id=? AND scope_kind=? AND scope_id=? AND enabled=1 ORDER BY insertion_order,id", (guild_id, scope_kind, scope_id))
 
-    def delete_lore(self, guild_id: int, lore_id: int) -> None:
+    def delete_lore(self, guild_id: int, lore_id: int) -> bool:
         row = self.lore_row(guild_id, lore_id)
         if row:
             self.delete_entry(guild_id, f"lore:{lore_id}", row["revision"])
+        return bool(row)
 
     def pin_lore(self, guild_id: int, lore_id: int) -> None:
         row = self.admin_entry(guild_id, f"lore:{lore_id}")
@@ -441,8 +442,10 @@ class Store(AdminStore):
             return self.all("SELECT * FROM personal_memories WHERE guild_id=? AND user_id=? ORDER BY id", (guild_id, user_id))
         return self.all("SELECT * FROM personal_memories WHERE guild_id=? AND user_id=? AND character_id=? ORDER BY id", (guild_id, user_id, character_id))
 
-    def forget_personal(self, guild_id: int, user_id: int, memory_id: int) -> None:
-        self.execute("DELETE FROM personal_memories WHERE guild_id=? AND user_id=? AND id=?", (guild_id, user_id, memory_id))
+    def forget_personal(self, guild_id: int, user_id: int, memory_id: int) -> bool:
+        with self.db:
+            return self.db.execute("DELETE FROM personal_memories WHERE guild_id=? AND user_id=? AND id=?",
+                                   (guild_id, user_id, memory_id)).rowcount > 0
 
     def add_encounter(self, guild_id: int, character_id: int, space_id: int, content: str, source_id: int) -> None:
         self.execute("INSERT OR IGNORE INTO encounters(guild_id,character_id,space_id,content,source_message_id) VALUES(?,?,?,?,?)", (guild_id, character_id, space_id, content, source_id))

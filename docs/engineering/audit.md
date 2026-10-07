@@ -200,6 +200,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Status:** Resolved in R2 step 6 (branch `rework/r2-auth-perf`). `AuthService.prune()` runs on every `session()` call and on each OAuth sign-in: it drops expired sessions, refresh locks with no session, and `request_locks`/`retry_at` keys no live session uses whose retry time has passed. `drop_session()` is the single removal path (logout, Discord 401, failed refresh, expiry) and also drops the session's refresh lock. A lock that is held or has waiters is never dropped (`busy()` reads `locked()` and the private `asyncio.Lock._waiters`, pinned by a test). Pending backoff survives with or without a session. Pinned by `tests/test_auth_prune.py`. Not done (optional): persisting sessions across restarts. Low follow-ups: a queued waiter after a failed refresh sends one more refresh POST (pre-existing); `prune()` is O(sessions + keys) per check.
 
 ### SEC-05: Slash commands not guild-only or permission-gated; errors public
+- **Status:** error part resolved in R4 step 1 (provider detail no longer posted publicly; details ephemeral to the `/summon` invoker for provider stages, and logged). Guild-only and `default_permissions` pending (R4 step 2).
 - **Severity:** medium. **Confidence:** CONFIRMED. **Label:** incorrect.
 - **Evidence:**
   - No `default_permissions` and no `guild_only`/`allowed_contexts` on any group.
@@ -355,6 +356,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Direction:** fix with SEC-05.
 
 ### UX-07: Raw and ambiguous error text
+- **Status:** resolved in R4 step 1 (D3): generic public/ephemeral messages with a logged reference ID; UNIQUE conflicts say "already exists"; `/memory forget` and `/lore delete` report definite outcomes.
 - **Severity:** medium. **Confidence:** CONFIRMED (characterization tests). **Label:** incorrect.
 - **Evidence:**
   - Users see "UNIQUE constraint failed: ..." and "Command failed: KeyError: ..." (`discord_bot.py:703-712`).
