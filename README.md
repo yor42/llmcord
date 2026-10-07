@@ -63,3 +63,38 @@ Create a named **guild lorebook** and enable it for selected worlds or hubs, or 
 The World Info evaluator supports keyword and JavaScript regex matching, constants, secondary filters, ordering, probability, groups, recursion, timing, character filters, and Discord-applicable prompt positions. Rules tied to SillyTavern-only surfaces such as author-note slots, outlets, vectors, or automation IDs are preserved and flagged in the dashboard; they remain inactive until remapped. Behavior that depends on SillyTavern's exact prompt assembly may differ in Discord scenes, so review imported entries in a private test channel.
 
 If Ollama runs on the Pi host rather than in the bot container, use `http://host.docker.internal:11434/v1` as the compatible model `base_url` and configure Ollama to listen on a host-reachable interface. If it runs on another machine, use its reachable LAN or tailnet URL. `localhost` inside the bot container points to the container itself.
+
+## Acknowledgments and license
+
+This project began as a fork of [llmcord](https://github.com/jakobdylanc/llmcord) by **jakobdylanc**. The implementation has since been substantially reworked around character roleplay, worlds and hubs, lore and memory, and a private administration dashboard. We acknowledge the original project and its contributors for the foundation and inherited work.
+
+The repository currently uses the MIT license; see [LICENSE.md](LICENSE.md). The original copyright and complete MIT permission and warranty notice for inherited llmcord code are also preserved below.
+
+<details>
+<summary>Original llmcord MIT license notice</summary>
+
+```text
+MIT License
+
+Copyright (c) 2024 jakobdylanc
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+</details>
