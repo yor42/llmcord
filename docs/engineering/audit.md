@@ -242,6 +242,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Severity:** medium. **Confidence:** CONFIRMED. **Label:** fragile.
 - **Evidence:** `world_info` creates a `MiniRacer()` for every regex-key evaluation, synchronously (`llmcord_core/world_info.py:28-32`). A large regex-heavy lorebook multiplies isolate start-up cost per turn, and that time blocks the event loop.
 - **Direction:** reuse one isolate, cache compiled patterns, or evaluate with Python `re` where the syntax allows.
+- **Status:** Resolved in R3 step 3 (branch `rework/r3-turn-reliability`): one shared isolate per process with cached RegExp objects (about 22× faster for 20 keys); a timed-out pattern discards and recreates the isolate; evaluation is still synchronous on the event loop, capped at 50 ms per key. The shared isolate must never evaluate user-supplied JS.
 
 ### REL-04: Unbounded and stale bot caches; webhooks listed every turn
 - **Severity:** low. **Confidence:** CONFIRMED. **Label:** fragile.

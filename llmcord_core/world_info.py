@@ -1,6 +1,7 @@
 """Evaluate Discord-applicable SillyTavern World Info rules on one branch."""
 from __future__ import annotations
 
+import atexit
 import hashlib
 import json
 import random
@@ -11,6 +12,56 @@ from .lore import LoreMatch, estimate_tokens
 
 def _seed(turn_id: int, key: str) -> int:
     return int.from_bytes(hashlib.sha256(f"{turn_id}:{key}".encode()).digest()[:8], "big")
+
+
+# One isolate per process, used only from the event-loop thread (evaluation is synchronous), so no locking.
+# Never evaluate user-supplied JS here (only RegExp construction from data): the shared context keeps RegExp.lastMatch etc.
+_ISOLATE: list = []
+_JS_HELPER = """var __wiCache = new Map();
+function __wiTest(p, f, t) {
+  var k = f + "/" + p, r = __wiCache.get(k);
+  if (r === undefined) {
+    if (__wiCache.size >= 512) __wiCache.clear();
+    r = new RegExp(p, f);
+    __wiCache.set(k, r);
+  }
+  r.lastIndex = 0;
+  return r.test(t) === true;
+}"""
+
+
+def _discard_isolate() -> None:
+    while _ISOLATE:
+        try:
+            _ISOLATE.pop().close()
+        except Exception:
+            pass
+
+
+atexit.register(_discard_isolate)
+
+
+def _regex_test(pattern: str, flags: str, text: str) -> bool:
+    try:
+        import py_mini_racer
+    except Exception:
+        return False
+    try:
+        if not _ISOLATE:
+            _ISOLATE.append(py_mini_racer.MiniRacer())
+            try:
+                _ISOLATE[0].eval(_JS_HELPER)
+            except Exception:
+                _discard_isolate()
+                raise
+        return bool(_ISOLATE[0].eval(
+            f"__wiTest({json.dumps(pattern)}, {json.dumps(flags)}, {json.dumps(text)})", timeout_sec=0.05))
+    except Exception as exc:
+        # A bad pattern is a plain JS SyntaxError and leaves the isolate usable; anything else discards it.
+        if not isinstance(exc, py_mini_racer.JSEvalException) or isinstance(
+                exc, (py_mini_racer.JSTimeoutException, py_mini_racer.JSOOMException)):
+            _discard_isolate()
+        return False
 
 
 def _key_matches(key: str, text: str, rule: dict) -> bool:
@@ -24,14 +75,7 @@ def _key_matches(key: str, text: str, rule: dict) -> bool:
         pattern, flags = key[1:end], key[end + 1:]
         if len(pattern) > 500 or not set(flags) <= set("gimsuyd"):
             return False
-        try:
-            from py_mini_racer import MiniRacer
-            with MiniRacer() as js:
-                return bool(js.eval(
-                    f"new RegExp({json.dumps(pattern)}, {json.dumps(flags)}).test({json.dumps(text)})",
-                    timeout_sec=0.05))
-        except Exception:
-            return False
+        return _regex_test(pattern, flags, text)
     if not rule.get("case_sensitive"):
         key, text = key.casefold(), text.casefold()
     if rule.get("whole_words") and " " not in key:
