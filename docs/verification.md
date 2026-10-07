@@ -1,5 +1,7 @@
 # Verification
 
+GitHub runs the offline and browser suites plus security and native ARM64/AMD64 container checks automatically. See [GitHub CI and container releases](github-ci.md) for setup and failure artifacts.
+
 ## Offline suite
 
 From the repository root in a Python 3.12 environment with dependencies installed:

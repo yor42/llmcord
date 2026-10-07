@@ -6,6 +6,8 @@ A Discord character bot for small group skits. Channels can belong to a **world*
 
 Start with the [documentation index](docs/README.md). It links to [getting started](docs/getting-started.md), the [server guide](docs/server-guide.md), [lore and memory](docs/lore-and-memory.md), [Raspberry Pi deployment](docs/deployment-raspberry-pi.md), [architecture](docs/architecture.md), and [verification](docs/verification.md).
 
+[GitHub CI and container releases](docs/github-ci.md) explains automatic Python/browser/security checks, native ARM64/AMD64 container verification, weekly dependency updates, and publishing versioned images to GHCR.
+
 ## Set up
 
 For native Raspberry Pi hosting with Google AI Studio and Gemini 3.8 Flash, use the [Pi hosting and live-testing guide](docs/live-testing-pi.md) and `config-gemini.yaml`.
@@ -16,7 +18,7 @@ For native Raspberry Pi hosting with Google AI Studio and Gemini 3.8 Flash, use 
 4. In the Discord developer portal, enable **Message Content Intent**. Invite the bot with permissions to read and send messages, read history, use application commands, and manage webhooks in the channels where characters will speak. Give it access to threads that will host scenes.
 5. Run `python llmcord.py`. Set `discord.development_guild_id` in `config.yaml` while testing to sync slash commands quickly to one server.
 
-The database is created at `data/llmcord.sqlite3` by default. Run `python -m unittest discover -s tests -v` for offline tests. Docker users can copy `.env` with their credentials and run `docker compose up --build`; a model server on the Docker host may need `host.docker.internal` in its `base_url`.
+The database is created at `data/llmcord.sqlite3` by default. Run `python -m unittest discover -s tests -v` for offline tests. Docker users need private `config.yaml` and `.env` files and can run `docker compose up --build`; the application code is included in the image, while configuration and data are mounted separately. A model server on the Docker host may need `host.docker.internal` in its `base_url`.
 
 ## Set up a server
 

@@ -1,36 +1,36 @@
+x-llmcord: &llmcord
+  image: ${LLMCORD_IMAGE:-llmcord:local}
+  build: .
+  env_file:
+    - .env
+  volumes:
+    - type: bind
+      source: ./config.yaml
+      target: /usr/src/app/config.yaml
+      read_only: true
+      bind:
+        create_host_path: false
+    - ./data:/usr/src/app/data
+
 services:
   migrate:
-    build: .
+    <<: *llmcord
     command: ["python", "migrate.py"]
-    env_file:
-      - .env
-    volumes:
-      - ./:/usr/src/app:ro
-      - ./data:/usr/src/app/data
   bot:
-    build: .
+    <<: *llmcord
     restart: unless-stopped
-    env_file:
-      - .env
-    volumes:
-      - ./:/usr/src/app:ro
-      - ./data:/usr/src/app/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
       migrate:
         condition: service_completed_successfully
   web:
-    build: .
+    <<: *llmcord
     command: ["python", "web_main.py"]
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       WEB_HOST: 0.0.0.0
-    volumes:
-      - ./:/usr/src/app:ro
-      - ./data:/usr/src/app/data
+      WEB_PORT: 8080
     ports:
       - "127.0.0.1:8080:8080"
     depends_on:

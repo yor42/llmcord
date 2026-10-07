@@ -4,6 +4,8 @@ This deployment runs the bot and admin dashboard as separate Docker Compose serv
 
 For a native installation without Docker, including a Gemini 3.8 Flash configuration, use [Native Pi hosting and live testing](live-testing-pi.md).
 
+The image includes the application code. Compose mounts only private configuration and persistent data. To use a published version instead of building on the Pi, follow [GitHub CI and container releases](github-ci.md#use-a-published-image-on-a-pi).
+
 ## Before you start
 
 - Use a **64-bit** Raspberry Pi OS. Docker directs 64-bit Raspberry Pi OS users to its [Debian arm64 installation guide](https://docs.docker.com/engine/install/debian/).
