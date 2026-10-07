@@ -238,6 +238,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
   - Release the lock after delivery.
   - Run extraction and summary as a follow-up task.
 - **Status:** Partly resolved in R3 step 1 (branch `rework/r3-turn-reliability`): explicit per-profile `timeout_seconds` (120) and `max_retries` (1); worst case for one hung call is about 2 × 120 s instead of about 30 min. The channel lock is still held across all model calls (R3 step 5).
+- **Status (R3 step 5):** Resolved. The lock is released after delivery; extraction and summary run as a chained per-channel background task, and the next turn waits at most 15 s for it. New related note: a `/scene delete` during an in-flight extraction can re-add candidates/encounters sourced from the deleted scene (pre-existing race, longer window now); track with ARCH-05.
 
 ### REL-03: New V8 isolate per regex key match
 - **Severity:** medium. **Confidence:** CONFIRMED. **Label:** fragile.

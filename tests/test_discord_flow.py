@@ -6,6 +6,7 @@ from pathlib import Path
 from llmcord_core.config import ModelProfile, Settings
 from llmcord_core.discord_bot import SkitBot, split_discord
 from llmcord_core.engine import SceneContext
+from helpers import drain_memory_tasks
 
 
 class FakeModels:
@@ -119,6 +120,7 @@ class DiscordFlowTests(unittest.IsolatedAsyncioTestCase):
             self.assertGreater(len(hooks[alice].posts), 1)
             self.assertTrue(all('thread' not in options for hook in hooks.values() for options in hook.options))
         finally:
+            await drain_memory_tasks(bot)  # REL-02: let background memory work finish before the store closes
             bot.store.close()
 
     async def test_sequential_webhook_lines_and_parent_recovery(self):
@@ -148,6 +150,7 @@ class DiscordFlowTests(unittest.IsolatedAsyncioTestCase):
         scene = SceneContext(1, 100, None, world, 9, 1000, "Start a skit", None, [], [])
         try:
             await bot.run_scene(scene, channel)
+            await drain_memory_tasks(bot)  # REL-02: the summary may run as a background task
             self.assertEqual(channel.errors, [])
             self.assertEqual(hooks[alice].posts[0].content.split('\n\n-# ')[0], "First line")
             self.assertEqual(hooks[bob].posts[0].content.split('\n\n-# ')[0], "Second line")

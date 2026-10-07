@@ -342,3 +342,23 @@ class FakeTextChannel(discord.TextChannel):
         if ident in self.missing:
             raise discord.NotFound(SimpleNamespace(status=404, reason="Not Found"), "Unknown Message")
         return SimpleNamespace(id=ident)
+
+
+def memory_tasks(bot) -> list[asyncio.Task]:
+    """Background memory tasks the bot is tracking (REL-02 seam ``bot.memory_tasks``: channel id -> task, or an
+    iterable of tasks). Empty while extraction/summary still run inline inside ``run_scene``."""
+    found = []
+    for value in getattr(bot, "memory_tasks", {}).values():
+        found.extend(value if isinstance(value, (list, tuple, set)) else [value])
+    return [task for task in found if isinstance(task, asyncio.Future)]
+
+
+async def drain_memory_tasks(bot, within: float = 1.0) -> None:
+    """Wait (bounded) until the bot's background memory tasks finish, without retrieving their exceptions.
+    A no-op when extraction/summary run inline."""
+    deadline = asyncio.get_running_loop().time() + within
+    while pending := [task for task in memory_tasks(bot) if not task.done()]:
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            raise AssertionError(f"{len(pending)} memory task(s) still pending after {within}s")
+        await asyncio.wait(pending, timeout=remaining)

@@ -13,6 +13,7 @@ from llmcord_core.engine import SceneContext
 from llmcord_core.store import Store
 from test_core import settings
 from test_discord_flow import FakeChannel, FakeModels, FakeWebhook
+from helpers import drain_memory_tasks
 
 
 def image(color):
@@ -122,6 +123,7 @@ class AvatarDeliveryTests(unittest.IsolatedAsyncioTestCase):
             bot.checked_avatar_assets.clear()  # Simulate first use after restart.
             start = len(hook.posts)
             await bot.run_scene(SceneContext(1, 100, None, world, 9, 1000 + turn, 'Hi', None, [], []), channel)
+            await drain_memory_tasks(bot)  # REL-02: memory work runs in the background after delivery
             self.assertFalse(channel.errors)
             self.assertGreater(len(hook.posts) - start, 1)
             self.assertEqual(hook.default_avatar, expected_fallback)
@@ -150,4 +152,5 @@ class AvatarDeliveryTests(unittest.IsolatedAsyncioTestCase):
             store.save_static_avatar(1, character, None, store.owner_revision(1, 'character', character))
             await check('<emotion>neutral</emotion>', 'default', None, None)
         finally:
+            await drain_memory_tasks(bot)
             store.close()

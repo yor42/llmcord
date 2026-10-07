@@ -25,6 +25,8 @@ from .usage import capture_usage, reply_footer
 from .identity import discord_identity, message_context
 
 AVATAR_ASSET_CHECK_TTL = 600
+MEMORY_WAIT_SECONDS = 15
+MEMORY_CLOSE_SECONDS = 5
 
 
 def split_discord(text: str, limit: int = 1900) -> list[str]:
@@ -57,6 +59,7 @@ class SkitBot(commands.Bot):
         self.webhook_defaults = {}
         self.checked_avatar_assets = {}
         self.cleanup_task: asyncio.Task | None = None
+        self.memory_tasks: dict[int, asyncio.Task] = {}
         register_commands(self)
 
     async def setup_hook(self):
@@ -84,6 +87,12 @@ class SkitBot(commands.Bot):
         if self.cleanup_task:
             self.cleanup_task.cancel()
         try:
+            pending = [task for task in self.memory_tasks.values() if not task.done()]
+            if pending:
+                _, pending = await asyncio.wait(pending, timeout=MEMORY_CLOSE_SECONDS)
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
             await self.models.close()
         finally:
             try:
@@ -235,8 +244,41 @@ class SkitBot(commands.Bot):
         return selected
 
     async def run_scene(self, scene: SceneContext, channel):
+        previous = self.memory_tasks.get(channel.id)
+        if previous and not previous.done():
+            _, pending = await asyncio.wait({previous}, timeout=MEMORY_WAIT_SECONDS)
+            if pending:
+                logging.warning('Memory task for channel %s still running after %ss; continuing without it',
+                                channel.id, MEMORY_WAIT_SECONDS)
         with capture_usage(scene.guild_id):
             return await self._run_scene(scene, channel)
+
+    def _schedule_memory(self, channel_id, scene, completed, preceding, root_id, parent_message_id):
+        previous = self.memory_tasks.get(channel_id)
+
+        async def work():
+            if previous and not previous.done():
+                try:
+                    await asyncio.wait({previous})
+                except asyncio.CancelledError:
+                    previous.cancel()
+                    await asyncio.gather(previous, return_exceptions=True)
+                    raise
+            with capture_usage(scene.guild_id):
+                try:
+                    await self.engine.extract_memories(scene, completed, preceding, root_id)
+                    await self.engine.summarize_scene(parent_message_id, scene)
+                except Exception as error:
+                    logging.error('Memory update failed in channel %s: %s\n%s',
+                                  channel_id, error_detail(error), error_stack(error))
+
+        def forget(done):
+            if self.memory_tasks.get(channel_id) is done:
+                del self.memory_tasks[channel_id]
+
+        task = asyncio.create_task(work())
+        self.memory_tasks[channel_id] = task
+        task.add_done_callback(forget)
 
     async def _run_scene(self, scene: SceneContext, channel):
         progress = None
@@ -376,10 +418,7 @@ class SkitBot(commands.Bot):
             await clear_progress('Reply sent.')
             if scene.ambient:
                 self.store.mark_ambient_response(scene.channel_id)
-            stage = 'memory extraction'
-            await self.engine.extract_memories(scene, completed, preceding, root_id)
-            stage = 'scene summary'
-            await self.engine.summarize_scene(parent_message_id, scene)
+            self._schedule_memory(channel.id, scene, completed, preceding, root_id, parent_message_id)
         except Exception as error:
             explanation = error_detail(error)
             logging.error('Scene failed during %s: %s\n%s', stage, explanation, error_stack(error))

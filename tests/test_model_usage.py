@@ -13,6 +13,7 @@ from llmcord_core.store import Store
 from llmcord_core.usage import ModelUsage, capture_usage, collect_usage, rates, reply_footer
 from test_core import settings
 from test_discord_flow import FakeChannel, FakeWebhook
+from helpers import drain_memory_tasks
 
 
 def gemini(**kwargs):
@@ -160,6 +161,7 @@ class UsageAdapterTests(unittest.IsolatedAsyncioTestCase):
         try:
             with patch('llmcord_core.usage.time.time', return_value=now):
                 await bot.run_scene(SceneContext(1, 100, None, world, 9, 1000, 'Hello', None, [], []), channel)
+                await drain_memory_tasks(bot)  # REL-02: memory usage rows land under the patched clock
             self.assertFalse(channel.errors)
             self.assertGreater(len(hook.posts), 1)
             for posted in hook.posts:
@@ -173,4 +175,5 @@ class UsageAdapterTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any('Streaming' in edit and 'gemini-3.8-flash' in edit and '24h tracked:' in edit for message in channel.messages for edit in message.edits))
             self.assertGreater(store.model_usage_summary(1, 'test', 'gemini-3.8-flash', now - 86400)['requests'], 1)
         finally:
+            await drain_memory_tasks(bot)
             store.close()
