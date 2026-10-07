@@ -15,6 +15,11 @@ models:
       api_key_env: OPENAI_API_KEY
       context_tokens: 32000
       supports_images: true
+      # Seconds a model request may wait for data (first token or next chunk)
+      # before failing; a stream that keeps sending is not cut off. Retries
+      # apply after a failed or timed-out request.
+      # timeout_seconds: 120
+      # max_retries: 1
     anthropic/main:
       provider: anthropic
       model: YOUR_ANTHROPIC_MODEL
@@ -29,6 +34,11 @@ models:
       base_url: http://localhost:11434/v1
       context_tokens: 8192
       supports_images: false
+      # Slow local models: raise timeout_seconds (prompt processing before the
+      # first token counts), and consider max_retries: 0 so a slow request is
+      # not repeated.
+      # timeout_seconds: 300
+      # max_retries: 0
 limits:
   max_input_tokens: 12000
   max_output_tokens: 700

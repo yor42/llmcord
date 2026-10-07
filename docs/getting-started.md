@@ -73,5 +73,7 @@ Members can use `/cast set`, `/cast add`, and `/cast remove` to adjust the activ
 | `models.profiles.<name>.supports_images` | Enables bounded image attachments for dialogue. |
 | `models.profiles.<name>.api_key_env` | Environment variable holding a cloud provider key. |
 | `models.profiles.<name>.base_url` | OpenAI-compatible endpoint URL, or an optional OpenAI API override. |
+| `models.profiles.<name>.timeout_seconds` | Seconds a model request may wait for data (first token or next chunk) before failing; a stream that keeps sending is not cut off. Default `120`; raise it for slow local models, where prompt processing before the first token counts. |
+| `models.profiles.<name>.max_retries` | Automatic retries after a failed or timed-out request; default `1` (`0` disables; consider `0` for slow local models so a slow request is not repeated). |
 
 The `limits` block controls input/output token budgets, image count and attachment size, speaker count, nearby-message count and time window, and ambient cooldown. Use [config-example.yaml](../config-example.yaml) for the exact keys and defaults. `max_speakers` cannot exceed three.

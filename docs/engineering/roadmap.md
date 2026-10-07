@@ -81,6 +81,7 @@ R1 and R2 are independent and could swap. R1 goes first because its tests alread
 
 ## R3: Bot turn reliability
 
+- **Progress:** branch `rework/r3-turn-reliability` (from `main` at `827f183`). Step 1 done (reviewed): each model profile has `timeout_seconds` (default 120) and `max_retries` (default 1), validated at load and passed to `AsyncAnthropic`/`AsyncOpenAI` (was SDK default 600 s, 2 retries). The timeout is per read (time to first byte, gaps between chunks), so a stream that keeps sending is not cut off. Pinned by `tests/test_model_timeouts.py` (7 tests, hanging fake transport); 231 tests, 0 expected failures. Follow-ups: a mid-stream timeout surfaces as `ReadTimeout`, a pre-response one as `APITimeoutError` (unify wording with R4 error mapping); slow local `compatible` models may need a higher `timeout_seconds` (documented).
 - **Problem:**
   - **REL-02:** the channel lock is held across all model calls, and no client timeouts are set.
   - **REL-03:** a new V8 isolate per regex match.

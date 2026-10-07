@@ -30,6 +30,8 @@ class ModelProfile:
     input_cost_per_million: float | None = None
     output_cost_per_million: float | None = None
     cached_input_cost_per_million: float | None = None
+    timeout_seconds: float = 120.0
+    max_retries: int = 1
 
     @property
     def prompt_provider(self) -> str:
@@ -96,6 +98,7 @@ def load_settings(path: str | Path = "config.yaml") -> Settings:
             stream_usage=value.get('stream_usage', True), billing_tier=value.get('billing_tier', 'paid'),
             input_cost_per_million=value.get('input_cost_per_million'), output_cost_per_million=value.get('output_cost_per_million'),
             cached_input_cost_per_million=value.get('cached_input_cost_per_million'),
+            timeout_seconds=value.get('timeout_seconds', 120.0), max_retries=value.get('max_retries', 1),
         )
         for name, value in models.get("profiles", {}).items()
     }
@@ -108,6 +111,11 @@ def load_settings(path: str | Path = "config.yaml") -> Settings:
         for rate in (profile.input_cost_per_million, profile.output_cost_per_million, profile.cached_input_cost_per_million):
             if rate is not None and (type(rate) not in {int, float} or not math.isfinite(rate) or rate < 0):
                 raise ValueError(f'Invalid token price in {name}')
+        timeout = profile.timeout_seconds
+        if type(timeout) not in {int, float} or not math.isfinite(timeout) or timeout <= 0:
+            raise ValueError(f'timeout_seconds in {name} must be a finite number greater than 0')
+        if type(profile.max_retries) is not int or profile.max_retries < 0:
+            raise ValueError(f'max_retries in {name} must be a whole number of at least 0')
         if profile.provider not in {"openai", "anthropic", "compatible"}:
             raise ValueError(f"Unsupported provider in {name}")
         if name in choices.values() and (profile.provider != "compatible" or profile.api_key_env) and not os.environ.get(profile.api_key_env or ""):

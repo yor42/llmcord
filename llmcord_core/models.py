@@ -67,10 +67,11 @@ class ModelGateway:
             key = os.environ.get(profile.api_key_env or "", "local-no-key")
             if profile.provider == "anthropic":
                 from anthropic import AsyncAnthropic
-                self.clients[profile_name] = AsyncAnthropic(api_key=key)
+                self.clients[profile_name] = AsyncAnthropic(
+                    api_key=key, timeout=profile.timeout_seconds, max_retries=profile.max_retries)
             else:
                 from openai import AsyncOpenAI
-                kwargs = {"api_key": key}
+                kwargs = {"api_key": key, "timeout": profile.timeout_seconds, "max_retries": profile.max_retries}
                 if profile.base_url:
                     kwargs["base_url"] = profile.base_url
                 self.clients[profile_name] = AsyncOpenAI(**kwargs)
