@@ -72,7 +72,7 @@ sequenceDiagram
   opt not a rewind
     B->>U: channel.history() (recent context)
   end
-  B->>B: acquire channel_locks[channel] (held until the end, REL-02)
+  B->>B: wait ≤ 15 s for the channel's pending memory task, then acquire channel_locks[channel]
   B->>U: progress message "Generating a reply…"
   B->>S: active_preset, scene_guidelines (preset snapshot)
   B->>E: speakers(scene)
@@ -90,9 +90,8 @@ sequenceDiagram
     B->>S: record_node, save_trace, save_lore_activations (per chunk)
   end
   B->>U: delete progress message
-  B->>E: extract_memories → M (memory call) → S
-  B->>E: summarize_scene → M (summary call) → S (BUG-03 cap)
-  B->>B: release channel lock
+  B->>B: release channel lock (R3 step 5)
+  B-)E: background task (chained per channel): extract_memories → M → S, then summarize_scene → M → S (latest window, BUG-03 fixed)
   Note over B,U: on any exception the stage + provider detail<br/>is posted publicly (SEC-05)
 ```
 
@@ -165,9 +164,9 @@ Uploads (`/admin/_nicegui/client/*/upload/*`) run `guard` with the `X-CSRF-Token
 | Discord gateway and REST (`discord.py==2.6.4`) | bot | Events, commands, webhooks, history | discord.py reconnects; a webhook failure fails the turn, and the error is posted publicly (SEC-05) |
 | Discord OAuth2 and `/users/@me/guilds` (`httpx`) | web | Login, token refresh, every authorization check | 401 drops the session; 429 or `Remaining: 0` makes the next check sleep; network error → 503; a rejected socket event is dropped and the bound client is notified (PERF-01, R2 step 5) |
 | Discord REST with the bot token (`httpx`) | web | Guild channel list; avatar publication to the asset channel | Publish raises `ValueError` and shows a notify |
-| Model providers: `openai==2.6.1`, `anthropic==0.69.0`, OpenAI-compatible | bot (web only builds previews) | Director, dialogue stream, image description, memory, summary | SDK default timeouts and retries (REL-02) |
+| Model providers: `openai==2.6.1`, `anthropic==0.69.0`, OpenAI-compatible | bot (web only builds previews) | Director, dialogue stream, image description, memory, summary | Per-profile `timeout_seconds` (120) and `max_retries` (1) since R3 |
 | `mini-racer==0.14.1` (V8) | bot | JS-compatible regex lore keys | Exceptions → no match; new isolate per match (REL-03) |
 | `nicegui==3.17.1`, `fastapi==0.142.2`, `uvicorn`, `Jinja2`, `python-multipart` | web | Dashboard, legacy pages, uploads | `dashboard.py` monkey-patches socket handlers |
 | `Pillow` | web | Avatar normalization | Invalid image → `ValueError` |
-| SQLite (stdlib) | all | Single source of truth | `busy_timeout` 5 s, blocks the event loop (REL-01) |
+| SQLite (stdlib) | all | Single source of truth | `busy_timeout` 5 s, blocks the event loop (REL-01); slow calls ≥ 50 ms logged since R3 |
 | Tailscale Serve | deployment | HTTPS + private reachability for `/admin` | Outside the app |

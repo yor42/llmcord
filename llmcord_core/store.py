@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import time
 import threading
@@ -129,12 +130,55 @@ CREATE TABLE IF NOT EXISTS admin_audit (
 """
 
 
+SLOW_QUERY_SECONDS = 0.05
+log = logging.getLogger(__name__)
+
+
+class TimedConnection(sqlite3.Connection):
+    # Times execute calls and commit/rollback (including `with conn:`); row
+    # fetching on the returned cursor is not timed. SQL text is logged, so
+    # values must always be bound parameters, never formatted into SQL.
+    # Counters are approximate if the connection is used from several threads.
+    def __init__(self, *args: Any, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self.calls = self.slow_calls = 0
+        self.total_seconds = self.max_seconds = 0.0
+
+    def _timed(self, label: str, call: Any, *args: Any) -> Any:
+        start = time.perf_counter()
+        try:
+            return call(*args)
+        finally:
+            elapsed = time.perf_counter() - start
+            self.calls += 1
+            self.total_seconds += elapsed
+            self.max_seconds = max(self.max_seconds, elapsed)
+            if elapsed >= SLOW_QUERY_SECONDS:
+                self.slow_calls += 1
+                log.warning("Slow sqlite call %.1f ms: %s", elapsed * 1000, " ".join(label.split())[:80])
+
+    def execute(self, sql: str, *args: Any) -> sqlite3.Cursor:
+        return self._timed(sql, super().execute, sql, *args)
+
+    def executemany(self, sql: str, *args: Any) -> sqlite3.Cursor:
+        return self._timed(sql, super().executemany, sql, *args)
+
+    def executescript(self, script: str) -> sqlite3.Cursor:
+        return self._timed(script, super().executescript, script)
+
+    def commit(self) -> None:
+        return self._timed("COMMIT", super().commit)
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> Any:
+        return self._timed("COMMIT" if exc_type is None else "ROLLBACK", super().__exit__, exc_type, exc, tb)
+
+
 class Store(AdminStore):
     def __init__(self, path: str | Path = ":memory:"):
         existing = str(path) != ":memory:" and Path(path).exists()
         if str(path) != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(path, check_same_thread=False)
+        self.db = sqlite3.connect(path, check_same_thread=False, factory=TimedConnection)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys=ON")
         self.db.execute("PRAGMA busy_timeout=5000")
@@ -171,6 +215,10 @@ class Store(AdminStore):
 
     def close(self) -> None:
         self.db.close()
+
+    def timing_stats(self) -> dict[str, Any]:
+        db = self.db
+        return {"calls": db.calls, "total_seconds": db.total_seconds, "max_seconds": db.max_seconds, "slow_calls": db.slow_calls}
 
     def one(self, sql: str, args: tuple = ()) -> sqlite3.Row | None:
         return self.db.execute(sql, args).fetchone()

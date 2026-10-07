@@ -226,6 +226,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
   - `Store` uses one `sqlite3` connection with `busy_timeout=5000` (`store.py:140`), called directly from async code in the bot and in the web process.
   - A lock held by the other process can stall the whole event loop for up to 5 s: the Discord heartbeat, or every dashboard socket.
 - **Direction:** short-term, keep transactions tiny and measure. Longer-term, use a thread executor for store calls.
+- **Status:** Measured in R3 step 6 (branch `rework/r3-turn-reliability`): sqlite calls (including `with conn:` commits) ≥ 50 ms log a WARNING on `llmcord_core.store` (SQL prefix only, never parameters), and `Store.timing_stats()` keeps counters. Decide on an executor once production logs exist.
 
 ### REL-02: Channel lock held across all model calls; no client timeouts
 - **Severity:** high. **Confidence:** CONFIRMED. **Label:** fragile.
