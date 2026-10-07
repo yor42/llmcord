@@ -371,6 +371,14 @@ class FakeTextChannel(discord.TextChannel):
         return SimpleNamespace(id=ident)
 
 
+class FakeThread(discord.Thread):
+    """Passes ``isinstance(channel, discord.Thread)`` so ``SkitBot.location`` / ``local_scope`` take the thread path.
+    Pass it as ``FakeInteraction(channel=FakeThread(101, parent_id=100))``."""
+
+    def __init__(self, ident=101, parent_id=100):  # deliberately skips discord.Thread.__init__
+        self.id, self.parent_id = ident, parent_id
+
+
 def memory_tasks(bot) -> list[asyncio.Task]:
     """Background memory tasks the bot is tracking (REL-02 seam ``bot.memory_tasks``: channel id -> task, or an
     iterable of tasks). Empty while extraction/summary still run inline inside ``run_scene``."""

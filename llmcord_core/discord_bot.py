@@ -60,6 +60,7 @@ class SkitBot(commands.Bot):
         self.webhook_defaults = {}
         self.checked_avatar_assets = {}
         self.cleanup_task: asyncio.Task | None = None
+        self.tree.allowed_contexts = app_commands.AppCommandContext(guild=True)
         self.memory_tasks: dict[int, asyncio.Task] = {}
         register_commands(self)
 
@@ -456,6 +457,10 @@ def register_commands(bot: SkitBot) -> None:
             raise ValueError("This channel is not bound to a world or hub")
         return parent_id, binding
 
+    def require_guild(interaction: discord.Interaction) -> None:
+        if not interaction.guild:
+            raise ValueError("Use this command in a server.")
+
     def local_scope(interaction: discord.Interaction) -> tuple[str, int]:
         return ("thread", interaction.channel.id) if isinstance(interaction.channel, discord.Thread) else ("channel", interaction.channel.id)
 
@@ -464,11 +469,13 @@ def register_commands(bot: SkitBot) -> None:
     @space.command(name="create", description="Create a world or hub")
     @app_commands.checks.has_permissions(administrator=True)
     async def space_create(interaction: discord.Interaction, kind: Literal["world", "hub"], name: str):
+        require_guild(interaction)
         ident = bot.store.create_space(interaction.guild_id, name, kind)
         await interaction.response.send_message(f"Created {kind} {name} (#{ident}).", ephemeral=True)
 
     @space.command(name="list", description="List the server's worlds and hubs")
     async def space_list(interaction: discord.Interaction):
+        require_guild(interaction)
         rows = bot.store.list_spaces(interaction.guild_id)
         text = "\n".join(f"#{row['id']} {row['kind']}: {row['name']}" for row in rows) or "No spaces yet."
         await interaction.response.send_message(text[:1900], ephemeral=True)
@@ -476,6 +483,7 @@ def register_commands(bot: SkitBot) -> None:
     @space.command(name="bind", description="Bind a text channel to a world or hub")
     @app_commands.checks.has_permissions(administrator=True)
     async def space_bind(interaction: discord.Interaction, channel: discord.TextChannel, space_name: str):
+        require_guild(interaction)
         chosen = bot.store.space(interaction.guild_id, space_name)
         if not chosen:
             raise ValueError("Space not found")
@@ -485,6 +493,7 @@ def register_commands(bot: SkitBot) -> None:
     @space.command(name="allow_world", description="Allow a world's characters in a hub")
     @app_commands.checks.has_permissions(administrator=True)
     async def space_allow(interaction: discord.Interaction, hub_name: str, world_name: str):
+        require_guild(interaction)
         hub, world = bot.store.space(interaction.guild_id, hub_name), bot.store.space(interaction.guild_id, world_name)
         if not hub or not world:
             raise ValueError("Hub or world not found")
@@ -494,6 +503,7 @@ def register_commands(bot: SkitBot) -> None:
     @space.command(name="disallow_world", description="Remove a world's characters from a hub")
     @app_commands.checks.has_permissions(administrator=True)
     async def space_disallow(interaction: discord.Interaction, hub_name: str, world_name: str):
+        require_guild(interaction)
         hub, world = bot.store.space(interaction.guild_id, hub_name), bot.store.space(interaction.guild_id, world_name)
         if not hub or not world:
             raise ValueError("Hub or world not found")
@@ -507,6 +517,7 @@ def register_commands(bot: SkitBot) -> None:
     @character.command(name="import", description="Import a V2/V3 JSON or PNG character card")
     @app_commands.checks.has_permissions(administrator=True)
     async def character_import(interaction: discord.Interaction, world_name: str, attachment: discord.Attachment):
+        require_guild(interaction)
         world = bot.store.space(interaction.guild_id, world_name)
         if not world or world["kind"] != "world":
             raise ValueError("Choose an existing world")
@@ -526,6 +537,7 @@ def register_commands(bot: SkitBot) -> None:
 
     @character.command(name="info", description="Show a character's home world")
     async def character_info(interaction: discord.Interaction, name: str):
+        require_guild(interaction)
         row = bot.store.character(interaction.guild_id, name)
         if not row:
             raise ValueError("Character not found")
@@ -654,16 +666,19 @@ def register_commands(bot: SkitBot) -> None:
 
     @memory.command(name="opt_in", description="Allow characters to remember facts you explicitly state")
     async def memory_opt_in(interaction: discord.Interaction):
+        require_guild(interaction)
         bot.store.set_consent(interaction.guild_id, interaction.user.id, True)
         await interaction.response.send_message("Personal memory enabled. Use /memory list or /memory opt_out anytime.", ephemeral=True)
 
     @memory.command(name="opt_out", description="Disable and erase your personal memories")
     async def memory_opt_out(interaction: discord.Interaction):
+        require_guild(interaction)
         bot.store.set_consent(interaction.guild_id, interaction.user.id, False)
         await interaction.response.send_message("Personal memory disabled and your saved personal facts erased.", ephemeral=True)
 
     @memory.command(name="list", description="List what characters remember about you")
     async def memory_list(interaction: discord.Interaction):
+        require_guild(interaction)
         rows = bot.store.personal(interaction.guild_id, interaction.user.id)
         lines = []
         for row in rows:
@@ -673,6 +688,7 @@ def register_commands(bot: SkitBot) -> None:
 
     @memory.command(name="forget", description="Remove one of your personal memories")
     async def memory_forget(interaction: discord.Interaction, memory_id: int):
+        require_guild(interaction)
         if bot.store.forget_personal(interaction.guild_id, interaction.user.id, memory_id):
             message = f"Memory #{memory_id} removed."
         else:
@@ -706,6 +722,7 @@ def register_commands(bot: SkitBot) -> None:
     @lore.command(name="pin", description="Pin a lore entry")
     @app_commands.checks.has_permissions(administrator=True)
     async def lore_pin(interaction: discord.Interaction, lore_id: int):
+        require_guild(interaction)
         if not bot.store.lore_row(interaction.guild_id, lore_id):
             raise ValueError("Lore entry not found")
         bot.store.pin_lore(interaction.guild_id, lore_id)
@@ -714,6 +731,7 @@ def register_commands(bot: SkitBot) -> None:
     @lore.command(name="edit", description="Correct the text of a lore entry")
     @app_commands.checks.has_permissions(administrator=True)
     async def lore_edit(interaction: discord.Interaction, lore_id: int, content: str):
+        require_guild(interaction)
         bot.store.edit_lore(interaction.guild_id, lore_id, content)
         await interaction.response.send_message(f"Updated lore #{lore_id}.", ephemeral=True)
 
@@ -734,6 +752,7 @@ def register_commands(bot: SkitBot) -> None:
     @lore.command(name="delete", description="Delete a lore entry")
     @app_commands.checks.has_permissions(administrator=True)
     async def lore_delete(interaction: discord.Interaction, lore_id: int):
+        require_guild(interaction)
         if bot.store.delete_lore(interaction.guild_id, lore_id):
             message = f"Deleted lore #{lore_id}."
         else:
