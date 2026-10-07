@@ -13,7 +13,7 @@ from fastapi.responses import PlainTextResponse
 
 from .avatars import MAX_AVATAR_BYTES, normalize_avatar
 from .cards import parse_card
-from .lorebooks import normalize_entry, parse_lorebook
+from .lorebooks import parse_lorebook
 from .prompts import PURPOSES, SOURCES, block, compatibility, default_bundle, export_preset, parse_preset
 from .scene_ui import delete_book_dialog, delete_space_dialog, direct_import_dialog, guideline_editor
 

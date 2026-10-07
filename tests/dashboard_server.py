@@ -3,6 +3,7 @@ import asyncio
 import json
 import os
 import time
+from collections import Counter
 
 import httpx
 import uvicorn
@@ -14,17 +15,25 @@ from llmcord_core.web import create_app
 def main():
     port = int(os.environ['LLMCORD_TEST_PORT'])
     state = {'admin': True, 'guild_checks': 0, 'permission_delay': 0}
+    # Opt-in benchmark knobs (scripts/bench_dashboard.py); unset keeps the browser-test behavior.
+    bench = os.environ.get('LLMCORD_BENCH') == '1'
+    latency = float(os.environ.get('LLMCORD_BENCH_DISCORD_LATENCY', '0'))
+    reset_after = os.environ.get('LLMCORD_BENCH_RESET_AFTER', '0.05')
+    calls = Counter()
     async def discord_api(request):
+        calls[request.method + ' ' + request.url.path.removeprefix('/api/v10')] += 1
+        if latency:
+            await asyncio.sleep(latency)
         if request.url.path.endswith('/users/@me/guilds'):
             delay = state['permission_delay']
             state['permission_delay'] = 0
             if delay:
                 await asyncio.sleep(delay)
             state['guild_checks'] += 1
-            if state['guild_checks'] == 1:
+            if state['guild_checks'] == 1 and not bench:
                 return httpx.Response(429, json={'retry_after': 0.05})
             return httpx.Response(200, json=[{'id': '1', 'name': 'Test server', 'permissions': '8' if state['admin'] else '0'}],
-                                  headers={'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset-After': '0.05'})
+                                  headers={'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset-After': reset_after})
         if request.method == 'POST' and request.url.path.endswith('/messages'):
             return httpx.Response(200, json={'id': '900', 'attachments': [{'url': 'https://cdn.discordapp.com/attachments/100/900/image.png?ex=test'}]})
         return httpx.Response(200, json=[{'id': '100', 'name': 'scene', 'type': 0},
@@ -41,6 +50,8 @@ def main():
     book_id = store.create_lorebook(1, 'Test book', 'channel', 100)
     from llmcord_core.lorebooks import parse_lorebook
     store.sync_lorebook(1, book_id, parse_lorebook(json.dumps({'entries': {str(i): {'key': ['fixture'], 'content': f'Fixture entry {i}'} for i in range(75)}}).encode()), {}, 0)
+    if bench:
+        seed_benchmark(store, world, os.environ.get('LLMCORD_BENCH_SEED', '10,500'))
     app.state.sessions['browser-test-session'] = {'user': {'id': '4', 'username': 'Test admin'}, 'expires': time.time() + 3600,
         'token_expires': time.time() + 3600, 'csrf': 'browser-test-csrf', 'access': 'test', 'refresh': 'test'}
 
@@ -63,6 +74,15 @@ def main():
         return [f'/admin{element._registered_url}' for client in Client.instances.values()
             if getattr(client, 'llmcord_binding', None) == ('browser-test-session', 1)
             for element in client.elements.values() if hasattr(element, '_registered_url')]
+
+    @app.get('/_test/metrics')
+    async def metrics():
+        return dict(calls)
+
+    @app.post('/_test/metrics/reset')
+    async def reset_metrics():
+        calls.clear()
+        return {'ok': True}
 
     @app.post('/_test/revoke')
     async def revoke():
@@ -99,6 +119,22 @@ def main():
 
     server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=port, ssl_keyfile=os.environ['LLMCORD_TEST_KEY'], ssl_certfile=os.environ['LLMCORD_TEST_CERT'], access_log=False, log_level='warning'))
     server.run()
+
+
+def seed_benchmark(store, world, spec):
+    """Seed N extra characters (each with a static and an emotion avatar) and M channel lore entries."""
+    from io import BytesIO
+    from PIL import Image
+    from llmcord_core.avatars import normalize_avatar
+    characters, lore = (int(part) for part in spec.split(','))
+    buffer = BytesIO()
+    Image.new('RGB', (64, 64), (90, 120, 200)).save(buffer, 'PNG')
+    image = normalize_avatar(buffer.getvalue())
+    for index in range(characters):
+        ident = store.add_character(1, world, f'Bench {index:03d}', {'name': f'Bench {index:03d}', 'description': 'x' * 400}, image, [])
+        store.save_avatar(1, ident, 'happy', 'Happy', '', image)
+    for index in range(lore):
+        store.add_lore(1, 'channel', 100, f'Bench lore {index} ' + 'y' * 200, [f'key{index}'])
 
 
 if __name__ == '__main__':

@@ -329,9 +329,7 @@ class DashboardBrowserTests(unittest.TestCase):
         page.get_by_role('button', name='Save lore', exact=True).click()
         self.wait_for(lambda: any(r['content'] == 'Browser lore' for r in self.state()['lore']))
         tile = page.locator('.lore-entry').filter(has_text='Browser lore')
-        destination = page.locator('[class*="nicegui-column"]').filter(has=page.get_by_text('Book: Test book', exact=True)).last
         # Use the visible drag handle and target owner container.
-        target = page.locator('.lore-entry').filter(has_text='Fixture entry 0').first
         self.lore_idle()
         self.drag_lore(tile, page.locator('.lore-drop-right'))
         self.wait_for(lambda: any(r['content'] == 'Browser lore' for r in self.state()['books']))

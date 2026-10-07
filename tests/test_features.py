@@ -1,10 +1,8 @@
-import copy
 import json
 import tempfile
 import sqlite3
 import time
 import unittest
-from dataclasses import replace
 from io import BytesIO
 from pathlib import Path
 
@@ -15,15 +13,12 @@ from PIL import Image
 from llmcord_core.admin_store import ConflictError
 from llmcord_core.avatars import AvatarPublisher, emotion_stream, normalize_avatar
 from llmcord_core.cards import ParsedCard, parse_card
-from llmcord_core.engine import Engine, SceneContext
-from llmcord_core.lore import LoreMatch, lore_scopes
+from llmcord_core.lore import LoreMatch
 from llmcord_core.lorebooks import export_entry, normalize_entry, parse_lorebook, validate_rule
 from llmcord_core.models import ImageInput, TurnMessage
 from llmcord_core.prompts import block, compatibility, compile_prompt, default_bundle, export_preset, parse_preset, validate_bundle
 from llmcord_core.store import SCHEMA, Store
 from llmcord_core.web import create_app
-from llmcord_core.world_info import evaluate
-from test_core import FakeModels, settings
 
 
 def book(content='Imported', **rule):
