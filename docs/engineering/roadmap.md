@@ -1,6 +1,6 @@
 # Rework roadmap
 
-**Status:** approved by the user on 2026-10-07. R1 committed (`1f21be3`, branch `rework/r1-correctness`). R2 in progress on branch `rework/r2-auth-perf`. All decisions D1–D10 taken (see "Decisions taken").
+**Status:** approved by the user on 2026-10-07. R1 committed (`1f21be3`, branch `rework/r1-correctness`). R2 complete and pushed (branch `rework/r2-auth-perf`). All decisions D1–D10 taken (see "Decisions taken").
 
 Every phase goes through the `orchestrate-change` skill: test-writer → implementer → `scripts/verify.sh` → change-reviewer. Finding IDs refer to `audit.md`.
 
@@ -76,7 +76,7 @@ R1 and R2 are independent and could swap. R1 goes first because its tests alread
   - `--browser`.
   - `--bench`, twice, on the same host, with a new dated section in `perf-baseline.md`.
   - A test that a revoked admin loses access within the TTL, and immediately on a 401.
-- **Status:** in progress on branch `rework/r2-auth-perf`.
+- **Status:** complete on branch `rework/r2-auth-perf` (steps 1–6 + SEC-01 logout follow-up); `verify.sh --browser` PASS, 224 tests, 0 expected failures; bench twice, see `perf-baseline.md` (lore search settled 23.1 s → 1.5 s rate limited; 0 guild checks after cold load).
 - **Progress:** step 1 done (reviewed twice): `AuthService.guilds()` caches the guild list per session for 300 s (D1), coalesces concurrent fetches, never caches errors, and is dropped with the session on 401, sign-out, expiry or failed refresh; `forget_guilds()` resets it (used by the browser fixture). `verify.sh --browser` PASS, 186 tests, 0 expected failures. Bench deferred to the end of R2. Step 2 done (reviewed): origin is checked before the form body (session → origin → body); SEC-03 resolved (`AdminService.run` drops csrf, live calls guard without csrf/origin, real boundary documented); 195 tests, 0 expected failures. Follow-ups (both done after step 6): `/logout` origin-before-body, and a positive test for a mutate with the correct Origin. Note: with the cache, step 2's "drop the duplicate check" became "keep the per-action guard", since a cached check costs no Discord call. Step 3 done (reviewed): lore search debounced at 300 ms (`lore_workspace.py`, Quasar prop); a 10-character burst = 1 board render (was 10), pinned by browser test `test_lore_search_is_debounced`; probes kept (free under the cache, they surface errors). Steps 1–3 committed `2bcf139`. Step 4 done (reviewed): stored avatars `private, max-age=300` (endpoint allow-list, everything else `no-store`), versioned `?v=` URLs in `guild.html` and the dashboard; 202 tests, 0 expected failures. Untested: the dashboard `?v=` URLs (browser-only) and HEAD/405 no-store (checked by the reviewer by hand). Step 4 committed `11ef19f`. Step 5 done (reviewed): rejected live events from a bound client show a negative notification (401 sign in again; else the detail), unbound clients stay silent; 203 tests, 0 expected failures. Follow-ups: dedupe repeated toasts, offline test for `rejection_notice` and the silent path. Step 5 committed `b24f96f`. Step 6 done (reviewed): SEC-04 resolved — `AuthService.prune()` on access and sign-in, `drop_session()` as the single removal path (logout now uses it), held or waited-on locks never dropped, pending backoff kept.
 
 ## R3: Bot turn reliability
