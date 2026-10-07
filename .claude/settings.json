@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(scripts/verify.sh)",
+      "Bash(scripts/verify.sh:*)",
+      "Bash(.venv/bin/python -m unittest:*)",
+      "Bash(.venv/bin/python -m ruff check:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git blame:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git branch --show-current)",
+      "Bash(git branch --list:*)"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Edit(**/.env)",
+      "Read(**/.env.*)",
+      "Edit(**/.env.*)",
+      "Read(**/*.key)",
+      "Edit(**/*.key)",
+      "Read(**/*.crt)",
+      "Edit(**/*.crt)",
+      "Read(./data/**)",
+      "Edit(./data/**)",
+      "Read(**/config.yaml)",
+      "Edit(**/config.yaml)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/ruff-edited.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

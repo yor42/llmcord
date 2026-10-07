@@ -58,7 +58,7 @@ The 36 new tests are the characterization and known-defect tests in:
 ## CI
 
 `.github/workflows/ci.yml` runs:
-- the offline suite on Python 3.12 and 3.13;
+- `ruff check` (same `ruff.toml`, pinned `ruff==0.16.10`) followed by the offline suite on Python 3.12 and 3.13;
 - the browser suite on 3.13.
 
-It does not run ruff yet; bootstrap step 3 adds that.
+The ruff step was added in bootstrap step 3. CI does not call `scripts/verify.sh` itself; repository hygiene runs in the separate `security` job, and `compileall` is not run in CI.
