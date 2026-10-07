@@ -159,6 +159,7 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
     @app.post("/logout")
     async def logout(request: Request):
         session = await session_for(request)
+        app.state.auth.check_origin(request.headers.get("origin"))
         form = await request.form()
         if not secrets.compare_digest(str(form.get("csrf", "")), session["csrf"]):
             raise HTTPException(403, "Invalid form token")

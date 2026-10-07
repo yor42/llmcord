@@ -163,7 +163,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 ## Security
 
 ### SEC-01: Mutating legacy routes parse the body before auth
-- **Status:** Resolved in R1 (branch `rework/r1-correctness`): `require_admin(mutate=True)` validates the session before `request.form()`. R2 step 2 added the origin check before the body too (session → origin → body). Remaining gap: `/logout` (`web.py:154-158`) checks the session but parses the body before checking origin; low impact, tracked as an R2 follow-up.
+- **Status:** Resolved in R1 (branch `rework/r1-correctness`): `require_admin(mutate=True)` validates the session before `request.form()`. R2 step 2 added the origin check before the body too (session → origin → body). R2 follow-up: `/logout` now checks origin too (it previously never did, so a cross-site POST with a valid csrf could sign the user out); all 19 POST routes run session → origin → body. Positive same-origin tests added for a mutate and for logout.
 - **Severity:** medium. **Confidence:** CONFIRMED (test in `tests/test_web_auth_boundaries.py`, expectedFailure). **Label:** incorrect.
 - **Evidence:** `require_admin(mutate=True)` awaits `request.form()` before `guard` checks the session (`auth.py:105-107`). Unauthenticated multipart bodies are parsed and spooled to disk. The suite shows `ResourceWarning: unclosed SpooledTemporaryFile`.
 - **Why it matters:** an unauthenticated client can make the Pi write upload bodies to disk, bounded only by python-multipart limits.

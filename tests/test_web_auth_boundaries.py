@@ -236,6 +236,40 @@ class WebAuthBoundaryTests(unittest.TestCase):
         self.assertEqual(self.client.post("/logout", data={"csrf": "csrf"}, follow_redirects=False).status_code, 303)
         self.assertNotIn(self.session, self.app.state.sessions)
 
+    def test_logout_cross_origin_body_is_not_parsed(self):
+        """SEC-01 (fixed): a `/logout` POST with a valid session but a foreign Origin is rejected with 403 before its
+        form body is parsed, and the session survives (a forged cross-site logout must not sign the user out)."""
+        parsed = []
+        original = Request.form
+
+        def counting_form(request, *args, **kwargs):
+            parsed.append(request.url.path)
+            return original(request, *args, **kwargs)
+        with patch.object(Request, "form", counting_form):
+            response = self.client.post("/logout", data={"csrf": "csrf"}, headers={"origin": "https://evil.test"},
+                                        follow_redirects=False)
+        self.assertEqual(parsed, [])
+        self.assertEqual(response.status_code, 403)
+        self.assertIn(self.session, self.app.state.sessions)
+
+    def test_same_origin_mutation_with_csrf_succeeds(self):
+        """SEC-01: a mutating admin POST with the dashboard's own Origin, a valid session and csrf passes
+        `check_origin` and applies the change."""
+        response = self.client.post("/guild/1/spaces", data={"csrf": "csrf", "name": "Same", "kind": "world"},
+                                    headers={"origin": "https://pi.test"}, follow_redirects=False)
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers["location"], "/guild/1")
+        self.assertIn("Same", [space["name"] for space in self.app.state.store.list_spaces(1)])
+
+    def test_same_origin_logout_with_csrf_signs_out(self):
+        """SEC-01: `/logout` with the dashboard's own Origin and a valid csrf drops the session and clears the cookie."""
+        response = self.client.post("/logout", data={"csrf": "csrf"}, headers={"origin": "https://pi.test"},
+                                    follow_redirects=False)
+        self.assertEqual(response.status_code, 303)
+        self.assertNotIn(self.session, self.app.state.sessions)
+        self.assertIn("llmcord_session=", response.headers["set-cookie"])
+        self.assertEqual(self.client.get("/guild/1").status_code, 401)
+
     def test_expired_session_rejected_without_discord_call(self):
         self.app.state.sessions[self.session]["expires"] = 0
         self.assertEqual(self.client.get(f"/guild/1/characters/{self.character}/avatar").status_code, 401)
