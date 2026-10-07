@@ -1,5 +1,13 @@
 # Running a server
 
+## Conversation participants
+
+Human messages sent to the model include the speaker's Discord display name and stable user ID. Names are saved with each message, so two members sharing a nickname remain distinct and a renamed member keeps the same identity. Mentioned users are identified separately from the person speaking. This is ordinary conversation attribution; world/channel guidelines still supply the roleplay setting.
+
+Recent human chat observed before a bot turn is kept with that branch and included in later replies and summaries, within the configured context and retention limits. Rewinding to an earlier reply excludes later participants and messages. Identity guidance also applies to custom prompt presets; `{{user}}` means the current speaker.
+
+Older saved messages from before this feature retain their user IDs; historical display names that were never recorded cannot be recovered. Speaker names and mention metadata expire with conversation history. Personal memories remain scoped to the consenting user ID and character.
+
 ## Spaces and casts
 
 | Scope | What it controls |

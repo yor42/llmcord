@@ -225,6 +225,10 @@ def compile_prompt(bundle, purpose, values, history, provider, budget, *, contra
     if contract:
         records.insert(0, ['contract', TurnMessage('system', contract), 1000000, True, None, None, None])
     managed_sources = []
+    identity = str(values.get('speaker_identity', '')).strip()
+    if identity:
+        records.append(['speaker_identity', TurnMessage('system', identity), 1000000, True, None, None, None])
+        managed_sources.append('speaker_identity')
     if purpose == 'dialogue':
         for key, label in (('world_guidelines', 'World / hub guidelines'), ('channel_guidelines', 'Channel guidelines (take precedence over world guidelines when they conflict)')):
             text = str(values.get(key, '')).strip()

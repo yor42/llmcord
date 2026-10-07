@@ -57,7 +57,8 @@ CREATE TABLE IF NOT EXISTS nodes (
  message_id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, channel_id INTEGER NOT NULL,
  parent_id INTEGER, root_id INTEGER NOT NULL, author_id INTEGER, character_id INTEGER,
  content TEXT NOT NULL, created_at REAL NOT NULL, context_json TEXT NOT NULL DEFAULT '[]',
- sources_json TEXT NOT NULL DEFAULT '[]'
+ sources_json TEXT NOT NULL DEFAULT '[]', author_label TEXT NOT NULL DEFAULT '',
+ mentions_json TEXT NOT NULL DEFAULT '[]'
 );
 CREATE INDEX IF NOT EXISTS nodes_channel_time ON nodes(channel_id,created_at);
 CREATE INDEX IF NOT EXISTS nodes_root ON nodes(root_id);
@@ -142,9 +143,13 @@ class Store(AdminStore):
         if old_version > 3:
             self.db.close()
             raise ValueError('Database is newer than this application')
-        if existing and old_version < 3:
-            backup = Path(str(path) + f".pre-v3-{time.time_ns()}.sqlite3")
+        node_columns = {row[1] for row in self.db.execute('PRAGMA table_info(nodes)')}
+        needs_identities = bool(node_columns) and not {'author_label', 'mentions_json'} <= node_columns
+        if existing and (old_version < 3 or needs_identities):
+            upgrade = 'v3' if old_version < 3 else 'identities'
+            backup = Path(str(path) + f".pre-{upgrade}-{time.time_ns()}.sqlite3")
             with closing(sqlite3.connect(backup)) as target:
+                backup.chmod(0o600)
                 self.db.backup(target)
         self.db.executescript(SCHEMA)
         columns = {row[1] for row in self.db.execute("PRAGMA table_info(characters)")}
@@ -153,6 +158,12 @@ class Store(AdminStore):
         columns = {row[1] for row in self.db.execute("PRAGMA table_info(lore)")}
         if "rule_json" not in columns:
             self.db.execute("ALTER TABLE lore ADD COLUMN rule_json TEXT NOT NULL DEFAULT '{}'")
+        with self.db:
+            self.db.execute('BEGIN IMMEDIATE')
+            columns = {row[1] for row in self.db.execute('PRAGMA table_info(nodes)')}
+            for name, spec in {'author_label': "TEXT NOT NULL DEFAULT ''", 'mentions_json': "TEXT NOT NULL DEFAULT '[]'"}.items():
+                if name not in columns:
+                    self.db.execute(f'ALTER TABLE nodes ADD COLUMN {name} {spec}')
         self.admin_lock = threading.RLock()
         self.migrate_admin()
         self.db.execute("PRAGMA user_version=3")
@@ -323,12 +334,12 @@ class Store(AdminStore):
         self.execute('UPDATE lore SET promoted_from=?,source_message_id=? WHERE id=?', (lore_id, source['source_message_id'], ident))
         return ident
 
-    def record_node(self, message_id: int, guild_id: int, channel_id: int, parent_id: int | None, author_id: int | None, character_id: int | None, content: str, context: list[dict] | None = None, sources: list[int] | None = None, created_at: float | None = None) -> int:
+    def record_node(self, message_id: int, guild_id: int, channel_id: int, parent_id: int | None, author_id: int | None, character_id: int | None, content: str, context: list[dict] | None = None, sources: list[int] | None = None, created_at: float | None = None, *, author_label: str = '', mentions: list[dict] | None = None) -> int:
         parent = self.node(parent_id) if parent_id else None
         if parent and (parent["guild_id"] != guild_id or parent["channel_id"] != channel_id):
             parent = None
         root_id = parent["root_id"] if parent else message_id
-        self.execute("INSERT OR REPLACE INTO nodes(message_id,guild_id,channel_id,parent_id,root_id,author_id,character_id,content,created_at,context_json,sources_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)", (message_id, guild_id, channel_id, parent["message_id"] if parent else None, root_id, author_id, character_id, content, created_at or time.time(), json.dumps(context or []), json.dumps(sources or [])))
+        self.execute("INSERT OR REPLACE INTO nodes(message_id,guild_id,channel_id,parent_id,root_id,author_id,character_id,content,created_at,context_json,sources_json,author_label,mentions_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (message_id, guild_id, channel_id, parent["message_id"] if parent else None, root_id, author_id, character_id, content, created_at or time.time(), json.dumps(context or []), json.dumps(sources or []), author_label, json.dumps(mentions or [])))
         return root_id
 
     def node(self, message_id: int | None) -> sqlite3.Row | None:

@@ -22,6 +22,7 @@ from .store import Store
 from .avatars import emotion_stream
 from .errors import error_detail, error_stack
 from .usage import capture_usage, reply_footer
+from .identity import discord_identity, message_context
 
 
 def split_discord(text: str, limit: int = 1900) -> list[str]:
@@ -120,7 +121,7 @@ class SkitBot(commands.Bot):
                     break
                 if old.author.bot or old.webhook_id or not old.content:
                     continue
-                recent.append({"message_id": old.id, "author_id": old.author.id, "text": old.content[:1500]})
+                recent.append(message_context(old))
                 if len(recent) >= self.settings.limits["recent_messages"]:
                     break
             recent.reverse()
@@ -147,7 +148,8 @@ class SkitBot(commands.Bot):
             return
         scene = SceneContext(message.guild.id, message.channel.id, parent_id,
             binding["space_id"], message.author.id, message.id, text,
-            reference_id if referenced else None, recent, images, ambient=not explicit, user_label=message.author.display_name)
+            reference_id if referenced else None, recent, images, ambient=not explicit, user_label=message.author.display_name,
+            mentioned_users=[discord_identity(user) for user in message.mentions if not user.bot])
         async with self.channel_locks.setdefault(message.channel.id, asyncio.Lock()):
             await self.run_scene(scene, message.channel)
 
@@ -531,7 +533,7 @@ def register_commands(bot: SkitBot) -> None:
                 break
             if old.author.bot or old.webhook_id or not old.content:
                 continue
-            recent.append({"message_id": old.id, "author_id": old.author.id, "text": old.content[:1500]})
+            recent.append(message_context(old))
             if len(recent) >= bot.settings.limits["recent_messages"]:
                 break
         recent.reverse()
@@ -541,7 +543,9 @@ def register_commands(bot: SkitBot) -> None:
         invitation = await interaction.original_response()
         scene = SceneContext(interaction.guild_id, interaction.channel.id, parent_id,
             binding["space_id"], interaction.user.id, invitation.id, prompt,
-            parent_message_id, recent, [], forced_character_id=row["id"], user_label=interaction.user.display_name)
+            parent_message_id, recent, [], forced_character_id=row["id"], user_label=interaction.user.display_name,
+            mentioned_users=[discord_identity(member) for ident in re.findall(r'<@!?(\d+)>', prompt)
+                             if (member := interaction.guild.get_member(int(ident))) and not member.bot])
         async with bot.channel_locks.setdefault(interaction.channel.id, asyncio.Lock()):
             await bot.run_scene(scene, interaction.channel)
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .config import Settings
 from .lore import estimate_tokens, lore_scopes
@@ -11,6 +11,7 @@ from .models import DIRECTOR_SCHEMA, MEMORY_SCHEMA, ImageInput, ModelGateway, Tu
 from .store import Store
 from .prompts import compile_prompt
 from .errors import error_detail
+from .identity import speaker_context, user_line
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,7 @@ class SceneContext:
     preset: dict | None = None
     user_label: str = ''
     guidelines: dict | None = None
+    mentioned_users: list[dict] = field(default_factory=list)
 
 
 class Engine:
@@ -45,15 +47,31 @@ class Engine:
         budget = min(self.settings.limits['max_input_tokens'], self.settings.profile(role).context_tokens - (max_tokens or self.settings.limits['max_output_tokens']))
         return compile_prompt(snapshot['bundle'], purpose, values, history or [], self.settings.profile(role).prompt_provider, budget, contract=contract, images=images, protected_history_index=protected_history_index, lore_injections=lore_injections)
 
+    def identities(self, scene, nodes=()):
+        participants = []
+        for row in nodes:
+            for part in json.loads(row['context_json']):
+                participants.extend([part, *part.get('mentions', [])])
+            participants.extend(json.loads(row['mentions_json']))
+            if row['author_id'] is not None:
+                participants.append({'author_id': row['author_id'], 'author_label': row['author_label']})
+        for part in scene.recent:
+            participants.extend([part, *part.get('mentions', [])])
+        participants.extend(scene.mentioned_users)
+        return speaker_context(scene.user_id, scene.user_label, participants)
+
     async def purpose_text(self, scene, purpose, payload, max_tokens, images=None):
-        request = self.compile(scene, purpose, {'payload': payload}, images=images, max_tokens=max_tokens)
+        values = {'payload': payload}
+        if purpose == 'summary' and scene.user_id:
+            values['speaker_identity'] = self.identities(scene)
+        request = self.compile(scene, purpose, values, images=images, max_tokens=max_tokens)
         role = 'dialogue' if purpose == 'images' else 'memory'
         if hasattr(self.models, 'text_compiled'):
             return await self.models.text_compiled(role, request, max_tokens)
         return await self.models.text(role, '\n\n'.join(m.text for m in request.messages if m.role == 'system'), [m for m in request.messages if m.role != 'system'], max_tokens)
 
     async def purpose_structured(self, scene, purpose, payload, name, schema):
-        request = self.compile(scene, purpose, {'payload': payload}, contract='Return only the required structured result. Output schema: ' + json.dumps(schema))
+        request = self.compile(scene, purpose, {'payload': payload, 'speaker_identity': self.identities(scene)}, contract='Return only the required structured result. Output schema: ' + json.dumps(schema))
         role = 'director' if purpose == 'director' else 'memory'
         if hasattr(self.models, 'structured_compiled'):
             return await self.models.structured_compiled(role, request, name, schema)
@@ -78,6 +96,7 @@ class Engine:
                 return []
         options = [{"id": row["id"], "name": row["name"]} for row in cast]
         prompt = json.dumps({"cast": options, "recent": scene.recent[-6:], "latest": scene.text,
+            'latest_author': {'author_id': scene.user_id, 'author_label': scene.user_label},
             "ambient": scene.ambient, "forced": scene.forced_character_id}, ensure_ascii=False)
         try:
             decision = await self.purpose_structured(scene, "director", prompt, "choose_speakers", DIRECTOR_SCHEMA)
@@ -96,7 +115,8 @@ class Engine:
 
     def record_user(self, scene: SceneContext, stored_text: str | None = None) -> int:
         return self.store.record_node(scene.user_message_id, scene.guild_id, scene.channel_id,
-            scene.parent_message_id, scene.user_id, None, stored_text or scene.text, scene.recent)
+            scene.parent_message_id, scene.user_id, None, stored_text or scene.text, scene.recent,
+            author_label=scene.user_label, mentions=scene.mentioned_users)
 
     async def describe_images(self, scene: SceneContext) -> str:
         if not scene.images:
@@ -107,7 +127,29 @@ class Engine:
             logging.error("Image description failed: %s", error_detail(error))
             return "Image attached; description unavailable."
 
-    async def _history(self, scene: SceneContext, target_character_id: int) -> tuple[str, list[TurnMessage], list[int]]:
+    def history_messages(self, nodes, target_character_id):
+        history, ids, seen = [], [], {row['message_id'] for row in nodes}
+        for row in nodes:
+            # Recent human chat was observed with this ancestor, so belongs to
+            # this branch even on later turns. Avoid duplicate saved messages.
+            for part in json.loads(row['context_json']):
+                ident = part.get('message_id')
+                if ident in seen:
+                    continue
+                seen.add(ident)
+                history.append(TurnMessage('user', user_line(part.get('author_id'), part.get('author_label', ''), part.get('text', ''))))
+                ids.append(ident)
+            if row['character_id']:
+                speaker = self.store.character_by_id(row['character_id'])
+                label = speaker['name'] if speaker else f"Character {row['character_id']}"
+                role = 'assistant' if row['character_id'] == target_character_id else 'user'
+                history.append(TurnMessage(role, f"{label}: {row['content']}"))
+            else:
+                history.append(TurnMessage('user', user_line(row['author_id'], row['author_label'], row['content'])))
+            ids.append(row['message_id'])
+        return history, ids
+
+    async def _history(self, scene: SceneContext, target_character_id: int):
         nodes = self.store.ancestors(scene.user_message_id)
         summary = ""
         summary_index = -1
@@ -116,12 +158,13 @@ class Engine:
                 summary, summary_index = saved, index
         unsummarized = nodes[summary_index + 1:]
         current_summary = self.store.summary(scene.user_message_id)
+        expanded = self.history_messages(unsummarized, target_character_id)[0]
         if current_summary:
             summary = current_summary
             unsummarized = unsummarized[-12:]
-        elif len(unsummarized) > 20 or sum(estimate_tokens(row["content"]) for row in unsummarized) > 5000:
+        elif len(unsummarized) > 12 and (len(expanded) > 20 or sum(estimate_tokens(message.text) for message in expanded) > 5000):
             older, unsummarized = unsummarized[:-12], unsummarized[-12:]
-            payload = "\n".join(f"{'Character '+str(row['character_id']) if row['character_id'] else 'User '+str(row['author_id'])}: {row['content']}" for row in older)
+            payload = '\n'.join(message.text for message in self.history_messages(older, target_character_id)[0])
             if summary:
                 payload = f"Previous summary: {summary}\n{payload}"
             try:
@@ -130,18 +173,10 @@ class Engine:
             except Exception as error:
                 logging.error("Branch summarization failed: %s", error_detail(error))
                 summary = (summary + "\n" + payload)[-2000:]
-        history = []
-        for row in unsummarized:
-            if row["character_id"]:
-                speaker = self.store.character_by_id(row["character_id"])
-                label = speaker["name"] if speaker else f"Character {row['character_id']}"
-                role = "assistant" if row["character_id"] == target_character_id else "user"
-                history.append(TurnMessage(role, f"{label}: {row['content']}"))
-            else:
-                history.append(TurnMessage("user", f"User {row['author_id']}: {row['content']}"))
+        history, history_ids = self.history_messages(unsummarized, target_character_id)
         if scene.images and history:
             history[-1] = TurnMessage(history[-1].role, history[-1].text, scene.images)
-        return summary, history, [row["message_id"] for row in nodes]
+        return summary, history, [row["message_id"] for row in nodes], history_ids
 
     async def prepare_dialogue(self, scene: SceneContext, character, preceding_lines: list[tuple[str, str]]):
         card = json.loads(character["card"])
@@ -150,8 +185,7 @@ class Engine:
         scopes = lore_scopes(self.store, character["id"], scene.space_id, scene.channel_id, scene.parent_channel_id)
         budget = min(self.settings.limits["max_input_tokens"], self.settings.profile("dialogue").context_tokens - self.settings.limits["max_output_tokens"])
         budget -= len(scene.images) * 1500
-        summary, history, message_ids = await self._history(scene, character["id"])
-        history_ids = message_ids[-len(history):] if history else []
+        summary, history, message_ids, history_ids = await self._history(scene, character["id"])
         ancestor_ids = set(message_ids)
         parent = self.store.node(scene.parent_message_id)
         def visible(source_id: int | None) -> bool:
@@ -192,14 +226,19 @@ class Engine:
             'personal': 'Known personal bonds with the current speaker:\n' + '\n'.join(row['content'] for row in personal[-6:]) if personal else '',
             'encounters': 'Your own past encounters:\n' + '\n'.join(row['content'] for row in encounters[-6:]) if encounters else '',
             'summary': summary, 'preceding': '\n'.join(f'{name}: {line}' for name, line in preceding_lines),
-            'recent': '\n'.join(f"User {part.get('author_id')}: {part.get('text','')}" for part in scene.recent)}
+            # Recent chat is carried once in labelled history, so imported
+            # presets with only a history marker still receive every speaker.
+            'recent': '',
+            'speaker_identity': self.identities(scene, self.store.ancestors(scene.user_message_id))}
         guidelines = scene.guidelines if scene.guidelines is not None else self.store.scene_guidelines(scene.guild_id, scene.space_id, scene.parent_channel_id or scene.channel_id)
         values.update({key: row['content'] for key, row in guidelines.items()})
         for position in ('before_char', 'after_char', 'before_examples', 'after_examples'):
             values['lore_' + position] = lore_text([item for item in lore if item.position == position])
         if not history:
-            history = [TurnMessage('user', scene.text, scene.images)]
-            history_ids = [scene.user_message_id]
+            recent = [part for part in scene.recent if part.get('message_id') != scene.user_message_id]
+            history = [TurnMessage('user', user_line(part.get('author_id'), part.get('author_label', ''), part.get('text', ''))) for part in recent]
+            history.append(TurnMessage('user', user_line(scene.user_id, scene.user_label, scene.text), scene.images))
+            history_ids = [part.get('message_id') for part in recent] + [scene.user_message_id]
         slots = self.store.usable_avatars(scene.guild_id, character['id'])
         choices = [{'key': row['slot_key'], 'label': row['label'], 'description': row['description']} for row in slots]
         contract = 'Begin your response with exactly <emotion>SLOT_KEY</emotion> on its own line, then write your dialogue. Choose one available avatar emotion for the whole reply: ' + json.dumps(choices, ensure_ascii=False)
@@ -215,7 +254,7 @@ class Engine:
             "messages": [ident for ident in used_history_ids if isinstance(ident, int)], "summary": "summary" in included,
             "personal": [row["id"] for row in personal[-6:]] if "personal" in included else [],
             "encounters": [row["id"] for row in encounters[-6:]] if "encounters" in included else [],
-            "recent": [part.get("message_id") for part in scene.recent] if "recent" in included else []}
+            "recent": [part.get("message_id") for part in scene.recent if part.get('message_id') in used_history_ids]}
         sources['preset'] = {'id': snapshot['id'], 'revision': snapshot['revision'], **request.trace()}
         sources['guidelines'] = {key: {field: row[field] for field in ('kind', 'owner_id', 'revision')} for key, row in guidelines.items() if key in included}
         return request, sources
@@ -233,10 +272,7 @@ class Engine:
                 prior_summary, start = saved, index + 1
         if len(nodes) - start > 30:
             return
-        transcript = "\n".join(
-            f"{'Character '+str(row['character_id']) if row['character_id'] else 'User '+str(row['author_id'])}: {row['content']}"
-            for row in nodes[start:]
-        )
+        transcript = '\n'.join(message.text for message in self.history_messages(nodes[start:], 0)[0])
         try:
             if scene is None:
                 node = nodes[-1]
@@ -250,7 +286,7 @@ class Engine:
     async def extract_memories(self, scene: SceneContext, speakers: list, lines: list[tuple[str, str]], root_id: int) -> None:
         if not lines:
             return
-        text = f"User {scene.user_id}: {scene.text}\n" + "\n".join(f"{name}: {line}" for name, line in lines)
+        text = user_line(scene.user_id, scene.user_label, scene.text) + '\n' + '\n'.join(f"{name}: {line}" for name, line in lines)
         scope_kind = "thread" if scene.parent_channel_id else "channel"
         scope_id = scene.channel_id
         for index, character in enumerate(speakers[:len(lines)]):
