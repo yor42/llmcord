@@ -11,7 +11,7 @@ from http.cookies import SimpleCookie
 from fastapi import HTTPException, Request
 from fastapi.responses import PlainTextResponse
 
-from .avatars import MAX_AVATAR_BYTES, normalize_avatar
+from .avatars import MAX_AVATAR_BYTES, avatar_version, normalize_avatar
 from .cards import parse_card
 from .lorebooks import parse_lorebook
 from .prompts import PURPOSES, SOURCES, block, compatibility, default_bundle, export_preset, parse_preset
@@ -377,7 +377,7 @@ def static_avatar_editor(ctx, character):
     from nicegui import ui
     with ui.expansion('Fallback static avatar').classes('w-full fallback-avatar'):
         if character['avatar']:
-            ui.image(ctx.app.state.base_url + f"/guild/{ctx.guild_id}/characters/{character['id']}/avatar").classes('w-24 h-24')
+            ui.image(ctx.app.state.base_url + f"/guild/{ctx.guild_id}/characters/{character['id']}/avatar?v={avatar_version(character['avatar'])}").classes('w-24 h-24')
         else:
             ui.label('No static fallback set. Import a card portrait or upload one here.')
         ui.label('Used when the selected emotion has no usable image. No asset channel or publication is needed.')
@@ -406,7 +406,7 @@ def avatar_editor(ctx, character_id, slot):
     from nicegui import ui
     with ui.expansion(slot['label']).classes('w-full'):
         if slot['image']:
-            ui.image(ctx.app.state.base_url + f"/guild/{ctx.guild_id}/characters/{character_id}/avatars/{slot['slot_key']}").classes('w-24 h-24')
+            ui.image(ctx.app.state.base_url + f"/guild/{ctx.guild_id}/characters/{character_id}/avatars/{slot['slot_key']}?v={avatar_version(slot['image'])}").classes('w-24 h-24')
         ui.label('Stable key: ' + slot['slot_key'])
         label = ui.input('Label', value=slot['label'])
         description = ui.input('When to use this emotion', value=slot['description'])

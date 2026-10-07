@@ -43,11 +43,104 @@ class WebAuthBoundaryTests(unittest.TestCase):
     def tearDown(self):
         self.client.__exit__(None, None, None)
 
-    def test_avatar_responses_are_no_store(self):
-        """Characterization (PERF-01): avatar images are served with `Cache-Control: no-store` (changes in R2.4)."""
-        response = self.client.get(f"/guild/1/characters/{self.character}/avatar")
+    def _png(self, color):
+        from io import BytesIO
+
+        from PIL import Image
+
+        from llmcord_core.avatars import normalize_avatar
+        png = BytesIO()
+        Image.new("RGB", (8, 8), color).save(png, "PNG")
+        return normalize_avatar(png.getvalue())
+
+    def _assert_private_cacheable(self, response):
         self.assertEqual(response.status_code, 200)
+        cache = response.headers["cache-control"]
+        self.assertIn("private", cache)
+        self.assertIn("max-age=300", cache)
+        self.assertNotIn("no-store", cache)
+        self.assertNotIn("public", cache)
+
+    def _guild_page_avatar_src(self):
+        import html
+        import re
+        page = self.client.get("/guild/1")
+        self.assertEqual(page.status_code, 200)
+        match = re.search(r'<img[^>]*src="(/guild/1/characters/%d/avatar[^"]*)"' % self.character, page.text)
+        self.assertIsNotNone(match, "guild page has no <img> for the character avatar")
+        return html.unescape(match.group(1))
+
+    def test_character_avatar_is_privately_cacheable(self):
+        """PERF-01 (fixed): the stored character avatar is sent `Cache-Control: private, max-age=300` (not no-store, never
+        public), so the browser stops refetching it on every render."""
+        self._assert_private_cacheable(self.client.get(f"/guild/1/characters/{self.character}/avatar"))
+
+    def test_emotion_avatar_is_privately_cacheable(self):
+        """PERF-01 (fixed): a stored emotion avatar slot is sent `Cache-Control: private, max-age=300` (not no-store, never
+        public)."""
+        self.app.state.store.save_avatar(1, self.character, "happy", "Happy", "", image=self._png("red"))
+        self._assert_private_cacheable(self.client.get(f"/guild/1/characters/{self.character}/avatars/happy"))
+
+    def test_avatar_error_responses_are_no_store(self):
+        """PERF-01: avatar 403, 404 and 401 responses stay `no-store`; only stored images become cacheable."""
+        forbidden = self.client.get(f"/guild/2/characters/{self.character}/avatar")
+        self.assertEqual(forbidden.status_code, 403)
+        self.assertIn("no-store", forbidden.headers["cache-control"])
+        missing = self.client.get("/guild/1/characters/999999/avatar")
+        self.assertEqual(missing.status_code, 404)
+        self.assertIn("no-store", missing.headers["cache-control"])
+        empty_slot = self.client.get(f"/guild/1/characters/{self.character}/avatars/neutral")
+        self.assertEqual(empty_slot.status_code, 404)
+        self.assertIn("no-store", empty_slot.headers["cache-control"])
+        self.client.cookies.clear()
+        for path in (f"/guild/1/characters/{self.character}/avatar", f"/guild/1/characters/{self.character}/avatars/neutral"):
+            unauthenticated = self.client.get(path)
+            self.assertEqual(unauthenticated.status_code, 401)
+            self.assertIn("no-store", unauthenticated.headers["cache-control"])
+
+    def test_guild_page_is_no_store(self):
+        """PERF-01: HTML pages stay `no-store` when avatars become cacheable."""
+        page = self.client.get("/guild/1")
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(page.headers["cache-control"], "no-store")
+
+    def test_card_preview_avatar_is_no_store(self):
+        """PERF-01: the card-preview avatar is session-scoped and temporary, so it stays `no-store`."""
+        import time
+        from types import SimpleNamespace
+        image = self._png("blue")
+        self.app.state.sessions[self.session]["card_preview"] = {
+            "world_id": 1, "card": SimpleNamespace(avatar=image), "expires": time.time() + 600}
+        response = self.client.get("/guild/1/card-preview/avatar")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, image)
         self.assertEqual(response.headers["cache-control"], "no-store")
+
+    def test_avatar_routes_ignore_version_query(self):
+        """PERF-01: avatar routes ignore unknown query parameters, so `?v=...` (and no `v`) both serve the image."""
+        stored = self.app.state.store.one("SELECT avatar FROM characters WHERE id=?", (self.character,))["avatar"]
+        for query in ("", "?v=anything", "?v="):
+            response = self.client.get(f"/guild/1/characters/{self.character}/avatar{query}")
+            self.assertEqual(response.status_code, 200, query)
+            self.assertEqual(response.content, stored)
+        slot = self._png("green")
+        self.app.state.store.save_avatar(1, self.character, "happy", "Happy", "", image=slot)
+        response = self.client.get(f"/guild/1/characters/{self.character}/avatars/happy?v=anything")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, slot)
+
+    def test_guild_page_avatar_url_is_versioned(self):
+        """PERF-01 (fixed): the legacy guild page links the character avatar with a non-empty `v=` content version, and the
+        version changes when the avatar bytes change, so a cached image is never shown after an upload."""
+        from urllib.parse import parse_qs, urlsplit
+        first = parse_qs(urlsplit(self._guild_page_avatar_src()).query).get("v", [""])[0]
+        self.assertTrue(first, "avatar <img> src has no v= parameter")
+        store = self.app.state.store
+        store.db.execute("UPDATE characters SET avatar=? WHERE id=?", (self._png("white"), self.character))
+        store.db.commit()
+        second = parse_qs(urlsplit(self._guild_page_avatar_src()).query).get("v", [""])[0]
+        self.assertTrue(second)
+        self.assertNotEqual(first, second)
 
     def test_repeated_avatar_requests_check_discord_once(self):
         """PERF-01 (fixed): N avatar requests in one session within the TTL cost one Discord guild-list call."""

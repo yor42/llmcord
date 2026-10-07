@@ -14,6 +14,10 @@ DEFAULT_SLOTS = ('neutral', 'happy', 'sad', 'angry', 'surprised', 'embarrassed')
 MAX_AVATAR_BYTES = 8 * 1024 * 1024
 
 
+def avatar_version(data):
+    return hashlib.sha256(data).hexdigest()[:12]
+
+
 def normalize_avatar(data):
     if len(data) > MAX_AVATAR_BYTES:
         raise ValueError('Avatar exceeds 8 MiB')

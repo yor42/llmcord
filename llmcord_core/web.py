@@ -15,6 +15,7 @@ from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
+from .avatars import avatar_version
 from .cards import parse_card
 from .lorebooks import MAX_BOOK_BYTES, parse_lorebook
 from .store import Store
@@ -26,6 +27,8 @@ from .admin_store import ConflictError
 DISCORD_API = "https://discord.com/api/v10"
 ADMINISTRATOR = 1 << 3
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+TEMPLATES.env.filters["avatar_version"] = avatar_version
+AVATAR_CACHE = {"Cache-Control": "private, max-age=300"}
 
 
 def create_app(database_path: str | Path, base_url: str, client_id: str,
@@ -67,7 +70,8 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
         response = await call_next(request)
-        response.headers["Cache-Control"] = "no-store"
+        if request.scope.get("endpoint") not in cacheable or "cache-control" not in response.headers:
+            response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
         policy = "default-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"
@@ -268,7 +272,7 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
             (guild_id, character_id))
         if not row or not row["avatar"]:
             raise HTTPException(404, "Avatar not found")
-        return Response(row["avatar"], media_type="image/png")
+        return Response(row["avatar"], media_type="image/png", headers=AVATAR_CACHE)
 
     @app.get('/guild/{guild_id}/characters/{character_id}/avatars/{slot_key}')
     async def emotion_avatar(request: Request, guild_id: int, character_id: int, slot_key: str):
@@ -276,7 +280,7 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
         row = app.state.store.avatar_slot(guild_id, character_id, slot_key)
         if not row['image']:
             raise HTTPException(404, 'Avatar not found')
-        return Response(row['image'], media_type='image/png')
+        return Response(row['image'], media_type='image/png', headers=AVATAR_CACHE)
 
     @app.get("/guild/{guild_id}/card-preview/avatar")
     async def preview_avatar(request: Request, guild_id: int):
@@ -285,6 +289,8 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
         if not preview or preview["expires"] < time.time() or not preview["card"].avatar:
             raise HTTPException(404, "Preview avatar not found")
         return Response(preview["card"].avatar, media_type="image/png")
+
+    cacheable = {character_avatar, emotion_avatar}
 
     @app.post("/guild/{guild_id}/characters/{character_id}")
     async def edit_character(request: Request, guild_id: int, character_id: int):

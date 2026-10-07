@@ -68,7 +68,7 @@
     </form>
     {% for character in characters %}
       <div class="row">
-        <div class="inline">{% if character.avatar %}<img class="avatar" src="/guild/{{ guild_id }}/characters/{{ character.id }}/avatar" alt="Avatar for {{ character.name }}">{% endif %}<strong>{{ character.name }}</strong> <span class="badge">{{ (spaces|selectattr('id','equalto',character.world_id)|list|first).name }}</span>{% if character.archived %}<span class="badge">Archived</span>{% endif %}</div>
+        <div class="inline">{% if character.avatar %}<img class="avatar" src="/guild/{{ guild_id }}/characters/{{ character.id }}/avatar?v={{ character.avatar|avatar_version }}" alt="Avatar for {{ character.name }}">{% endif %}<strong>{{ character.name }}</strong> <span class="badge">{{ (spaces|selectattr('id','equalto',character.world_id)|list|first).name }}</span>{% if character.archived %}<span class="badge">Archived</span>{% endif %}</div>
         <details><summary>Edit character</summary>
           <form action="/guild/{{ guild_id }}/characters/{{ character.id }}" method="post">
             <input type="hidden" name="csrf" value="{{ csrf }}">
