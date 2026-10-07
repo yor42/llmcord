@@ -149,8 +149,8 @@ class DiscordFlowTests(unittest.IsolatedAsyncioTestCase):
         try:
             await bot.run_scene(scene, channel)
             self.assertEqual(channel.errors, [])
-            self.assertEqual(hooks[alice].posts[0].content, "First line")
-            self.assertEqual(hooks[bob].posts[0].content, "Second line")
+            self.assertEqual(hooks[alice].posts[0].content.split('\n\n-# ')[0], "First line")
+            self.assertEqual(hooks[bob].posts[0].content.split('\n\n-# ')[0], "Second line")
             self.assertEqual(bot.store.node(2000)["parent_id"], 1000)
             self.assertEqual(bot.store.node(3000)["parent_id"], 2000)
             self.assertEqual(bot.store.ancestors(3000)[-1]["character_id"], bob)
@@ -217,7 +217,8 @@ class DiscordFlowTests(unittest.IsolatedAsyncioTestCase):
         task = asyncio.create_task(bot.run_scene(SceneContext(1, 100, None, world, 9, 1000, 'Hello', None, [], []), channel))
         try:
             await asyncio.wait_for(entered.wait(), 2)
-            self.assertEqual(channel.messages[0].content, '⏳ Generating a reply…')
+            self.assertTrue(channel.messages[0].content.startswith('⏳ Generating a reply…'))
+            self.assertIn('test · 24h tracked: 0 tokens', channel.messages[0].content)
             self.assertFalse(task.done())
             release.set()
             await task

@@ -21,6 +21,7 @@ from .models import ImageInput, ModelGateway
 from .store import Store
 from .avatars import emotion_stream
 from .errors import error_detail, error_stack
+from .usage import capture_usage, reply_footer
 
 
 def split_discord(text: str, limit: int = 1900) -> list[str]:
@@ -45,7 +46,7 @@ class SkitBot(commands.Bot):
         super().__init__(command_prefix=commands.when_mentioned, intents=intents)
         self.settings = settings
         self.store = Store(settings.database_path)
-        self.models = ModelGateway(settings)
+        self.models = ModelGateway(settings, usage_sink=self.store.record_model_usage)
         self.engine = Engine(self.store, self.models, settings)
         self.channel_locks: dict[int, asyncio.Lock] = {}
         self.webhook_locks = {}
@@ -196,7 +197,18 @@ class SkitBot(commands.Bot):
         return selected
 
     async def run_scene(self, scene: SceneContext, channel):
+        with capture_usage(scene.guild_id):
+            return await self._run_scene(scene, channel)
+
+    async def _run_scene(self, scene: SceneContext, channel):
         progress = None
+        model_label = discord.utils.escape_markdown(self.settings.profile('dialogue').model[:120])
+
+        def status(phase):
+            summary = self.store.model_usage_summary(scene.guild_id, self.settings.dialogue, self.settings.profile('dialogue').model)
+            tokens = summary['input_tokens'] + summary['output_tokens']
+            qualifier = f" (+{summary['unreported']} unreported calls)" if summary['unreported'] else ''
+            return f'⏳ {phase} · {model_label} · 24h tracked: {tokens:,} tokens{qualifier}'
 
         async def update_progress(content):
             nonlocal progress
@@ -224,8 +236,9 @@ class SkitBot(commands.Bot):
         stage = 'speaker selection'
         try:
             if not scene.ambient:
-                await update_progress('⏳ Generating a reply…')
-            scene = replace(scene, preset=scene.preset or self.store.active_preset(scene.guild_id))
+                await update_progress(status('Generating a reply…'))
+            scene = replace(scene, preset=scene.preset or self.store.active_preset(scene.guild_id),
+                guidelines=scene.guidelines if scene.guidelines is not None else self.store.scene_guidelines(scene.guild_id, scene.space_id, scene.parent_channel_id or scene.channel_id))
             speakers = await self.engine.speakers(scene)
             if not speakers:
                 if not scene.ambient:
@@ -233,7 +246,7 @@ class SkitBot(commands.Bot):
                         progress = None
                 return
             if scene.ambient:
-                await update_progress('⏳ Generating a reply…')
+                await update_progress(status('Generating a reply…'))
             stage = 'image description'
             image_description = await self.engine.describe_images(scene)
             stored_text = scene.text + (f"\n[Image description: {image_description}]" if image_description else "")
@@ -244,7 +257,7 @@ class SkitBot(commands.Bot):
             completed = []
             for character in speakers:
                 name = discord.utils.escape_markdown(character['name'])
-                await update_progress(f'⏳ **{name}** is generating a reply…')
+                await update_progress(status(f'**{name}** is preparing a reply…'))
                 stage = 'preparing character prompt'
                 request, sources = await self.engine.prepare_dialogue(scene, character, preceding)
                 system = '\n\n'.join(m.text for m in request.messages if m.role == 'system')
@@ -257,28 +270,32 @@ class SkitBot(commands.Bot):
                 pieces, last_edit = [], 0.0
                 try:
                     stage = 'dialogue generation'
-                    stream = self.models.stream_compiled('dialogue', request) if hasattr(self.models, 'stream_compiled') else self.models.stream_text('dialogue', system, messages)
-                    async for event in emotion_stream(stream, slots):
-                        if event.emotion is not None:
-                            emotion = event.emotion
-                            stage = 'avatar lookup'
-                            chosen_avatar = await self.resolve_avatar(slots.get(emotion, slots['neutral']))
-                            stage = 'webhook delivery'
-                            placeholder = await webhook.send('…', **thread_options, wait=True, silent=True,
-                                username=character['name'], avatar_url=chosen_avatar['url'], allowed_mentions=discord.AllowedMentions.none())
-                            stage = 'dialogue generation'
-                            continue
-                        pieces.append(event.text)
-                        current = "".join(pieces)
-                        if time.monotonic() - last_edit > 1.2 and len(current) < 1800:
-                            stage = 'webhook delivery'
-                            await placeholder.edit(content=current + " ▌", allowed_mentions=discord.AllowedMentions.none())
-                            last_edit = time.monotonic()
-                            stage = 'dialogue generation'
+                    await update_progress(status(f'Streaming **{name}**'))
+                    with capture_usage() as usage_records:
+                        stream = self.models.stream_compiled('dialogue', request) if hasattr(self.models, 'stream_compiled') else self.models.stream_text('dialogue', system, messages)
+                        async for event in emotion_stream(stream, slots):
+                            if event.emotion is not None:
+                                emotion = event.emotion
+                                stage = 'avatar lookup'
+                                chosen_avatar = await self.resolve_avatar(slots.get(emotion, slots['neutral']))
+                                stage = 'webhook delivery'
+                                placeholder = await webhook.send('…', **thread_options, wait=True, silent=True,
+                                    username=character['name'], avatar_url=chosen_avatar['url'], allowed_mentions=discord.AllowedMentions.none())
+                                stage = 'dialogue generation'
+                                continue
+                            pieces.append(event.text)
+                            current = "".join(pieces)
+                            if time.monotonic() - last_edit > 1.2 and len(current) < 1800:
+                                stage = 'webhook delivery'
+                                await placeholder.edit(content=current + " ▌", allowed_mentions=discord.AllowedMentions.none())
+                                last_edit = time.monotonic()
+                                stage = 'dialogue generation'
                     line = re.sub(r'<emotion>[^\n]*?</emotion>\s*', '', "".join(pieces)).strip()
-                    chunks = split_discord(line)
+                    usage = usage_records[-1] if usage_records else None
+                    footer = reply_footer(model_label, usage)
+                    chunks = split_discord(line, limit=min(1900, 2000 - len(footer)))
                     stage = 'webhook delivery'
-                    await placeholder.edit(content=chunks[0], allowed_mentions=discord.AllowedMentions.none())
+                    await placeholder.edit(content=chunks[0] + footer, allowed_mentions=discord.AllowedMentions.none())
                 except Exception:
                     if placeholder:
                         try:
@@ -288,7 +305,7 @@ class SkitBot(commands.Bot):
                     raise
                 outgoing = [placeholder]
                 for chunk in chunks[1:]:
-                    outgoing.append(await webhook.send(chunk, **thread_options, wait=True, silent=True,
+                    outgoing.append(await webhook.send(chunk + footer, **thread_options, wait=True, silent=True,
                         username=character['name'], avatar_url=chosen_avatar['url'],
                         allowed_mentions=discord.AllowedMentions.none()))
                 for posted, chunk in zip(outgoing, chunks):
@@ -297,6 +314,7 @@ class SkitBot(commands.Bot):
                         parent_message_id, None, character["id"], chunk,
                         sources=sources["messages"])
                     self.store.save_trace(posted.id, {"character_id": character["id"], 'emotion': emotion,
+                        'usage': usage.as_dict() if usage else None,
                         'avatar_source': 'emotion' if chosen_avatar['asset_id'] else 'static' if character['avatar'] else 'default',
                         'avatar_asset_id': chosen_avatar['asset_id'], **sources})
                     self.store.save_lore_activations(posted.id, sources.get("lore_activations", []))

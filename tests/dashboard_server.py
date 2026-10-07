@@ -26,6 +26,9 @@ def main():
             {'id': '200', 'name': 'assets', 'type': 0, 'permission_overwrites': [{'id': '1', 'deny': str(1 << 10)}]}])
     app = create_app(':memory:', f'https://localhost:{port}', 'test-client', 'test-secret', 'test-token', httpx.AsyncClient(transport=httpx.MockTransport(discord_api)), config_path='tests/nonexistent-config.yaml')
     store = app.state.store
+    app.state.admin.model_config = {'dialogue': 'fixture', 'director': 'fixture', 'memory': 'fixture', 'profiles': {'fixture': {'model': 'fixture-model'}}}
+    from llmcord_core.usage import ModelUsage
+    store.record_model_usage(ModelUsage(1, 'fixture', 'fixture-model', 'dialogue', 123, 45, 0, 0, 0.001, 'configured', time.time()))
     world = store.create_space(1, 'World', 'world')
     store.bind_channel(1, 100, world)
     store.add_character(1, world, 'Alice', {'name': 'Alice', 'description': 'A cheerful courier'}, None, [])
@@ -39,6 +42,9 @@ def main():
     @app.get('/_test/state')
     async def snapshot():
         return {'spaces': [dict(r) for r in store.list_spaces(1)],
+            'guidelines': [dict(r) for r in store.all('SELECT * FROM scene_guidelines')],
+            'guild_lore': [dict(r) for r in store.all('SELECT * FROM guild_lore_entries')],
+            'lorebooks': [dict(r) for r in store.list_lorebooks(1)],
             'characters': [dict(r) for r in store.all('SELECT id,guild_id,world_id,name,card,archived,avatar IS NOT NULL AS has_static_avatar FROM characters')],
             'lore': [dict(r) for r in store.all('SELECT * FROM lore')],
             'books': [dict(r) for r in store.all('SELECT * FROM lorebook_entries')],

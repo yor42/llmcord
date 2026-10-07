@@ -174,7 +174,10 @@ class Store(AdminStore):
     def create_space(self, guild_id: int, name: str, kind: str) -> int:
         if kind not in {"world", "hub"} or not name.strip():
             raise ValueError("Space needs a name and kind world or hub")
-        return self.execute("INSERT INTO spaces(guild_id,name,kind) VALUES(?,?,?)", (guild_id, name.strip(), kind))
+        with self.write_admin():
+            ident = self.next_owner_id('space', 'spaces')
+            self.db.execute('INSERT INTO spaces(id,guild_id,name,kind) VALUES(?,?,?,?)', (ident, guild_id, name.strip(), kind))
+        return ident
 
     def space(self, guild_id: int, name: str) -> sqlite3.Row | None:
         return self.one("SELECT * FROM spaces WHERE guild_id=? AND name=?", (guild_id, name))
@@ -294,7 +297,8 @@ class Store(AdminStore):
         return self.one("SELECT * FROM lore WHERE guild_id=? AND id=?", (guild_id, lore_id))
 
     def list_lore(self, guild_id: int, scope_kind: str, scope_id: int) -> list[sqlite3.Row]:
-        return self.all("SELECT * FROM lore WHERE guild_id=? AND scope_kind=? AND scope_id=? AND enabled=1 ORDER BY insertion_order,id", (guild_id, scope_kind, scope_id))
+        table = 'guild_lore_entries' if scope_kind == 'guild' else 'lore'
+        return self.all(f"SELECT * FROM {table} WHERE guild_id=? AND scope_kind=? AND scope_id=? AND enabled=1 ORDER BY insertion_order,id", (guild_id, scope_kind, scope_id))
 
     def delete_lore(self, guild_id: int, lore_id: int) -> None:
         row = self.lore_row(guild_id, lore_id)
@@ -425,6 +429,7 @@ class Store(AdminStore):
             self.db.execute(f"DELETE FROM lore_activations WHERE node_id IN ({clause})", (cutoff,))
             self.db.execute(f"DELETE FROM summaries WHERE node_id IN ({clause})", (cutoff,))
             self.db.execute("DELETE FROM nodes WHERE created_at<?", (cutoff,))
+            self.db.execute('DELETE FROM model_usage WHERE created_at<?', (cutoff,))
             self.db.execute("UPDATE candidates SET evidence_count=(SELECT COUNT(*) FROM evidence WHERE candidate_id=candidates.id)")
             self.db.execute("DELETE FROM candidates WHERE evidence_count=0 AND promoted=0")
             return count
@@ -439,8 +444,10 @@ class Store(AdminStore):
                 raise ValueError("Channel is not bound in this server")
         else:
             target_id = 0
-        return self.execute("INSERT INTO lorebooks(guild_id,name,target_kind,target_id) VALUES(?,?,?,?)",
-            (guild_id, name.strip(), target_kind, target_id))
+        with self.write_admin():
+            ident = self.next_owner_id('book', 'lorebooks')
+            self.db.execute('INSERT INTO lorebooks(id,guild_id,name,target_kind,target_id) VALUES(?,?,?,?,?)', (ident, guild_id, name.strip(), target_kind, target_id))
+        return ident
 
     def lorebook(self, guild_id: int, book_id: int) -> sqlite3.Row | None:
         return self.one("SELECT * FROM lorebooks WHERE guild_id=? AND id=?", (guild_id, book_id))

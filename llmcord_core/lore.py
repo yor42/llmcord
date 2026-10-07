@@ -31,7 +31,7 @@ def lore_scopes(store: Store, character_id: int, space_id: int, channel_id: int,
     space = store.space_by_id(space_id)
     if not character or not space:
         return []
-    scopes = [("character", character_id), ("space", character["world_id"])]
+    scopes = [("guild", character['guild_id']), ("character", character_id), ("space", character["world_id"])]
     if space["kind"] == "hub":
         scopes.append(("space", space_id))
     scopes.append(("channel", parent_id or channel_id))

@@ -15,6 +15,7 @@ from .avatars import MAX_AVATAR_BYTES, normalize_avatar
 from .cards import parse_card
 from .lorebooks import normalize_entry, parse_lorebook
 from .prompts import PURPOSES, SOURCES, block, compatibility, default_bundle, export_preset, parse_preset
+from .scene_ui import delete_book_dialog, delete_space_dialog, direct_import_dialog, guideline_editor
 
 
 class LiveContext:
@@ -24,6 +25,7 @@ class LiveContext:
         self.csrf = session['csrf']
         self.service = app.state.admin
         self.store = self.service.store
+        self.lore_owner = request.query_params.get('owner')
 
     async def run(self, operation, action=None, detail=None):
         from nicegui import ui
@@ -178,7 +180,8 @@ def mount_dashboard(app):
             lore = ui.tab('Lore')
             imports = ui.tab('Imports')
             prompts = ui.tab('Prompt presets')
-        with ui.tab_panels(tabs, value=characters if request.query_params.get('tab') == 'characters' else setup).classes('w-full'):
+        selected_tab = {'characters': characters, 'lore': lore, 'imports': imports}.get(request.query_params.get('tab'), setup)
+        with ui.tab_panels(tabs, value=selected_tab).classes('w-full'):
             with ui.tab_panel(setup):
                 await setup_panel(ctx)
             with ui.tab_panel(characters):
@@ -208,9 +211,31 @@ async def setup_panel(ctx):
     spaces = {r['id']: r['name'] + ' (' + r['kind'] + ')' for r in store.list_spaces(gid)}
     channels = await ctx.run(lambda: ctx.service.avatars.channels(gid)) or []
     channel_names = {int(c['id']): '#' + c['name'] for c in channels if c['type'] == 0}
+    ui.label('Models and usage · last 24 hours').classes('text-xl font-bold')
+    models = ctx.service.model_config
+    grouped = {}
+    for role in ('dialogue', 'director', 'memory'):
+        ident = models.get(role, models.get('dialogue'))
+        if ident:
+            grouped.setdefault(ident, []).append(role)
+    rows = []
+    for ident, roles in grouped.items():
+        model = models.get('profiles', {}).get(ident, {}).get('model', '')
+        summary = store.model_usage_summary(gid, ident, model)
+        cost = f"${summary['cost_usd']:.6f}" + (f" + {summary['unpriced']} unpriced calls" if summary['unpriced'] else '')
+        rows.append({'profile': ident, 'model': model, 'roles': ', '.join(roles), 'input': summary['input_tokens'], 'output': summary['output_tokens'], 'cost': cost, 'unreported': summary['unreported']})
+    if rows:
+        ui.table(columns=[{'name': key, 'field': key, 'label': label, 'align': 'left'} for key, label in
+                          (('model', 'Model'), ('roles', 'Used for'), ('input', 'Input tokens'), ('output', 'Output tokens'), ('cost', 'Estimated USD'), ('unreported', 'Unreported calls'))], rows=rows, row_key='profile').classes('w-full')
+        ui.label('Tracked for this server, including internal model calls. Cost uses list rates or your configured rates; it is not a billing statement. Refresh to update totals.').classes('text-slate-400')
+    else:
+        ui.label('No model profiles are configured for the dashboard.')
+    ui.separator()
     ui.label('Spaces').classes('text-xl font-bold')
     for space in store.list_spaces(gid):
-        ui.label(f"{space['name']} · {space['kind']}")
+        with ui.expansion(f"{space['name']} · {space['kind']}").classes('space-card w-full border rounded-lg'):
+            guideline_editor(ctx, 'space', space['id'], 'World guidelines' if space['kind'] == 'world' else 'Hub guidelines')
+            ui.button('Delete ' + space['kind'], icon='delete', color='negative', on_click=lambda space=space: delete_space_dialog(ctx, space))
     with ui.row().classes('items-end'):
         name = ui.input('Space name')
         kind = ui.select(['world', 'hub'], value='world', label='Kind')
@@ -242,8 +267,9 @@ async def setup_panel(ctx):
         ctx.button('Bind channel', bind, 'channel.bind', then=lambda _: ui.navigate.reload())
     ui.label('Rebinding a channel resets its casts and ambient mode.').classes('text-amber-300')
     for binding in store.all('SELECT * FROM channels WHERE guild_id=?', (gid,)):
-        with ui.card().classes('w-full'):
+        with ui.card().classes('w-full channel-card'):
             ui.label(channel_names.get(binding['channel_id'], str(binding['channel_id']))).classes('text-lg font-bold')
+            guideline_editor(ctx, 'channel', binding['channel_id'], 'Channel guidelines')
             options = {r['id']: r['name'] for r in store.eligible_characters(gid, binding['space_id'])}
             cast = ui.select(options, value=json.loads(binding['default_cast']), multiple=True, label='Default cast (up to five)').classes('w-full')
             def save_cast(binding=binding, cast=cast):
@@ -350,7 +376,7 @@ def static_avatar_editor(ctx, character):
     from nicegui import ui
     with ui.expansion('Fallback static avatar').classes('w-full fallback-avatar'):
         if character['avatar']:
-            ui.image(f"/guild/{ctx.guild_id}/characters/{character['id']}/avatar").classes('w-24 h-24')
+            ui.image(ctx.app.state.base_url + f"/guild/{ctx.guild_id}/characters/{character['id']}/avatar").classes('w-24 h-24')
         else:
             ui.label('No static fallback set. Import a card portrait or upload one here.')
         ui.label('Used when the selected emotion has no usable image. No asset channel or publication is needed.')
@@ -379,7 +405,7 @@ def avatar_editor(ctx, character_id, slot):
     from nicegui import ui
     with ui.expansion(slot['label']).classes('w-full'):
         if slot['image']:
-            ui.image(f"/guild/{ctx.guild_id}/characters/{character_id}/avatars/{slot['slot_key']}").classes('w-24 h-24')
+            ui.image(ctx.app.state.base_url + f"/guild/{ctx.guild_id}/characters/{character_id}/avatars/{slot['slot_key']}").classes('w-24 h-24')
         ui.label('Stable key: ' + slot['slot_key'])
         label = ui.input('Label', value=slot['label'])
         description = ui.input('When to use this emotion', value=slot['description'])
@@ -409,7 +435,8 @@ def avatar_editor(ctx, character_id, slot):
 
 def lore_panel(ctx, on_import=None):
     from .lore_workspace import render_lore_workspace
-    render_lore_workspace(ctx, entry_editor, on_import=on_import)
+    render_lore_workspace(ctx, entry_editor, on_import=on_import,
+                          on_entry_import=lambda kind, ident, refresh: direct_import_dialog(ctx, kind, ident, refresh))
 
 
 def entry_editor(ctx, entry, owners, refresh):
@@ -529,6 +556,16 @@ def imports_panel(ctx):
             ctx.button('Apply card import', apply, 'character.import', then=lambda _: ui.navigate.reload())
     ctx.upload(card_uploaded, 'Upload V2/V3 JSON or PNG card')
     ui.separator()
+    ui.label('Direct lore entry import').classes('text-xl font-bold')
+    owners = {f"{owner['kind']}:{owner['id']}": owner['label'] for owner in ctx.service.owners(gid)}
+    destination = ui.select(owners, label='Destination owner').classes('w-full')
+    def import_into_owner():
+        if destination.value not in owners:
+            raise ValueError('Choose a destination owner')
+        kind, ident = destination.value.split(':', 1)
+        direct_import_dialog(ctx, kind, int(ident))
+    ui.button('Import entries into selected owner', icon='upload_file', on_click=import_into_owner)
+    ui.separator()
     ui.label('Named lorebooks').classes('text-xl font-bold')
     with ui.row().classes('items-end'):
         book_name = ui.input('Book name')
@@ -538,6 +575,7 @@ def imports_panel(ctx):
         ctx.button('Create book', lambda: store.create_lorebook(gid, book_name.value or '', target.value, channel.value or 0), 'book.create', then=lambda _: ui.navigate.reload())
     for book in store.list_lorebooks(gid):
         with ui.expansion(book['name'] + ' · ' + book['target_kind']).classes('w-full'):
+            ui.button('Delete book', icon='delete', color='negative', on_click=lambda book=book: delete_book_dialog(ctx, book))
             if book['target_kind'] == 'guild':
                 for space in store.list_spaces(gid):
                     enabled = space['id'] in store.lorebook_links(book['id'])
@@ -716,10 +754,11 @@ def presets_panel(ctx):
     ui.label('Assembled request preview').classes('text-xl font-bold')
     chars = {r['id']: r['name'] for r in store.all('SELECT * FROM characters WHERE guild_id=?', (gid,))}
     character = ui.select(chars, label='Sample character')
+    channel = ui.select({row['channel_id']: str(row['channel_id']) for row in store.all('SELECT channel_id FROM channels WHERE guild_id=?', (gid,))}, label='Sample channel (optional)')
     sample = ui.textarea('Sample input', value='Hello!').classes('w-full')
     history = ui.textarea('Sample history (one message per line)').classes('w-full')
     def preview():
-        request = ctx.service.preview_prompt(gid, collect(), purpose.value, character.value, sample.value or '', history.value or '')
+        request = ctx.service.preview_prompt(gid, collect(), purpose.value, character.value, sample.value or '', history.value or '', channel.value)
         diagnostics.clear()
         with diagnostics:
             ui.label(f'Estimated input tokens: {request.estimated_tokens}')

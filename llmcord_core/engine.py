@@ -29,6 +29,7 @@ class SceneContext:
     forced_character_id: int | None = None
     preset: dict | None = None
     user_label: str = ''
+    guidelines: dict | None = None
 
 
 class Engine:
@@ -192,6 +193,8 @@ class Engine:
             'encounters': 'Your own past encounters:\n' + '\n'.join(row['content'] for row in encounters[-6:]) if encounters else '',
             'summary': summary, 'preceding': '\n'.join(f'{name}: {line}' for name, line in preceding_lines),
             'recent': '\n'.join(f"User {part.get('author_id')}: {part.get('text','')}" for part in scene.recent)}
+        guidelines = scene.guidelines if scene.guidelines is not None else self.store.scene_guidelines(scene.guild_id, scene.space_id, scene.parent_channel_id or scene.channel_id)
+        values.update({key: row['content'] for key, row in guidelines.items()})
         for position in ('before_char', 'after_char', 'before_examples', 'after_examples'):
             values['lore_' + position] = lore_text([item for item in lore if item.position == position])
         if not history:
@@ -214,6 +217,7 @@ class Engine:
             "encounters": [row["id"] for row in encounters[-6:]] if "encounters" in included else [],
             "recent": [part.get("message_id") for part in scene.recent] if "recent" in included else []}
         sources['preset'] = {'id': snapshot['id'], 'revision': snapshot['revision'], **request.trace()}
+        sources['guidelines'] = {key: {field: row[field] for field in ('kind', 'owner_id', 'revision')} for key, row in guidelines.items() if key in included}
         return request, sources
 
     async def prompt_for(self, scene: SceneContext, character, preceding_lines: list[tuple[str, str]]) -> tuple[str, list[TurnMessage], dict]:

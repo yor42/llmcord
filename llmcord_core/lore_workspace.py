@@ -13,14 +13,14 @@ def snapshot(entry):
     return {key: entry[key] for key in ('entry_key', 'revision', 'owner_kind', 'owner_id')}
 
 
-def render_lore_workspace(ctx, entry_editor, on_import=None):
+def render_lore_workspace(ctx, entry_editor, on_import=None, on_entry_import=None):
     ui.add_css('.lore-drop-zone:empty::before { content: "Drop entries here"; color: #94a3b8; pointer-events: none; }')
     owners = ctx.service.owners(ctx.guild_id)
     options = {f"{owner['kind']}:{owner['id']}": owner['label'] for owner in owners}
     ui.label('Lore workspace').classes('text-xl font-bold')
     if on_import:
         ui.button('Import lorebook', icon='upload_file', on_click=on_import)
-        ui.label('In Imports, create or expand a named lorebook, then upload JSON to preview and apply its entries.').classes('text-slate-400')
+        ui.label('Import JSON directly into either owner below, or manage reusable named lorebooks in Imports.').classes('text-slate-400')
     ui.label('Drag entries onto either navy drop area, or select entries to move or delete together. Higher insertion orders appear later in each prompt position.')
     if not owners:
         ui.label('Create a world or import a character first.')
@@ -31,7 +31,8 @@ def render_lore_workspace(ctx, entry_editor, on_import=None):
     root = ui.column().classes('w-full lore-workspace')
     with root:
         with ui.row().classes('w-full items-end'):
-            left = ui.select(options, value=next(iter(options)), label='Left owner', with_input=True).classes('flex-1')
+            initial_owner = getattr(ctx, 'lore_owner', None)
+            left = ui.select(options, value=initial_owner if initial_owner in options else next(iter(options)), label='Left owner', with_input=True).classes('flex-1')
             right = ui.select(options, value=list(options)[-1], label='Right owner', with_input=True).classes('flex-1')
             query = ui.input('Search content and keywords').classes('flex-1')
         toolbar = ui.row().classes('w-full items-center')
@@ -206,6 +207,12 @@ def render_lore_workspace(ctx, entry_editor, on_import=None):
                         ui.download.content(json.dumps(ctx.store.export_lore(ctx.guild_id, kind, ident), ensure_ascii=False, indent=2), 'lorebook.json')
                         return True
                     ctx.button('Export owner', download)
+                    if on_entry_import:
+                        def imported(refs):
+                            selected.clear()
+                            update_selection()
+                            render_board.refresh()
+                        ui.button('Import JSON entries', icon='upload_file', on_click=lambda kind=kind, ident=ident: on_entry_import(kind, ident, imported))
         drag.lists(containers)
 
     with board:

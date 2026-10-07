@@ -224,6 +224,13 @@ def compile_prompt(bundle, purpose, values, history, provider, budget, *, contra
         records.insert(min(position, len(records)), record)
     if contract:
         records.insert(0, ['contract', TurnMessage('system', contract), 1000000, True, None, None, None])
+    managed_sources = []
+    if purpose == 'dialogue':
+        for key, label in (('world_guidelines', 'World / hub guidelines'), ('channel_guidelines', 'Channel guidelines (take precedence over world guidelines when they conflict)')):
+            text = str(values.get(key, '')).strip()
+            if text:
+                records.append([key, TurnMessage('system', label + ':\n' + text), 1000000, True, None, None, None])
+                managed_sources.append(key)
     if provider in {'anthropic', 'gemini'}:
         systems, others = [], []
         seen_non_system = False
@@ -258,7 +265,7 @@ def compile_prompt(bundle, purpose, values, history, provider, budget, *, contra
         raise ValueError('Required prompt inputs exceed the model context budget')
     history_indices = [r[4] for r in records if r[4] is not None]
     included = list(dict.fromkeys(r[0] for r in records))
-    included_sources = [b['source'] for b in purpose_blocks(bundle, purpose) if b['id'] in included]
+    included_sources = [b['source'] for b in purpose_blocks(bundle, purpose) if b['id'] in included] + managed_sources
     messages = [r[1] for r in records]
     if provider == 'gemini':
         # Gemini's OpenAI endpoint can retain only the last system message.

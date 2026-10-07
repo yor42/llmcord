@@ -3,10 +3,12 @@ from __future__ import annotations
 import base64
 import json
 import os
+import logging
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 
 from .config import Settings
+from .usage import collect_usage
 
 
 def validate_result(value, schema):
@@ -46,9 +48,18 @@ class TurnMessage:
 
 
 class ModelGateway:
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, usage_sink=None):
         self.settings = settings
         self.clients: dict[str, Any] = {}
+        self.usage_sink = usage_sink
+
+    def _usage(self, profile_name, role, usage):
+        record = collect_usage(profile_name, self.settings.profiles[profile_name], role, usage)
+        if self.usage_sink:
+            try:
+                self.usage_sink(record)
+            except Exception as error:
+                logging.warning('Model usage could not be saved: %s', type(error).__name__)
 
     def _client(self, profile_name: str):
         if profile_name not in self.clients:
@@ -131,14 +142,17 @@ class ModelGateway:
         if profile.provider == "openai":
             response = await client.responses.create(model=profile.model, instructions=system,
                 input=self._openai_input(messages), max_output_tokens=limit)
+            self._usage(profile_name, role, getattr(response, 'usage', None))
             return response.output_text or ""
         if profile.provider == "anthropic":
             response = await client.messages.create(model=profile.model, system=system,
                 messages=self._anthropic_input(messages), max_tokens=limit)
+            self._usage(profile_name, role, getattr(response, 'usage', None))
             return "".join(block.text for block in response.content if block.type == "text")
         response = await client.chat.completions.create(model=profile.model,
             messages=([{"role": "system", "content": system}] if system else []) + self._chat_input(messages), max_tokens=limit,
             **({"reasoning_effort": profile.reasoning_effort} if profile.reasoning_effort else {}))
+        self._usage(profile_name, role, getattr(response, 'usage', None))
         return response.choices[0].message.content or ""
 
     async def stream_text(self, role: str, system: str, messages: list[TurnMessage], max_tokens: int | None = None) -> AsyncIterator[str]:
@@ -149,23 +163,41 @@ class ModelGateway:
         if profile.provider == "openai":
             stream = await client.responses.create(model=profile.model, instructions=system,
                 input=self._openai_input(messages), max_output_tokens=limit, stream=True)
-            async for event in stream:
-                if event.type == "response.output_text.delta" and event.delta:
-                    yield event.delta
+            usage = None
+            try:
+                async for event in stream:
+                    if event.type in {'response.completed', 'response.incomplete', 'response.failed'}:
+                        usage = getattr(getattr(event, 'response', None), 'usage', None)
+                    if event.type == "response.output_text.delta" and event.delta:
+                        yield event.delta
+            finally:
+                self._usage(profile_name, role, usage)
         elif profile.provider == "anthropic":
-            async with client.messages.stream(model=profile.model, system=system,
-                messages=self._anthropic_input(messages), max_tokens=limit) as stream:
-                async for chunk in stream.text_stream:
-                    yield chunk
+            usage = None
+            try:
+                async with client.messages.stream(model=profile.model, system=system,
+                    messages=self._anthropic_input(messages), max_tokens=limit) as stream:
+                    async for chunk in stream.text_stream:
+                        yield chunk
+                    usage = (await stream.get_final_message()).usage
+            finally:
+                self._usage(profile_name, role, usage)
         else:
             stream = await client.chat.completions.create(model=profile.model,
                 messages=([{"role": "system", "content": system}] if system else []) + self._chat_input(messages),
                 max_tokens=limit, stream=True,
+                **({'stream_options': {'include_usage': True}} if profile.stream_usage else {}),
                 **({"reasoning_effort": profile.reasoning_effort} if profile.reasoning_effort else {}))
-            async for chunk in stream:
-                delta = chunk.choices[0].delta.content if chunk.choices else None
-                if delta:
-                    yield delta
+            usage = None
+            try:
+                async for chunk in stream:
+                    if getattr(chunk, 'usage', None) is not None:
+                        usage = chunk.usage
+                    delta = chunk.choices[0].delta.content if chunk.choices else None
+                    if delta:
+                        yield delta
+            finally:
+                self._usage(profile_name, role, usage)
 
     async def structured(self, role: str, system: str, messages: list[TurnMessage], schema_name: str, schema: dict) -> dict:
         profile_name = getattr(self.settings, role)
@@ -176,12 +208,14 @@ class ModelGateway:
             response = await client.responses.create(model=profile.model, instructions=system,
                 input=self._openai_input(messages), max_output_tokens=limit,
                 text={"format": {"type": "json_schema", "name": schema_name, "schema": schema, "strict": True}})
+            self._usage(profile_name, role, getattr(response, 'usage', None))
             return validate_result(json.loads(response.output_text), schema)
         if profile.provider == "anthropic":
             response = await client.messages.create(model=profile.model, system=system,
                 messages=self._anthropic_input(messages), max_tokens=limit,
                 tools=[{"name": schema_name, "description": "Return the requested structured result", "input_schema": schema}],
                 tool_choice={"type": "tool", "name": schema_name})
+            self._usage(profile_name, role, getattr(response, 'usage', None))
             for block in response.content:
                 if block.type == "tool_use" and block.name == schema_name:
                     return validate_result(block.input, schema)
@@ -192,6 +226,7 @@ class ModelGateway:
                 max_tokens=limit,
                 response_format={"type": "json_schema", "json_schema": {"name": schema_name, "schema": schema, "strict": True}},
                 **({"reasoning_effort": profile.reasoning_effort} if profile.reasoning_effort else {}))
+            self._usage(profile_name, role, getattr(response, 'usage', None))
             choice = response.choices[0]
             try:
                 return validate_result(json.loads(choice.message.content or ''), schema)

@@ -20,6 +20,7 @@ class AdminService:
             import yaml
             raw = yaml.safe_load(Path(config_path).read_text(encoding='utf-8')) or {}
         models = raw.get('models', {})
+        self.model_config = models
         profiles = models.get('profiles', {})
         self.providers, self.budgets = {}, {}
         for purpose, role in {'dialogue': 'dialogue', 'director': 'director', 'extraction': 'memory', 'summary': 'memory', 'images': 'dialogue'}.items():
@@ -44,13 +45,14 @@ class AdminService:
             owners.append({'kind': 'character', 'id': row['id'], 'label': 'Character: ' + row['name']})
         for row in self.store.all('SELECT * FROM channels WHERE guild_id=? ORDER BY channel_id', (guild_id,)):
             owners.append({'kind': 'channel', 'id': row['channel_id'], 'label': f"Channel: {row['channel_id']}"})
+        owners.append({'kind': 'guild', 'id': guild_id, 'label': 'Guild: Server-wide lore'})
         for row in self.store.list_lorebooks(guild_id):
             owners.append({'kind': 'book', 'id': row['id'], 'label': 'Book: ' + row['name']})
         for row in self.store.all("SELECT DISTINCT scope_id FROM lore WHERE guild_id=? AND scope_kind='thread'", (guild_id,)):
             owners.append({'kind': 'thread', 'id': row['scope_id'], 'label': f"Thread: {row['scope_id']}"})
         return owners
 
-    def preview_prompt(self, guild_id, bundle, purpose, character_id, sample, sample_history):
+    def preview_prompt(self, guild_id, bundle, purpose, character_id, sample, sample_history, channel_id=None):
         # Preview uses supplied sample data only; it never reads scene or personal-memory tables.
         card, character_name = {}, 'Character'
         if character_id:
@@ -63,6 +65,16 @@ class AdminService:
             'mesExamples': card.get('mes_example', ''), 'mesExamplesRaw': card.get('mes_example', ''),
             'card_instructions': card.get('system_prompt', ''), 'card_post_history': card.get('post_history_instructions', ''),
             'location': 'Sample world', 'summary': ''}
+        if purpose == 'dialogue':
+            if channel_id:
+                self.store.validate_owner(guild_id, 'channel', channel_id)
+                binding = self.store.channel(channel_id)
+                guidelines = self.store.scene_guidelines(guild_id, binding['space_id'], channel_id)
+            elif character_id:
+                guidelines = {'world_guidelines': self.store.guidelines(guild_id, 'space', row['world_id'])}
+            else:
+                guidelines = {}
+            values.update({key: row['content'] for key, row in guidelines.items()})
         history = [TurnMessage('user', text) for text in sample_history.splitlines() if text] + [TurnMessage('user', sample)]
         contract = 'Begin your response with <emotion>neutral</emotion> on its own line, then write your dialogue.' if purpose == 'dialogue' else ''
         if purpose in {'director', 'extraction'}:

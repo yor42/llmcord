@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,11 @@ class ModelProfile:
     base_url: str | None = None
     reasoning_effort: str | None = None
     structured_outputs: bool = False
+    stream_usage: bool = True
+    billing_tier: str = 'paid'
+    input_cost_per_million: float | None = None
+    output_cost_per_million: float | None = None
+    cached_input_cost_per_million: float | None = None
 
     @property
     def prompt_provider(self) -> str:
@@ -64,6 +70,9 @@ def load_settings(path: str | Path = "config.yaml") -> Settings:
             api_key_env=value.get("api_key_env"), base_url=value.get("base_url"),
             reasoning_effort=value.get("reasoning_effort"),
             structured_outputs=bool(value.get("structured_outputs", False)),
+            stream_usage=value.get('stream_usage', True), billing_tier=value.get('billing_tier', 'paid'),
+            input_cost_per_million=value.get('input_cost_per_million'), output_cost_per_million=value.get('output_cost_per_million'),
+            cached_input_cost_per_million=value.get('cached_input_cost_per_million'),
         )
         for name, value in models.get("profiles", {}).items()
     }
@@ -71,6 +80,11 @@ def load_settings(path: str | Path = "config.yaml") -> Settings:
     if not profiles or any(value not in profiles for value in choices.values()):
         raise ValueError("Each model role must name a configured profile")
     for name, profile in profiles.items():
+        if profile.billing_tier not in {'paid', 'free'} or type(profile.stream_usage) is not bool:
+            raise ValueError(f'Invalid billing_tier or stream_usage in {name}')
+        for rate in (profile.input_cost_per_million, profile.output_cost_per_million, profile.cached_input_cost_per_million):
+            if rate is not None and (type(rate) not in {int, float} or not math.isfinite(rate) or rate < 0):
+                raise ValueError(f'Invalid token price in {name}')
         if profile.provider not in {"openai", "anthropic", "compatible"}:
             raise ValueError(f"Unsupported provider in {name}")
         if name in choices.values() and (profile.provider != "compatible" or profile.api_key_env) and not os.environ.get(profile.api_key_env or ""):

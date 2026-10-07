@@ -16,6 +16,9 @@ models:
       base_url: https://generativelanguage.googleapis.com/v1beta/openai/
       reasoning_effort: low
       structured_outputs: true
+      # Cost estimates use standard paid list rates; choose free for free-tier use.
+      billing_tier: paid
+      stream_usage: true
       context_tokens: 1048576
       supports_images: true
 limits:

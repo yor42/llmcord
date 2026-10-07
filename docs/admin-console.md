@@ -6,6 +6,12 @@ The console is a NiceGUI application mounted at `/admin/` on the existing privat
 
 Use **Server setup** to create worlds and hubs, link worlds, bind channels, choose casts, and enable ambient participation. Rebinding resets a channel's cast and ambient setting.
 
+Expand a world or hub to edit its **World guidelines** or **Hub guidelines**. Each bound channel has **Channel guidelines**. Use these for the setting, participants' shared fictional roles, tone, and conventions such as occasional fourth-wall jokes. Channel guidance takes precedence over the current world/hub guidance when they conflict. Threads inherit their parent channel's guidance. In hubs, the hub's guidelines describe the current scene; a guest's home-world guidelines are not added. Each field accepts up to 6,000 UTF-8 bytes.
+
+Guidelines are managed instructions included after preset/card instructions, independent of lore matching and lore budgets. They remain present when prompt trimming occurs and work with existing custom presets. All speakers in a turn share one guideline snapshot. Prompt previews include the selected character's home-world guidance, or the current world/channel guidance when **Sample channel (optional)** is selected.
+
+**Delete world** or **Delete hub** shows a confirmation. First move/delete home characters, including archived characters, and rebind any channels elsewhere. Deletion removes owned lore, guidelines, encounters, and hub/book links; shared lorebooks, entries moved elsewhere, and past messages remain. **Delete book** in Imports removes a named lorebook, including empty books, its remaining entries, and its world/hub links after confirmation. Deleted world/book IDs are not reused.
+
 **Characters** edits card fields, including main and post-history instructions, moves home worlds with confirmation, and archives or restores characters. Card instructions are added to the selected guild prompt structure. Post-history instructions are placed after conversation history when the provider permits it.
 
 Choose **Create character**, enter a name and home world, and choose **Create** to start with empty card fields and the default emotion slots. Create a world in Server setup first if none exists. Names must be unique within the server.
@@ -15,6 +21,8 @@ Choose **Create character**, enter a name and home world, and choose **Create** 
 ## Lore workspace
 
 Choose an owner on each side of **Lore**: character, channel, world/hub, named book, or an existing thread-local lore owner. Search filters content and keywords; lists show 50 entries per page.
+
+**Guild: Server-wide lore** is also available and applies to eligible characters throughout that server. Use **Import JSON entries** under either owner list to preview a SillyTavern or RisuAI file and add entries directly to that owner. The **Direct lore entry import** section in Imports provides the same flow. These imports create independent entries without creating a named book, replacing existing entries, or removing entries absent from the file. Identical content/rules/pin state are skipped, including duplicates within one upload. Unsupported imported features stay preserved and inactive. A changed destination requires a fresh preview. Named lorebooks retain their separate synchronization workflow.
 
 Drag an entry by its handle onto the other navy drop area, including its padding or an empty list. The workspace shows **Saving lore changes…** and waits for that move to finish before accepting another drag. Lists update after the saved change, and the destination opens the page containing the moved entries. Drops within the same owner do not change insertion priority.
 
@@ -83,6 +91,14 @@ In **Characters → Fallback static avatar**, upload an image and choose **Save 
 Upload static PNG, JPEG, or WebP images up to 8 MiB and 16 megapixels. Images are normalized to PNG thumbnails no larger than 256 pixels. Save a slot, then choose **Publish / repair image**. Only published usable slots are offered to the model, alongside neutral. Replacing an image retains older published assets for historical messages.
 
 The dialogue model selects one emotion before visible text streams. The bot chooses the avatar before creating its placeholder, and continuation chunks use the same avatar. Headers are removed from saved dialogue, summaries, and extraction inputs. Unknown/malformed headers select neutral; a missing or unavailable emotion image uses the static fallback. With neither image configured, Discord shows the webhook's default icon. Assets are checked on first use after a bot restart; repair deleted assets from the console. Response traces identify whether the avatar came from an emotion image, the static fallback, or Discord's default.
+
+## Model usage and reply status
+
+Generation status shows the dialogue model and its tracked input-plus-output tokens over a rolling 24 hours for the current server. The total includes director, memory, summary, and image calls using that same profile/model. Server setup shows model roles and 24-hour usage/cost totals. Tracking starts with this feature and persists across restarts; it cannot reconstruct earlier provider usage.
+
+Each completed Discord message has a footer with model, reply input/output tokens, and estimated USD cost. Continuation messages repeat the same reply-level figures; they are not separate model calls. Footers are excluded from saved conversation text and memory extraction. Provider-reported counts include thinking tokens when reported as output. Missing counts and unknown prices display as unavailable rather than being inferred from visible text.
+
+For Google's `gemini-3.8-flash` endpoint, estimates use [standard paid list rates](https://ai.google.dev/gemini-api/docs/pricing): $0.75/M input, $3.75/M output, and $0.075/M cached input through December 31, 2026, doubling from January 1, 2027 (UTC). These estimates are not billing statements and exclude credits, taxes, and non-token charges. Set a model profile's `billing_tier: free` for a free-tier estimate, or configure `input_cost_per_million`, `output_cost_per_million`, and optional `cached_input_cost_per_million` in `config.yaml`. Other models require configured prices. Set `stream_usage: false` only for compatible backends that reject usage reporting.
 
 ## Deployment and security
 

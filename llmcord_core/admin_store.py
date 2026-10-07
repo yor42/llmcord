@@ -9,6 +9,28 @@ from contextlib import contextmanager
 from .lorebooks import normalize_entry, parse_lorebook
 
 ADMIN_SCHEMA = """
+CREATE TABLE IF NOT EXISTS model_usage (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL,
+ profile TEXT NOT NULL, model TEXT NOT NULL, role TEXT NOT NULL,
+ input_tokens INTEGER, output_tokens INTEGER, cached_tokens INTEGER NOT NULL,
+ reasoning_tokens INTEGER NOT NULL, cost_usd REAL, cost_basis TEXT NOT NULL,
+ created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS usage_guild_model_time ON model_usage(guild_id,profile,model,created_at);
+CREATE TABLE IF NOT EXISTS scene_guidelines (
+ guild_id INTEGER NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('space','channel')),
+ owner_id INTEGER NOT NULL, content TEXT NOT NULL, revision INTEGER NOT NULL,
+ PRIMARY KEY(guild_id,kind,owner_id)
+);
+CREATE TABLE IF NOT EXISTS guild_lore_entries (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL,
+ scope_kind TEXT NOT NULL DEFAULT 'guild' CHECK(scope_kind='guild'),
+ scope_id INTEGER NOT NULL, content TEXT NOT NULL, keys_json TEXT NOT NULL DEFAULT '[]',
+ constant INTEGER NOT NULL DEFAULT 0, insertion_order INTEGER NOT NULL DEFAULT 100,
+ enabled INTEGER NOT NULL DEFAULT 1, source_message_id INTEGER, promoted_from INTEGER,
+ pinned INTEGER NOT NULL DEFAULT 0, rule_json TEXT NOT NULL DEFAULT '{}',
+ entry_key TEXT NOT NULL UNIQUE, revision INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS owner_revisions (
  guild_id INTEGER NOT NULL, kind TEXT NOT NULL, owner_id INTEGER NOT NULL,
  revision INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(guild_id,kind,owner_id)
@@ -54,6 +76,114 @@ class ConflictError(ValueError):
 
 
 class AdminStore:
+    def record_model_usage(self, usage):
+        if usage.guild_id is None:
+            return
+        self.execute('INSERT INTO model_usage(guild_id,profile,model,role,input_tokens,output_tokens,cached_tokens,reasoning_tokens,cost_usd,cost_basis,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                     (usage.guild_id, usage.profile, usage.model, usage.role, usage.input_tokens, usage.output_tokens, usage.cached_tokens, usage.reasoning_tokens, usage.cost_usd, usage.cost_basis, usage.created_at))
+
+    def model_usage_summary(self, guild_id, profile, model, since=None):
+        since = time.time() - 86400 if since is None else since
+        return dict(self.one('SELECT COUNT(*) AS requests,COALESCE(SUM(input_tokens),0) AS input_tokens,COALESCE(SUM(output_tokens),0) AS output_tokens,COALESCE(SUM(cost_usd),0) AS cost_usd,COALESCE(SUM(input_tokens IS NULL OR output_tokens IS NULL),0) AS unreported,COALESCE(SUM(cost_usd IS NULL),0) AS unpriced FROM model_usage WHERE guild_id=? AND profile=? AND model=? AND created_at>=?', (guild_id, profile, model, since)))
+
+    def next_owner_id(self, kind, table):
+        if (kind, table) not in {('space', 'spaces'), ('book', 'lorebooks')}:
+            raise ValueError('Invalid owner table')
+        return self.one(f'SELECT COALESCE(MAX(id),0)+1 AS next_id FROM (SELECT id FROM {table} UNION ALL SELECT owner_id FROM owner_revisions WHERE kind=?)', (kind,))['next_id']
+
+    def guidelines(self, guild_id, kind, owner_id):
+        if kind not in {'space', 'channel'}:
+            raise ValueError('Choose a world, hub, or channel')
+        self.validate_owner(guild_id, kind, owner_id)
+        row = self.one('SELECT * FROM scene_guidelines WHERE guild_id=? AND kind=? AND owner_id=?', (guild_id, kind, owner_id))
+        return dict(row) if row else {'guild_id': guild_id, 'kind': kind, 'owner_id': owner_id, 'content': '', 'revision': 0}
+
+    def save_guidelines(self, guild_id, kind, owner_id, content, expected_revision):
+        content = content.strip()
+        if len(content.encode()) > 6000:
+            raise ValueError('Guidelines exceed 6,000 bytes; shorten them before saving')
+        with self.write_admin():
+            current = self.guidelines(guild_id, kind, owner_id)
+            if current['revision'] != expected_revision:
+                raise ConflictError('Guidelines changed; reload before saving')
+            self.db.execute('INSERT INTO scene_guidelines VALUES(?,?,?,?,?) ON CONFLICT(guild_id,kind,owner_id) DO UPDATE SET content=excluded.content,revision=excluded.revision', (guild_id, kind, owner_id, content, expected_revision + 1))
+            self.bump_owner(guild_id, kind, owner_id)
+        return True
+
+    def scene_guidelines(self, guild_id, space_id, channel_id):
+        result = {}
+        for key, kind, ident in (('world_guidelines', 'space', space_id), ('channel_guidelines', 'channel', channel_id)):
+            if kind == 'channel' and not self.channel(ident):
+                continue
+            row = self.guidelines(guild_id, kind, ident)
+            if row['content']:
+                result[key] = row
+        return result
+
+    def space_delete_impact(self, guild_id, space_id):
+        self.validate_owner(guild_id, 'space', space_id)
+        return {'characters': [row['name'] for row in self.all('SELECT name FROM characters WHERE guild_id=? AND world_id=?', (guild_id, space_id))],
+                'channels': [row['channel_id'] for row in self.all('SELECT channel_id FROM channels WHERE guild_id=? AND space_id=?', (guild_id, space_id))],
+                'entries': len(self.admin_entries(guild_id, 'space', space_id)),
+                'revision': self.owner_revision(guild_id, 'space', space_id)}
+
+    def delete_space(self, guild_id, space_id, expected_revision):
+        with self.write_admin():
+            impact = self.space_delete_impact(guild_id, space_id)
+            if impact['revision'] != expected_revision:
+                raise ConflictError('World or hub changed; reload before deleting')
+            if impact['characters'] or impact['channels']:
+                raise ValueError('Move or delete its home characters and rebind its channels before deleting this world or hub')
+            for entry in self.admin_entries(guild_id, 'space', space_id):
+                self._delete_entry_locked(guild_id, entry)
+            self.db.execute("DELETE FROM candidates WHERE guild_id=? AND scope_kind='space' AND scope_id=?", (guild_id, space_id))
+            self.db.execute('DELETE FROM encounters WHERE guild_id=? AND space_id=?', (guild_id, space_id))
+            self.db.execute("DELETE FROM import_entries WHERE guild_id=? AND source_kind='space' AND source_id=?", (guild_id, space_id))
+            self.db.execute("DELETE FROM scene_guidelines WHERE guild_id=? AND kind='space' AND owner_id=?", (guild_id, space_id))
+            self.db.execute('DELETE FROM spaces WHERE guild_id=? AND id=?', (guild_id, space_id))
+            self.bump_owner(guild_id, 'space', space_id)
+        return True
+
+    def delete_lorebook(self, guild_id, book_id, expected_revision):
+        with self.write_admin():
+            self.validate_owner(guild_id, 'book', book_id)
+            if self.owner_revision(guild_id, 'book', book_id) != expected_revision:
+                raise ConflictError('Lorebook changed; reload before deleting')
+            for entry in self.admin_entries(guild_id, 'book', book_id):
+                self._delete_entry_locked(guild_id, entry)
+            revision = self.owner_revision(guild_id, 'book', book_id) + 1
+            self.db.execute("DELETE FROM import_entries WHERE guild_id=? AND source_kind='book' AND source_id=?", (guild_id, book_id))
+            self.db.execute('DELETE FROM lorebooks WHERE guild_id=? AND id=?', (guild_id, book_id))
+            self.db.execute("INSERT INTO owner_revisions VALUES(?,'book',?,?) ON CONFLICT(guild_id,kind,owner_id) DO UPDATE SET revision=excluded.revision", (guild_id, book_id, revision))
+        return True
+
+    def preview_entry_import(self, guild_id, kind, owner_id, imported):
+        def signature(content, rule, pinned):
+            return json.dumps([content, rule, bool(pinned)], sort_keys=True, ensure_ascii=False)
+        seen = {signature(row['content'], row['rule'], row['pinned']) for row in self.admin_entries(guild_id, kind, owner_id)}
+        changes = []
+        for uid, entry in imported.entries.items():
+            pinned = entry.rule.get('original', {}).get('llmcord_pinned') is True
+            key = signature(entry.content, entry.rule, pinned)
+            changes.append({'uid': uid, 'status': 'duplicate' if key in seen else 'add', 'after': entry.content, 'warnings': entry.rule.get('unsupported', [])})
+            seen.add(key)
+        return changes
+
+    def import_lore_entries(self, guild_id, kind, owner_id, imported, expected_revision):
+        with self.write_admin():
+            self.validate_owner(guild_id, kind, owner_id)
+            if self.owner_revision(guild_id, kind, owner_id) != expected_revision:
+                raise ConflictError('Destination lore changed; preview the import again')
+            changes = self.preview_entry_import(guild_id, kind, owner_id, imported)
+            refs = []
+            for change in changes:
+                if change['status'] == 'add':
+                    entry = imported.entries[change['uid']]
+                    refs.append(self.insert_admin_entry(guild_id, kind, owner_id, entry.content, entry.rule, entry.rule.get('original', {}).get('llmcord_pinned') is True))
+            if refs:
+                self.bump_owner(guild_id, kind, owner_id)
+        return refs
+
     @contextmanager
     def write_admin(self):
         with self.admin_lock:
@@ -120,7 +250,9 @@ class AdminStore:
                     (character['guild_id'], 'character', character['id'], source.uid, match['entry_key'], json.dumps({'content': source.content, 'rule': source.rule, 'pinned': False}), source.source_hash, 'active'))
 
     def validate_owner(self, guild_id, kind, owner_id):
-        if kind == 'book':
+        if kind == 'guild':
+            row = {'guild_id': guild_id} if owner_id == guild_id else None
+        elif kind == 'book':
             row = self.lorebook(guild_id, owner_id)
         elif kind == 'character':
             row = self.character_by_id(owner_id)
@@ -156,6 +288,8 @@ class AdminStore:
             raise ValueError('Invalid entry reference') from None
         if kind == 'lore':
             row = self.one('SELECT * FROM lore WHERE guild_id=? AND id=?', (guild_id, ident))
+        elif kind == 'guild-lore':
+            row = self.one('SELECT * FROM guild_lore_entries WHERE guild_id=? AND id=?', (guild_id, ident))
         elif kind == 'book-entry':
             row = self.one('SELECT e.*,b.guild_id FROM lorebook_entries e JOIN lorebooks b ON b.id=e.book_id WHERE b.guild_id=? AND e.id=?', (guild_id, ident))
         else:
@@ -165,10 +299,10 @@ class AdminStore:
         rule = json.loads(row['rule_json'])
         if not rule:
             rule = normalize_entry(str(ident), {'keys': json.loads(row['keys_json']), 'constant': bool(row['constant']), 'enabled': bool(row['enabled']), 'order': row['insertion_order']}).rule
-        return {'ref': ref, 'id': ident, 'table': 'lore' if kind == 'lore' else 'lorebook_entries',
+        return {'ref': ref, 'id': ident, 'table': {'lore': 'lore', 'guild-lore': 'guild_lore_entries', 'book-entry': 'lorebook_entries'}[kind],
                 'entry_key': row['entry_key'] or f'lore:{ident}', 'revision': row['revision'],
-                'owner_kind': row['scope_kind'] if kind == 'lore' else 'book',
-                'owner_id': row['scope_id'] if kind == 'lore' else row['book_id'],
+                'owner_kind': row['scope_kind'] if kind != 'book-entry' else 'book',
+                'owner_id': row['scope_id'] if kind != 'book-entry' else row['book_id'],
                 'content': row['content'], 'rule': rule, 'pinned': bool(row['pinned']),
                 'source_message_id': row['source_message_id'], 'promoted_from': row['promoted_from'],
                 'uid': row['uid'] if kind == 'book-entry' else None}
@@ -177,6 +311,9 @@ class AdminStore:
         row = self.one('SELECT id FROM lore WHERE guild_id=? AND entry_key=?', (guild_id, key))
         if row:
             return self.admin_entry(guild_id, f"lore:{row['id']}")
+        row = self.one('SELECT id FROM guild_lore_entries WHERE guild_id=? AND entry_key=?', (guild_id, key))
+        if row:
+            return self.admin_entry(guild_id, f"guild-lore:{row['id']}")
         row = self.one('SELECT e.id FROM lorebook_entries e JOIN lorebooks b ON b.id=e.book_id WHERE b.guild_id=? AND e.entry_key=?', (guild_id, key))
         return self.admin_entry(guild_id, f"book-entry:{row['id']}") if row else None
 
@@ -184,6 +321,8 @@ class AdminStore:
         self.validate_owner(guild_id, kind, owner_id)
         if kind == 'book':
             refs = [f"book-entry:{r['id']}" for r in self.lorebook_entries(owner_id)]
+        elif kind == 'guild':
+            refs = [f"guild-lore:{r['id']}" for r in self.all('SELECT id FROM guild_lore_entries WHERE guild_id=? ORDER BY insertion_order,id', (guild_id,))]
         else:
             refs = [f"lore:{r['id']}" for r in self.all('SELECT id FROM lore WHERE guild_id=? AND scope_kind=? AND scope_id=? ORDER BY insertion_order,id', (guild_id, kind, owner_id))]
         return [self.admin_entry(guild_id, ref) for ref in refs]
@@ -196,10 +335,11 @@ class AdminStore:
                 (owner_id, uid, content, json.dumps(rule), '', '', key, int(pinned))).lastrowid
             self.db.execute('UPDATE lorebook_entries SET source_message_id=?,promoted_from=?,revision=? WHERE id=?', (source_id, promoted_from, time.time_ns(), ident))
             return f'book-entry:{ident}'
-        ident = self.db.execute('INSERT INTO lore(guild_id,scope_kind,scope_id,content,keys_json,constant,insertion_order,enabled,rule_json,pinned,entry_key) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+        table = 'guild_lore_entries' if kind == 'guild' else 'lore'
+        ident = self.db.execute(f'INSERT INTO {table}(guild_id,scope_kind,scope_id,content,keys_json,constant,insertion_order,enabled,rule_json,pinned,entry_key) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
             (guild_id, kind, owner_id, content, json.dumps(rule['keys']), int(rule['constant']), rule['order'], int(rule['enabled']), json.dumps(rule), int(pinned), key)).lastrowid
-        self.db.execute('UPDATE lore SET source_message_id=?,promoted_from=?,revision=? WHERE id=?', (source_id, promoted_from, time.time_ns(), ident))
-        return f'lore:{ident}'
+        self.db.execute(f'UPDATE {table} SET source_message_id=?,promoted_from=?,revision=? WHERE id=?', (source_id, promoted_from, time.time_ns(), ident))
+        return f"{'guild-lore' if kind == 'guild' else 'lore'}:{ident}"
 
     def save_entry(self, guild_id, kind, owner_id, content, rule, pinned=False, ref=None, expected_revision=None):
         from .lorebooks import validate_rule
@@ -215,8 +355,8 @@ class AdminStore:
                 if expected_revision is None or old['revision'] != expected_revision:
                     raise ConflictError('Entry changed; reload the editor')
                 self.db.execute(f"UPDATE {old['table']} SET content=?,rule_json=?,pinned=?,revision=revision+1 WHERE id=?", (content.strip(), json.dumps(rule), int(pinned), old['id']))
-                if old['table'] == 'lore':
-                    self.db.execute('UPDATE lore SET keys_json=?,constant=?,insertion_order=?,enabled=? WHERE id=?', (json.dumps(rule['keys']), int(rule['constant']), rule['order'], int(rule['enabled']), old['id']))
+                if old['table'] != 'lorebook_entries':
+                    self.db.execute(f"UPDATE {old['table']} SET keys_json=?,constant=?,insertion_order=?,enabled=? WHERE id=?", (json.dumps(rule['keys']), int(rule['constant']), rule['order'], int(rule['enabled']), old['id']))
             else:
                 ref = self.insert_admin_entry(guild_id, kind, owner_id, content.strip(), rule, pinned)
             self.bump_owner(guild_id, kind, owner_id)
@@ -273,14 +413,15 @@ class AdminStore:
         ref = row['ref']
         if not copy and (kind, owner_id) == (row['owner_kind'], row['owner_id']):
             return ref
-        same_table = (kind == 'book') == (row['owner_kind'] == 'book')
+        target_table = 'lorebook_entries' if kind == 'book' else 'guild_lore_entries' if kind == 'guild' else 'lore'
+        same_table = target_table == row['table']
         new_ref = self.insert_admin_entry(guild_id, kind, owner_id, row['content'], row['rule'], row['pinned'], None if copy else row['entry_key'], row['source_message_id'], row['promoted_from']) if copy or not same_table else ref
         if not copy:
             if new_ref == ref:
                 if kind == 'book':
                     self.db.execute('UPDATE lorebook_entries SET book_id=?,uid=?,revision=revision+1 WHERE id=?', (owner_id, 'local-' + uuid.uuid4().hex, row['id']))
                 else:
-                    self.db.execute('UPDATE lore SET scope_kind=?,scope_id=?,revision=revision+1 WHERE id=?', (kind, owner_id, row['id']))
+                    self.db.execute(f"UPDATE {row['table']} SET scope_kind=?,scope_id=?,revision=revision+1 WHERE id=?", (kind, owner_id, row['id']))
             else:
                 self.db.execute(f"DELETE FROM {row['table']} WHERE id=?", (row['id'],))
             self.db.execute("UPDATE import_entries SET disposition='moved' WHERE guild_id=? AND entry_key=?", (guild_id, row['entry_key']))
@@ -343,7 +484,7 @@ class AdminStore:
                     ref = current['ref']
                     self.db.execute(f"UPDATE {current['table']} SET content=?,rule_json=?,pinned=?,revision=revision+1 WHERE id=?", (incoming.content, json.dumps(incoming.rule), int(incoming_pinned), current['id']))
                     if kind != 'book':
-                        self.db.execute('UPDATE lore SET keys_json=?,constant=?,enabled=?,insertion_order=? WHERE id=?', (json.dumps(incoming.rule['keys']), int(incoming.rule['constant']), int(incoming.rule['enabled']), incoming.rule['order'], current['id']))
+                        self.db.execute(f"UPDATE {current['table']} SET keys_json=?,constant=?,enabled=?,insertion_order=? WHERE id=?", (json.dumps(incoming.rule['keys']), int(incoming.rule['constant']), int(incoming.rule['enabled']), incoming.rule['order'], current['id']))
                 else:
                     ref = self.insert_admin_entry(guild_id, kind, owner_id, incoming.content, incoming.rule, pinned=incoming_pinned, key=key)
                 if kind == 'book':
