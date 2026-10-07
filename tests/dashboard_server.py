@@ -1,4 +1,5 @@
 """Isolated HTTPS browser-test fixture. Never used by production entry points."""
+import asyncio
 import json
 import os
 import time
@@ -12,9 +13,13 @@ from llmcord_core.web import create_app
 
 def main():
     port = int(os.environ['LLMCORD_TEST_PORT'])
-    state = {'admin': True, 'guild_checks': 0}
+    state = {'admin': True, 'guild_checks': 0, 'permission_delay': 0}
     async def discord_api(request):
         if request.url.path.endswith('/users/@me/guilds'):
+            delay = state['permission_delay']
+            state['permission_delay'] = 0
+            if delay:
+                await asyncio.sleep(delay)
             state['guild_checks'] += 1
             if state['guild_checks'] == 1:
                 return httpx.Response(429, json={'retry_after': 0.05})
@@ -70,6 +75,11 @@ def main():
         row = store.entry_by_key(1, value['key'])
         store.save_entry(1, row['owner_kind'], row['owner_id'], value['content'], row['rule'],
                          ref=row['ref'], expected_revision=row['revision'])
+        return {'ok': True}
+
+    @app.post('/_test/delay-permission')
+    async def delay_permission():
+        state['permission_delay'] = 0.5
         return {'ok': True}
 
     @app.post('/_test/restore')

@@ -51,7 +51,7 @@ class DashboardBrowserTests(unittest.TestCase):
         cls.context.add_cookies([{'name': 'llmcord_session', 'value': 'browser-test-session', 'url': cls.url, 'secure': True, 'httpOnly': True, 'sameSite': 'Lax'}])
         cls.page = cls.context.new_page()
         cls.errors = []
-        cls.page.on('pageerror', lambda e: cls.errors.append(str(e)))
+        cls.page.on('pageerror', lambda e: cls.errors.append(e.stack or str(e)))
 
     @classmethod
     def tearDownClass(cls):
@@ -74,6 +74,12 @@ class DashboardBrowserTests(unittest.TestCase):
             (artifacts / 'server.log').write_text((Path(self.temp.name) / 'server.log').read_text(encoding='utf-8', errors='replace'))
             (artifacts / 'browser-errors.json').write_text(json.dumps(self.errors, indent=2))
             (artifacts / 'state.json').write_text(json.dumps(self.state()))
+            (artifacts / 'lore-drag.json').write_text(json.dumps(self.page.evaluate("""() => ({
+                started: window.lastLoreDragStarted ?? null, ended: window.lastLoreDrop ?? null,
+                lists: [...document.querySelectorAll('.lore-drop-zone')].map(element => ({
+                    id: element.id, owner: {...element.dataset}, bounds: element.getBoundingClientRect().toJSON(),
+                })),
+            })"""), indent=2))
 
     def wait_for(self, predicate):
         for _ in range(50):
@@ -82,20 +88,47 @@ class DashboardBrowserTests(unittest.TestCase):
             self.page.wait_for_timeout(100)
         self.fail('Expected database state was not reached')
 
-    def lore_idle(self):
-        self.page.wait_for_function("""() => {
+    def lore_idle(self, expected_owners=None):
+        self.page.evaluate("""async () => {
+            const { Sortable } = await import('nicegui-sortable');
+            window.loreTestSortable = Sortable;
+        }""")
+        # Playwright polls synchronous predicates; a Promise is truthy even
+        # when its eventual result says the old board is not ready yet.
+        self.page.wait_for_function("""expected => {
+            const Sortable = window.loreTestSortable;
             const root = document.querySelector('.lore-workspace');
             const lists = document.querySelectorAll('.lore-drop-zone');
-            return root && !root.inert && lists.length === 2 && [...lists].every(list => list.dataset.dragReady === 'true');
-        }""")
+            return root && !root.inert && lists.length === 2 && [...lists].every(list => {
+                const sortable = Sortable.get(list);
+                const side = list.classList.contains('lore-drop-left') ? 'left' : 'right';
+                const owner = expected?.[side];
+                return list.dataset.dragReady === 'true' && sortable?.el === list &&
+                    !sortable.option('disabled') && (!owner ||
+                    (list.dataset.ownerKind === owner[0] && list.dataset.ownerId === String(owner[1])));
+            });
+        }""", arg=expected_owners)
 
-    def drag_lore(self, tile, destination, edge=False):
+    def choose_lore_owner(self, side, label, kind, ident):
+        self.page.get_by_label(f'{side.title()} owner', exact=True).click()
+        self.page.get_by_role('option', name=label, exact=True).click()
+        # The select changes before the server authorizes and redraws the board.
+        # Old lists can still report dragReady during that interval.
+        self.lore_idle({side: [kind, ident]})
+
+    def drag_lore(self, tile, destination, edge=False, require_started=True):
         self.page.evaluate("""async () => {
             window.lastLoreDrop = null;
+            window.lastLoreDragStarted = null;
             const { Sortable } = await import('nicegui-sortable');
             for (const element of document.querySelectorAll('.lore-drop-zone')) {
                 const sortable = Sortable.get(element);
                 if (!sortable || sortable.testWrapped) continue;
+                const start = sortable.option('onStart');
+                sortable.option('onStart', event => {
+                    window.lastLoreDragStarted = {source: {...event.from.dataset}, entry: {...event.item.dataset}};
+                    start(event);
+                });
                 const original = sortable.option('onEnd');
                 sortable.option('onEnd', event => {
                     window.lastLoreDrop = {source: {...event.from.dataset}, target: {...event.to.dataset}, entry: {...event.item.dataset}};
@@ -105,13 +138,28 @@ class DashboardBrowserTests(unittest.TestCase):
             }
         }""")
         destination.evaluate("element => window.scrollBy(0, element.getBoundingClientRect().top - 140)")
+        tile.locator('.drag-handle').scroll_into_view_if_needed()
         source_box = tile.locator('.drag-handle').bounding_box()
         target_box = destination.bounding_box()
+        if source_box is None or target_box is None:
+            if require_started:
+                self.fail('Lore drag source or destination disappeared before the gesture')
+            # During the deliberately overlapping attempt, a committed move
+            # may already be replacing the board. There is then nothing to grab.
+            return
         self.page.mouse.move(source_box['x'] + source_box['width'] / 2, source_box['y'] + source_box['height'] / 2)
         self.page.mouse.down()
-        self.page.mouse.move(target_box['x'] + (5 if edge else 30), target_box['y'] + (5 if edge else 30), steps=12)
-        self.page.wait_for_timeout(150)
-        self.page.mouse.up()
+        try:
+            self.page.mouse.move(source_box['x'] + source_box['width'] / 2 + 12,
+                                 source_box['y'] + source_box['height'] / 2, steps=3)
+            if require_started:
+                self.page.wait_for_function('window.lastLoreDragStarted !== null', timeout=5000)
+            self.page.mouse.move(target_box['x'] + (5 if edge else 30), target_box['y'] + (5 if edge else 30), steps=12)
+            self.page.wait_for_timeout(150)
+        finally:
+            self.page.mouse.up()
+        if require_started:
+            self.page.wait_for_function('window.lastLoreDrop !== null', timeout=5000)
 
     def select_lore(self, tile):
         from playwright.sync_api import expect
@@ -152,6 +200,8 @@ class DashboardBrowserTests(unittest.TestCase):
         self.assertIn('nonce-', response.headers['content-security-policy'])
         page.get_by_text('Server administration', exact=True).wait_for()
         page.get_by_text('fixture-model', exact=True).wait_for()
+        # Rendered controls precede the connection that delivers their events.
+        page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
         world_panel = page.locator('.space-card').filter(has=page.get_by_text('World · world', exact=True))
         world_panel.get_by_text('World · world', exact=True).click()
         world_panel.get_by_label('World guidelines', exact=True).fill('The setting is a courier guild. Treat users as guild members.')
@@ -260,9 +310,7 @@ class DashboardBrowserTests(unittest.TestCase):
             dialog.get_by_role('button', name='Apply entry import', exact=True).click()
         self.assertTrue(any(row['content'] == 'Direct guild fact' for row in self.state()['guild_lore']))
         self.assertEqual(len(self.state()['lorebooks']), 1)
-        page.get_by_label('Left owner', exact=True).click()
-        page.get_by_role('option', name='World: World', exact=True).click()
-        self.lore_idle()
+        self.choose_lore_owner('left', 'World: World', 'space', 1)
         data = json.dumps({'entries': [{'content': 'Direct world fact', 'constant': True, 'order': 37}]}).encode()
         for count in (1, 0):
             page.get_by_role('button', name='Import JSON entries', exact=True).first.click()
@@ -303,8 +351,9 @@ class DashboardBrowserTests(unittest.TestCase):
         right_list = page.locator('.lore-drop-right')
         # Edge drops and another attempted drag while a save is pending must
         # neither lose entries nor submit an operation against stale DOM IDs.
+        self.assertEqual(self.context.request.post(self.url + '/_test/delay-permission').status, 200)
         self.drag_lore(left_list.locator('.lore-entry').filter(has_text='Bulk A'), right_list, edge=True)
-        self.drag_lore(left_list.locator('.lore-entry').filter(has_text='Bulk B'), right_list, edge=True)
+        self.drag_lore(left_list.locator('.lore-entry').filter(has_text='Bulk B'), right_list, edge=True, require_started=False)
         self.wait_for(lambda: any(row['content'] == 'Bulk A' for row in self.state()['books']))
         self.lore_idle()
         self.assertEqual(sum(row['content'] in {'Bulk A', 'Bulk B', 'Bulk C'}
@@ -350,9 +399,11 @@ class DashboardBrowserTests(unittest.TestCase):
         left_list.locator('.lore-entry').filter(has_text='Stale test updated').wait_for()
         self.assertFalse(any(row['entry_key'] == key for row in self.state()['books']))
         # Also support dropping into an empty list and page-wide selection.
-        page.get_by_label('Right owner', exact=True).click()
-        page.get_by_role('option', name='Character: Alice', exact=True).click()
-        self.lore_idle()
+        # Keep the old, ready book list visible while authorization is pending.
+        # This reproduces the race seen on fast CI workers during owner changes.
+        self.assertEqual(self.context.request.post(self.url + '/_test/delay-permission').status, 200)
+        alice = next(row for row in self.state()['characters'] if row['name'] == 'Alice')
+        self.choose_lore_owner('right', 'Character: Alice', 'character', alice['id'])
         self.drag_lore(left_list.locator('.lore-entry').filter(has_text='Stale test updated'), right_list, edge=True)
         self.wait_for(lambda: any(row['entry_key'] == key and row['scope_kind'] == 'character' for row in self.state()['lore']))
         self.lore_idle()
