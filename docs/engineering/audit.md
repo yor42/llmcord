@@ -365,8 +365,8 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 ### TOOL-01: Tooling, test-helper and docs gaps
 - **Severity:** low. **Confidence:** CONFIRMED. **Label:** fragile.
 - **Evidence:**
-  - Before bootstrap there was no lint or type tooling. Since bootstrap: `ruff.toml` (bug-class rules) and `scripts/verify.sh`. CI does not run ruff yet.
+  - Before bootstrap there was no lint or type tooling. Since bootstrap: `ruff.toml` (bug-class rules) and `scripts/verify.sh`. CI runs ruff since bootstrap step 3 (`250e9be`).
   - Test helpers are duplicated: two `FakeModels`, `Settings` built inline in 4 files, and test files importing each other. `tests/helpers.py` now exists for new tests.
   - The NiceGUI dashboard is covered only by the opt-in browser test.
   - Docs are stale: `docs/verification.md` says "Python 3.12", and the `docs/architecture.md` module table missed usage/identity/errors/scene_ui/lore_workspace/lore_drag. Fixed in this bootstrap.
-- **Direction:** add ruff to CI (bootstrap step 3) and migrate tests to the helpers opportunistically.
+- **Direction:** (ruff in CI: done in `250e9be`.) Migrate tests to the helpers opportunistically.
