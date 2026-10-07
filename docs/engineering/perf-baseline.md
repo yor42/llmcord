@@ -95,3 +95,34 @@ A change claiming a dashboard performance improvement must re-run the bench with
 The bench has not been re-run for this step. The dated bench section (two runs, same seed and host) comes at the end of R2, after the debounce and probe removal (steps 2–3), which also affect the lore-search numbers.
 
 R2 step 3 (same day): the lore search box is debounced (300 ms). The browser test `test_lore_search_is_debounced` counts `AdminStore.admin_entries` calls through a test-only wrapper in `tests/dashboard_server.py`: a 10-character burst at 30 ms per key gives 2 calls (1 board render), down from 20 (10 renders). The bench server now runs through that counting wrapper too; its overhead is negligible.
+
+## 2026-10-07: end of R2 (steps 1–6 + logout follow-up)
+
+Same host, same seed (`10,500`), two consecutive `scripts/verify.sh --bench` runs on `rework/r2-auth-perf` at `df8260f`. Times in seconds; "Checks" = `GET /users/@me/guilds` calls.
+
+### `latency`
+
+| Scenario | Run 1 ready / settled | Run 2 ready / settled | Checks (was) | Other Discord calls |
+| --- | --- | --- | --- | --- |
+| Guild page cold load | 2.16 / 2.16 | 2.02 / 2.02 | 1 (4) | 1 channels |
+| Switch to Characters tab | 0.55 / 0.55 | 1.36 / 1.36 | 0 (1) | — |
+| Expand one character | 0.04 / 0.05 | 0.05 / 0.06 | 0 (1) | — |
+| Type 10 chars in lore search | 1.54 / 1.54 | 1.50 / 1.50 | 0 (21) | — |
+| Click Save cast | 0.55 / 0.55 | 0.56 / 0.56 | 0 (3) | — |
+
+### `ratelimited`
+
+| Scenario | Run 1 ready / settled | Run 2 ready / settled | Checks (was) | Other Discord calls |
+| --- | --- | --- | --- | --- |
+| Guild page cold load | 2.01 / 2.01 | 2.02 / 2.02 | 1 (4) | 1 channels |
+| Switch to Characters tab | 0.56 / 0.57 | 0.54 / 0.55 | 0 (1) | — |
+| Expand one character | 0.04 / 0.04 | 0.04 / 0.04 | 0 (1) | — |
+| Type 10 chars in lore search | 1.51 / 1.52 | 1.50 / 1.50 | 0 (21) | — |
+| Click Save cast | 0.55 / 0.55 | 0.60 / 0.60 | 0 (3) | — |
+
+Reading:
+- Guild checks per session dropped to 1 on cold load and 0 for every later interaction within the 300 s TTL (D1). The rate-limited profile now matches the latency profile, since nothing waits on Discord after the first check.
+- Lore search settled: 23.1 s → 1.5 s (rate limited), 3.7 s → 1.5 s (latency). The remaining time includes the 300 ms debounce.
+- Save cast settled: 2.36 s → 0.55–0.60 s (rate limited).
+- Cold load (rate limited): 3.9 s → 2.0 s settled.
+- The Characters tab and Expand one character moved in opposite directions (tab ~0.07 → ~0.55, expand ~0.55 → ~0.05). Their sum is about the same, so the render work seems to have shifted from the expand step to the tab switch; this was not investigated. The latency run 2 tab value (1.36 s) is a single outlier; the other three runs are 0.54–0.56 s.
