@@ -141,14 +141,7 @@ class SummaryTests(unittest.IsolatedAsyncioTestCase):
         await self.engine.summarize_scene(last)
         self.assertEqual(self.store.summary(last), "Earlier scene summary")
 
-    async def test_branch_over_30_unsummarized_nodes_is_never_summarized(self):
-        """Characterization (BUG-03, probable defect): past 30 unsummarized nodes summarization stops for good."""
-        last = self.chain(31)
-        await self.engine.summarize_scene(last)
-        self.assertIsNone(self.store.summary(last))
-        self.store.record_node(5000, 1, 100, last, 9, None, "one more")
-        await self.engine.summarize_scene(5000)
-        self.assertIsNone(self.store.summary(5000))
+    # BUG-03 (fixed): the over-30-node characterization moved to test_memory_cadence.SummaryWindowTests.
 
 
 class CleanupLoopTests(unittest.IsolatedAsyncioTestCase):

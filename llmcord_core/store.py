@@ -355,6 +355,15 @@ class Store(AdminStore):
         result.reverse()
         return result
 
+    def count_user_ancestors(self, guild_id: int, message_id: int) -> int:
+        """User-authored nodes (character_id IS NULL) on the branch ending at ``message_id``, inclusive, within ``guild_id``."""
+        row = self.one("""WITH RECURSIVE chain(message_id, parent_id, character_id, depth) AS (
+            SELECT message_id, parent_id, character_id, 0 FROM nodes WHERE message_id=? AND guild_id=?
+            UNION SELECT n.message_id, n.parent_id, n.character_id, chain.depth + 1 FROM nodes n
+            JOIN chain ON n.message_id=chain.parent_id WHERE n.guild_id=? AND chain.depth < 100000)
+            SELECT COUNT(DISTINCT message_id) AS total FROM chain WHERE character_id IS NULL""", (message_id, guild_id, guild_id))
+        return row["total"] if row else 0
+
     def latest_character_node(self, channel_id: int) -> sqlite3.Row | None:
         return self.one("SELECT * FROM nodes WHERE channel_id=? AND character_id IS NOT NULL ORDER BY created_at DESC,message_id DESC LIMIT 1", (channel_id,))
 

@@ -55,6 +55,14 @@ class Settings:
 
 
 DEFAULT_DATABASE_PATH = "data/llmcord.sqlite3"
+LIMIT_DEFAULTS = {
+    "max_input_tokens": 12000, "max_output_tokens": 700,
+    "max_images": 3, "max_attachment_bytes": 8 * 1024 * 1024,
+    "max_speakers": 3, "recent_messages": 12,
+    "recent_window_seconds": 600, "ambient_cooldown_seconds": 120,
+    "memory_input_tokens": 6000, "memory_output_tokens": 550,
+    "summary_every_messages": 1, "extraction_every_turns": 1,
+}
 
 
 def _database_path(raw: dict[str, Any]) -> Path:
@@ -124,15 +132,11 @@ def load_settings(path: str | Path = "config.yaml") -> Settings:
             raise ValueError(f"base_url is required for {name}")
         if profile.reasoning_effort is not None and (profile.provider != "compatible" or profile.reasoning_effort not in {"none", "minimal", "low", "medium", "high"}):
             raise ValueError(f"Invalid compatible reasoning_effort in {name}")
-    defaults = {
-        "max_input_tokens": 12000, "max_output_tokens": 700,
-        "max_images": 3, "max_attachment_bytes": 8 * 1024 * 1024,
-        "max_speakers": 3, "recent_messages": 12,
-        "recent_window_seconds": 600, "ambient_cooldown_seconds": 120,
-    }
-    limits = {key: int(raw.get("limits", {}).get(key, value)) for key, value in defaults.items()}
+    limits = {key: int(raw.get("limits", {}).get(key, value)) for key, value in LIMIT_DEFAULTS.items()}
     if any(value <= 0 for value in limits.values()) or limits["max_speakers"] > 3:
         raise ValueError("Limits must be positive and max_speakers cannot exceed 3")
+    if limits["summary_every_messages"] > 100 or limits["extraction_every_turns"] > 100:
+        raise ValueError("summary_every_messages and extraction_every_turns must be between 1 and 100")
     guild_id = os.environ.get("DISCORD_GUILD_ID") or discord.get("development_guild_id")
     if guild_id and int(guild_id) <= 0:
         raise ValueError("DISCORD_GUILD_ID must be a positive server ID")

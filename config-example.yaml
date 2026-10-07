@@ -48,3 +48,7 @@ limits:
   recent_messages: 12
   recent_window_seconds: 600
   ambient_cooldown_seconds: 120
+  memory_input_tokens: 6000
+  memory_output_tokens: 550
+  summary_every_messages: 1  # 1-100
+  extraction_every_turns: 1  # 1-100

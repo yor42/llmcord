@@ -144,6 +144,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Severity:** medium. **Confidence:** SUSPECTED, i.e. characterized but intent unknown. **Label:** incorrect.
 - **Evidence:** `summarize_scene` returns early when more than 30 nodes follow the last summary (`llmcord_core/engine.py:273-274`). If a summary fails, or a branch grows beyond 30 nodes before the first summary, that branch is never summarized again, because the gap only grows.
 - **Direction:** summarize the most recent window, or chunk. Needs a product decision on whether the cap is a cost guard.
+- **Status:** Resolved in R3 step 4 (branch `rework/r3-turn-reliability`) per D6: past the budget, the most recent window that fits `memory_input_tokens` is summarized, so a branch never stalls; summary/extraction cadence and budget are configurable (D4). Stalled branches in existing databases resume on their next turn.
 
 ### BUG-04: `record_node` replace cascade-deletes the node's summary
 - **Status:** Resolved in R1 (branch `rework/r1-correctness`): `record_node` upserts with `ON CONFLICT(message_id) DO UPDATE`, so the summary survives a re-record. Note: if a re-record ever changed the node's parent, the kept summary would describe the old ancestry (no current caller does this).

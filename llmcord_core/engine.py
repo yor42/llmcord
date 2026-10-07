@@ -4,7 +4,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 
-from .config import Settings
+from .config import LIMIT_DEFAULTS, Settings
 from .lore import estimate_tokens, lore_scopes
 from .world_info import evaluate
 from .models import DIRECTOR_SCHEMA, MEMORY_SCHEMA, ImageInput, ModelGateway, TurnMessage
@@ -12,6 +12,12 @@ from .store import Store
 from .prompts import compile_prompt
 from .errors import error_detail
 from .identity import speaker_context, user_line
+
+
+def tail_tokens(text: str, budget: int) -> str:
+    """Keep the end of ``text`` so estimate_tokens stays within ``budget``."""
+    data = text.encode('utf-8')
+    return text if estimate_tokens(text) <= budget else data[-3 * budget:].decode('utf-8', 'ignore')
 
 
 @dataclass(frozen=True)
@@ -264,20 +270,41 @@ class Engine:
         request, sources = await self.prepare_dialogue(scene, character, preceding_lines)
         return '\n\n'.join(m.text for m in request.messages if m.role == 'system'), [m for m in request.messages if m.role != 'system'], sources
 
+    def limit(self, key: str) -> int:
+        return self.settings.limits.get(key, LIMIT_DEFAULTS[key])
+
+    def recent_transcript(self, nodes, budget: int) -> str:
+        """Newest whole nodes whose transcript fits ``budget`` tokens; a lone oversize node keeps its end."""
+        history, ids = self.history_messages(nodes, 0)
+        node_ids = {row['message_id'] for row in nodes}
+        groups, current = [], []
+        for message, ident in zip(history, ids):
+            current.append(message.text)
+            if ident in node_ids:
+                groups.append('\n'.join(current))
+                current = []
+        kept, size = [], -1
+        for group in reversed(groups):
+            size += len(group.encode('utf-8')) + 1
+            if kept and size > 3 * budget:
+                break
+            kept.append(group)
+        return tail_tokens('\n'.join(reversed(kept)), budget)
+
     async def summarize_scene(self, last_message_id: int, scene: SceneContext | None = None) -> None:
         nodes = self.store.ancestors(last_message_id)
         prior_summary, start = "", 0
         for index, node in enumerate(nodes[:-1]):
             if saved := self.store.summary(node["message_id"]):
                 prior_summary, start = saved, index + 1
-        if len(nodes) - start > 30:
+        if len(nodes) - start < self.limit('summary_every_messages'):
             return
-        transcript = '\n'.join(message.text for message in self.history_messages(nodes[start:], 0)[0])
         try:
+            transcript = self.recent_transcript(nodes[start:], self.limit('memory_input_tokens'))
             if scene is None:
                 node = nodes[-1]
                 scene = SceneContext(node['guild_id'], node['channel_id'], None, 0, 0, last_message_id, '', None, [], [])
-            summary = await self.purpose_text(scene, 'summary', f'Previous summary: {prior_summary}\nNew exchange:\n{transcript}', 550)
+            summary = await self.purpose_text(scene, 'summary', f'Previous summary: {prior_summary}\nNew exchange:\n{transcript}', self.limit('memory_output_tokens'))
             if summary.strip():
                 self.store.save_summary(last_message_id, summary.strip())
         except Exception as error:
@@ -286,7 +313,18 @@ class Engine:
     async def extract_memories(self, scene: SceneContext, speakers: list, lines: list[tuple[str, str]], root_id: int) -> None:
         if not lines:
             return
-        text = user_line(scene.user_id, scene.user_label, scene.text) + '\n' + '\n'.join(f"{name}: {line}" for name, line in lines)
+        every = self.limit('extraction_every_turns')
+        if every > 1 and self.store.count_user_ancestors(scene.guild_id, scene.user_message_id) % every:
+            return
+        try:
+            head = user_line(scene.user_id, scene.user_label, scene.text)
+            budget = self.limit('memory_input_tokens')
+            rest = budget - estimate_tokens(head + '\n')
+            body = '\n'.join(f"{name}: {line}" for name, line in lines)
+            text = tail_tokens(head + '\n' + body, budget) if rest <= 0 else head + '\n' + tail_tokens(body, rest)
+        except Exception as error:
+            logging.error("Memory extraction failed: %s", error_detail(error))
+            return
         scope_kind = "thread" if scene.parent_channel_id else "channel"
         scope_id = scene.channel_id
         for index, character in enumerate(speakers[:len(lines)]):

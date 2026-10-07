@@ -77,3 +77,12 @@ Members can use `/cast set`, `/cast add`, and `/cast remove` to adjust the activ
 | `models.profiles.<name>.max_retries` | Automatic retries after a failed or timed-out request; default `1` (`0` disables; consider `0` for slow local models so a slow request is not repeated). |
 
 The `limits` block controls input/output token budgets, image count and attachment size, speaker count, nearby-message count and time window, and ambient cooldown. Use [config-example.yaml](../config-example.yaml) for the exact keys and defaults. `max_speakers` cannot exceed three.
+
+Memory limits (all optional, positive whole numbers):
+
+| Key | Meaning |
+| --- | --- |
+| `limits.memory_input_tokens` | Estimated tokens of transcript sent to one scene-summary or memory-extraction call; default `6000`. Long unsummarized stretches are summarized from their most recent messages that fit. |
+| `limits.memory_output_tokens` | Maximum output tokens for a scene-summary call; default `550`. |
+| `limits.summary_every_messages` | Summarize only once at least this many messages follow the last saved summary on the branch; `1`–`100`, default `1` (every turn). |
+| `limits.extraction_every_turns` | Run memory extraction only on every Nth user turn of the branch; `1`–`100`, default `1` (every turn). |

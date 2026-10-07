@@ -14,7 +14,10 @@ from llmcord_core.config import ModelProfile, Settings
 
 LIMITS = {"max_input_tokens": 12000, "max_output_tokens": 700, "max_images": 3,
           "max_attachment_bytes": 8388608, "max_speakers": 3, "recent_messages": 12,
-          "recent_window_seconds": 600, "ambient_cooldown_seconds": 120}
+          "recent_window_seconds": 600, "ambient_cooldown_seconds": 120,
+          # BUG-03 / D4 memory cadence + budget keys (defaults match load_settings).
+          "memory_input_tokens": 6000, "memory_output_tokens": 550,
+          "summary_every_messages": 1, "extraction_every_turns": 1}
 
 
 def make_settings(**limits) -> Settings:
@@ -44,6 +47,40 @@ class FakeModels:
 
     async def close(self):
         pass
+
+
+class MemoryModels(FakeModels):
+    """FakeModels that records summary/extraction calls with their full arguments.
+
+    ``summaries`` holds ``{"text", "max_tokens"}`` per text call (``text`` joins system + message texts);
+    ``extractions`` holds ``{"text"}`` per ``extract_memory`` call. ``extraction_result`` is returned from
+    extraction calls; ``summary_failures`` is the number of upcoming text calls that raise ``RuntimeError``.
+    """
+
+    def __init__(self, summary="Fresh summary", extraction_result=None, summary_failures=0):
+        super().__init__(summary=summary)
+        self.summaries, self.extractions = [], []
+        self.extraction_result = extraction_result or {"shared_facts": [], "personal_facts": [], "encounter_facts": []}
+        self.summary_failures = summary_failures
+
+    @staticmethod
+    def _joined(system, messages):
+        return "\n".join([system, *(message.text for message in messages)])
+
+    async def structured(self, role, system, messages, schema_name, schema):
+        if schema_name == "extract_memory":
+            self.calls.append(("structured", schema_name))
+            self.extractions.append({"text": self._joined(system, messages)})
+            return self.extraction_result
+        return await super().structured(role, system, messages, schema_name, schema)
+
+    async def text(self, role, system, messages, max_tokens=None):
+        self.calls.append(("text", role))
+        self.summaries.append({"text": self._joined(system, messages), "max_tokens": max_tokens})
+        if self.summary_failures:
+            self.summary_failures -= 1
+            raise RuntimeError("summary provider down")
+        return self.summary_text
 
 
 class FakeResponse:
