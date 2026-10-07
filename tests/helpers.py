@@ -112,14 +112,14 @@ async def invoke(bot, path: str, interaction: FakeInteraction, *args, **kwargs):
 
 
 def discord_transport(admin_guilds=(1,), calls: Counter | None = None, rate_limited=False, *,
-                      guilds_by_token=None, guild_failures=None, token_status=200, yield_on_guilds=False):
+                      guilds_by_token=None, guild_failures=None, token_status=200, yield_on_guilds=False, retry_after=0):
     """httpx MockTransport imitating the Discord endpoints the dashboard uses, counting calls per path.
 
     ``admin_guilds`` is read on every request, so pass a list and mutate it to simulate Discord-side
     permission changes. ``guilds_by_token`` maps an access token (without ``Bearer``) to its guild ids and
     takes precedence; guild-list calls are then also counted under ``"GET /users/@me/guilds <token>"``.
     ``guild_failures`` is a list consumed one item per guild-list call before normal answers: an int status
-    code (429 answers carry ``Retry-After: 0``) or ``"network"`` for a connection error.
+    code (429 answers carry ``Retry-After: <retry_after>``, default 0) or ``"network"`` for a connection error.
     ``token_status`` is the status of ``POST /oauth2/token`` (>= 400 makes refreshes fail).
     ``yield_on_guilds`` makes guild-list calls yield to the event loop once (the mock otherwise answers without
     suspending, so ``asyncio.gather`` of guards would run them one after another instead of overlapping).
@@ -138,7 +138,7 @@ def discord_transport(admin_guilds=(1,), calls: Counter | None = None, rate_limi
                 failure = guild_failures.pop(0)
                 if failure == "network":
                     raise httpx.ConnectError("offline", request=request)
-                return httpx.Response(failure, headers={"Retry-After": "0"} if failure == 429 else {}, json={})
+                return httpx.Response(failure, headers={"Retry-After": str(retry_after)} if failure == 429 else {}, json={})
             guilds = guilds_by_token.get(token, ()) if guilds_by_token is not None else admin_guilds
             return httpx.Response(200, headers=headers, json=[
                 {"id": str(g), "name": f"Guild {g}", "permissions": "8"} for g in guilds])

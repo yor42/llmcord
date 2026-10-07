@@ -36,7 +36,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 | SEC-01 | Mutating legacy routes parse the body before auth — **Resolved (R1, branch `rework/r1-correctness`)** | medium | CONFIRMED (test) | incorrect |
 | SEC-02 | Legacy Jinja POST routes still live | medium | CONFIRMED | fragile |
 | SEC-03 | Live-call CSRF and origin checks pass by construction — **Resolved (R2 step 2)** | low | CONFIRMED | unconventional |
-| SEC-04 | Unbounded in-memory auth state; sessions lost on restart | low | CONFIRMED | fragile |
+| SEC-04 | Unbounded in-memory auth state; sessions lost on restart — **Resolved in R2 step 6 (pruning; restart sign-out remains, by design)** | low | CONFIRMED | fragile |
 | SEC-05 | Slash commands not guild-only or permission-gated; errors public | medium | CONFIRMED | incorrect |
 | SEC-06 | `archive_character` cross-guild touches global thread casts | low | CONFIRMED (test) | fragile |
 | REL-01 | Synchronous sqlite on the event loop | medium | CONFIRMED | fragile |
@@ -196,6 +196,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Severity:** low. **Confidence:** CONFIRMED. **Label:** fragile.
 - **Evidence:** `app.state.sessions`, `request_locks`, `retry_at` and `refresh_locks` (`auth.py:18-21`) are never pruned. Sessions live only in memory, so every restart signs everyone out.
 - **Direction:** prune expired entries on access or with a periodic sweep. Persisting sessions is optional.
+- **Status:** Resolved in R2 step 6 (branch `rework/r2-auth-perf`). `AuthService.prune()` runs on every `session()` call and on each OAuth sign-in: it drops expired sessions, refresh locks with no session, and `request_locks`/`retry_at` keys no live session uses whose retry time has passed. `drop_session()` is the single removal path (logout, Discord 401, failed refresh, expiry) and also drops the session's refresh lock. A lock that is held or has waiters is never dropped (`busy()` reads `locked()` and the private `asyncio.Lock._waiters`, pinned by a test). Pending backoff survives with or without a session. Pinned by `tests/test_auth_prune.py`. Not done (optional): persisting sessions across restarts. Low follow-ups: a queued waiter after a failed refresh sends one more refresh POST (pre-existing); `prune()` is O(sessions + keys) per check.
 
 ### SEC-05: Slash commands not guild-only or permission-gated; errors public
 - **Severity:** medium. **Confidence:** CONFIRMED. **Label:** incorrect.

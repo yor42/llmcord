@@ -144,6 +144,7 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
         tokens = response.json()
         user = await discord_get("/users/@me", "Bearer " + tokens["access_token"])
         ident = secrets.token_urlsafe(40)
+        app.state.auth.prune()
         app.state.sessions[ident] = {"user": user, "access": tokens["access_token"],
             "refresh": tokens["refresh_token"],
             "token_expires": time.time() + int(tokens["expires_in"]),
@@ -161,7 +162,7 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
         form = await request.form()
         if not secrets.compare_digest(str(form.get("csrf", "")), session["csrf"]):
             raise HTTPException(403, "Invalid form token")
-        app.state.sessions.pop(request.cookies.get("llmcord_session", ""), None)
+        app.state.auth.drop_session(request.cookies.get("llmcord_session", ""))
         result = RedirectResponse("/", status_code=303)
         result.delete_cookie("llmcord_session")
         return result

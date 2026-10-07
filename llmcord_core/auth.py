@@ -14,6 +14,15 @@ DISCORD_API = 'https://discord.com/api/v10'
 GUILD_CACHE_TTL = 300  # seconds a session's guild list is reused (roadmap D1)
 
 
+def token_key(token):
+    return hashlib.sha256(token.encode()).digest()
+
+
+def busy(lock):
+    # Held or awaited locks must stay shared, or two refreshes/requests for one key could run at once (SEC-04).
+    return lock.locked() or bool(getattr(lock, '_waiters', None))
+
+
 class AuthService:
     def __init__(self, app):
         self.app = app
@@ -35,7 +44,7 @@ class AuthService:
             return 1.0
 
     async def discord_get(self, path, token):
-        key = (path, hashlib.sha256(token.encode()).digest())
+        key = (path, token_key(token))
         deadline = time.monotonic() + 20
         async with self.request_locks.setdefault(key, asyncio.Lock()):
             for attempt in range(3):
@@ -59,7 +68,7 @@ class AuthService:
                     # Invalidate only sessions using the rejected access token.
                     for ident, session in list(self.app.state.sessions.items()):
                         if 'Bearer ' + session['access'] == token:
-                            self.app.state.sessions.pop(ident, None)
+                            self.drop_session(ident)
                     raise HTTPException(401, 'Discord session expired. Please sign in again.')
                 if response.status_code >= 400:
                     logging.warning('Discord permission request failed: path=%s status=%d', path, response.status_code)
@@ -68,11 +77,37 @@ class AuthService:
                 return response.json()
         raise HTTPException(503, 'Discord permission checks are temporarily rate limited. Please try again shortly.')
 
+    def drop_session(self, ident):
+        self.app.state.sessions.pop(ident, None)
+        lock = self.refresh_locks.get(ident)
+        if lock is not None and not busy(lock):
+            del self.refresh_locks[ident]
+
+    def prune(self):
+        """Drop expired sessions and lock/backoff state no live session uses (SEC-04); O(sessions + keys)."""
+        sessions, now = self.app.state.sessions, time.time()
+        for ident, session in list(sessions.items()):
+            if session.get('expires', now) < now:
+                self.drop_session(ident)
+        for ident, lock in list(self.refresh_locks.items()):
+            if ident not in sessions and not busy(lock):
+                del self.refresh_locks[ident]
+        live = {token_key('Bearer ' + s['access']) for s in sessions.values() if 'access' in s}
+        mono = time.monotonic()
+        for key in list({*self.request_locks, *self.retry_at}):
+            lock = self.request_locks.get(key)
+            if key[1] in live or self.retry_at.get(key, 0) > mono or (lock is not None and busy(lock)):
+                continue
+            self.request_locks.pop(key, None)
+            self.retry_at.pop(key, None)
+
     async def session(self, ident):
+        self.prune()
         session = self.app.state.sessions.get(ident)
         if not session or session['expires'] < time.time():
             raise HTTPException(401, 'Sign in with Discord')
         if session['token_expires'] < time.time() + 30:
+            failed = False
             async with self.refresh_locks.setdefault(ident, asyncio.Lock()):
                 if session['token_expires'] < time.time() + 30:
                     response = await self.app.state.http.post(DISCORD_API + '/oauth2/token', data={
@@ -80,9 +115,13 @@ class AuthService:
                         'client_id': self.app.state.client_id, 'client_secret': self.app.state.client_secret})
                     if response.status_code >= 400:
                         self.app.state.sessions.pop(ident, None)
-                        raise HTTPException(401, 'Discord session expired')
-                    tokens = response.json()
-                    session.update(access=tokens['access_token'], refresh=tokens['refresh_token'], token_expires=time.time() + int(tokens['expires_in']))
+                        failed = True
+                    else:
+                        tokens = response.json()
+                        session.update(access=tokens['access_token'], refresh=tokens['refresh_token'], token_expires=time.time() + int(tokens['expires_in']))
+            if failed:
+                self.drop_session(ident)  # after releasing the lock, so an idle lock is dropped with the session
+                raise HTTPException(401, 'Discord session expired')
         if self.app.state.sessions.get(ident) is not session or session['expires'] < time.time():
             raise HTTPException(401, 'Discord session expired')
         return session
