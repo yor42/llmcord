@@ -40,6 +40,20 @@ flowchart LR
 | [`llmcord_core/admin_store.py`](../llmcord_core/admin_store.py) | Versioned presets, lore identities/import provenance, ownership transfers, and avatar metadata. |
 | [`llmcord_core/prompts.py`](../llmcord_core/prompts.py) | Preset import/export, bounded macros, ordered messages, adaptations, and trimming. |
 | [`llmcord_core/avatars.py`](../llmcord_core/avatars.py) | Image validation, Discord publication, and bounded emotion-header parsing. |
+| [`llmcord_core/usage.py`](../llmcord_core/usage.py) | Provider-reported token usage, per-task attribution, and cost estimates. |
+| [`llmcord_core/identity.py`](../llmcord_core/identity.py) | Discord speaker identities as message metadata, separate from character personas. |
+| [`llmcord_core/errors.py`](../llmcord_core/errors.py) | Actionable error text without credentials or full provider bodies. |
+| [`llmcord_core/scene_ui.py`](../llmcord_core/scene_ui.py) | Dashboard guideline editors, owner deletion dialogs, and direct lore imports. |
+| [`llmcord_core/lore_workspace.py`](../llmcord_core/lore_workspace.py) | Dashboard lore lists, search, pagination, and selection actions. |
+| [`llmcord_core/lore_drag.py`](../llmcord_core/lore_drag.py), [`lore_drag.js`](../llmcord_core/lore_drag.js) | Drag-and-drop lore transfers using stable entry snapshots. |
+
+For engineering detail (process and sequence diagrams, shared state, known defects by ID, and the rework plan) see [`engineering/`](engineering/):
+
+| Document | Contents |
+| --- | --- |
+| [System map](engineering/system-map.md) | Processes, component diagram, turn and dashboard-auth sequences, shared state, external dependencies |
+| [Audit](engineering/audit.md) | Findings (`BUG-*`, `PERF-*`, `SEC-*`, `REL-*`, `ARCH-*`, `UX-*`, `TOOL-*`) with evidence and confidence |
+| [Roadmap](engineering/roadmap.md) | Rework phases R1–R6 and open product decisions |
 
 ## Scene flow
 

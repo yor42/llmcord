@@ -1,0 +1,205 @@
+# Rework roadmap
+
+**Status:** proposal, awaiting user approval. No phase starts until the roadmap is approved (see `CLAUDE.md`).
+
+Every phase goes through the `orchestrate-change` skill: test-writer → implementer → `scripts/verify.sh` → change-reviewer. Finding IDs refer to `audit.md`.
+
+**Phase rules**
+- A phase is one or more small PRs, each green on `scripts/verify.sh` (plus `--browser` when it touches dashboard files, plus `--bench` when it claims performance).
+- When a known defect is fixed, its `expectedFailure` decorator is removed in the same change.
+- When behavior changes on purpose, its characterization test is updated in the same change, and the reason goes in the PR.
+
+## Order at a glance
+
+| Order | Phase | Findings | Size | Risk |
+| --- | --- | --- | --- | --- |
+| 1 | R1 Correctness quick wins | BUG-01, BUG-02, BUG-04, BUG-05, SEC-01, REL-05 | S | low |
+| 2 | R2 Dashboard authorization performance | PERF-01, SEC-03, SEC-04 | M | medium |
+| 3 | R3 Bot turn reliability | REL-02, REL-03, REL-04, BUG-03, REL-01 (measure) | M | medium |
+| 4 | R4 Discord command surface and messages | SEC-05, UX-03, UX-04, UX-06, UX-07, UX-08, UX-09 | M | low–medium |
+| 5 | R5 Dashboard data layer and UX | PERF-02, PERF-03, PERF-04, PERF-05, ARCH-02, UX-01, UX-02, UX-05 | L | medium |
+| 6 | R6 Legacy retirement and structure | SEC-02, ARCH-01, ARCH-03, ARCH-04, ARCH-05, SEC-06, TOOL-01 | L | medium–high |
+
+R1 and R2 are independent and could swap. R1 goes first because its tests already exist (four `test_known_defect_*`), so it proves the agent workflow on the smallest diffs.
+
+---
+
+## R1: Correctness quick wins
+
+- **Problem:**
+  - **BUG-01:** `/lore add` keys are ignored.
+  - **BUG-02:** the cleanup loop dies on its first error.
+  - **BUG-04:** a node replace deletes its summary.
+  - **BUG-05:** migrate uses a different database path resolution from the bot.
+  - **SEC-01:** the form is parsed before auth.
+  - **REL-05:** close order can skip `store.close()`.
+- **Impact:**
+  - Keyword lore works as documented.
+  - Retention keeps running.
+  - Summaries survive.
+  - Unauthenticated uploads no longer hit the disk.
+- **Dependencies:** none. Tests for BUG-01/02/04 and SEC-01 already exist as `expectedFailure`.
+- **Risk:** low.
+  - BUG-01 changes behavior for future `/lore add` calls only. Rows already created with keys stay pinned unless a migration unpins them (open decision D7).
+  - BUG-05 must not move an existing deployment's database: the env var keeps precedence.
+- **Order inside the phase:** SEC-01, then BUG-02 + REL-05, then BUG-04, then BUG-01, then BUG-05.
+- **Verification:**
+  - The four decorators are removed, `verify.sh` is green, and expected failures equal 0.
+  - New tests for REL-05 (models.close raising) and BUG-05 (path resolution precedence).
+  - `--browser`, because `auth.py` changes.
+
+## R2: Dashboard authorization performance
+
+- **Problem:** PERF-01. Every socket event, `ctx.run`, handshake and HTTP route (including avatar images) calls Discord `/users/@me/guilds`, uncached and serialized per token. Per-keystroke lore search multiplies the cost. Failed checks silently drop events.
+  - Related: SEC-03 (redundant csrf/origin arguments on live calls) and SEC-04 (unbounded auth maps).
+- **Impact:** from `perf-baseline.md`:
+  - lore search goes from 21 checks / 23 s settled (rate limited) to an expected ≤1 check per TTL window;
+  - Save cast goes from 3 checks / 2.4 s to an expected 0–1 checks.
+  - This is the main reported pain.
+- **Dependencies:** none in code. Product decision D1 (the acceptable revocation delay) sets the TTL.
+- **Risk:** medium. This is the authorization boundary; `dashboard.py` monkey-patches every socket handler.
+  - **Mitigations:**
+    - characterize the current guard call counts first (`tests/test_web_auth_boundaries.py`);
+    - keep the cookie-binding checks per event (cheap, no Discord call);
+    - invalidate the cache on 401, sign-out and session expiry.
+- **Order:**
+  1. A per-session guild-list cache with a TTL inside `AuthService` (one change point).
+  2. Drop the duplicate check in `AdminService.run` for live calls.
+  3. Debounce lore search and stop the `ctx.run(lambda: True)` probe.
+  4. Make avatar GETs `private, max-age` (images only).
+  5. Notify the user when an event is rejected, instead of dropping it silently.
+  6. Prune `sessions`, `request_locks`, `retry_at` and `refresh_locks`.
+- **Verification:**
+  - Count-based tests are updated deliberately.
+  - `--browser`.
+  - `--bench`, twice, on the same host, with a new dated section in `perf-baseline.md`.
+  - A test that a revoked admin loses access within the TTL, and immediately on a 401.
+
+## R3: Bot turn reliability
+
+- **Problem:**
+  - **REL-02:** the channel lock is held across all model calls, and no client timeouts are set.
+  - **REL-03:** a new V8 isolate per regex match.
+  - **REL-04:** unbounded caches, webhooks listed every turn, and the avatar-asset check never expires.
+  - **BUG-03:** the summary stops after 30 nodes.
+  - **REL-01:** synchronous sqlite on the loop. This phase only measures it.
+- **Impact:**
+  - A hung provider no longer freezes a channel for up to about 30 minutes.
+  - Turns are faster: one webhook lookup, cheaper regex.
+  - Long branches keep a summary.
+- **Dependencies:** D4 (extraction and summary cost per turn) and D6 (whether the 30-node cap is intended) decide BUG-03 and whether extraction moves off the critical path.
+- **Risk:** medium. Moving extraction and summary after the lock release changes ordering guarantees between consecutive turns in a channel. A characterization test must pin that the next turn sees the previous summary, or the change must state that it no longer does.
+- **Order:**
+  1. Explicit provider timeouts and `max_retries`, from config.
+  2. Webhook object cache, with invalidation on 404.
+  3. Reuse the MiniRacer isolate and cache patterns.
+  4. BUG-03 per decision D6.
+  5. Lock scope and background memory tasks.
+  6. Add timing logs around sqlite calls, to decide whether REL-01 needs an executor.
+- **Verification:**
+  - New tests with fake models that hang or raise.
+  - A regex evaluation count test.
+  - `verify.sh`.
+  - A manual private-Discord checklist run (`docs/verification.md` items 3, 6 and 9).
+
+## R4: Discord command surface and messages
+
+- **Problem:**
+  - **SEC-05:** commands are not guild-only and have no `default_permissions`; provider errors are posted publicly.
+  - **UX-06:** admin commands are visible to everyone; option names are inconsistent.
+  - **UX-07:** raw errors reach users.
+  - **UX-04:** inconsistent name matching.
+  - **UX-03:** rebind silently resets the cast.
+  - **UX-08:** public footer and "no character" message.
+  - **UX-09:** `/scene delete` scope.
+- **Impact:** fewer confusing or leaky messages, and admin commands hidden from members.
+- **Dependencies:** decisions D2 (cost footer), D3 (public vs admin-only error detail) and D5 (`/scene delete` scope). Renaming command options changes the synced command signatures, so users see renamed options after the next sync.
+- **Risk:** low–medium.
+  - `default_permissions` is only a default, and server admins can override it in Discord. Keep the runtime `has_permissions` checks.
+  - The new guild-only rule must not break the existing threads behavior.
+- **Order:**
+  1. Error mapping (UX-07, SEC-05 errors).
+  2. Guild-only + `default_permissions`.
+  3. Shared name resolver with autocomplete (UX-04).
+  4. Rebind preserves or prunes the cast (UX-03).
+  5. Footer, no-character message and scene delete, per decisions.
+- **Verification:**
+  - Update the characterization tests in `tests/test_slash_commands.py`, which already pin UX-03, UX-04 and UX-07.
+  - A DM invocation test.
+  - `verify.sh`.
+
+## R5: Dashboard data layer and UX
+
+- **Problem:**
+  - **PERF-02:** lore N+1 and Python-side search.
+  - **PERF-03:** blob over-fetch.
+  - **PERF-04:** no gzip, buffered CSP rewrite.
+  - **PERF-05:** repeated lookups.
+  - **ARCH-02:** raw SQL and private helpers in the UI.
+  - **UX-01:** no success feedback, wrong tab after reload, raw IDs.
+  - **UX-02:** terminology.
+  - **UX-05:** split flows.
+- **Impact:**
+  - Large lorebooks stay responsive.
+  - Dashboard writes go through revision-checked store methods (admin-writes invariant).
+  - Admins get clear feedback.
+- **Dependencies:** R2 first, so that perf measurements are not dominated by auth latency. A glossary (D8) before UX-02 string changes.
+- **Risk:** medium. The browser suite is the only dashboard coverage (TOOL-01), so add focused tests before refactoring `presets_panel` and `render_lore_workspace`.
+- **Order:**
+  1. Move ARCH-02 writes into the store.
+  2. SQL pagination and search (PERF-02).
+  3. Slot metadata queries (PERF-03).
+  4. A per-render snapshot (PERF-05).
+  5. UX-01 feedback and tab map.
+  6. Lazy tab rendering or targeted refresh instead of `navigate.reload`.
+  7. PERF-04.
+  8. UX-02 and UX-05.
+- **Verification:**
+  - `--browser`.
+  - `--bench` with a new dated section; lore search settled time is the target metric.
+  - Store-level tests for the new queries, guild-scoped.
+
+## R6: Legacy retirement and structure
+
+- **Problem:**
+  - **SEC-02:** legacy Jinja POST routes are live, and the legacy character edit skips the revision check.
+  - **ARCH-01:** oversized functions.
+  - **ARCH-03:** duplication.
+  - **ARCH-04:** dead code and `hasattr` fallbacks.
+  - **ARCH-05:** delete and expiry leave derived memory.
+  - **SEC-06:** an unscoped thread-cast write.
+  - **TOOL-01:** test-helper duplication.
+- **Impact:** a smaller attack surface, one write path per operation, and code that agents can change in smaller pieces.
+- **Dependencies:** D9 (retire the legacy routes?) and the ARCH-05 per-artifact retention decision. R4 and R5 should land first, so that splitting `register_commands`, `create_app` and `mount_dashboard` happens after their behavior settles.
+- **Risk:** medium–high, because of removal.
+  - Follow the CLAUDE.md rule: grep callers, including `tests/dashboard_server.py` and docs; add a characterization test; then delete.
+  - The browser fixture may depend on legacy routes.
+- **Order:**
+  1. SEC-06 scoping.
+  2. Legacy route removal, or a revision check on legacy edit if they are kept.
+  3. ARCH-04 dead code, with its tests.
+  4. ARCH-03 constants and helpers.
+  5. ARCH-01 splits along the seams R4/R5 created.
+  6. ARCH-05 per decision.
+  7. Migrate older tests to `tests/helpers.py` where touched.
+- **Verification:**
+  - `verify.sh --browser`.
+  - A grep proof that no caller remains.
+  - Docs updated: `docs/admin-console.md` and `docs/architecture.md`.
+
+---
+
+## Open product decisions
+
+| ID | Decision | Blocks | Options and notes |
+| --- | --- | --- | --- |
+| D1 | How long may a removed Discord admin keep dashboard access? | R2 | The guild-list cache TTL: e.g. 30 s, 60 s or 5 min. A 401 always invalidates immediately. |
+| D2 | Keep the public usage/cost footer on every reply? | R4 | Keep / admin-only via `/context` / config toggle per guild (UX-08) |
+| D3 | Public vs admin-only error details | R4 | Public generic + ephemeral or log detail / keep public detail (SEC-05, UX-07) |
+| D4 | Run extraction and summary on every turn? | R3 | Every turn (current cost) / every N turns / only when the summary gap is large / config |
+| D5 | `/scene delete` scope | R4 | Whole root tree (current) / the invoker's branch only / subtree from a message; also delete the Discord messages? (UX-09) |
+| D6 | Is the BUG-03 30-node cap intended? | R3 | If it is a cost guard: summarize the last window instead of skipping. If not: remove. |
+| D7 | Unpin existing `/lore add` rows that have keys? | R1 | Migration to unpin / leave existing rows and fix only new ones (BUG-01) |
+| D8 | Canonical terms (guild vs server, space/world/hub, "Link" vs "allow", local vs channel) | R5 (UX-02) | Pick one user-facing vocabulary; code names can stay |
+| D9 | Retire the legacy Jinja routes? | R6 | Retire / keep read-only / keep with revision checks (SEC-02) |
+| D10 | Should scene deletion and history expiry also remove personal facts, encounters and promoted lore derived from the deleted nodes? | R6 (ARCH-05) | Per artifact; consent rules already apply to personal facts |

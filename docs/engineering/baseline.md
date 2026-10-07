@@ -1,0 +1,64 @@
+# Verification baseline
+
+Recorded 2026-10-07 on the Raspberry Pi 5 development host (Python 3.13.5 in `.venv`, Linux 6.18.33+rpt-rpi-2712 aarch64).
+
+## Commands
+
+| Command | Stages |
+| --- | --- |
+| `scripts/verify.sh` | ruff (bug-class rules, `ruff.toml`), then repository hygiene (`scripts/check_repository.py`), then `compileall` of `llmcord_core scripts tests` and the entry points, then the offline `unittest discover -s tests` |
+| `scripts/verify.sh --browser` | The above, plus the Playwright dashboard suite (`LLMCORD_BROWSER_TESTS=1`, `test_dashboard_browser.py`) |
+| `scripts/verify.sh --bench` | The above, plus `scripts/bench_dashboard.py` (see `perf-baseline.md`) |
+
+The script uses `.venv/bin/python` when present, prints a PASS/FAIL line per stage, and exits non-zero if any stage fails.
+
+## Before bootstrap
+
+These facts were recorded while the harness was being built, before `verify.sh` existed:
+
+| Check | Result | Classification |
+| --- | --- | --- |
+| Offline unit tests | 111 tests OK (skipped=1) | Pass. The skip is the opt-in browser test. |
+| Browser suite, first attempt | Failed: Chromium not installed | **Environment.** Fixed with `.venv/bin/python -m playwright install chromium`; not a code issue. |
+| Browser suite, after installing Chromium | Pass (about 105 s) | Pass |
+| `scripts/check_repository.py` | Pass | Pass |
+| `compileall` | Pass | Pass |
+| `ruff check .` (first run) | 12 findings, all F401 (unused import) or F841 (unused variable) | **Pre-existing lint.** Fixed during bootstrap (e.g. `avatars.py` `re`, `dashboard.py` `normalize_entry`). No behavior change. |
+
+## After bootstrap (step 1 baseline, commit `1270c09`)
+
+| Command | Result | Time |
+| --- | --- | --- |
+| `scripts/verify.sh` | Exit 0. ruff "All checks passed!", hygiene PASS, compile PASS. `Ran 147 tests ... OK (skipped=1, expected failures=4)` | about 8 s (unit tests 6.8 s) |
+| `scripts/verify.sh --browser` | Exit 0. Unit tests as above, then `Ran 1 test in 88.563s OK` | 96 s total |
+
+The 36 new tests are the characterization and known-defect tests in:
+- `test_slash_commands.py`
+- `test_store_lifecycle.py`
+- `test_web_auth_boundaries.py`
+
+### Classification
+
+- **Expected failures (4) = documented known defects, not regressions.**
+  - They are BUG-01 (`test_slash_commands.py`), BUG-02 and BUG-04 (`test_store_lifecycle.py`), and SEC-01 (`test_web_auth_boundaries.py`).
+  - The count must equal `grep -rc "def test_known_defect_" tests` summed. "Unexpected success" means a defect was fixed without removing its decorator.
+- **Skipped (1):** the browser test, outside `--browser`.
+- **Known noise (not failures):**
+  - **From the environment:**
+    - discord.py `count` DeprecationWarning;
+    - Starlette/httpx deprecation warning;
+    - "PyNaCl is not installed".
+  - **From tests that deliberately exercise failure paths:**
+    - Discord rate-limit WARNINGs;
+    - `ERROR:root:Scene failed during webhook delivery`;
+    - an asyncio slow-callback warning, about 0.1 s.
+- **`ResourceWarning: unclosed SpooledTemporaryFile`:** the observable symptom of SEC-01 (multipart parsed before auth), produced by its known-defect test. It disappears when SEC-01 is fixed.
+- **No failures needed classifying** as regression, flaky, environment or pre-existing in the step 1 runs.
+
+## CI
+
+`.github/workflows/ci.yml` runs:
+- the offline suite on Python 3.12 and 3.13;
+- the browser suite on 3.13.
+
+It does not run ruff yet; bootstrap step 3 adds that.

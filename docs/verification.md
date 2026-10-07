@@ -2,9 +2,27 @@
 
 GitHub runs the offline and browser suites plus security and native ARM64/AMD64 container checks automatically. See [GitHub CI and container releases](github-ci.md) for setup and failure artifacts.
 
+## One command
+
+From the repository root, in a Python 3.12 or 3.13 virtual environment with `requirements-dev.txt` installed:
+
+```bash
+scripts/verify.sh            # ruff, repository hygiene, compileall, offline unit tests
+scripts/verify.sh --browser  # also the Playwright dashboard suite
+scripts/verify.sh --bench    # also the dashboard benchmark (mock Discord)
+```
+
+"Expected failures" in the unit output are documented known defects (`test_known_defect_*`, IDs from the audit), not regressions.
+
+| Document | Contents |
+| --- | --- |
+| [Verification baseline](engineering/baseline.md) | Commands, recorded results, and how to classify warnings and expected failures |
+| [Dashboard performance baseline](engineering/perf-baseline.md) | Benchmark method, host conditions, and recorded timings and Discord call counts |
+| [Audit](engineering/audit.md) | Finding IDs referenced by test docstrings |
+
 ## Offline suite
 
-From the repository root in a Python 3.12 environment with dependencies installed:
+To run only the unit tests:
 
 ```bash
 python -m unittest discover -s tests -v
