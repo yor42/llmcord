@@ -24,12 +24,12 @@ The database is created at `data/llmcord.sqlite3` by default. Run `python -m uni
 
 For three channels, `#world-a`, `#world-b`, and `#hub`:
 
-1. `/space create world A`, `/space create world B`, `/space create hub Hub`.
-2. Bind each text channel using `/space bind`.
-3. `/space allow_world Hub A` and `/space allow_world Hub B`.
-4. Import cards with `/character import` and the home world name. JSON and PNG V2/V3 cards work; PNGs supply the avatar. The `examples/cards` directory has two small example cards.
-5. Set a channel's default cast with `/cast default` and comma-separated character names. Members can use `/cast set`, `/cast add`, and `/cast remove` to change the active cast in a channel or thread. A hub's `/summon` can invite any eligible guest for one turn without changing that cast.
-6. Mention the bot or reply to one of its character lines to begin. `/ambient on` is an optional admin setting per channel. Ambient participation waits for at least two human messages and a 120-second cooldown, and the director can stay silent. Test explicit turns first.
+1. `/admin space create world A`, `/admin space create world B`, `/admin space create hub Hub`.
+2. Bind each text channel using `/admin space bind`.
+3. `/admin space allow_world Hub A` and `/admin space allow_world Hub B`.
+4. Import cards with `/admin character import` and the home world name. JSON and PNG V2/V3 cards work; PNGs supply the avatar. The `examples/cards` directory has two small example cards.
+5. Set a channel's default cast with `/admin cast default` and comma-separated character names. Members can use `/cast set`, `/cast add`, and `/cast remove` to change the active cast in a channel or thread. A hub's `/summon` can invite any eligible guest for one turn without changing that cast.
+6. Mention the bot or reply to one of its character lines to begin. `/admin ambient on` is an optional admin setting per channel. Ambient participation waits for at least two human messages and a 120-second cooldown, and the director can stay silent. Test explicit turns first.
 
 World channels only admit their home world's characters. Hub channels admit characters from linked worlds, but only active cast members join ambiently. Threads inherit their parent channel's space, lore, and ambient setting; they keep separate casts and message histories.
 
@@ -37,9 +37,9 @@ World channels only admit their home world's characters. Hub channels admit char
 
 Character prompts include the card, relevant character and home-world lore, the current hub and channel lore, and branch history. A hub guest does not receive another guest's world lore. Character encounters are scoped to a space. A person's memories can follow the same character between its home world and a hub only after `/memory opt_in`. `/memory list`, `/memory forget`, and `/memory opt_out` give that person control; opting out erases their personal facts.
 
-The bot extracts short scene facts after replies. A repeated fact in two separate scenes becomes durable lore **in that channel or thread only**. Admins can use `/lore add`, `/lore edit`, `/lore pin`, `/lore delete`, and `/lore promote` to control shared facts and explicitly copy them into a channel, world, or hub. `/context` shows which lore and memories informed a saved character line.
+The bot extracts short scene facts after replies. A repeated fact in two separate scenes becomes durable lore **in that channel or thread only**. Admins can use `/admin lore add`, `/admin lore edit`, `/admin lore pin`, `/admin lore delete`, and `/admin lore promote` to control shared facts and explicitly copy them into a channel, world, or hub. `/context` shows which lore and memories informed a saved character line.
 
-Replies to an older character line branch from that line's saved parent chain. A new mention can also use up to 12 recent human messages from the last 10 minutes as group context. `/scene reset` starts the next invitation without the channel's recent context. Admins can use `/scene delete` to remove a stored scene and its branches. Conversation text and response traces expire after 90 days by default; change `history_retention_days` in `config.yaml`. Durable lore and opted-in personal facts stay until removed with their controls. Application logs do not include raw chat transcripts.
+Replies to an older character line branch from that line's saved parent chain. A new mention can also use up to 12 recent human messages from the last 10 minutes as group context. `/scene reset` starts the next invitation without the channel's recent context. Admins can use `/admin scene delete` to remove a stored scene and its branches. Conversation text and response traces expire after 90 days by default; change `history_retention_days` in `config.yaml`. Durable lore and opted-in personal facts stay until removed with their controls. Application logs do not include raw chat transcripts.
 
 ## Model providers
 

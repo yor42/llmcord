@@ -12,7 +12,7 @@ Each response starts with the character card and the history of the selected con
 
 Another guest's world lore is not included merely because both guests are in the hub. Character encounters are keyed to character and space. Opted-in personal facts are keyed to person and character, so a bond with that character can follow it between its home world and a linked hub. Ordinary hub events stay in hub-scoped encounter or local scene memory.
 
-Admins can use `/lore promote` or the dashboard's **Promote** control to copy a shared fact into another channel, world, or hub. Automatic fact promotion stays local to the channel or thread where it was observed. The bot requires evidence from two distinct scene roots before turning a repeated shared fact into durable local lore. Each durable fact keeps source message IDs when available.
+Admins can use `/admin lore promote` or the dashboard's **Promote** control to copy a shared fact into another channel, world, or hub. Automatic fact promotion stays local to the channel or thread where it was observed. The bot requires evidence from two distinct scene roots before turning a repeated shared fact into durable local lore. Each durable fact keeps source message IDs when available.
 
 ## Importing SillyTavern lorebooks
 

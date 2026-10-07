@@ -131,14 +131,23 @@ class FakeInteraction:
 
 
 def command(bot, path: str):
-    """Look up an app command by its space-separated path, e.g. ``command(bot, "lore add")``."""
+    """Look up an app command by its space-separated path, e.g. ``command(bot, "admin lore add")``.
+    Raises ``LookupError(path)`` when any segment is not registered."""
     parent, *rest = path.split()
     found = bot.tree.get_command(parent)
     for name in rest:
+        if found is None or not hasattr(found, "get_command"):
+            raise LookupError(path)
         found = found.get_command(name)
     if found is None:
         raise LookupError(path)
     return found
+
+
+def leaf_commands(bot) -> dict:
+    """Every invocable slash command in the live tree, keyed by qualified path (``"admin lore add"``, ``"summon"``)."""
+    from discord import app_commands
+    return {cmd.qualified_name: cmd for cmd in bot.tree.walk_commands() if isinstance(cmd, app_commands.Command)}
 
 
 async def invoke(bot, path: str, interaction: FakeInteraction, *args, **kwargs):

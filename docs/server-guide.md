@@ -35,26 +35,26 @@ Text attachments are read up to the configured size and added to the turn. Image
 
 ## Discord commands
 
-Commands marked **Admin** require Discord server administrator permission. Other commands are available to members in their bound channel or thread, unless noted.
+Commands marked **Admin** live under `/admin` and require Discord server administrator permission. Discord hides `/admin` from members without that permission by default (a server can change this under Integrations); the bot still checks the permission on every use. Other commands are available to members in their bound channel or thread, unless noted. All commands work in servers only, not in direct messages. If you upgraded from a version where admin commands were top-level (for example `/lore add`), re-check any per-command overrides under Server Settings → Integrations: they do not carry over to the new `/admin …` commands.
 
 | Command | Who | Effect |
 | --- | --- | --- |
-| `/space create` | Admin | Create a named world or hub. |
+| `/admin space create` | Admin | Create a named world or hub. |
 | `/space list` | Member | List spaces. |
-| `/space bind` | Admin | Bind a text channel to a space; rebinding resets its casts and ambient setting. |
-| `/space allow_world`, `/space disallow_world` | Admin | Add or remove a world from a hub's guest list. |
-| `/character import` | Admin | Import a V2/V3 JSON or PNG card into a home world. |
+| `/admin space bind` | Admin | Bind a text channel to a space; rebinding resets its casts and ambient setting. |
+| `/admin space allow_world`, `/admin space disallow_world` | Admin | Add or remove a world from a hub's guest list. |
+| `/admin character import` | Admin | Import a V2/V3 JSON or PNG card into a home world. |
 | `/character list`, `/character info` | Member | List eligible characters or inspect one character's home world. |
 | `/cast set`, `/cast add`, `/cast remove`, `/cast show` | Member | Manage or view the active cast for the channel or thread. |
-| `/cast default` | Admin | Set a channel's default and current cast. |
+| `/admin cast default` | Admin | Set a channel's default and current cast. |
 | `/summon` | Member | Invite one eligible character with a prompt, without changing the cast. |
-| `/ambient on`, `/ambient off` | Admin | Toggle ambient participation in the current bound channel. |
+| `/admin ambient on`, `/admin ambient off` | Admin | Toggle ambient participation in the current bound channel. |
 | `/ambient status` | Member | Show the ambient setting. |
-| `/lore add`, `/lore edit`, `/lore pin`, `/lore promote`, `/lore delete` | Admin | Manage shared lore and explicit scope promotion. |
+| `/admin lore add`, `/admin lore edit`, `/admin lore pin`, `/admin lore promote`, `/admin lore delete` | Admin | Manage shared lore and explicit scope promotion. |
 | `/lore list` | Member | Show lore in the current space and local channel or thread. |
 | `/memory opt_in`, `/memory opt_out`, `/memory list`, `/memory forget` | Member | Control that member's own personal memories. |
 | `/scene reset` | Member | Start fresh context on the next invitation. |
-| `/scene delete` | Admin | Delete a stored scene and its branches by root message ID. |
+| `/admin scene delete` | Admin | Delete a stored scene and its branches by root message ID. |
 | `/context` | Member | Inspect the last saved character line, or supply a message ID. |
 
 Discord presents the parameters for each slash command. Most command responses are ephemeral, including context and memory listings. Character skit lines appear in the channel.

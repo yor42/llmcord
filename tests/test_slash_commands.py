@@ -2,7 +2,7 @@
 
 Tests named ``test_known_defect_*`` are ``expectedFailure``: they assert the intended behavior
 for an objectively incorrect current behavior and will report "unexpected success" once fixed.
-Command error mapping and definite /memory forget and /lore delete replies (UX-07, SEC-05 per D3) are pinned in
+Command error mapping and definite /memory forget and /admin lore delete replies (UX-07, SEC-05 per D3) are pinned in
 tests/test_error_mapping.py.
 """
 import unittest
@@ -27,23 +27,23 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_admin_commands_reject_non_admins_with_clear_message(self):
         interaction = FakeInteraction(admin=False)
-        await invoke(self.bot, "space create", interaction, "world", "Elsewhere")
+        await invoke(self.bot, "admin space create", interaction, "world", "Elsewhere")
         self.assertEqual(interaction.replies, ["Only server administrators can use that command."])
         self.assertIsNone(self.store.space(1, "Elsewhere"))
 
     async def test_space_create_and_list(self):
         interaction = FakeInteraction(admin=True)
-        await invoke(self.bot, "space create", interaction, "hub", "Plaza")
+        await invoke(self.bot, "admin space create", interaction, "hub", "Plaza")
         listing = FakeInteraction()
         await invoke(self.bot, "space list", listing)
         self.assertIn("hub: Plaza", listing.replies[0])
 
     async def test_rebinding_channel_resets_cast_and_ambient(self):
-        """Characterization (UX-03): /space bind silently clears casts and ambient."""
+        """Characterization (UX-03): /admin space bind silently clears casts and ambient."""
         self.store.set_cast(100, None, [self.alice], default=True)
         self.store.set_ambient(100, True)
         channel = type("Chan", (), {"id": 100, "mention": "<#100>"})()
-        await invoke(self.bot, "space bind", FakeInteraction(admin=True), channel, "Harbor")
+        await invoke(self.bot, "admin space bind", FakeInteraction(admin=True), channel, "Harbor")
         row = self.store.channel(100)
         self.assertEqual((row["default_cast"], row["active_cast"], row["ambient"]), ("[]", "[]", 0))
 
@@ -96,21 +96,21 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store.personal(1, user), [])
 
     async def test_lore_add_without_keys_is_constant(self):
-        await invoke(self.bot, "lore add", FakeInteraction(admin=True), "The tide is high")
+        await invoke(self.bot, "admin lore add", FakeInteraction(admin=True), "The tide is high")
         row = self.store.list_lore(1, "channel", 100)[0]
         self.assertTrue(row["constant"])
         self.assertTrue(row["pinned"])
 
     async def test_lore_add_with_blank_keys_is_constant(self):
         """BUG-01 (fixed): keys that are only commas/whitespace parse to no keys, so the entry is constant and pinned."""
-        await invoke(self.bot, "lore add", FakeInteraction(admin=True), "The tide is high", " , ")
+        await invoke(self.bot, "admin lore add", FakeInteraction(admin=True), "The tide is high", " , ")
         row = self.store.list_lore(1, "channel", 100)[0]
         self.assertTrue(row["constant"])
         self.assertTrue(row["pinned"])
 
     async def test_lore_add_with_keys_is_keyword_triggered(self):
-        """BUG-01 (fixed): /lore add with keys creates an unpinned, non-constant entry gated by its keys."""
-        await invoke(self.bot, "lore add", FakeInteraction(admin=True), "The lighthouse is haunted", "lighthouse")
+        """BUG-01 (fixed): /admin lore add with keys creates an unpinned, non-constant entry gated by its keys."""
+        await invoke(self.bot, "admin lore add", FakeInteraction(admin=True), "The lighthouse is haunted", "lighthouse")
         active = evaluate(self.store, 1, [("channel", 100)], "nothing relevant here", 1000)
         self.assertNotIn("The lighthouse is haunted", [item.content for item in active])
         active = evaluate(self.store, 1, [("channel", 100)], "we walk to the lighthouse", 1000)
@@ -124,7 +124,7 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_scene_delete_requires_numeric_id(self):
         interaction = FakeInteraction(admin=True)
-        await invoke(self.bot, "scene delete", interaction, "abc")
+        await invoke(self.bot, "admin scene delete", interaction, "abc")
         self.assertEqual(interaction.replies, ["Give a numeric root message ID"])
 
     async def test_context_without_trace(self):

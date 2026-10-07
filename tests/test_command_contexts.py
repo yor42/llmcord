@@ -1,11 +1,9 @@
 """Where slash commands may run (SEC-05, R4 step 2a): guild-only synced payload plus a DM runtime safety net.
-
-Tests named ``test_known_defect_*`` are ``expectedFailure``: they assert the intended behavior for an
-objectively incorrect current behavior and will report "unexpected success" once fixed.
+The ``/admin`` group surface (R4 step 2b, D11) is pinned in tests/test_admin_commands.py.
 """
 import unittest
 
-from helpers import FakeInteraction, FakeThread, invoke, make_settings, reference_ids
+from helpers import FakeInteraction, FakeThread, command, invoke, make_settings, reference_ids
 
 from llmcord_core.discord_bot import SkitBot
 
@@ -94,8 +92,8 @@ class DirectMessageInvocationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.null_guild_rows(), {})
 
     async def test_dm_memory_opt_in_says_use_a_server(self):
-        """SEC-05: /memory opt_in from a DM never reaches the store with guild_id None and tells the person to use
-        it in a server (today: set_consent(None, ...) hits NOT NULL and the generic ref message is sent)."""
+        """SEC-05 (fixed): /memory opt_in from a DM never reaches the store with guild_id None and tells the person
+        to use it in a server (before SEC-05: set_consent(None, ...) hit NOT NULL and the generic ref message was sent)."""
         interaction = dm_interaction()
         await invoke(self.bot, "memory opt_in", interaction)
         self.assert_server_only_reply(interaction)
@@ -110,15 +108,15 @@ class DirectMessageInvocationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.store.personal(1, 9)), 1)
 
     async def test_dm_memory_list_says_use_a_server(self):
-        """SEC-05: /memory list from a DM says to use a server instead of querying guild None (today it replies
-        "No personal memories saved.", which is misleading for someone with memories in a server)."""
+        """SEC-05 (fixed): /memory list from a DM says to use a server instead of querying guild None (before SEC-05
+        it replied "No personal memories saved.", which is misleading for someone with memories in a server)."""
         interaction = dm_interaction()
         await invoke(self.bot, "memory list", interaction)
         self.assert_server_only_reply(interaction)
 
     async def test_dm_memory_forget_says_use_a_server(self):
-        """SEC-05: /memory forget from a DM says to use a server and deletes nothing (today it queries guild None and
-        replies "No memory #N of yours was found.")."""
+        """SEC-05 (fixed): /memory forget from a DM says to use a server and deletes nothing (before SEC-05 it queried
+        guild None and replied "No memory #N of yours was found.")."""
         interaction = dm_interaction()
         await invoke(self.bot, "memory forget", interaction, self.memory_id)
         self.assert_server_only_reply(interaction)
@@ -167,15 +165,16 @@ class GuildChannelAndThreadTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_admin_lore_add_in_thread_scopes_to_the_thread(self):
         interaction = FakeInteraction(admin=True, channel=FakeThread(101, parent_id=100))
-        await invoke(self.bot, "lore add", interaction, "The thread is foggy")
+        await invoke(self.bot, "admin lore add", interaction, "The thread is foggy")
         self.assertEqual([row["content"] for row in self.store.list_lore(1, "thread", 101)], ["The thread is foggy"])
 
     async def test_admin_permission_check_still_runs_in_guild(self):
-        """The runtime ``has_permissions(administrator=True)`` check stays alongside any guild-only flag."""
-        cmd = self.bot.tree.get_command("lore").get_command("add")
+        """The runtime ``has_permissions(administrator=True)`` check stays alongside the guild-only flag and the
+        ``/admin`` group's ``default_member_permissions`` (D11)."""
+        cmd = command(self.bot, "admin lore add")
         self.assertTrue(cmd.checks)
         interaction = FakeInteraction(admin=False, channel=FakeThread(101, parent_id=100))
-        await invoke(self.bot, "lore add", interaction, "Nope")
+        await invoke(self.bot, "admin lore add", interaction, "Nope")
         self.assertEqual(interaction.replies, ["Only server administrators can use that command."])
         self.assertEqual(self.store.list_lore(1, "thread", 101), [])
 

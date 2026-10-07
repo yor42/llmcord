@@ -354,10 +354,10 @@ class CommandErrorTests(unittest.IsolatedAsyncioTestCase):
         self.store.close()
 
     async def test_duplicate_space_says_already_exists(self):
-        """UX-07: a UNIQUE conflict (duplicate /space create) becomes a plain ephemeral "already exists" message with no
+        """UX-07: a UNIQUE conflict (duplicate /admin space create) becomes a plain ephemeral "already exists" message with no
         sqlite text, table or column names (today the raw 'UNIQUE constraint failed: spaces.guild_id, ...' is sent)."""
         interaction = FakeInteraction(admin=True)
-        await invoke(self.bot, "space create", interaction, "world", "Harbor")
+        await invoke(self.bot, "admin space create", interaction, "world", "Harbor")
         self.assertEqual(len(interaction.replies), 1, interaction.replies)
         reply = interaction.replies[0]
         self.assertIn("already exists", reply.lower())
@@ -376,7 +376,7 @@ class CommandErrorTests(unittest.IsolatedAsyncioTestCase):
     async def test_missing_permissions_message_unchanged(self):
         """Characterization (UX-07): MissingPermissions keeps its clear ephemeral message."""
         interaction = FakeInteraction(admin=False)
-        await invoke(self.bot, "space create", interaction, "world", "Elsewhere")
+        await invoke(self.bot, "admin space create", interaction, "world", "Elsewhere")
         self.assertEqual(interaction.replies, ["Only server administrators can use that command."])
         self.assertIs(interaction.response.sent[0][1].get("ephemeral"), True)
 
@@ -476,7 +476,7 @@ class DefiniteOutcomeTests(unittest.IsolatedAsyncioTestCase):
 
     async def delete_lore(self, lore_id, guild_id=1, channel_id=100):
         interaction = FakeInteraction(guild_id=guild_id, channel_id=channel_id, admin=True)
-        await invoke(self.bot, "lore delete", interaction, lore_id)
+        await invoke(self.bot, "admin lore delete", interaction, lore_id)
         self.assertEqual(len(interaction.replies), 1, interaction.replies)
         self.assertIs(interaction.response.sent[0][1].get("ephemeral"), True)
         return interaction.replies[0]
@@ -524,14 +524,13 @@ class DefiniteOutcomeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(self.store.personal(2, 9)), 1)
 
     async def test_lore_delete_reports_deleted(self):
-        """UX-07: /lore delete on an entry it can delete says so (e.g. "Deleted lore #N.") and removes it (today:
-        "Lore entry deleted if present.")."""
+        """UX-07: /admin lore delete on an entry it can delete says so (e.g. "Deleted lore #N.") and removes it."""
         ident = self.store.add_lore(1, "channel", 100, "The tide is high")
         self.assert_removed_reply(await self.delete_lore(ident), ident)
         self.assertIsNone(self.store.lore_row(1, ident))
 
     async def test_lore_delete_reports_not_found(self):
-        """UX-07: /lore delete says nothing was found for an unknown id or another guild's lore id, and the other
+        """UX-07: /admin lore delete says nothing was found for an unknown id or another guild's lore id, and the other
         guild's entry stays."""
         foreign = self.store.add_lore(2, "channel", 200, "Snow falls upward")
         for ident, label in ((9999, "unknown id"), (foreign, "other guild's lore")):
@@ -540,13 +539,13 @@ class DefiniteOutcomeTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(self.store.lore_row(2, foreign))
 
     async def test_lore_delete_never_deletes_across_guilds(self):
-        """Regression (UX-07, guild isolation): /lore delete refuses another guild's lore id."""
+        """Regression (UX-07, guild isolation): /admin lore delete refuses another guild's lore id."""
         foreign = self.store.add_lore(2, "channel", 200, "Snow falls upward")
         await self.delete_lore(foreign)
         self.assertIsNotNone(self.store.lore_row(2, foreign))
 
     async def test_lore_delete_scope_is_the_guild(self):
-        """Characterization (UX-07): /lore delete is scoped by guild only (``Store.delete_lore(guild_id, id)``), not
+        """Characterization (UX-07): /admin lore delete is scoped by guild only (``Store.delete_lore(guild_id, id)``), not
         by the invoking channel or space: an admin can delete another channel's lore in the same guild by id. Step 1
         keeps this scope; only the reply wording changes."""
         other_channel = self.store.add_lore(1, "channel", 101, "The bell rings twice")
