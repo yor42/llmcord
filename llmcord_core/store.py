@@ -253,23 +253,53 @@ class Store(AdminStore):
             raise ValueError("Choose a hub and world in this server")
         self.execute("INSERT OR IGNORE INTO hub_worlds VALUES(?,?)", (hub_id, world_id))
 
-    def unlink_world(self, guild_id: int, hub_id: int, world_id: int) -> None:
+    def unlink_world(self, guild_id: int, hub_id: int, world_id: int) -> int:
+        """Unlink and prune now-ineligible characters from the hub's channel casts; returns the entries removed.
+        Thread casts are not pruned (no parent column)."""
         hub, world = self.space_by_id(hub_id), self.space_by_id(world_id)
         if not hub or not world or hub["guild_id"] != guild_id or world["guild_id"] != guild_id:
             raise ValueError("Choose a hub and world in this server")
-        self.execute("DELETE FROM hub_worlds WHERE hub_id=? AND world_id=?", (hub_id, world_id))
+        pruned = 0
+        with self.db:
+            self.db.execute("DELETE FROM hub_worlds WHERE hub_id=? AND world_id=?", (hub_id, world_id))
+            eligible = {row["id"] for row in self.eligible_characters(guild_id, hub_id)}
+            for binding in self.all("SELECT * FROM channels WHERE guild_id=? AND space_id=?", (guild_id, hub_id)):
+                pruned += len(self._prune_binding_casts(binding, eligible))
+        return pruned
+
+    def _prune_binding_casts(self, binding, eligible: set[int], space_id: int | None = None) -> list[int]:
+        """Keep only ``eligible`` ids (order kept) in both casts, optionally moving the binding; returns dropped ids
+        (one per id removed from one list). Caller holds the transaction."""
+        casts, dropped = {}, []
+        for field in ("default_cast", "active_cast"):
+            cast = json.loads(binding[field])
+            casts[field] = [ident for ident in cast if ident in eligible]
+            dropped.extend(ident for ident in cast if ident not in eligible)
+        if dropped or space_id is not None:
+            self.db.execute("UPDATE channels SET space_id=?,default_cast=?,active_cast=? WHERE channel_id=?",
+                (space_id or binding["space_id"], json.dumps(casts["default_cast"]), json.dumps(casts["active_cast"]),
+                 binding["channel_id"]))
+        return dropped
 
     def allowed_worlds(self, hub_id: int) -> set[int]:
         return {row["world_id"] for row in self.all("SELECT world_id FROM hub_worlds WHERE hub_id=?", (hub_id,))}
 
-    def bind_channel(self, guild_id: int, channel_id: int, space_id: int) -> None:
+    def bind_channel(self, guild_id: int, channel_id: int, space_id: int) -> list[int]:
+        """Bind, or rebind keeping ambient and pruning both casts to the new space; returns dropped character ids."""
         space = self.space_by_id(space_id)
         if not space or space["guild_id"] != guild_id:
             raise ValueError("Space does not belong to this server")
-        existing = self.channel(channel_id)
-        if existing and existing['guild_id'] != guild_id:
-            raise ValueError('Channel belongs to another server')
-        self.execute("INSERT INTO channels(channel_id,guild_id,space_id) VALUES(?,?,?) ON CONFLICT(channel_id) DO UPDATE SET space_id=excluded.space_id,default_cast='[]',active_cast='[]',ambient=0", (channel_id, guild_id, space_id))
+        with self.db:
+            existing = self.channel(channel_id)
+            if existing and existing['guild_id'] != guild_id:
+                raise ValueError('Channel belongs to another server')
+            if not existing:
+                self.db.execute("INSERT INTO channels(channel_id,guild_id,space_id) VALUES(?,?,?)", (channel_id, guild_id, space_id))
+                return []
+            if existing["space_id"] == space_id:
+                return []
+            eligible = {row["id"] for row in self.eligible_characters(guild_id, space_id)}
+            return list(dict.fromkeys(self._prune_binding_casts(existing, eligible, space_id)))
 
     def channel(self, channel_id: int) -> sqlite3.Row | None:
         return self.one("SELECT * FROM channels WHERE channel_id=?", (channel_id,))

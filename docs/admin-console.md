@@ -4,7 +4,7 @@ The console is a NiceGUI application mounted at `/admin/` on the existing privat
 
 ## Server setup and characters
 
-Use **Server setup** to create worlds and hubs, link worlds, bind channels, choose casts, and enable ambient participation. Rebinding resets a channel's cast and ambient setting.
+Use **Server setup** to create worlds and hubs, link worlds, bind channels, choose casts, and enable ambient participation. Rebinding a channel keeps its ambient setting and removes cast members who are not available in the new space; unlinking a world from a hub removes that world's characters from the hub's channel casts.
 
 Expand a world or hub to edit its **World guidelines** or **Hub guidelines**. Each bound channel has **Channel guidelines**. Use these for the setting, participants' shared fictional roles, tone, and conventions such as occasional fourth-wall jokes. Channel guidance takes precedence over the current world/hub guidance when they conflict. Threads inherit their parent channel's guidance. In hubs, the hub's guidelines describe the current scene; a guest's home-world guidelines are not added. Each field accepts up to 6,000 UTF-8 bytes.
 

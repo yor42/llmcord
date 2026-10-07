@@ -219,18 +219,18 @@ class CharacterResolutionTests(BotCase):
 
 
     async def test_cast_remove_drops_a_stale_member(self):
-        """UX-04: after ``/admin space disallow_world`` unlinks Harbor from hub Plaza, the hub channel's cast still holds
-        Harbor's Alice, and ``/cast remove alice`` must remove her (casefold resolution over eligible characters plus
-        the current cast). Currently the resolver only sees eligible characters, so the stale member cannot be removed.
-        Guild scoping still holds: guild 2's "Zara" is not resolved."""
+        """UX-04: when the hub channel's cast still holds Harbor's Alice after Harbor was unlinked from hub Plaza,
+        ``/cast remove alice`` removes her (casefold resolution over eligible characters plus the current cast).
+        Since UX-03 ``unlink_world`` prunes such members, so the stale state is written directly (the hub link is
+        deleted without the prune), as in a database from before UX-03. Guild scoping still holds: guild 2's "Zara"
+        is not resolved."""
         alice = self.add("Alice")
         plaza = self.store.create_space(1, "Plaza", "hub")
         self.store.link_world(1, plaza, self.harbor)
         self.store.bind_channel(1, 200, plaza)
         self.store.set_cast(200, None, [alice])
-        unlink = FakeInteraction(admin=True)
-        await invoke(self.bot, "admin space disallow_world", unlink, "Plaza", "Harbor")
-        self.assertEqual(self.store.allowed_worlds(plaza), set(), unlink.replies)
+        self.store.execute("DELETE FROM hub_worlds WHERE hub_id=? AND world_id=?", (plaza, self.harbor))
+        self.assertEqual(self.store.allowed_worlds(plaza), set())
         self.assertEqual(self.store.get_cast(200), [alice], "precondition: Alice is a stale cast member")
         elsewhere = self.store.create_space(2, "Faraway", "world")
         self.add("Zara", elsewhere, guild=2)

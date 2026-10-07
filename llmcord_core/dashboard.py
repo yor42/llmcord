@@ -284,7 +284,7 @@ async def setup_panel(ctx):
             store.bind_channel(gid, channel.value, space.value)
             return True
         ctx.button('Bind channel', bind, 'channel.bind', then=lambda _: ui.navigate.reload())
-    ui.label('Rebinding a channel resets its casts and ambient mode.').classes('text-amber-300')
+    ui.label('Rebinding a channel keeps its ambient mode and removes cast members not available in the new space.').classes('text-amber-300')
     for binding in store.all('SELECT * FROM channels WHERE guild_id=?', (gid,)):
         with ui.card().classes('w-full channel-card'):
             ui.label(channel_names.get(binding['channel_id'], str(binding['channel_id']))).classes('text-lg font-bold')

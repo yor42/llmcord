@@ -551,8 +551,19 @@ def register_commands(bot: SkitBot) -> None:
     async def space_bind(interaction: discord.Interaction, channel: discord.TextChannel, space: str):
         require_guild(interaction)
         chosen = guild_space(interaction, space)
-        bot.store.bind_channel(interaction.guild_id, channel.id, chosen["id"])
-        await interaction.response.send_message(f"Bound {channel.mention} to {chosen['kind']} {chosen['name']}.", ephemeral=True)
+        previous = bot.store.channel(channel.id)
+        dropped = bot.store.bind_channel(interaction.guild_id, channel.id, chosen["id"])
+        target = f"{chosen['kind']} {chosen['name']}"
+        if previous and previous["space_id"] == chosen["id"]:
+            message = f"{channel.mention} is already bound to {target}; its cast and ambient setting were kept."
+        elif dropped:
+            names = [row["name"] for ident in dropped if (row := bot.store.character_by_id(ident))]
+            message = f"Bound {channel.mention} to {target}. Removed from its cast (not available there): {', '.join(names)}."
+        elif previous:
+            message = f"Bound {channel.mention} to {target}. Its cast and ambient setting were kept."
+        else:
+            message = f"Bound {channel.mention} to {target}."
+        await interaction.response.send_message(message[:1900], ephemeral=True)
 
     @admin_space.command(name="allow_world", description="Allow a world's characters in a hub")
     @app_commands.checks.has_permissions(administrator=True)
@@ -569,8 +580,10 @@ def register_commands(bot: SkitBot) -> None:
     async def space_disallow(interaction: discord.Interaction, hub: str, world: str):
         require_guild(interaction)
         hub_row, world_row = guild_space(interaction, hub, "hub"), guild_space(interaction, world, "world")
-        bot.store.unlink_world(interaction.guild_id, hub_row["id"], world_row["id"])
-        await interaction.response.send_message(f"{world_row['name']} is no longer linked to {hub_row['name']}.", ephemeral=True)
+        pruned = bot.store.unlink_world(interaction.guild_id, hub_row["id"], world_row["id"])
+        entries = "cast entry" if pruned == 1 else "cast entries"
+        await interaction.response.send_message(
+            f"{world_row['name']} is no longer linked to {hub_row['name']}; removed {pruned} {entries}.", ephemeral=True)
 
     bot.tree.add_command(space)
 

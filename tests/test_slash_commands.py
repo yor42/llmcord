@@ -38,14 +38,15 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
         await invoke(self.bot, "space list", listing)
         self.assertIn("hub: Plaza", listing.replies[0])
 
-    async def test_rebinding_channel_resets_cast_and_ambient(self):
-        """Characterization (UX-03): /admin space bind silently clears casts and ambient."""
+    async def test_rebinding_channel_keeps_cast_and_ambient(self):
+        """UX-03: /admin space bind to the channel's current space keeps its casts and ambient (currently it silently
+        clears them). The keep/prune contract for other spaces and hub unlinks is pinned in tests/test_rebind_cast.py."""
         self.store.set_cast(100, None, [self.alice], default=True)
         self.store.set_ambient(100, True)
         channel = type("Chan", (), {"id": 100, "mention": "<#100>"})()
         await invoke(self.bot, "admin space bind", FakeInteraction(admin=True), channel, "Harbor")
         row = self.store.channel(100)
-        self.assertEqual((row["default_cast"], row["active_cast"], row["ambient"]), ("[]", "[]", 0))
+        self.assertEqual((row["default_cast"], row["active_cast"], row["ambient"]), (f"[{self.alice}]", f"[{self.alice}]", 1))
 
     async def test_unbound_channel_message(self):
         interaction = FakeInteraction(channel_id=999)

@@ -41,8 +41,8 @@ Commands marked **Admin** live under `/admin` and require Discord server adminis
 | --- | --- | --- |
 | `/admin space create` | Admin | Create a named world or hub. |
 | `/space list` | Member | List spaces. |
-| `/admin space bind` | Admin | Bind a text channel to a space; rebinding resets its casts and ambient setting. |
-| `/admin space allow_world`, `/admin space disallow_world` | Admin | Add or remove a world from a hub's guest list. |
+| `/admin space bind` | Admin | Bind a text channel to a space; rebinding keeps its ambient setting and drops cast members not available in the new space. |
+| `/admin space allow_world`, `/admin space disallow_world` | Admin | Add or remove a world from a hub's guest list; removing it also drops that world's characters from the hub's channel casts. |
 | `/admin character import` | Admin | Import a V2/V3 JSON or PNG card into a home world. |
 | `/character list`, `/character info` | Member | List eligible characters or inspect one character's home world. |
 | `/cast set`, `/cast add`, `/cast remove`, `/cast show` | Member | Manage or view the active cast for the channel or thread. |
