@@ -28,12 +28,12 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 | PERF-03 | Avatar slot reads load every blob | low | CONFIRMED | fragile |
 | PERF-04 | No gzip; CSP middleware buffers every `/admin` HTML response | low | CONFIRMED | unconventional |
 | PERF-05 | Same lookups repeated per page render | low | CONFIRMED | preference |
-| BUG-01 | `/lore add` keys are ignored | high | CONFIRMED (test) | incorrect |
-| BUG-02 | Daily cleanup loop dies permanently on one error | medium | CONFIRMED (test) | incorrect |
+| BUG-01 | `/lore add` keys are ignored — **Resolved (R1, branch `rework/r1-correctness`)** | high | CONFIRMED (test) | incorrect |
+| BUG-02 | Daily cleanup loop dies permanently on one error — **Resolved (R1, branch `rework/r1-correctness`)** | medium | CONFIRMED (test) | incorrect |
 | BUG-03 | Scene summary stops after 30 unsummarized nodes | medium | SUSPECTED (characterized) | incorrect |
-| BUG-04 | `record_node` replace cascade-deletes the node's summary | medium | CONFIRMED mechanism (test) | incorrect |
-| BUG-05 | `migrate.py` ignores `config.yaml` `database_path` | low | CONFIRMED | fragile |
-| SEC-01 | Mutating legacy routes parse the body before auth | medium | CONFIRMED (test) | incorrect |
+| BUG-04 | `record_node` replace cascade-deletes the node's summary — **Resolved (R1, branch `rework/r1-correctness`)** | medium | CONFIRMED mechanism (test) | incorrect |
+| BUG-05 | `migrate.py` ignores `config.yaml` `database_path` — **Resolved (R1, branch `rework/r1-correctness`)** | low | CONFIRMED | fragile |
+| SEC-01 | Mutating legacy routes parse the body before auth — **Resolved (R1, branch `rework/r1-correctness`)** | medium | CONFIRMED (test) | incorrect |
 | SEC-02 | Legacy Jinja POST routes still live | medium | CONFIRMED | fragile |
 | SEC-03 | Live-call CSRF and origin checks pass by construction | low | CONFIRMED | unconventional |
 | SEC-04 | Unbounded in-memory auth state; sessions lost on restart | low | CONFIRMED | fragile |
@@ -43,7 +43,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 | REL-02 | Channel lock held across all model calls; no client timeouts | high | CONFIRMED | fragile |
 | REL-03 | New V8 isolate per regex key match | medium | CONFIRMED | fragile |
 | REL-04 | Unbounded and stale bot caches; webhooks listed every turn | low | CONFIRMED | fragile |
-| REL-05 | Shutdown order can skip `store.close()` | low | CONFIRMED | fragile |
+| REL-05 | Shutdown order can skip `store.close()` — **Resolved (R1, branch `rework/r1-correctness`)** | low | CONFIRMED | fragile |
 | ARCH-01 | Oversized functions | medium | CONFIRMED | fragile |
 | ARCH-02 | Raw SQL and private store helpers in UI code | medium | CONFIRMED | fragile |
 | ARCH-03 | Duplicated constants and logic | low | CONFIRMED | preference |
@@ -122,6 +122,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 ## Defects
 
 ### BUG-01: `/lore add` keys are ignored
+- **Status:** Resolved in R1 (branch `rework/r1-correctness`): `/lore add` with keys creates an unpinned, keyword-gated entry; without keys it stays constant + pinned. Per D7, existing rows were not migrated. Test renamed to `test_lore_add_with_keys_is_keyword_triggered`.
 - **Severity:** high. **Confidence:** CONFIRMED (test `tests/test_slash_commands.py::test_known_defect_lore_add_with_keys_is_keyword_triggered`, expectedFailure). **Label:** incorrect.
 - **Evidence:**
   - `/lore add` always passes `pinned=True` (`llmcord_core/discord_bot.py:588-589`).
@@ -133,6 +134,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
   - Decide whether existing rows created with keys should be unpinned by a migration. That is a product decision.
 
 ### BUG-02: Daily cleanup loop dies permanently on one error
+- **Status:** Resolved in R1 (branch `rework/r1-correctness`): `_cleanup_loop` logs a failed pass and retries next cycle.
 - **Severity:** medium. **Confidence:** CONFIRMED (test in `tests/test_store_lifecycle.py`, expectedFailure). **Label:** incorrect.
 - **Evidence:** `_cleanup_loop` has no try/except (`discord_bot.py:72-75`). One `sqlite3.OperationalError` (for example `database is locked` while the web process writes) ends the task, and history retention stops until restart. Nobody awaits the task, so the error surfaces only as "Task exception was never retrieved".
 - **Direction:** log and continue inside the loop.
@@ -143,6 +145,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Direction:** summarize the most recent window, or chunk. Needs a product decision on whether the cap is a cost guard.
 
 ### BUG-04: `record_node` replace cascade-deletes the node's summary
+- **Status:** Resolved in R1 (branch `rework/r1-correctness`): `record_node` upserts with `ON CONFLICT(message_id) DO UPDATE`, so the summary survives a re-record. Note: if a re-record ever changed the node's parent, the kept summary would describe the old ancestry (no current caller does this).
 - **Severity:** medium. **Confidence:** CONFIRMED mechanism (test in `tests/test_store_lifecycle.py`, expectedFailure); production trigger unverified. **Label:** incorrect.
 - **Evidence:**
   - `INSERT OR REPLACE INTO nodes` (`llmcord_core/store.py:342`) deletes and re-inserts the row.
@@ -151,6 +154,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Direction:** `INSERT ... ON CONFLICT(message_id) DO UPDATE`.
 
 ### BUG-05: `migrate.py` ignores `config.yaml` `database_path`
+- **Status:** Resolved in R1 (branch `rework/r1-correctness`): `config.resolve_database_path()` (env → YAML → default) is shared by bot, web, migrate and `scripts/check_host.py`. Deployment note: with the env var unset and a YAML `database_path` other than the default, web and migrate now open the YAML file. YAML `database_path:` null/empty still crashes at startup, as the bot always did.
 - **Severity:** low. **Confidence:** CONFIRMED. **Label:** fragile.
 - **Evidence:** `migrate.py:10` and `web_main.py` read only `LLMCORD_DATABASE_PATH` (default `data/llmcord.sqlite3`). The bot reads `database_path` through `load_settings`. A deployment that sets only the YAML key migrates a different file than the bot opens.
 - **Direction:** one resolver for the database path, shared by all three entry points.
@@ -158,6 +162,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 ## Security
 
 ### SEC-01: Mutating legacy routes parse the body before auth
+- **Status:** Resolved in R1 (branch `rework/r1-correctness`): `require_admin(mutate=True)` validates the session before `request.form()`.
 - **Severity:** medium. **Confidence:** CONFIRMED (test in `tests/test_web_auth_boundaries.py`, expectedFailure). **Label:** incorrect.
 - **Evidence:** `require_admin(mutate=True)` awaits `request.form()` before `guard` checks the session (`auth.py:105-107`). Unauthenticated multipart bodies are parsed and spooled to disk. The suite shows `ResourceWarning: unclosed SpooledTemporaryFile`.
 - **Why it matters:** an unauthenticated client can make the Pi write upload bodies to disk, bounded only by python-multipart limits.
@@ -243,6 +248,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Direction:** cache the webhook objects, add TTLs, and re-check an asset after a delivery failure.
 
 ### REL-05: Shutdown order can skip `store.close()`
+- **Status:** Resolved in R1 (branch `rework/r1-correctness`): `close()` uses try/finally so the store and parent close always run.
 - **Severity:** low. **Confidence:** CONFIRMED. **Label:** fragile.
 - **Evidence:**
   - `close()` awaits `models.close()` before `store.close()`, without try/finally (`discord_bot.py:77-82`).

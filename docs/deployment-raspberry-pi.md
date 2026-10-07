@@ -28,7 +28,7 @@ chmod 600 .env
 
 Edit `config.yaml` to select real model IDs for `dialogue`, `director`, and `memory`. Edit `.env` with `DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `WEB_BASE_URL`, and any selected cloud model API keys. Set `WEB_BASE_URL` to the Pi's exact Tailscale HTTPS origin, with no trailing slash or path, for example `https://my-pi.my-tailnet.ts.net`.
 
-All services use `LLMCORD_DATABASE_PATH` when set. Otherwise the bot reads `database_path` from `config.yaml`, while web and migration default to `data/llmcord.sqlite3`. Use the same path for every service. Both containers mount `./data` for SQLite, including its WAL files and migration backups.
+All services resolve the database path the same way: `LLMCORD_DATABASE_PATH` when set, otherwise `database_path` from `config.yaml`, otherwise `data/llmcord.sqlite3`. If you set `database_path` in `config.yaml` without the environment variable, note that before this rule was unified the dashboard and migration ignored it and used `data/llmcord.sqlite3`; copy or merge that file first if they ever diverged. Both containers mount `./data` for SQLite, including its WAL files and migration backups.
 
 Do not commit `.env`, `config.yaml`, the database, or its backups. These paths are covered by `.gitignore` or live under the ignored `data/` directory.
 

@@ -339,7 +339,7 @@ class Store(AdminStore):
         if parent and (parent["guild_id"] != guild_id or parent["channel_id"] != channel_id):
             parent = None
         root_id = parent["root_id"] if parent else message_id
-        self.execute("INSERT OR REPLACE INTO nodes(message_id,guild_id,channel_id,parent_id,root_id,author_id,character_id,content,created_at,context_json,sources_json,author_label,mentions_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)", (message_id, guild_id, channel_id, parent["message_id"] if parent else None, root_id, author_id, character_id, content, created_at or time.time(), json.dumps(context or []), json.dumps(sources or []), author_label, json.dumps(mentions or [])))
+        self.execute("INSERT INTO nodes(message_id,guild_id,channel_id,parent_id,root_id,author_id,character_id,content,created_at,context_json,sources_json,author_label,mentions_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(message_id) DO UPDATE SET guild_id=excluded.guild_id,channel_id=excluded.channel_id,parent_id=excluded.parent_id,root_id=excluded.root_id,author_id=excluded.author_id,character_id=excluded.character_id,content=excluded.content,created_at=excluded.created_at,context_json=excluded.context_json,sources_json=excluded.sources_json,author_label=excluded.author_label,mentions_json=excluded.mentions_json", (message_id, guild_id, channel_id, parent["message_id"] if parent else None, root_id, author_id, character_id, content, created_at or time.time(), json.dumps(context or []), json.dumps(sources or []), author_label, json.dumps(mentions or [])))
         return root_id
 
     def node(self, message_id: int | None) -> sqlite3.Row | None:

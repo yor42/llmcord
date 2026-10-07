@@ -4,10 +4,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
-from pathlib import Path
 from urllib.parse import urlparse
 
-from llmcord_core.config import load_settings
+from llmcord_core.config import load_settings, resolve_database_path
 
 
 def require(name):
@@ -96,7 +95,7 @@ def main():
         database.parent.mkdir(parents=True, exist_ok=True)
         if not os.access(database.parent, os.W_OK) or (database.exists() and not os.access(database, os.W_OK)):
             raise ValueError('SQLite database and its parent directory must be writable')
-        if Path(os.environ.get('LLMCORD_DATABASE_PATH', 'data/llmcord.sqlite3')).resolve() != database.resolve():
+        if resolve_database_path().resolve() != database.resolve():
             raise ValueError('Bot and dashboard database paths differ; set LLMCORD_DATABASE_PATH')
         print('PASS: shared SQLite location is writable')
         if args.web:

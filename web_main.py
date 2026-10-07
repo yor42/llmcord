@@ -5,6 +5,7 @@ import os
 
 import uvicorn
 
+from llmcord_core.config import resolve_database_path
 from llmcord_core.web import create_app
 
 
@@ -13,7 +14,7 @@ def main() -> None:
     client_id = os.environ.get("DISCORD_CLIENT_ID", "")
     client_secret = os.environ.get("DISCORD_CLIENT_SECRET", "")
     bot_token = os.environ.get("DISCORD_BOT_TOKEN", "")
-    database_path = os.environ.get("LLMCORD_DATABASE_PATH", "data/llmcord.sqlite3")
+    database_path = resolve_database_path()
     app = create_app(database_path, base_url, client_id, client_secret, bot_token)
     uvicorn.run(app, host=os.environ.get("WEB_HOST", "127.0.0.1"),
                 port=int(os.environ.get("WEB_PORT", "8080")), access_log=False)

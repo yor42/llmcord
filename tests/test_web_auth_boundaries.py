@@ -76,9 +76,8 @@ class WebAuthBoundaryTests(unittest.TestCase):
         self.assertEqual(self.client.post("/guild/1/spaces", data={"name": "X", "kind": "world"}).status_code, 401)
         self.assertEqual(self.calls[GUILDS], 0)
 
-    @unittest.expectedFailure
-    def test_known_defect_unauthenticated_body_is_not_parsed(self):
-        """SEC-01: require_admin(mutate=True) parses the (possibly multipart) body before checking the session."""
+    def test_unauthenticated_body_is_not_parsed(self):
+        """SEC-01 (fixed): a mutating request without a session is rejected with 401 before its body is parsed."""
         self.client.cookies.clear()
         parsed = []
         original = Request.form
@@ -90,6 +89,21 @@ class WebAuthBoundaryTests(unittest.TestCase):
             response = self.client.post("/guild/1/characters/import", files={"file": ("a.json", b"x" * 1024, "application/json")})
         self.assertEqual(response.status_code, 401)
         self.assertEqual(parsed, [])
+
+    def test_expired_session_body_is_not_parsed(self):
+        """SEC-01: an expired session is rejected with 401 before the multipart body is parsed."""
+        self.app.state.sessions[self.session]["expires"] = 0
+        parsed = []
+        original = Request.form
+
+        def counting_form(request, *args, **kwargs):
+            parsed.append(request.url.path)
+            return original(request, *args, **kwargs)
+        with patch.object(Request, "form", counting_form):
+            response = self.client.post("/guild/1/characters/import", files={"file": ("a.json", b"x" * 1024, "application/json")})
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(parsed, [])
+        self.assertEqual(self.calls[GUILDS], 0)
 
     def test_logout_requires_csrf_and_clears_session(self):
         self.assertEqual(self.client.post("/logout", data={"csrf": "csrf"}, follow_redirects=False).status_code, 303)

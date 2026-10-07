@@ -103,13 +103,22 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
         await invoke(self.bot, "lore add", FakeInteraction(admin=True), "The tide is high")
         row = self.store.list_lore(1, "channel", 100)[0]
         self.assertTrue(row["constant"])
+        self.assertTrue(row["pinned"])
 
-    @unittest.expectedFailure
-    async def test_known_defect_lore_add_with_keys_is_keyword_triggered(self):
-        """BUG-01: /lore add always pins, and pinned lore is forced constant, so keys never gate it."""
+    async def test_lore_add_with_blank_keys_is_constant(self):
+        """BUG-01 (fixed): keys that are only commas/whitespace parse to no keys, so the entry is constant and pinned."""
+        await invoke(self.bot, "lore add", FakeInteraction(admin=True), "The tide is high", " , ")
+        row = self.store.list_lore(1, "channel", 100)[0]
+        self.assertTrue(row["constant"])
+        self.assertTrue(row["pinned"])
+
+    async def test_lore_add_with_keys_is_keyword_triggered(self):
+        """BUG-01 (fixed): /lore add with keys creates an unpinned, non-constant entry gated by its keys."""
         await invoke(self.bot, "lore add", FakeInteraction(admin=True), "The lighthouse is haunted", "lighthouse")
         active = evaluate(self.store, 1, [("channel", 100)], "nothing relevant here", 1000)
         self.assertNotIn("The lighthouse is haunted", [item.content for item in active])
+        active = evaluate(self.store, 1, [("channel", 100)], "we walk to the lighthouse", 1000)
+        self.assertIn("The lighthouse is haunted", [item.content for item in active])
 
     async def test_scene_reset_records_timestamp(self):
         interaction = FakeInteraction()

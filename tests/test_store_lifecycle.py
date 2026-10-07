@@ -1,10 +1,12 @@
 """Characterization tests for scene/state lifecycle in Store, Engine and the bot loop.
 
-``test_known_defect_*`` tests are ``expectedFailure`` for confirmed defects (docs/engineering/audit.md).
+Confirmed defects follow the ``test_known_defect_*`` / ``expectedFailure`` convention (docs/engineering/audit.md).
 """
 import asyncio
 import unittest
 from unittest.mock import patch
+
+from discord.ext import commands
 
 from helpers import FakeModels, make_settings
 
@@ -92,13 +94,29 @@ class StoreLifecycleTests(unittest.TestCase):
         self.store.archive_character(2, self.alice, True)
         self.assertEqual(self.store.character_by_id(self.alice)["archived"], 0)
 
-    @unittest.expectedFailure
-    def test_known_defect_rerecording_node_keeps_its_summary(self):
-        """BUG-04: record_node uses INSERT OR REPLACE; the replace cascades and drops the node's summary."""
+    def test_rerecording_node_keeps_its_summary(self):
+        """BUG-04 (fixed): re-recording an existing node updates it in place, so its summary row survives."""
         last = self.chain(2)
         self.store.save_summary(last, "kept")
         self.store.record_node(last, 1, 100, 1000, None, self.alice, "edited line")
         self.assertEqual(self.store.summary(last), "kept")
+
+    def test_rerecording_node_last_write_wins_for_its_columns(self):
+        """Re-recording a node overwrites its own columns (last write wins) and keeps its place in the chain.
+
+        The trace is unaffected too (it has no FK to nodes, so it was never at risk from BUG-04).
+        """
+        last = self.chain(2)
+        before = self.store.node(last)
+        self.store.save_trace(last, {"speaker": "alice"})
+        self.store.record_node(last, 1, 100, 1000, None, self.alice, "edited line")
+        node = self.store.node(last)
+        self.assertEqual(node["content"], "edited line")
+        self.assertEqual(node["character_id"], self.alice)
+        self.assertEqual(node["parent_id"], 1000)
+        self.assertEqual(node["root_id"], 1000)
+        self.assertEqual((node["parent_id"], node["root_id"]), (before["parent_id"], before["root_id"]))
+        self.assertEqual(self.store.trace(last), {"speaker": "alice"})
 
 
 class SummaryTests(unittest.IsolatedAsyncioTestCase):
@@ -134,9 +152,8 @@ class SummaryTests(unittest.IsolatedAsyncioTestCase):
 
 
 class CleanupLoopTests(unittest.IsolatedAsyncioTestCase):
-    @unittest.expectedFailure
-    async def test_known_defect_cleanup_loop_survives_a_failed_pass(self):
-        """BUG-02: an exception from expire_history ends the daily cleanup task permanently."""
+    async def test_cleanup_loop_survives_a_failed_pass(self):
+        """BUG-02 (fixed): the cleanup loop logs a failed pass and retries next cycle."""
         bot = SkitBot(make_settings())
         calls = []
 
@@ -148,16 +165,45 @@ class CleanupLoopTests(unittest.IsolatedAsyncioTestCase):
             if len(calls) >= 2:
                 raise asyncio.CancelledError
         try:
-            with patch.object(bot.store, "expire_history", failing), patch("asyncio.sleep", no_sleep):
-                try:
+            with patch.object(bot.store, "expire_history", failing), patch("asyncio.sleep", no_sleep), \
+                    self.assertLogs(level="ERROR") as logs:
+                with self.assertRaises(asyncio.CancelledError):
                     await bot._cleanup_loop()
-                except asyncio.CancelledError:
-                    pass
-                except RuntimeError:
-                    pass
             self.assertEqual(len(calls), 2, "loop should retry on the next cycle")
+            failures = [record for record in logs.records if record.getMessage() == "History cleanup failed"]
+            self.assertEqual(len(failures), 2, "each failed pass should be logged")
+            self.assertTrue(all(record.exc_info and record.exc_info[0] is RuntimeError for record in failures))
         finally:
             bot.store.close()
+
+    async def test_close_closes_store_when_models_close_raises(self):
+        """REL-05 (fixed): if models.close() raises, close() still cancels cleanup, closes the store and the
+        Discord client, then re-raises the model error."""
+        bot = SkitBot(make_settings())
+        real_store_close = bot.store.close
+        store_closed = []
+        parent_closed = []
+
+        async def failing_models_close():
+            raise RuntimeError("provider shutdown failed")
+
+        async def parent_close(_self):
+            parent_closed.append(True)
+        bot.cleanup_task = asyncio.create_task(asyncio.sleep(3600))
+        try:
+            with patch.object(bot.models, "close", failing_models_close), \
+                    patch.object(bot.store, "close", lambda: store_closed.append(True)), \
+                    patch.object(commands.Bot, "close", parent_close):
+                with self.assertRaises(RuntimeError):
+                    await bot.close()
+            await asyncio.sleep(0)
+            self.assertTrue(bot.cleanup_task.cancelled(), "cleanup task should be cancelled")
+            self.assertEqual(store_closed, [True], "store should be closed even if models.close() raises")
+            self.assertEqual(parent_closed, [True], "discord client close should still run")
+        finally:
+            if not bot.cleanup_task.done():
+                bot.cleanup_task.cancel()
+            real_store_close()
 
 
 if __name__ == "__main__":

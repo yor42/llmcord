@@ -52,6 +52,29 @@ class Settings:
         return self.profiles[getattr(self, role)]
 
 
+DEFAULT_DATABASE_PATH = "data/llmcord.sqlite3"
+
+
+def _database_path(raw: dict[str, Any]) -> Path:
+    return Path(os.environ.get("LLMCORD_DATABASE_PATH") or raw.get("database_path", DEFAULT_DATABASE_PATH))
+
+
+def resolve_database_path(config_path: str | Path = "config.yaml") -> Path:
+    """LLMCORD_DATABASE_PATH, else config.yaml database_path, else the default; invalid YAML raises."""
+    import yaml
+
+    if os.environ.get("LLMCORD_DATABASE_PATH"):
+        return _database_path({})
+    try:
+        with open(config_path, encoding="utf-8") as file:
+            raw = yaml.safe_load(file) or {}
+    except FileNotFoundError:
+        raw = {}
+    if not isinstance(raw, dict):
+        raise ValueError(f"{config_path} must contain a mapping")
+    return _database_path(raw)
+
+
 def load_settings(path: str | Path = "config.yaml") -> Settings:
     import yaml
 
@@ -110,7 +133,7 @@ def load_settings(path: str | Path = "config.yaml") -> Settings:
         raise ValueError("history_retention_days must be positive")
     return Settings(
         token=token, development_guild_id=int(guild_id) if guild_id else None,
-        database_path=Path(os.environ.get("LLMCORD_DATABASE_PATH") or raw.get("database_path", "data/llmcord.sqlite3")),
+        database_path=_database_path(raw),
         history_retention_days=retention, profiles=profiles,
         dialogue=choices["dialogue"], director=choices["director"],
         memory=choices["memory"], limits=limits,

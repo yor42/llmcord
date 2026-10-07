@@ -103,5 +103,9 @@ class AuthService:
         return session
 
     async def require_admin(self, request, guild_id, mutate=False):
-        csrf = str((await request.form()).get('csrf', '')) if mutate else None
-        return await self.guard(request.cookies.get('llmcord_session', ''), guild_id, csrf, request.headers.get('origin'))
+        ident = request.cookies.get('llmcord_session', '')
+        csrf = None
+        if mutate:
+            await self.session(ident)  # reject unauthenticated posts before parsing the body
+            csrf = str((await request.form()).get('csrf', ''))
+        return await self.guard(ident, guild_id, csrf, request.headers.get('origin'))

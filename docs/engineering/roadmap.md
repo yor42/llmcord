@@ -1,6 +1,6 @@
 # Rework roadmap
 
-**Status:** proposal, awaiting user approval. No phase starts until the roadmap is approved (see `CLAUDE.md`).
+**Status:** approved by the user on 2026-10-07. R1 in progress on branch `rework/r1-correctness`. All decisions D1–D10 taken (see "Decisions taken").
 
 Every phase goes through the `orchestrate-change` skill: test-writer → implementer → `scripts/verify.sh` → change-reviewer. Finding IDs refer to `audit.md`.
 
@@ -42,6 +42,8 @@ R1 and R2 are independent and could swap. R1 goes first because its tests alread
 - **Risk:** low.
   - BUG-01 changes behavior for future `/lore add` calls only. Rows already created with keys stay pinned unless a migration unpins them (open decision D7).
   - BUG-05 must not move an existing deployment's database: the env var keeps precedence.
+- **Status:** complete on branch `rework/r1-correctness` (uncommitted); `verify.sh --browser` PASS, 165 tests, 0 expected failures.
+- **Progress:** SEC-01 done (reviewed; follow-ups: expired-session ordering test, origin check before form parse → R2). BUG-02 + REL-05 done (reviewed). BUG-04 done (reviewed). BUG-01 done (reviewed). BUG-05 done (reviewed; deployment note in audit). Test tidy pass done (fixed known-defect tests renamed per `tests/CLAUDE.md`).
 - **Order inside the phase:** SEC-01, then BUG-02 + REL-05, then BUG-04, then BUG-01, then BUG-05.
 - **Verification:**
   - The four decorators are removed, `verify.sh` is green, and expected failures equal 0.
@@ -188,6 +190,21 @@ R1 and R2 are independent and could swap. R1 goes first because its tests alread
   - Docs updated: `docs/admin-console.md` and `docs/architecture.md`.
 
 ---
+
+## Decisions taken (2026-10-07)
+
+| ID | Decision | Consequence for the plan |
+| --- | --- | --- |
+| D1 | 5 minutes | R2 guild-list cache TTL = 300 s; a 401, sign-out or session expiry still invalidates immediately. |
+| D2 | Per-server setting, default on | R4 adds a per-server setting for the usage/cost footer (dashboard-editable); default on, so existing servers see no change. |
+| D3 | Generic public message; details private via ephemeral reply | R4 error mapping: public channel gets a generic message; the invoker gets the stage/provider detail ephemerally (interactions), detail also logged. |
+| D4 | Configurable, including a max token budget option | R3 makes extraction/summary cadence configurable and adds a max-token budget for those calls. |
+| D5 | Subtree from a message; database only | R4 `/scene delete` removes the given node and its descendants; earlier lines and sibling branches stay; Discord messages are not deleted. |
+| D6 | Summarize the latest window | R3 BUG-03: past the cap, summarize the most recent window instead of skipping; the window size follows the D4 budget config. |
+| D7 | Fix new entries only | R1 BUG-01 changes `/lore add` for future calls; no migration of existing rows. |
+| D8 | "Server"; "channel" lore scope; "Link" | R5 UX-02: user-facing text says "server" (code keeps `guild`); `/lore add` scope `local` becomes `channel`; `/space allow` becomes or is aliased to `link`. Glossary in `docs/` first. |
+| D9 | Retire the legacy Jinja routes | R6 removes legacy POST routes after grep + characterization tests; NiceGUI is the only write path. |
+| D10 | `/scene delete` also removes personal facts and encounters sourced only from the deleted nodes; promoted lore stays; expiry keeps derived data | R6 ARCH-05. |
 
 ## Open product decisions
 

@@ -71,15 +71,22 @@ class SkitBot(commands.Bot):
 
     async def _cleanup_loop(self):
         while True:
-            self.store.expire_history(self.settings.history_retention_days)
+            try:
+                self.store.expire_history(self.settings.history_retention_days)
+            except Exception:
+                logging.exception('History cleanup failed')
             await asyncio.sleep(86400)
 
     async def close(self):
         if self.cleanup_task:
             self.cleanup_task.cancel()
-        await self.models.close()
-        self.store.close()
-        await super().close()
+        try:
+            await self.models.close()
+        finally:
+            try:
+                self.store.close()
+            finally:
+                await super().close()
 
     def location(self, channel) -> tuple[int | None, object | None]:
         parent_id = channel.parent_id if isinstance(channel, discord.Thread) else None
@@ -584,8 +591,8 @@ def register_commands(bot: SkitBot) -> None:
     async def lore_add(interaction: discord.Interaction, content: str, keys: str = "", scope: Literal["local", "space"] = "local"):
         _, binding = await binding_for(interaction)
         scope_kind, scope_id = local_scope(interaction) if scope == "local" else ("space", binding["space_id"])
-        ident = bot.store.add_lore(interaction.guild_id, scope_kind, scope_id, content,
-            [key.strip() for key in keys.split(",") if key.strip()], constant=not bool(keys.strip()), pinned=True)
+        parsed = [key.strip() for key in keys.split(",") if key.strip()]
+        ident = bot.store.add_lore(interaction.guild_id, scope_kind, scope_id, content, parsed, constant=not parsed, pinned=not parsed)
         await interaction.response.send_message(f"Added {scope} lore #{ident}.", ephemeral=True)
 
     @lore.command(name="list", description="Show the lore available in this location")

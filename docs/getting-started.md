@@ -62,7 +62,7 @@ Members can use `/cast set`, `/cast add`, and `/cast remove` to adjust the activ
 | --- | --- |
 | `discord.token_env` | Name of the environment variable containing the bot token; defaults to `DISCORD_BOT_TOKEN`. |
 | `discord.development_guild_id` | Optional server ID for fast development command sync. |
-| `database_path` | SQLite file used by the bot. |
+| `database_path` | SQLite file used by the bot, dashboard and migration (`LLMCORD_DATABASE_PATH` overrides it). |
 | `history_retention_days` | Age limit for stored conversation text and response traces; default `90`. |
 | `models.dialogue` | Profile used for character lines and image descriptions. |
 | `models.director` | Profile used for structured speaker selection. |
