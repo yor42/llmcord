@@ -60,6 +60,16 @@
 | FEAT-03 | Member commands `/time set <zone>` (autocomplete over zone names), `/time show` (shows the zone in use and where it came from), `/time clear`. Replies are ephemeral. Document in `server-guide.md`. | user 2026-10-08 | now (after FEAT-01) |
 | FEAT-04 | Dashboard: a server timezone select in Server setup next to the reply footer, saved through `ctx.button` with audit action `settings.timezone` (detail: old → new). Browser test and screenshots. | user 2026-10-08 | now (after FEAT-01) |
 
+**Turn log (queued, design first).** A `Log` dashboard tab where a server's admins review their own server's recent turns: errors with full detail (stage, provider error, stack, the reference ID the member saw) and each model call's input and output (director, speakers, summaries, image descriptions). Today an error leaves only a log line and a reference ID (`discord_bot.py:441`, `:980`), and `trace` keeps only which sources a reply used (`store.py:101`), not the prompt or raw output.
+
+Open questions for the user before FEAT-05: how long entries are kept (follow `history_retention_days`, or shorter, e.g. 7 days, since full prompts are large); whether personal memories inside a logged prompt are shown to admins or masked (they were shared under `/memory opt_in` with characters, not with admins; an opt-out must also purge them from the log); whether logging is on by default or a per-server switch; and whether to ride the same schema bump as FEAT-01.
+
+| ID | Item | Origin | Priority |
+| --- | --- | --- | --- |
+| FEAT-05 | Storage: a `turn_log` table scoped by `guild_id` (channel, node or message ID, stage/role, model profile, status, error detail, reference ID, request and response text, token counts, timestamp), written once per model call and per failure; size cap per entry, secret redaction (MNT-16), retention through the daily cleanup, purge on `/memory opt_out` if personal memories are kept. Schema bump. Opus review (consent, isolation, migration). | user 2026-10-08 | queued (needs answers above) |
+| FEAT-06 | Engine and bot: record each model call and each `_run_scene` failure into the log without slowing the turn (one insert per call, after it returns). | user 2026-10-08 | queued (after FEAT-05) |
+| FEAT-07 | Dashboard: a `Log` tab (newest first, filter by channel, errors only, and by reference ID; collapsed rows that expand to the full input and output). Read-only, through `AuthService.guard`; browser test and screenshots. | user 2026-10-08 | queued (after FEAT-06) |
+
 ## Decisions
 
 Decisions D1–D12 from the rework stay in force ([history/roadmap-r1-r6.md](history/roadmap-r1-r6.md#decisions-taken-2026-10-07)). New decisions continue the numbering here.
