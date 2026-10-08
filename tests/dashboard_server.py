@@ -96,7 +96,8 @@ def main():
             counters[f'store:{name}'] += 1
             return original(*args, **kwargs)
         setattr(store, name, counting)
-    for name in ('list_spaces', 'list_characters', 'list_channels', 'list_lorebooks', 'thread_lore_scopes', 'lorebook_links'):
+    for name in ('list_spaces', 'list_characters', 'list_channels', 'list_lorebooks', 'thread_lore_scopes', 'lorebook_links',
+                 'model_usage_summary', 'list_presets'):  # the last two are panel-specific (Server setup / Prompt presets): R5 step 6
         count_store_method(name)
 
     @app.get('/_test/state')

@@ -207,14 +207,12 @@ class DashboardBrowserTests(unittest.TestCase):
         world_panel = page.locator('.space-card').filter(has=page.get_by_text('World · world', exact=True))
         world_panel.get_by_text('World · world', exact=True).click()
         world_panel.get_by_label('World guidelines', exact=True).fill('The setting is a courier guild. Treat users as guild members.')
-        with page.expect_navigation():
-            world_panel.get_by_role('button', name='Save world guidelines', exact=True).click()
-        self.assertTrue(any(row['kind'] == 'space' and 'courier guild' in row['content'] for row in self.state()['guidelines']))
+        world_panel.get_by_role('button', name='Save world guidelines', exact=True).click()
+        self.wait_for(lambda: any(row['kind'] == 'space' and 'courier guild' in row['content'] for row in self.state()['guidelines']))
         channel_panel = page.locator('.channel-card').filter(has=page.get_by_text('#scene', exact=True))
         channel_panel.get_by_label('Channel guidelines', exact=True).fill('Occasional fourth-wall jokes are welcome; keep them brief.')
-        with page.expect_navigation():
-            channel_panel.get_by_role('button', name='Save channel guidelines', exact=True).click()
-        self.assertTrue(any(row['kind'] == 'channel' and 'fourth-wall' in row['content'] for row in self.state()['guidelines']))
+        channel_panel.get_by_role('button', name='Save channel guidelines', exact=True).click()
+        self.wait_for(lambda: any(row['kind'] == 'channel' and 'fourth-wall' in row['content'] for row in self.state()['guidelines']))
         page.get_by_label('Space name', exact=True).fill('Browser world')
         page.get_by_role('button', name='Create space', exact=True).click()
         self.wait_for(lambda: any(r['name'] == 'Browser world' for r in self.state()['spaces']))
@@ -226,9 +224,8 @@ class DashboardBrowserTests(unittest.TestCase):
         dialog.get_by_role('button', name='Cancel', exact=True).click()
         self.assertTrue(any(row['name'] == 'Browser world' for row in self.state()['spaces']))
         unused.get_by_role('button', name='Delete world', exact=True).click()
-        with page.expect_navigation():
-            dialog.get_by_role('button', name='Delete world', exact=True).click()
-        self.assertFalse(any(row['name'] == 'Browser world' for row in self.state()['spaces']))
+        dialog.get_by_role('button', name='Delete world', exact=True).click()
+        self.wait_for(lambda: not any(row['name'] == 'Browser world' for row in self.state()['spaces']))
         page.get_by_label('Private text channel', exact=True).click()
         page.get_by_role('option', name='#assets', exact=True).click()
         page.get_by_role('button', name='Save asset channel', exact=True).click()
@@ -244,8 +241,8 @@ class DashboardBrowserTests(unittest.TestCase):
         dialog.get_by_label('Character name', exact=True).fill(' Browser blank ')
         dialog.get_by_label('Home world', exact=True).click()
         page.get_by_role('option', name='World', exact=True).click()
-        with page.expect_navigation():
-            dialog.get_by_role('button', name='Create', exact=True).click()
+        dialog.get_by_role('button', name='Create', exact=True).click()
+        self.wait_for(lambda: any(row['name'] == 'Browser blank' for row in self.state()['characters']))
         blank = next(row for row in self.state()['characters'] if row['name'] == 'Browser blank')
         self.assertTrue(all(value == '' for field, value in json.loads(blank['card']).items() if field != 'name'))
         self.assertTrue(any(row['character_id'] == blank['id'] for row in self.state()['slots']))
@@ -260,38 +257,34 @@ class DashboardBrowserTests(unittest.TestCase):
         fallback.locator('input[type=file]').set_input_files({'name': 'fallback.png', 'mimeType': 'image/png', 'buffer': portrait.getvalue()})
         page.get_by_text('Fallback image ready; save it to keep it', exact=True).wait_for()
         fallback.locator('.q-uploader__file--img').wait_for()
-        with page.expect_navigation():
-            fallback.get_by_role('button', name='Save fallback avatar', exact=True).click()
-        self.assertTrue(next(row for row in self.state()['characters'] if row['id'] == blank['id'])['has_static_avatar'])
+        fallback.get_by_role('button', name='Save fallback avatar', exact=True).click()
+        self.wait_for(lambda: next(row for row in self.state()['characters'] if row['id'] == blank['id'])['has_static_avatar'])
         self.assertFalse(self.state()['assets'])
         self.assertFalse(any(slot['has_image'] for slot in self.state()['slots'] if slot['character_id'] == blank['id']))
         character.get_by_text('Browser blank', exact=True).click()
         character.get_by_label('Description', exact=True).fill('A character created without an import')
-        with page.expect_navigation():
-            character.get_by_role('button', name='Save character', exact=True).click()
+        character.get_by_role('button', name='Save character', exact=True).click()
+        self.wait_for(lambda: json.loads(next(row for row in self.state()['characters'] if row['id'] == blank['id'])['card'])['description'] == 'A character created without an import')
         self.assertEqual(json.loads(next(row for row in self.state()['characters'] if row['id'] == blank['id'])['card'])['description'], 'A character created without an import')
         character.get_by_text('Browser blank', exact=True).click()
         character.get_by_text('Fallback static avatar', exact=True).click()
-        with page.expect_navigation():
-            fallback.get_by_role('button', name='Remove fallback avatar', exact=True).click()
-        self.assertFalse(next(row for row in self.state()['characters'] if row['id'] == blank['id'])['has_static_avatar'])
+        fallback.get_by_role('button', name='Remove fallback avatar', exact=True).click()
+        self.wait_for(lambda: not next(row for row in self.state()['characters'] if row['id'] == blank['id'])['has_static_avatar'])
         character.get_by_text('Browser blank', exact=True).click()
         character.get_by_role('button', name='Delete character', exact=True).click()
         dialog.get_by_text('Delete Browser blank?', exact=True).wait_for()
         dialog.get_by_role('button', name='Cancel', exact=True).click()
         self.assertTrue(any(row['id'] == blank['id'] for row in self.state()['characters']))
         character.get_by_role('button', name='Delete character', exact=True).click()
-        with page.expect_navigation():
-            dialog.get_by_role('button', name='Delete permanently', exact=True).click()
-        self.assertFalse(any(row['id'] == blank['id'] for row in self.state()['characters']))
+        dialog.get_by_role('button', name='Delete permanently', exact=True).click()
+        self.wait_for(lambda: not any(row['id'] == blank['id'] for row in self.state()['characters']))
         self.assertFalse(any(row['character_id'] == blank['id'] for row in self.state()['slots']))
         page.get_by_role('button', name='Create character', exact=True).wait_for()
 
         books_before = len(self.state()['lorebooks'])
         page.get_by_role('tab', name='Imports', exact=True).click()
         page.get_by_label('Book name', exact=True).fill('Browser empty book')
-        with page.expect_navigation():
-            page.get_by_role('button', name='Create book', exact=True).click()
+        page.get_by_role('button', name='Create book', exact=True).click()
         page.get_by_role('tab', name='Imports', exact=True).click()
         empty = page.locator('.q-expansion-item').filter(has=page.get_by_text('Browser empty book · guild', exact=True)).first
         empty.get_by_text('Browser empty book · guild', exact=True).click()
@@ -300,18 +293,17 @@ class DashboardBrowserTests(unittest.TestCase):
         dialog.get_by_role('button', name='Cancel', exact=True).click()
         self.assertTrue(any(row['name'] == 'Browser empty book' for row in self.state()['lorebooks']))
         empty.get_by_role('button', name='Delete book', exact=True).click()
-        with page.expect_navigation():
-            dialog.get_by_role('button', name='Delete lorebook', exact=True).click()
-        self.assertFalse(any(row['name'] == 'Browser empty book' for row in self.state()['lorebooks']))
+        dialog.get_by_role('button', name='Delete lorebook', exact=True).click()
+        self.wait_for(lambda: not any(row['name'] == 'Browser empty book' for row in self.state()['lorebooks']))
         page.get_by_label('Destination owner', exact=True).click()
         page.get_by_role('option', name='Guild: Server-wide lore', exact=True).click()
         page.get_by_role('button', name='Import entries into selected owner', exact=True).click()
         data = json.dumps({'type': 'risu', 'ver': 1, 'data': [{'key': '', 'content': 'Direct guild fact', 'alwaysActive': True, 'insertorder': 37}]}).encode()
         dialog.locator('input[type=file]').set_input_files({'name': 'guild.json', 'mimeType': 'application/json', 'buffer': data})
         dialog.get_by_text('RisuAI: 1 new entries, 0 already present', exact=True).wait_for()
-        with page.expect_navigation():
-            dialog.get_by_role('button', name='Apply entry import', exact=True).click()
-        self.assertTrue(any(row['content'] == 'Direct guild fact' for row in self.state()['guild_lore']))
+        dialog.get_by_role('button', name='Apply entry import', exact=True).click()
+        self.wait_for(lambda: any(row['content'] == 'Direct guild fact' for row in self.state()['guild_lore']))
+        page.wait_for_function("new URL(location.href).searchParams.get('owner')?.startsWith('guild:')")
         self.assertEqual(len(self.state()['lorebooks']), books_before)
         self.choose_lore_owner('left', 'World: World', 'space', 1)
         data = json.dumps({'entries': [{'content': 'Direct world fact', 'constant': True, 'order': 37}]}).encode()
@@ -444,8 +436,8 @@ class DashboardBrowserTests(unittest.TestCase):
         data = json.dumps({'name': 'Imported via browser', 'description': 'Imported card'}).encode()
         page.locator('input[type=file]').first.set_input_files({'name': 'card.json', 'mimeType': 'application/json', 'buffer': data})
         page.get_by_text('Preview: Imported via browser', exact=True).wait_for()
-        with page.expect_navigation(wait_until='networkidle'):
-            page.get_by_role('button', name='Apply card import', exact=True).click()
+        page.get_by_role('button', name='Apply card import', exact=True).click()
+        self.wait_for(lambda: any(r['name'] == 'Imported via browser' for r in self.state()['characters']))
         page.get_by_role('tab', name='Characters', exact=True).click()
         page.get_by_text('Imported via browser', exact=True).wait_for()
         character = page.locator('.q-expansion-item').filter(has=page.get_by_text('Imported via browser', exact=True)).first
@@ -486,8 +478,8 @@ class DashboardBrowserTests(unittest.TestCase):
         page.get_by_role('tab', name='Lore', exact=True).click()
         page.get_by_role('button', name='Import lorebook', exact=True).click()
         page.get_by_label('Book name', exact=True).fill('Browser import')
-        with page.expect_navigation(wait_until='networkidle'):
-            page.get_by_role('button', name='Create book', exact=True).click()
+        page.get_by_role('button', name='Create book', exact=True).click()
+        self.wait_for(lambda: any(r['name'] == 'Browser import' for r in self.state()['lorebooks']))
         page.get_by_role('tab', name='Lore', exact=True).click()
         page.get_by_role('button', name='Import lorebook', exact=True).click()
         book = page.locator('.q-expansion-item').filter(has=page.get_by_text('Browser import · guild', exact=True)).first
@@ -498,15 +490,14 @@ class DashboardBrowserTests(unittest.TestCase):
         entry = book.locator('.q-expansion-item').filter(has=page.get_by_text('Incoming: Imported lorebook entry', exact=True)).last
         entry.locator('.q-item').first.click()
         book.get_by_text('Incoming: Imported lorebook entry', exact=True).wait_for()
-        with page.expect_navigation(wait_until='networkidle'):
-            book.get_by_role('button', name='Apply lorebook sync', exact=True).click()
-        self.assertTrue(any(row['content'] == 'Imported lorebook entry' for row in self.state()['books']))
+        book.get_by_role('button', name='Apply lorebook sync', exact=True).click()
+        self.wait_for(lambda: any(row['content'] == 'Imported lorebook entry' for row in self.state()['books']))
         page.get_by_role('tab', name='Lore', exact=True).click()
         page.get_by_role('button', name='Import lorebook', exact=True).click()
         book = page.locator('.q-expansion-item').filter(has=page.get_by_text('Browser import · guild', exact=True)).first
         book.get_by_text('Browser import · guild', exact=True).click()
-        with page.expect_navigation(wait_until='networkidle'):
-            book.get_by_role('button', name='Enable in World', exact=True).click()
+        book.get_by_role('button', name='Enable in World', exact=True).click()
+        book.get_by_role('button', name='Enable in World', exact=True).wait_for(state='hidden')  # panel rebuilt in place, expansion collapsed
         page.get_by_role('tab', name='Lore', exact=True).click()
         page.get_by_role('button', name='Import lorebook', exact=True).click()
         book = page.locator('.q-expansion-item').filter(has=page.get_by_text('Browser import · guild', exact=True)).first
@@ -520,8 +511,8 @@ class DashboardBrowserTests(unittest.TestCase):
         ]}).encode()
         book.locator('input[type=file]').set_input_files({'name': 'risu.json', 'mimeType': 'application/json', 'buffer': risu})
         book.get_by_text('RisuAI lorebook detected · 2 entries', exact=True).wait_for()
-        with page.expect_navigation(wait_until='networkidle'):
-            book.get_by_role('button', name='Apply lorebook sync', exact=True).click()
+        book.get_by_role('button', name='Apply lorebook sync', exact=True).click()
+        self.wait_for(lambda: any(row['content'] == 'Imported Risu entry' for row in self.state()['books']))
         imported = next(row for row in self.state()['books'] if row['content'] == 'Imported Risu entry')
         self.assertEqual(json.loads(imported['rule_json'])['order'], 0)
         self.assertFalse(json.loads(imported['rule_json'])['regex_enabled'])
@@ -669,8 +660,8 @@ class DashboardBrowserTests(unittest.TestCase):
     def test_guild_page_load_reads_each_guild_list_once(self):
         """PERF-05: one load of the guild page reads each guild-wide list once, not once per panel.
 
-        All five tabs render eagerly, so before the per-render snapshot a single load called ``list_spaces`` about
-        eight times and ``lorebook_links`` once per guild book per space. Targets: one call each to
+        Opening every tab (panels build lazily, on first selection) called, before the per-render snapshot,
+        ``list_spaces`` about eight times and ``lorebook_links`` once per guild book per space. Targets: one call each to
         ``list_spaces``, ``list_characters``, ``list_channels``, ``list_lorebooks`` and ``thread_lore_scopes``,
         and exactly one ``lorebook_links`` per guild-target book (the fixture has several spaces, so the old
         per-space loop would give books x spaces).
@@ -698,8 +689,15 @@ class DashboardBrowserTests(unittest.TestCase):
                    ('list_spaces', 'list_characters', 'list_channels', 'list_lorebooks', 'thread_lore_scopes', 'lorebook_links')}
             self.assertEqual({k: v for k, v in got.items() if k != 'lorebook_links'},
                              {'list_spaces': 1, 'list_characters': 1, 'list_channels': 1, 'list_lorebooks': 1, 'thread_lore_scopes': 1}, got)
+            self.assertEqual(got['lorebook_links'], 0, got)
+            # Building the Imports panel takes a fresh snapshot (one more read each) and one lorebook_links per guild book.
             self.assertGreaterEqual(guild_books, 1)
-            self.assertEqual(got['lorebook_links'], guild_books, got)
+            page.get_by_role('tab', name='Imports', exact=True).click()
+            page.get_by_label('Book name', exact=True).wait_for()
+            page.wait_for_timeout(300)
+            counters = context.request.get(self.url + '/_test/counters').json()
+            self.assertEqual(counters.get('store:lorebook_links', 0), guild_books, counters)
+            self.assertEqual(counters.get('store:list_spaces', 0), 2, counters)
         finally:
             self.page = original_page
             context.close()
@@ -710,8 +708,12 @@ class DashboardBrowserTests(unittest.TestCase):
         context.add_cookies([{'name': 'llmcord_session', 'value': 'browser-ux-session', 'url': self.url,
                               'secure': True, 'httpOnly': True, 'sameSite': 'Lax'}])
         errors = []
+        network = []
         page = context.new_page()
         page.on('pageerror', lambda e: errors.append(e.stack or str(e)))
+        page.on('requestfailed', lambda r: network.append(f'failed {r.url} {r.failure}'))
+        page.on('response', lambda r: network.append(f'{r.status} {r.url}') if r.status >= 400 else None)
+        page.network = network
         page.goto(self.url + path)
         page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
         return context, page, errors
@@ -728,7 +730,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.goto(self.url + '/admin/guild/1?tab=bogus')
             page.get_by_role('tab', name='Server setup', exact=True).wait_for()
             self.assertTrue(self.tab_selected(page, 'Server setup'))
-            self.assertFalse(errors, errors)
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -739,13 +741,13 @@ class DashboardBrowserTests(unittest.TestCase):
             page.get_by_role('tab', name='Characters', exact=True).click()
             page.wait_for_url('**tab=characters*')
             self.assertIn('owner=channel', page.url)
-            page.reload()
+            page.goto(page.url)
             page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
             page.get_by_role('tab', name='Characters', exact=True).wait_for()
             self.assertTrue(self.tab_selected(page, 'Characters'))
             self.assertIn('tab=characters', page.url)
             self.assertIn('owner=channel', page.url)
-            self.assertFalse(errors, errors)
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -755,7 +757,7 @@ class DashboardBrowserTests(unittest.TestCase):
         try:
             page.get_by_role('button', name='Save cast', exact=True).first.click()
             page.get_by_text('Cast saved', exact=True).wait_for(timeout=5000)
-            self.assertFalse(errors, errors)
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -778,7 +780,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.get_by_label('Sample channel (optional)', exact=True).click()
             page.get_by_role('option', name='#scene', exact=True).wait_for()
             self.assertEqual(page.get_by_role('option', name='100', exact=True).count(), 0)
-            self.assertFalse(errors, errors)
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -793,6 +795,96 @@ class DashboardBrowserTests(unittest.TestCase):
             page.wait_for_timeout(300)
             calls = context.request.get(self.url + '/_test/metrics').json()
             self.assertEqual(calls.get('GET /guilds/1/channels', 0), 1, calls)
-            self.assertFalse(errors, errors)
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def panel_reads(self, context):
+        counters = context.request.get(self.url + '/_test/counters').json()
+        return {name: counters.get('store:' + name, 0) for name in ('model_usage_summary', 'list_presets')}
+
+    def test_lazy_panels_build_on_first_selection(self):
+        """PERF-01: a page load builds only the selected tab's panel; others are built once, on first selection.
+
+        ``model_usage_summary`` is read only by Server setup and ``list_presets`` only by Prompt presets.
+        """
+        context, page, errors = self.ux_page('/admin/')
+        try:
+            self.assertEqual(context.request.post(self.url + '/_test/counters/reset').status, 200)
+            page.goto(self.url + '/admin/guild/1?tab=characters')
+            page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
+            page.get_by_role('button', name='Create character', exact=True).wait_for()
+            page.wait_for_timeout(300)
+            self.assertEqual(self.panel_reads(context), {'model_usage_summary': 0, 'list_presets': 0})
+            page.get_by_role('tab', name='Prompt presets', exact=True).click()
+            page.get_by_label('Sample channel (optional)', exact=True).wait_for()
+            page.wait_for_timeout(300)
+            built = self.panel_reads(context)
+            self.assertEqual(built['model_usage_summary'], 0, built)
+            self.assertGreaterEqual(built['list_presets'], 1, built)
+            # Leaving and returning does not rebuild the panel.
+            page.get_by_role('tab', name='Characters', exact=True).click()
+            page.get_by_role('tab', name='Prompt presets', exact=True).click()
+            page.get_by_label('Sample channel (optional)', exact=True).wait_for()
+            page.wait_for_timeout(300)
+            self.assertEqual(self.panel_reads(context), built)
+            page.get_by_role('tab', name='Server setup', exact=True).click()
+            page.get_by_label('Space name', exact=True).wait_for()
+            page.wait_for_timeout(300)
+            self.assertEqual(self.panel_reads(context), {**built, 'model_usage_summary': 1})
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def create_space_in_place(self, page, name):
+        page.evaluate('window.__marker = 1')
+        page.get_by_label('Space name', exact=True).fill(name)
+        page.get_by_role('button', name='Create space', exact=True).click()
+        page.get_by_text(f'{name} · world', exact=True).wait_for(timeout=5000)
+
+    def test_mutation_updates_page_without_browser_reload(self):
+        """PERF-01: Create space refreshes the page in place: no navigation, no new Discord channel fetch."""
+        context, page, errors = self.ux_page('/admin/guild/1')
+        try:
+            page.get_by_label('Space name', exact=True).wait_for()
+            self.assertEqual(context.request.post(self.url + '/_test/metrics/reset').status, 200)
+            self.create_space_in_place(page, 'Inplace world')
+            self.assertEqual(page.evaluate('window.__marker'), 1)
+            page.wait_for_timeout(300)
+            calls = context.request.get(self.url + '/_test/metrics').json()
+            self.assertEqual(calls.get('GET /guilds/1/channels', 0), 0, calls)
+            self.assertTrue(self.tab_selected(page, 'Server setup'))
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_other_tabs_show_current_data_after_mutation(self):
+        """PERF-01: a panel built before a mutation on another tab shows the new data when selected again."""
+        context, page, errors = self.ux_page('/admin/guild/1')
+        try:
+            page.get_by_role('tab', name='Characters', exact=True).click()
+            page.get_by_role('button', name='Create character', exact=True).wait_for()
+            page.get_by_role('tab', name='Server setup', exact=True).click()
+            self.create_space_in_place(page, 'Fresh world')
+            page.get_by_role('tab', name='Characters', exact=True).click()
+            page.get_by_role('button', name='Create character', exact=True).click()
+            page.get_by_role('dialog').get_by_label('Home world', exact=True).click()
+            page.get_by_role('option', name='Fresh world', exact=True).wait_for()
+            page.keyboard.press('Escape')
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_lore_import_button_builds_imports_panel(self):
+        """PERF-01 / UX-01: the Lore tab's Import lorebook button switches to Imports, building it if it is not yet built."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=lore')
+        try:
+            page.get_by_role('button', name='Import lorebook', exact=True).wait_for()
+            self.assertEqual(page.get_by_label('Channel (for channel books)', exact=True).count(), 0)
+            page.get_by_role('button', name='Import lorebook', exact=True).click()
+            page.get_by_label('Channel (for channel books)', exact=True).wait_for(timeout=5000)
+            self.assertTrue(self.tab_selected(page, 'Imports'))
+            page.wait_for_url('**tab=imports*')
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
         finally:
             context.close()

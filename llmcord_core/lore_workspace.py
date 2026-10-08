@@ -14,7 +14,6 @@ def snapshot(entry):
 
 
 def render_lore_workspace(ctx, entry_editor, on_import=None, on_entry_import=None):
-    ui.add_css('.lore-drop-zone:empty::before { content: "Drop entries here"; color: #94a3b8; pointer-events: none; }')
     owners = ctx.snapshot.owners
     options = {f"{owner['kind']}:{owner['id']}": owner['label'] for owner in owners}
     ui.label('Lore workspace').classes('text-xl font-bold')

@@ -12,7 +12,7 @@ def guideline_editor(ctx, kind, owner_id, label):
     control.props('placeholder="Setting, participants\' fictional roles, tone, and interaction conventions"')
     ctx.button('Save ' + label.lower(),
                lambda: ctx.store.save_guidelines(ctx.guild_id, kind, owner_id, control.value or '', current['revision']),
-               'guidelines.edit', {'kind': kind, 'id': owner_id}, then=lambda _: ui.navigate.reload())
+               'guidelines.edit', {'kind': kind, 'id': owner_id}, then=lambda _: ctx.refresh())
 
 
 async def delete_space_dialog(ctx, space):
@@ -30,7 +30,7 @@ async def delete_space_dialog(ctx, space):
             ui.button('Cancel', on_click=dialog.close)
             ctx.button('Delete ' + space['kind'],
                        lambda: ctx.store.delete_space(ctx.guild_id, space['id'], impact['revision']),
-                       'space.delete', {'id': space['id']}, then=lambda _: ui.navigate.reload(), color='negative').set_enabled(not impact['characters'] and not impact['channels'])
+                       'space.delete', {'id': space['id']}, then=lambda _: ctx.refresh(), color='negative').set_enabled(not impact['characters'] and not impact['channels'])
     dialog.open()
 
 
@@ -48,7 +48,7 @@ async def delete_book_dialog(ctx, book):
         with ui.row():
             ui.button('Cancel', on_click=dialog.close)
             ctx.button('Delete lorebook', lambda: ctx.store.delete_lorebook(ctx.guild_id, book['id'], revision),
-                       'book.delete', {'id': book['id']}, then=lambda _: ui.navigate.to(f'/guild/{ctx.guild_id}?tab=imports'), color='negative')
+                       'book.delete', {'id': book['id']}, then=lambda _: ctx.refresh('imports'), color='negative')
     dialog.open()
 
 
@@ -80,7 +80,7 @@ def direct_import_dialog(ctx, kind, owner_id, on_saved=None):
                     if on_saved:
                         on_saved(refs)
                     else:
-                        ui.navigate.to(f'/guild/{ctx.guild_id}?tab=lore&owner={kind}:{owner_id}')
+                        return ctx.refresh('lore', owner=f'{kind}:{owner_id}')
                 ctx.button('Apply entry import', lambda: ctx.store.import_lore_entries(ctx.guild_id, kind, owner_id, imported, revision),
                            'lore.import', {'kind': kind, 'id': owner_id}, then=saved)
         ctx.upload(uploaded, 'Upload JSON entries')

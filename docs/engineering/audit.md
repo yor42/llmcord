@@ -75,7 +75,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Amplifiers:**
   - **Lore search.** Each value change calls `ctx.run(lambda: True)`, then re-renders the board (`llmcord_core/lore_workspace.py:220-225`).
   - **Silent drops.** A failed or rate-limited check makes `socket_allowed` return False, and the event is dropped with no message (`dashboard.py:85-87`, `:98-99`). *(Fixed in R2 step 5, see Status.)*
-  - **Full reloads.** Most mutations end in `ui.navigate.reload()`, which re-renders all five tab panels eagerly (`dashboard.py:183-194`; e.g. `:242`, `:253`, `:267`, `:370`, `:575`, `:712`).
+  - **Full reloads.** Most mutations end in `ui.navigate.reload()`, which re-renders all five tab panels eagerly (`dashboard.py:183-194`; e.g. `:242`, `:253`, `:267`, `:370`, `:575`, `:712`). *(Fixed in R5 step 6: only the selected tab is built; others build on first selection; mutations rebuild the current panel in place via `LiveContext.refresh`, with no browser reload.)*
 - **Why it matters:** see `perf-baseline.md`. Typing 10 characters triggers 21 guild checks. When Discord reports Remaining 0, they queue behind each other and the search settles about 20 s later.
 - **Direction:**
   - Cache the per-session guild list with a short TTL (about 30–60 s), invalidated on 401 and on sign-out.

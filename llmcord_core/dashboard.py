@@ -30,6 +30,7 @@ class LiveContext:
         self.store = self.service.store
         self.lore_owner = request.query_params.get('owner')
         self.channel_names = {}
+        self.selector, self.containers, self.builders, self.built = None, {}, {}, set()
 
     async def load_channel_names(self):
         # One Discord channel fetch per page render; a failure leaves the mapping empty.
@@ -53,6 +54,40 @@ class LiveContext:
             hubs={r['id']: r['name'] for r in spaces if r['kind'] == 'hub'},
             owners=self.service.owners_from(gid, spaces, characters, channels, lorebooks, scopes, self.channel_names))
 
+    def set_url(self, **params):
+        sets = ''.join(f'u.searchParams.set({json.dumps(k)}, {json.dumps(v)});' for k, v in params.items())
+        self.selector.client.run_javascript(f'const u = new URL(location.href);{sets} history.replaceState(history.state, "", u);')
+
+    async def build(self, tab):
+        """Build a tab's panel once; a fresh snapshot is read per build because panels may be built long after page load."""
+        container = self.containers.get(tab)
+        if container is None or tab in self.built:
+            return
+        self.built.add(tab)
+        self.__dict__.pop('snapshot', None)
+        container.clear()
+        try:
+            with container:
+                result = self.builders[tab]()
+                if inspect.isawaitable(result):
+                    await result  # builders must not otherwise await: a refresh during an awaited build would double-fill
+        except BaseException:
+            self.built.discard(tab)
+            raise
+
+    async def refresh(self, tab=None, owner=None):
+        """In-page replacement for a browser reload: stale every built panel, optionally switch tab, rebuild the visible one."""
+        if owner:
+            self.lore_owner = owner
+            self.set_url(owner=owner)
+        for built in self.built:
+            self.containers[built].clear()
+        self.built.clear()
+        if tab and tab != self.selector.value:
+            self.selector.set_value(tab)  # returns before the build: the tab_panels change handler builds it
+        else:
+            await self.build(self.selector.value)
+
     async def run(self, operation, action=None, detail=None):
         return (await self._attempt(operation, action, detail))[1]
 
@@ -75,7 +110,9 @@ class LiveContext:
             if success:
                 ui.notify(success, type='positive')
             if then:
-                then(result)
+                followup = then(result)
+                if inspect.isawaitable(followup):
+                    await followup
         return ui.button(text, on_click=clicked, **kwargs)
 
     def upload(self, handler, label):
@@ -237,20 +274,17 @@ def mount_dashboard(app):
         if selected_tab not in ('setup', 'characters', 'lore', 'imports', 'prompts'):
             selected_tab = 'setup'
         await ctx.load_channel_names()  # must precede any ctx.snapshot access: it bakes channel names into owner labels
-        def record_tab(event):
-            # Keep ?tab= current so ui.navigate.reload() returns to this tab.
-            ui.run_javascript(f'const u = new URL(location.href); u.searchParams.set("tab", {json.dumps(event.value)}); history.replaceState(history.state, "", u);')
-        with ui.tab_panels(tabs, value=selected_tab, on_change=record_tab).classes('w-full'):
-            with ui.tab_panel(setup):
-                await setup_panel(ctx)
-            with ui.tab_panel(characters):
-                characters_panel(ctx)
-            with ui.tab_panel(lore):
-                lore_panel(ctx, on_import=lambda: tabs.set_value(imports))
-            with ui.tab_panel(imports):
-                imports_panel(ctx)
-            with ui.tab_panel(prompts):
-                presets_panel(ctx)
+        ui.add_css('.lore-drop-zone:empty::before { content: "Drop entries here"; color: #94a3b8; pointer-events: none; }')
+        async def changed(event):
+            ctx.set_url(tab=event.value)
+            await ctx.build(event.value)
+        ctx.builders = {'setup': lambda: setup_panel(ctx), 'characters': lambda: characters_panel(ctx),
+                        'lore': lambda: lore_panel(ctx, on_import=lambda: ctx.selector.set_value('imports')),
+                        'imports': lambda: imports_panel(ctx), 'prompts': lambda: presets_panel(ctx)}
+        with ui.tab_panels(tabs, value=selected_tab, on_change=changed).classes('w-full') as ctx.selector:
+            for tab in (setup, characters, lore, imports, prompts):
+                ctx.containers[tab.props['name']] = ui.tab_panel(tab)
+        await ctx.build(selected_tab)
         signout(app, session)
 
     ui.run_with(app, mount_path='/admin', title='llmcord admin', dark=True, reconnect_timeout=15,
@@ -297,7 +331,7 @@ async def setup_panel(ctx):
     with ui.row().classes('items-end'):
         name = ui.input('Space name')
         kind = ui.select(['world', 'hub'], value='world', label='Kind')
-        ctx.button('Create space', lambda: store.create_space(gid, name.value or '', kind.value), 'space.create', then=lambda _: ui.navigate.reload())
+        ctx.button('Create space', lambda: store.create_space(gid, name.value or '', kind.value), 'space.create', then=lambda _: ctx.refresh())
     ui.separator()
     ui.label('Hub links').classes('text-xl font-bold')
     hubs, worlds = ctx.snapshot.hubs, ctx.snapshot.worlds
@@ -310,7 +344,7 @@ async def setup_panel(ctx):
         def linked(result):
             if result['pruned']:
                 ui.notify(f"Removed {result['pruned']} cast entries no longer available in the hub.")
-            ui.navigate.reload()
+            return ctx.refresh()
         ctx.button('Link', lambda: link(True), 'hub.link', then=linked)
         ctx.button('Unlink', lambda: link(False), 'hub.unlink', then=linked)
     for ident in hubs:
@@ -331,7 +365,7 @@ async def setup_panel(ctx):
                 ui.notify(f'Removed from the cast (not available there): {shown}.')
             else:
                 ui.notify('Cast kept.')
-            ui.navigate.reload()
+            return ctx.refresh()
         ctx.button('Bind channel', bind, 'channel.bind', then=bound)
     ui.label('Rebinding a channel keeps its ambient mode and removes cast members not available in the new space.').classes('text-amber-300')
     for binding in ctx.snapshot.channels:
@@ -370,8 +404,6 @@ async def setup_panel(ctx):
 def characters_panel(ctx):
     from nicegui import ui
     store, gid = ctx.store, ctx.guild_id
-    def reload_characters(_):
-        ui.navigate.to(f'/guild/{gid}?tab=characters')
     worlds = ctx.snapshot.worlds
     def new_character():
         with ui.dialog() as dialog, ui.card().classes('w-full max-w-lg'):
@@ -382,7 +414,7 @@ def characters_panel(ctx):
             with ui.row():
                 ui.button('Cancel', on_click=dialog.close)
                 ctx.button('Create', lambda: store.create_character(gid, world.value, name.value or ''),
-                           'character.create', then=reload_characters)
+                           'character.create', then=lambda _: ctx.refresh('characters'))
         dialog.open()
     ui.button('Create character', icon='add', on_click=new_character).set_enabled(bool(worlds))
     if not worlds:
@@ -403,11 +435,11 @@ def characters_panel(ctx):
                 new = {**card, **{key: control.value or '' for key, control in fields.items()}, 'name': name.value}
                 store.update_character(gid, row['id'], world.value, name.value or '', new, expected_revision=revision)
                 return True
-            ctx.button('Save character', save, 'character.edit', {'id': row['id']}, then=reload_characters)
+            ctx.button('Save character', save, 'character.edit', {'id': row['id']}, then=lambda _: ctx.refresh('characters'))
             def archive(row=row):
                 store.archive_character(gid, row['id'], not row['archived'])
                 return True
-            ctx.button('Restore' if row['archived'] else 'Archive', archive, 'character.archive', {'id': row['id']}, then=reload_characters)
+            ctx.button('Restore' if row['archived'] else 'Archive', archive, 'character.archive', {'id': row['id']}, then=lambda _: ctx.refresh('characters'))
             def confirm_delete(row=row, revision=revision):
                 with ui.dialog() as dialog, ui.card().classes('w-full max-w-lg'):
                     ui.label(f"Delete {row['name']}?").classes('text-xl font-bold')
@@ -416,7 +448,7 @@ def characters_panel(ctx):
                     with ui.row():
                         ui.button('Cancel', on_click=dialog.close)
                         ctx.button('Delete permanently', lambda: store.delete_character(gid, row['id'], revision),
-                                   'character.delete', {'id': row['id']}, then=reload_characters, color='negative')
+                                   'character.delete', {'id': row['id']}, then=lambda _: ctx.refresh('characters'), color='negative')
                 dialog.open()
             ui.button('Delete character', icon='delete', color='negative', on_click=confirm_delete)
             static_avatar_editor(ctx, row)
@@ -432,7 +464,7 @@ def characters_panel(ctx):
                         raise ValueError('That emotion key already exists; edit its slot instead')
                     store.save_avatar(gid, row['id'], key.value or '', label.value or '', '')
                     return True
-                ctx.button('Add emotion', add_slot, 'avatar.slot.create', then=lambda _: ui.navigate.reload())
+                ctx.button('Add emotion', add_slot, 'avatar.slot.create', then=lambda _: ctx.refresh())
     if not rows:
         ui.label('Create an empty character here or import a character card in Imports to get started.')
 
@@ -457,7 +489,7 @@ def static_avatar_editor(ctx, character):
             ctx.store.save_static_avatar(ctx.guild_id, character['id'], state['image'], revision)
             return True
         def reload(_):
-            ui.navigate.to(f'/guild/{ctx.guild_id}?tab=characters')
+            return ctx.refresh('characters')
         ctx.button('Save fallback avatar', save, 'avatar.fallback.edit', {'character': character['id']}, then=reload)
         if character['avatar']:
             def remove():
@@ -482,7 +514,7 @@ def avatar_editor(ctx, character_id, slot):
         def save():
             ctx.store.save_avatar(ctx.guild_id, character_id, slot['slot_key'], label.value or '', description.value or '', state['image'], slot['revision'])
             return True
-        ctx.button('Save slot', save, 'avatar.slot.edit', {'character': character_id, 'slot': slot['slot_key']}, then=lambda _: ui.navigate.reload())
+        ctx.button('Save slot', save, 'avatar.slot.edit', {'character': character_id, 'slot': slot['slot_key']}, then=lambda _: ctx.refresh())
         async def publish():
             return await ctx.service.avatars.publish(ctx.guild_id, character_id, slot['slot_key'], repair=True)
         ctx.button('Publish / repair image', publish, 'avatar.publish', {'character': character_id, 'slot': slot['slot_key']}, success='Image published')
@@ -490,12 +522,12 @@ def avatar_editor(ctx, character_id, slot):
             def remove_image():
                 ctx.store.clear_avatar_image(ctx.guild_id, character_id, slot['slot_key'], slot['revision'])
                 return True
-            ctx.button('Remove emotion image', remove_image, 'avatar.image.delete', {'character': character_id, 'slot': slot['slot_key']}, then=lambda _: ui.navigate.to(f'/guild/{ctx.guild_id}?tab=characters'))
+            ctx.button('Remove emotion image', remove_image, 'avatar.image.delete', {'character': character_id, 'slot': slot['slot_key']}, then=lambda _: ctx.refresh('characters'))
         if slot['slot_key'] != 'neutral':
             def delete():
                 ctx.store.delete_avatar(ctx.guild_id, character_id, slot['slot_key'], slot['revision'])
                 return True
-            ctx.button('Remove emotion', delete, 'avatar.slot.delete', then=lambda _: ui.navigate.reload())
+            ctx.button('Remove emotion', delete, 'avatar.slot.delete', then=lambda _: ctx.refresh())
 
 
 def lore_panel(ctx, on_import=None):
@@ -618,7 +650,7 @@ def imports_panel(ctx):
                 if confirm and not confirm.value:
                     raise ValueError('Confirm updating the existing character')
                 return store.apply_card(gid, selected_world, card, {key: c.value for key, c in decisions.items()}, preview['revision'])
-            ctx.button('Apply card import', apply, 'character.import', then=lambda _: ui.navigate.reload())
+            ctx.button('Apply card import', apply, 'character.import', then=lambda _: ctx.refresh())
     ctx.upload(card_uploaded, 'Upload V2/V3 JSON or PNG card')
     ui.separator()
     ui.label('Direct lore entry import').classes('text-xl font-bold')
@@ -637,7 +669,7 @@ def imports_panel(ctx):
         target = ui.select(['guild', 'channel'], value='guild', label='Book scope')
         channels = {r['channel_id']: ctx.channel_names.get(r['channel_id'], str(r['channel_id'])) for r in ctx.snapshot.channels}
         channel = ui.select(channels, label='Channel (for channel books)')
-        ctx.button('Create book', lambda: store.create_lorebook(gid, book_name.value or '', target.value, channel.value or 0), 'book.create', then=lambda _: ui.navigate.reload())
+        ctx.button('Create book', lambda: store.create_lorebook(gid, book_name.value or '', target.value, channel.value or 0), 'book.create', then=lambda _: ctx.refresh())
     for book in ctx.snapshot.lorebooks:
         with ui.expansion(book['name'] + ' · ' + book['target_kind']).classes('w-full'):
             ui.button('Delete book', icon='delete', color='negative', on_click=lambda book=book: delete_book_dialog(ctx, book))
@@ -648,7 +680,7 @@ def imports_panel(ctx):
                     def assign(book=book, space=space, enabled=enabled):
                         store.set_lorebook_space(gid, book['id'], space['id'], not enabled)
                         return True
-                    ctx.button(('Disable in ' if enabled else 'Enable in ') + space['name'], assign, 'book.assign', then=lambda _: ui.navigate.reload())
+                    ctx.button(('Disable in ' if enabled else 'Enable in ') + space['name'], assign, 'book.assign', then=lambda _: ctx.refresh())
             area = ui.column().classes('w-full')
             async def book_uploaded(event, book=book, area=area):
                 imported = parse_lorebook(await event.file.read())
@@ -664,7 +696,7 @@ def imports_panel(ctx):
                         if __import__('time').time() > expires:
                             raise ValueError('Preview expired; upload again')
                         return store.sync_lorebook(gid, book['id'], imported, {key: c.value for key, c in decisions.items()}, revision)
-                    ctx.button('Apply lorebook sync', apply, 'book.sync', {'id': book['id']}, then=lambda _: ui.navigate.reload())
+                    ctx.button('Apply lorebook sync', apply, 'book.sync', {'id': book['id']}, then=lambda _: ctx.refresh())
             ctx.upload(book_uploaded, 'Upload JSON lorebook for preview')
 
 
@@ -775,13 +807,13 @@ def presets_panel(ctx):
         def activate():
             store.activate_preset(gid, state['id'], state['revision'], ctx.service.providers)
             return True
-        ctx.button('Activate saved revision', activate, 'preset.activate', then=lambda _: ui.navigate.reload())
+        ctx.button('Activate saved revision', activate, 'preset.activate', then=lambda _: ctx.refresh())
         def delete():
             if not state['id']:
                 raise ValueError('The built-in default cannot be deleted')
             store.delete_preset(gid, state['id'])
             return True
-        ctx.button('Delete preset', delete, 'preset.delete', then=lambda _: ui.navigate.reload(), color='negative')
+        ctx.button('Delete preset', delete, 'preset.delete', then=lambda _: ctx.refresh(), color='negative')
     ui.separator()
     ui.label('Import preset').classes('text-xl font-bold')
     order_area = ui.column().classes('w-full')
