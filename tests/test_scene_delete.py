@@ -100,6 +100,151 @@ class DeleteSubtreeStoreTests(unittest.TestCase):
         self.assertIsNotNone(self.store.node(1000))
 
 
+def personal_sources(store, guild_id=1):
+    return sorted(r["source_message_id"] for r in store.db.execute(
+        "SELECT source_message_id FROM personal_memories WHERE guild_id=?", (guild_id,)))
+
+
+def encounter_sources(store, guild_id=1):
+    return sorted(r["source_message_id"] for r in store.db.execute(
+        "SELECT source_message_id FROM encounters WHERE guild_id=?", (guild_id,)))
+
+
+def count(store, table):
+    return store.db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+
+
+class DeleteSubtreeDerivedMemoryTests(unittest.TestCase):
+    """ARCH-05 / D10: delete_subtree also forgets personal facts and encounters sourced from the deleted nodes."""
+
+    def setUp(self):
+        self.store = Store()
+        self.world = self.store.create_space(1, "World", "world")
+        self.store.bind_channel(1, 100, self.world)
+        self.alice = self.store.add_character(1, self.world, "Alice", {"name": "Alice"}, None, [])
+        seed(self.store, self.alice)
+        self.store.set_consent(1, 5, True)
+        for ident in (1000, 1001, 1002, 1003, 2000):
+            self.store.add_personal(1, 5, self.alice, f"likes {ident}", ident)
+            self.store.add_encounter(1, self.alice, self.world, f"met {ident}", ident)
+
+    def tearDown(self):
+        self.store.close()
+
+    def test_facts_and_encounters_of_deleted_nodes_are_removed_others_kept(self):
+        """ARCH-05 (D10): facts sourced from the deleted subtree go; ancestor and sibling-branch facts stay."""
+        self.store.delete_subtree(1, 1002)
+        self.assertEqual(personal_sources(self.store), [1000, 1001, 2000])
+        self.assertEqual(encounter_sources(self.store), [1000, 1001, 2000])
+
+    def test_root_delete_removes_all_derived_facts(self):
+        """ARCH-05 (D10): deleting the root forgets every fact sourced from the scene."""
+        self.store.delete_subtree(1, 1000)
+        self.assertEqual(personal_sources(self.store), [])
+        self.assertEqual(encounter_sources(self.store), [])
+
+    def test_other_guild_facts_are_kept(self):
+        """ARCH-05 (D10): the new deletes are guild-scoped; another guild's rows are never touched."""
+        self.store.db.execute("PRAGMA foreign_keys=OFF")
+        self.store.db.execute("INSERT INTO personal_memories(guild_id,user_id,character_id,content,source_message_id) VALUES(2,6,?,?,1002)", (self.alice, "other guild"))
+        self.store.db.execute("INSERT INTO encounters(guild_id,character_id,space_id,content,source_message_id) VALUES(2,?,?,?,1002)", (self.alice, self.world, "other guild"))
+        self.store.db.commit()
+        self.store.db.execute("PRAGMA foreign_keys=ON")
+        self.store.delete_subtree(1, 1002)
+        self.assertEqual(personal_sources(self.store, 2), [1002])
+        self.assertEqual(encounter_sources(self.store, 2), [1002])
+
+    def test_missing_node_deletes_no_facts(self):
+        """ARCH-05 (D10): an unknown id removes no facts."""
+        self.store.delete_subtree(1, 424242)
+        self.assertEqual(len(personal_sources(self.store)), 5)
+        self.assertEqual(len(encounter_sources(self.store)), 5)
+
+    def test_promoted_lore_stays_after_its_evidence_is_deleted(self):
+        """ARCH-05 (D10): lore promoted from candidates keeps existing when its source nodes are deleted."""
+        self.store.add_candidate(1, "channel", 100, "shared fact", 1000, 1002)
+        self.store.add_candidate(1, "channel", 100, "shared fact", 1001, 1003)
+        before = [r["content"] for r in self.store.db.execute("SELECT content FROM lore WHERE content='shared fact'")]
+        self.assertEqual(before, ["shared fact"])
+        self.store.delete_subtree(1, 1002)
+        after = [r["content"] for r in self.store.db.execute("SELECT content FROM lore WHERE content='shared fact'")]
+        self.assertEqual(after, ["shared fact"])
+
+    def test_expire_history_keeps_facts_and_encounters(self):
+        """ARCH-05 (D10): history expiry still keeps derived facts and encounters."""
+        self.assertEqual(self.store.expire_history(1, now=10 * 86400), 5)
+        self.assertIsNone(self.store.node(1000))
+        self.assertEqual(len(personal_sources(self.store)), 5)
+        self.assertEqual(len(encounter_sources(self.store)), 5)
+
+
+class DeletedSourceRaceTests(unittest.TestCase):
+    """ARCH-05 / D10: a background memory task finishing after its turn was deleted writes nothing."""
+
+    def setUp(self):
+        self.store = Store()
+        self.world = self.store.create_space(1, "World", "world")
+        self.store.bind_channel(1, 100, self.world)
+        self.alice = self.store.add_character(1, self.world, "Alice", {"name": "Alice"}, None, [])
+        seed(self.store, self.alice)
+        self.store.set_consent(1, 5, True)
+        self.store.delete_subtree(1, 1002)
+
+    def tearDown(self):
+        self.store.close()
+
+    def test_add_personal_for_deleted_source_writes_nothing(self):
+        self.store.add_personal(1, 5, self.alice, "late fact", 1002)
+        self.assertEqual(count(self.store, "personal_memories"), 0)
+
+    def test_add_personal_for_live_source_still_writes(self):
+        self.store.add_personal(1, 5, self.alice, "live fact", 1001)
+        self.assertEqual(personal_sources(self.store), [1001])
+
+    def test_add_encounter_for_deleted_source_writes_nothing(self):
+        self.store.add_encounter(1, self.alice, self.world, "late", 1003)
+        self.assertEqual(count(self.store, "encounters"), 0)
+
+    def test_add_encounter_for_live_source_still_writes(self):
+        self.store.add_encounter(1, self.alice, self.world, "live", 2000)
+        self.assertEqual(encounter_sources(self.store), [2000])
+
+    def test_add_candidate_for_deleted_source_writes_nothing(self):
+        """No candidate, evidence or promotion even when a second mention would have promoted it."""
+        lore_before, ev_before, cand_before = count(self.store, "lore"), count(self.store, "evidence"), count(self.store, "candidates")
+        self.store.add_candidate(1, "channel", 100, "fact 1000", 1000, 1002)
+        self.store.add_candidate(1, "channel", 100, "late new", 1000, 1003)
+        self.assertEqual(count(self.store, "lore"), lore_before)
+        self.assertEqual(count(self.store, "evidence"), ev_before)
+        self.assertEqual(count(self.store, "candidates"), cand_before)
+
+    def test_add_candidate_for_live_source_still_writes(self):
+        self.store.add_candidate(1, "channel", 100, "fact 1000", 2000, 2000)
+        self.assertEqual(count(self.store, "lore"), 1)
+
+    def test_save_summary_for_deleted_node_is_a_noop(self):
+        self.store.save_summary(1002, "late summary")
+        self.assertIsNone(self.store.summary(1002))
+
+    def test_save_summary_for_live_node_still_writes(self):
+        self.store.save_summary(1001, "updated")
+        self.assertEqual(self.store.summary(1001), "updated")
+
+    def test_source_existing_only_in_another_guild_is_not_live(self):
+        """The existence check is guild-scoped: guild 2's node does not make a guild-1 write valid."""
+        self.store.record_node(7000, 2, 500, None, 9, None, "other guild", created_at=1.0)
+        self.store.add_personal(1, 5, self.alice, "cross guild", 7000)
+        self.store.add_encounter(1, self.alice, self.world, "cross guild", 7000)
+        self.store.add_candidate(1, "channel", 100, "cross guild", 7000, 7000)
+        self.assertEqual(count(self.store, "personal_memories"), 0)
+        self.assertEqual(count(self.store, "encounters"), 0)
+        self.assertEqual(count(self.store, "evidence WHERE source_message_id=7000"), 0)
+
+    def test_consent_still_required_for_live_source(self):
+        self.store.add_personal(1, 6, self.alice, "no consent", 1001)
+        self.assertEqual(count(self.store, "personal_memories"), 0)
+
+
 class SceneDeleteCommandTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.bot = SkitBot(make_settings())
@@ -123,6 +268,15 @@ class SceneDeleteCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(self.store.node(1003))
         for kept in (1000, 1001, 2000):
             self.assertIsNotNone(self.store.node(kept))
+
+    async def test_reply_mentions_forgotten_personal_facts_and_encounters(self):
+        """ARCH-05 / D10: the reply appends how many personal facts and encounters were forgotten."""
+        self.store.set_consent(1, 5, True)
+        self.store.add_personal(1, 5, self.alice, "likes tea", 1002)
+        self.store.add_encounter(1, self.alice, self.world, "met at the gate", 1003)
+        interaction = FakeInteraction(admin=True)
+        await invoke(self.bot, "admin scene delete", interaction, "1002")
+        self.assertEqual(interaction.replies[0], "Deleted 2 stored messages from this scene. Also forgot 1 personal fact and 1 encounter.")
 
     async def test_root_id_deletes_whole_tree(self):
         """UX-09 (D5): giving the root still deletes everything in the scene."""

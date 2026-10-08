@@ -67,6 +67,8 @@ class CoreTests(unittest.TestCase):
         self.assertFalse(any(row["content"] == "The bell rings twice" for row in self.store.list_lore(1, "space", self.b)))
 
     def test_candidates_need_two_distinct_scenes_and_stay_local(self):
+        for ident in (1001, 1002, 2001):
+            self.store.record_node(ident, 1, 100, None, 9, None, 'src')
         self.store.add_candidate(1, "channel", 100, "The bell rings twice", 1000, 1001)
         self.store.add_candidate(1, "channel", 100, "The bell rings twice", 1000, 1002)
         self.assertFalse(self.store.list_lore(1, "channel", 100))
@@ -103,6 +105,8 @@ class CoreTests(unittest.TestCase):
 
     def test_production_candidates_activate_locally_after_two_scenes(self):
         """Promoted candidate lore is retrieved by the production selector in its own channel only."""
+        for ident in (1001, 2001):
+            self.store.record_node(ident, 1, 100, None, 9, None, 'src')
         self.store.add_candidate(1, "channel", 100, "The bell rings twice", 1000, 1001)
         self.store.add_candidate(1, "channel", 100, "The bell rings twice", 2000, 2001)
         self.assertIn("The bell rings twice", [item.content for item in
@@ -168,6 +172,8 @@ class CoreTests(unittest.TestCase):
                 second.close()
 
     def test_personal_consent_and_character_space_memory(self):
+        for ident in (1, 2, 3):
+            self.store.record_node(ident, 1, 100, None, 9, None, 'src')
         self.store.add_personal(1, 9, self.alice, "likes tea", 1)
         self.assertEqual(self.store.personal(1, 9), [])
         self.store.set_consent(1, 9, True)

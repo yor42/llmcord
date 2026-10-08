@@ -51,6 +51,7 @@ class DirectMessageInvocationTests(unittest.IsolatedAsyncioTestCase):
         self.store.bind_channel(1, 100, self.world)
         self.alice = self.store.add_character(1, self.world, "Alice", {"name": "Alice"}, None, [])
         self.store.set_consent(1, 9, True)
+        self.store.record_node(1, 1, 100, None, 9, None, 'src')
         self.store.add_personal(1, 9, self.alice, "Likes tea", 1)
         self.memory_id = self.store.personal(1, 9)[0]["id"]
         self.guild_ids_seen = []

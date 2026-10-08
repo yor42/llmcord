@@ -87,6 +87,7 @@ class StoreLifecycleTests(unittest.TestCase):
 
     def test_forget_personal_is_scoped_to_owner(self):
         self.store.set_consent(1, 9, True)
+        self.store.record_node(1, 1, 100, None, 9, None, 'src')
         self.store.add_personal(1, 9, self.alice, "Likes tea", 1)
         memory_id = self.store.personal(1, 9)[0]["id"]
         self.store.forget_personal(1, 10, memory_id)

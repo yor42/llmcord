@@ -913,8 +913,11 @@ def _register_scene_commands(bot: SkitBot, ctx: SimpleNamespace, admin_scene: ap
         node = bot.store.node(target_id)
         if not node or node["guild_id"] != interaction.guild_id or node["channel_id"] != interaction.channel.id:
             raise ValueError("Scene message not found in this channel")
-        count = bot.store.delete_subtree(interaction.guild_id, target_id)
-        await interaction.response.send_message(f"Deleted {count} stored messages from this scene.", ephemeral=True)
+        count, personal, encounters = bot.store.delete_subtree_counts(interaction.guild_id, target_id)
+        message = f"Deleted {count} stored messages from this scene."
+        if personal or encounters:
+            message += f" Also forgot {personal} personal fact{'s' if personal != 1 else ''} and {encounters} encounter{'s' if encounters != 1 else ''}."
+        await interaction.response.send_message(message, ephemeral=True)
 
     bot.tree.add_command(scene)
 

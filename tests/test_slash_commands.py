@@ -91,6 +91,8 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
         user = 9
         await invoke(self.bot, "memory opt_in", FakeInteraction(user_id=user))
         self.assertTrue(self.store.has_consent(1, user))
+        self.store.record_node(1, 1, 100, None, 9, None, 'src')
+        self.store.record_node(2, 1, 100, None, 9, None, 'src')
         self.store.add_personal(1, user, self.alice, "Likes tea", 1)
         listing = FakeInteraction(user_id=user)
         await invoke(self.bot, "memory list", listing)

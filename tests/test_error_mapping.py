@@ -477,7 +477,9 @@ class DefiniteOutcomeTests(unittest.IsolatedAsyncioTestCase):
 
     def remember(self, guild_id, user_id, character_id, content):
         self.store.set_consent(guild_id, user_id, True)
-        self.store.add_personal(guild_id, user_id, character_id, content, 1)
+        if not self.store.node(1000 + guild_id):
+            self.store.record_node(1000 + guild_id, guild_id, 100 * guild_id, None, 9, None, "src")
+        self.store.add_personal(guild_id, user_id, character_id, content, 1000 + guild_id)
         return next(row["id"] for row in self.store.personal(guild_id, user_id) if row["content"] == content)
 
     async def forget(self, memory_id, user_id=9, guild_id=1):

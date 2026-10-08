@@ -448,7 +448,9 @@ class Store(AdminStore):
         return self.one("SELECT * FROM nodes WHERE channel_id=? AND character_id IS NOT NULL ORDER BY created_at DESC,message_id DESC LIMIT 1", (channel_id,))
 
     def save_summary(self, node_id: int, content: str) -> None:
-        self.execute("INSERT INTO summaries(node_id,content) VALUES(?,?) ON CONFLICT(node_id) DO UPDATE SET content=excluded.content", (node_id, content))
+        # A background task can finish after its node was deleted; skip instead of hitting the FK.
+        self.execute("INSERT INTO summaries(node_id,content) SELECT message_id,? FROM nodes WHERE message_id=? "
+                     "ON CONFLICT(node_id) DO UPDATE SET content=excluded.content", (content, node_id))
 
     def summary(self, node_id: int) -> str | None:
         row = self.one("SELECT content FROM summaries WHERE node_id=?", (node_id,))
@@ -466,7 +468,8 @@ class Store(AdminStore):
 
     def add_personal(self, guild_id: int, user_id: int, character_id: int, content: str, source_id: int) -> None:
         if self.has_consent(guild_id, user_id):
-            self.execute("INSERT OR IGNORE INTO personal_memories(guild_id,user_id,character_id,content,source_message_id) VALUES(?,?,?,?,?)", (guild_id, user_id, character_id, content, source_id))
+            self.execute("INSERT OR IGNORE INTO personal_memories(guild_id,user_id,character_id,content,source_message_id) "
+                         "SELECT ?,?,?,?,message_id FROM nodes WHERE guild_id=? AND message_id=?", (guild_id, user_id, character_id, content, guild_id, source_id))
 
     def personal(self, guild_id: int, user_id: int, character_id: int | None = None) -> list[sqlite3.Row]:
         if character_id is None:
@@ -479,13 +482,16 @@ class Store(AdminStore):
                                    (guild_id, user_id, memory_id)).rowcount > 0
 
     def add_encounter(self, guild_id: int, character_id: int, space_id: int, content: str, source_id: int) -> None:
-        self.execute("INSERT OR IGNORE INTO encounters(guild_id,character_id,space_id,content,source_message_id) VALUES(?,?,?,?,?)", (guild_id, character_id, space_id, content, source_id))
+        self.execute("INSERT OR IGNORE INTO encounters(guild_id,character_id,space_id,content,source_message_id) "
+                     "SELECT ?,?,?,?,message_id FROM nodes WHERE guild_id=? AND message_id=?", (guild_id, character_id, space_id, content, guild_id, source_id))
 
     def encounters(self, guild_id: int, character_id: int, space_id: int) -> list[sqlite3.Row]:
         return self.all("SELECT * FROM encounters WHERE guild_id=? AND character_id=? AND space_id=? ORDER BY id DESC LIMIT 12", (guild_id, character_id, space_id))
 
     def add_candidate(self, guild_id: int, scope_kind: str, scope_id: int, content: str, root_id: int, source_id: int) -> int:
         with self.db:
+            if not self.db.execute("SELECT 1 FROM nodes WHERE guild_id=? AND message_id=?", (guild_id, source_id)).fetchone():
+                return 0
             self.db.execute("INSERT OR IGNORE INTO candidates(guild_id,scope_kind,scope_id,content) VALUES(?,?,?,?)", (guild_id, scope_kind, scope_id, content))
             row = self.one("SELECT id,evidence_count,promoted FROM candidates WHERE guild_id=? AND scope_kind=? AND scope_id=? AND content=?", (guild_id, scope_kind, scope_id, content))
             inserted = self.db.execute("INSERT OR IGNORE INTO evidence(candidate_id,root_id,source_message_id) VALUES(?,?,?)", (row["id"], root_id, source_id)).rowcount
@@ -510,18 +516,15 @@ class Store(AdminStore):
     def save_webhook_id(self, channel_id: int, character_id: int, webhook_id: int) -> None:
         self.execute("INSERT INTO webhooks VALUES(?,?,?) ON CONFLICT(channel_id,character_id) DO UPDATE SET webhook_id=excluded.webhook_id", (channel_id, character_id, webhook_id))
 
-    def delete_scene(self, guild_id: int, root_id: int) -> None:
-        with self.db:
-            clause = "SELECT message_id FROM nodes WHERE guild_id=? AND root_id=?"
-            self.db.execute(f"DELETE FROM evidence WHERE source_message_id IN ({clause})", (guild_id, root_id))
-            self.db.execute(f"DELETE FROM trace WHERE response_id IN ({clause})", (guild_id, root_id))
-            self.db.execute(f"DELETE FROM lore_activations WHERE node_id IN ({clause})", (guild_id, root_id))
-            self.db.execute(f"DELETE FROM summaries WHERE node_id IN ({clause})", (guild_id, root_id))
-            self.db.execute("DELETE FROM nodes WHERE guild_id=? AND root_id=?", (guild_id, root_id))
-            self.db.execute("UPDATE candidates SET evidence_count=(SELECT COUNT(*) FROM evidence WHERE candidate_id=candidates.id)")
-            self.db.execute("DELETE FROM candidates WHERE evidence_count=0 AND promoted=0")
-
     def delete_subtree(self, guild_id: int, message_id: int) -> int:
+        return self.delete_subtree_counts(guild_id, message_id)[0]
+
+    def delete_subtree_counts(self, guild_id: int, message_id: int) -> tuple[int, int, int]:
+        """Delete a node and its descendants; returns (nodes, personal facts, encounters) removed.
+
+        Personal facts and encounters keep their FIRST source (INSERT OR IGNORE), so one re-stated in a surviving
+        branch later is still removed here; we cannot tell. Promoted lore is deliberately kept (D10)."""
+        personal = encounters = 0
         with self.db:
             self.db.execute("CREATE TEMP TABLE IF NOT EXISTS doomed(message_id INTEGER PRIMARY KEY)")
             self.db.execute("DELETE FROM doomed")
@@ -536,11 +539,13 @@ class Store(AdminStore):
                 self.db.execute(f"DELETE FROM trace WHERE response_id IN ({clause})")
                 self.db.execute(f"DELETE FROM lore_activations WHERE node_id IN ({clause})")
                 self.db.execute(f"DELETE FROM summaries WHERE node_id IN ({clause})")
+                personal = self.db.execute(f"DELETE FROM personal_memories WHERE guild_id=? AND source_message_id IN ({clause})", (guild_id,)).rowcount
+                encounters = self.db.execute(f"DELETE FROM encounters WHERE guild_id=? AND source_message_id IN ({clause})", (guild_id,)).rowcount
                 self.db.execute(f"DELETE FROM nodes WHERE message_id IN ({clause})")
                 self.db.execute("UPDATE candidates SET evidence_count=(SELECT COUNT(*) FROM evidence WHERE candidate_id=candidates.id)")
                 self.db.execute("DELETE FROM candidates WHERE evidence_count=0 AND promoted=0")
             self.db.execute("DELETE FROM doomed")
-            return count
+            return count, personal, encounters
 
     def expire_history(self, days: int, now: float | None = None) -> int:
         cutoff = (now or time.time()) - days * 86400

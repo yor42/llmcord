@@ -39,6 +39,7 @@ class StoreTimingTests(unittest.TestCase):
     def test_slow_call_logs_duration_and_sql_but_not_params(self):
         """REL-01 (fixed): with every call slow, a personal-memory write logs a WARNING with ms and the SQL prefix, never the bound values."""
         with threshold(0), self.assertLogs(LOGGER, logging.WARNING) as logs:
+            self.store.record_node(555, 1, 100, None, 9, None, "src")
             self.store.add_personal(1, 9, self.alice, SECRET, 555)
         self.assertEqual(self.store.personal(1, 9)[0]["content"], SECRET)
         output = "\n".join(logs.output)
@@ -70,6 +71,7 @@ class StoreTimingTests(unittest.TestCase):
         self.assertEqual(set(before), {"calls", "total_seconds", "max_seconds", "slow_calls"})
         self.store.has_consent(1, 9)
         self.store.personal(1, 9)
+        self.store.record_node(556, 1, 100, None, 9, None, "src")
         self.store.add_personal(1, 9, self.alice, "fact", 556)
         after = self.store.timing_stats()
         self.assertGreaterEqual(after["calls"], before["calls"] + 3)

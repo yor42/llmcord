@@ -48,7 +48,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 | ARCH-02 | Raw SQL and private store helpers in UI code | medium | CONFIRMED | fragile |
 | ARCH-03 | Duplicated constants and logic — **Mostly resolved (R6 step 4)** | low | CONFIRMED | preference |
 | ARCH-04 | Production-dead code and test-double fallbacks — **Resolved (R6 step 3)** | low | CONFIRMED | unconventional |
-| ARCH-05 | Scene deletion and expiry leave derived memory | medium | SUSPECTED | incorrect |
+| ARCH-05 | Scene deletion and expiry leave derived memory — **Resolved (R6 step 6, D10)** | medium | SUSPECTED | incorrect |
 | UX-01 | Missing success feedback; wrong tab after reload; raw IDs — **Resolved (R5 step 5)** | medium | CONFIRMED | incorrect |
 | UX-02 | Inconsistent terminology — **Resolved (R5 step 8)** | medium | CONFIRMED | preference |
 | UX-03 | Rebinding a channel silently resets cast and ambient | medium | CONFIRMED (test) | incorrect |
@@ -313,6 +313,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Direction:** follow the CLAUDE.md rule: grep, characterize, then delete together with the tests that pin them.
 
 ### ARCH-05: Scene deletion and expiry leave derived memory
+- **Status:** Resolved in R6 step 6 per D10. `/admin scene delete` (`Store.delete_subtree_counts`) also deletes personal facts and encounters whose source is a deleted node (guild-scoped); promoted lore stays; `expire_history` is unchanged. The reply adds "Also forgot N personal facts and M encounters." when any went. Late background writes for deleted nodes are dropped: `add_personal`, `add_encounter`, `add_candidate` and `save_summary` write only if the source node exists in that guild (closes the R3/R4 race follow-up, incl. the summaries FK error). The unused `delete_scene` was removed. Limitation: a fact keeps its first source, so a fact repeated in a surviving branch is still forgotten when its first source goes. Follow-up (low): `add_personal`'s consent check and insert are two statements (a cross-process opt-out could race it by microseconds).
 - **Severity:** medium. **Confidence:** SUSPECTED. **Label:** incorrect.
 - **Evidence:**
   - `delete_scene` and `expire_history` (`store.py:422-447`) remove nodes, evidence, traces, activations and summaries.
@@ -391,7 +392,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Status:** resolved in R4 step 5c (D5): deletes the given message's subtree only and reports the count.
 - **Severity:** medium. **Confidence:** CONFIRMED. **Label:** fragile.
 - **Evidence:**
-  - `delete_scene(guild, root_id)` deletes every node under the root, including other users' branches (`store.py:422-431`).
+  - `delete_scene(guild, root_id)` deletes every node under the root, including other users' branches (`store.py:422-431`). (Superseded: R4 step 5c replaced it with `delete_subtree`; R6 step 6 removed `delete_scene`.)
   - The Discord messages stay.
 - **Direction:** product decision on scope; at minimum, confirm with a count.
 
