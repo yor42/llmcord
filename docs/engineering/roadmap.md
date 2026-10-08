@@ -1,6 +1,6 @@
 # Rework roadmap
 
-**Status:** approved by the user on 2026-10-07. R1–R5 are complete and merged into `main`; R5 was fast-forwarded to `d2dec8a` on 2026-10-08. R6 is complete on `rework/r6-legacy-structure` (pushed 2026-10-08, not yet merged). All decisions D1–D12 are taken (see "Decisions taken").
+**Status:** approved by the user on 2026-10-07. R1–R6 are complete and merged into `main`; R6 was fast-forwarded to `9671c31` on 2026-10-08. All decisions D1–D12 are taken (see "Decisions taken").
 
 Every phase goes through the `orchestrate-change` skill: needed tests → scoped worker → final verification → review. Model routing and evidence ownership follow [the Claude workflow](claude-workflow.md). Finding IDs refer to `audit.md`.
 
