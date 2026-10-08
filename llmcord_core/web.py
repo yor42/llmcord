@@ -14,6 +14,8 @@ import httpx
 from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
+from starlette.datastructures import MutableHeaders
+from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES, GZipMiddleware
 
 from .avatars import avatar_version
 from .cards import parse_card
@@ -29,6 +31,55 @@ ADMINISTRATOR = 1 << 3
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 TEMPLATES.env.filters["avatar_version"] = avatar_version
 AVATAR_CACHE = {"Cache-Control": "private, max-age=300"}
+
+
+class SecurityHeaders:
+    """Plain ASGI middleware: adds security headers; only /admin text/html is buffered to add CSP nonces."""
+
+    def __init__(self, app, base_url: str, cacheable: set, versioned: dict):
+        self.app, self.cacheable, self.versioned = app, cacheable, versioned
+        self.connect = base_url.replace("https://", "wss://")
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        admin = scope["path"].startswith("/admin")
+        nonce = secrets.token_urlsafe(24) if admin else ""
+        policy = "default-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"
+        if admin:
+            policy += f"; script-src 'self' 'nonce-{nonce}' 'unsafe-eval'; img-src 'self' data: blob:; connect-src 'self' {self.connect}; font-src 'self' data:"
+        start, chunks, rewrite = None, [], False
+
+        async def wrapped(message):
+            nonlocal start, rewrite
+            if message["type"] == "http.response.start":
+                start = {**message, "headers": list(message.get("headers", []))}
+                headers = MutableHeaders(raw=start["headers"])
+                prefix = self.versioned.get("prefix")
+                if (prefix and scope["path"].startswith(prefix) and not scope["path"].startswith(prefix + "dynamic_resources/")
+                        and start["status"] in (200, 304)):
+                    headers["Cache-Control"] = self.versioned["directives"]  # versioned URLs are immutable
+                elif scope.get("endpoint") not in self.cacheable or "cache-control" not in headers:
+                    headers["Cache-Control"] = "no-store"
+                headers["X-Content-Type-Options"] = "nosniff"
+                headers["Referrer-Policy"] = "same-origin"
+                headers["Content-Security-Policy"] = policy
+                rewrite = admin and "text/html" in headers.get("content-type", "")
+                if not rewrite:
+                    await send(start)
+            elif not rewrite:
+                await send(message)
+            else:
+                chunks.append(message.get("body", b""))
+                if not message.get("more_body", False):
+                    body = b"".join(chunks).decode("utf-8")
+                    body = re.sub(r"<script(?=[\s>])", f'<script nonce="{nonce}"', body).encode("utf-8")
+                    if scope["method"] != "HEAD":
+                        MutableHeaders(raw=start["headers"])["content-length"] = str(len(body))
+                    await send(start)
+                    await send({"type": "http.response.body", "body": body})
+
+        await self.app(scope, receive, wrapped)
 
 
 def create_app(database_path: str | Path, base_url: str, client_id: str,
@@ -67,25 +118,8 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
     async def duplicate_value(_request: Request, _error: sqlite3.IntegrityError):
         return PlainTextResponse("This name or entry already exists", status_code=409)
 
-    @app.middleware("http")
-    async def security_headers(request: Request, call_next):
-        response = await call_next(request)
-        if request.scope.get("endpoint") not in cacheable or "cache-control" not in response.headers:
-            response.headers["Cache-Control"] = "no-store"
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["Referrer-Policy"] = "same-origin"
-        policy = "default-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"
-        if request.url.path.startswith('/admin'):
-            nonce = secrets.token_urlsafe(24)
-            policy += f"; script-src 'self' 'nonce-{nonce}' 'unsafe-eval'; img-src 'self' data: blob:; connect-src 'self' {base_url.replace('https://', 'wss://')}; font-src 'self' data:"
-            if 'text/html' in response.headers.get('content-type', ''):
-                body = b''.join([part async for part in response.body_iterator]).decode('utf-8')
-                body = re.sub(r'<script(?=[\s>])', f'<script nonce="{nonce}"', body)
-                headers = dict(response.headers)
-                headers.pop('content-length', None)
-                response = Response(body, status_code=response.status_code, headers=headers, background=response.background)
-        response.headers["Content-Security-Policy"] = policy
-        return response
+    cacheable, versioned = set(), {}
+    app.add_middleware(SecurityHeaders, base_url=base_url, cacheable=cacheable, versioned=versioned)
 
     app.state.auth = AuthService(app)
     app.state.admin = AdminService(app, config_path)
@@ -295,7 +329,7 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
             raise HTTPException(404, "Preview avatar not found")
         return Response(preview["card"].avatar, media_type="image/png")
 
-    cacheable = {character_avatar, emotion_avatar}
+    cacheable.update((character_avatar, emotion_avatar))
 
     @app.post("/guild/{guild_id}/characters/{character_id}")
     async def edit_character(request: Request, guild_id: int, character_id: int):
@@ -469,4 +503,10 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
     if enable_dashboard:
         from .dashboard import mount_dashboard
         mount_dashboard(app)
+        from nicegui import core
+        from nicegui.version import __version__
+        versioned.update(prefix=f"/admin/_nicegui/{__version__}/", directives=core.app.config.cache_control_directives)
+    # Added last so it is outermost: the CSP rewrite sees plain HTML. text/html is excluded (BREACH: CSRF token, reflected params, socket.io polling text).
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=6,
+                       exclude_content_types=(*DEFAULT_EXCLUDED_CONTENT_TYPES, "text/html", "text/plain", "application/octet-stream"))
     return app

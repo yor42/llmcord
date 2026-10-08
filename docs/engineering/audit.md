@@ -26,7 +26,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 | PERF-01 | Discord guild check on every event, request and action — **Resolved in R2 (steps 1, 3–5)** | high | CONFIRMED | incorrect |
 | PERF-02 | Lore workspace N+1 and in-Python search/pagination | medium | CONFIRMED | fragile |
 | PERF-03 | Avatar slot reads load every blob | low | CONFIRMED | fragile |
-| PERF-04 | No gzip; CSP middleware buffers every `/admin` HTML response | low | CONFIRMED | unconventional |
+| PERF-04 | No gzip; CSP middleware buffers every `/admin` HTML response — **Resolved (R5 step 7)** | low | CONFIRMED | unconventional |
 | PERF-05 | Same lookups repeated per page render — **Resolved (R5 step 4)** | low | CONFIRMED | preference |
 | BUG-01 | `/lore add` keys are ignored — **Resolved (R1, branch `rework/r1-correctness`)** | high | CONFIRMED (test) | incorrect |
 | BUG-02 | Daily cleanup loop dies permanently on one error — **Resolved (R1, branch `rework/r1-correctness`)** | medium | CONFIRMED (test) | incorrect |
@@ -105,6 +105,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Direction:** select metadata columns for listings, and use a keyed single-row query for the image.
 
 ### PERF-04: No gzip; CSP middleware buffers every `/admin` HTML response
+- **Status:** Resolved in R5 step 7: Starlette `GZipMiddleware` (level 6, ≥1 KiB) wraps the app outermost; `text/html`, `text/plain` and `application/octet-stream` are never compressed (BREACH: CSRF token, reflected params, socket.io polling). The CSP middleware is plain ASGI and buffers only `/admin` HTML (NiceGUI has no nonce support). Versioned NiceGUI assets now get NiceGUI's immutable cache-control (its own rule never matched under the `/admin` mount); they were `no-store`. `quasar.umd.prod.js`: 502,975 → 154,812 bytes.
 - **Severity:** low. **Confidence:** CONFIRMED. **Label:** unconventional.
 - **Evidence:**
   - `ui.run_with(..., gzip_middleware_factory=None)` (`dashboard.py:197-198`).
