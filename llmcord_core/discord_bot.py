@@ -29,6 +29,7 @@ AVATAR_ASSET_CHECK_TTL = 600
 MEMORY_WAIT_SECONDS = 15
 PROVIDER_STAGES = {'speaker selection', 'image description', 'dialogue generation'}
 MEMORY_CLOSE_SECONDS = 5
+NO_CHARACTER_NOTE_SECONDS = 15
 
 
 def split_discord(text: str, limit: int = 1900) -> list[str]:
@@ -63,6 +64,7 @@ class SkitBot(commands.Bot):
         self.cleanup_task: asyncio.Task | None = None
         self.tree.allowed_contexts = app_commands.AppCommandContext(guild=True)
         self.memory_tasks: dict[int, asyncio.Task] = {}
+        self.note_tasks: set[asyncio.Task] = set()
         register_commands(self)
 
     async def setup_hook(self):
@@ -96,6 +98,10 @@ class SkitBot(commands.Bot):
             for task in pending:
                 task.cancel()
             await asyncio.gather(*pending, return_exceptions=True)
+            notes = [task for task in self.note_tasks if not task.done()]
+            for task in notes:
+                task.cancel()
+            await asyncio.gather(*notes, return_exceptions=True)
             await self.models.close()
         finally:
             try:
@@ -283,6 +289,18 @@ class SkitBot(commands.Bot):
         self.memory_tasks[channel_id] = task
         task.add_done_callback(forget)
 
+    def _delete_later(self, message):
+        async def delete():
+            await asyncio.sleep(NO_CHARACTER_NOTE_SECONDS)
+            try:
+                await message.delete()
+            except discord.DiscordException as error:
+                logging.warning('No-character hint cleanup failed: %s', error_detail(error))
+
+        task = asyncio.create_task(delete())
+        self.note_tasks.add(task)
+        task.add_done_callback(self.note_tasks.discard)
+
     async def _run_scene(self, scene: SceneContext, channel, interaction=None):
         progress = None
         model_label = discord.utils.escape_markdown(self.settings.profile('dialogue').model[:120])
@@ -326,6 +344,7 @@ class SkitBot(commands.Bot):
             if not speakers:
                 if not scene.ambient:
                     if await update_progress("No active character is available here. Use /cast set or /summon."):
+                        self._delete_later(progress)
                         progress = None
                 return
             if scene.ambient:
@@ -383,7 +402,7 @@ class SkitBot(commands.Bot):
                                 stage = 'dialogue generation'
                     line = re.sub(r'<emotion>[^\n]*?</emotion>\s*', '', "".join(pieces)).strip()
                     usage = usage_records[-1] if usage_records else None
-                    footer = reply_footer(model_label, usage)
+                    footer = reply_footer(model_label, usage) if self.store.usage_footer_enabled(scene.guild_id) else ''
                     chunks = split_discord(line, limit=min(1900, 2000 - len(footer)))
                     stage = 'webhook delivery'
                     await placeholder.edit(content=chunks[0] + footer, allowed_mentions=discord.AllowedMentions.none())

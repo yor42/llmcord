@@ -367,6 +367,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Direction:** map `IntegrityError` to "already exists", give a generic message plus a log id for the rest, and use definite outcomes.
 
 ### UX-08: Public cost footer and public "no character" message
+- **Status:** resolved in R4 step 5 (D2, D12): per-server footer setting (default on); the no-character hint deletes itself after 15 s.
 - **Severity:** low. **Confidence:** CONFIRMED. **Label:** preference.
 - **Evidence:**
   - Every reply carries a model/usage footer (`discord_bot.py:297-310`).

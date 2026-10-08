@@ -184,13 +184,13 @@ class Store(AdminStore):
         self.db.execute("PRAGMA busy_timeout=5000")
         self.db.execute("PRAGMA journal_mode=WAL")
         old_version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if old_version > 3:
+        if old_version > 4:
             self.db.close()
             raise ValueError('Database is newer than this application')
         node_columns = {row[1] for row in self.db.execute('PRAGMA table_info(nodes)')}
         needs_identities = bool(node_columns) and not {'author_label', 'mentions_json'} <= node_columns
-        if existing and (old_version < 3 or needs_identities):
-            upgrade = 'v3' if old_version < 3 else 'identities'
+        if existing and (old_version < 4 or needs_identities):
+            upgrade = 'v3' if old_version < 3 else 'identities' if needs_identities else 'v4'
             backup = Path(str(path) + f".pre-{upgrade}-{time.time_ns()}.sqlite3")
             with closing(sqlite3.connect(backup)) as target:
                 backup.chmod(0o600)
@@ -210,7 +210,7 @@ class Store(AdminStore):
                     self.db.execute(f'ALTER TABLE nodes ADD COLUMN {name} {spec}')
         self.admin_lock = threading.RLock()
         self.migrate_admin()
-        self.db.execute("PRAGMA user_version=3")
+        self.db.execute("PRAGMA user_version=4")
         self.db.commit()
 
     def close(self) -> None:

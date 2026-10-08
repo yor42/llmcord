@@ -65,7 +65,7 @@ For engineering detail (process and sequence diagrams, shared state, known defec
 
 SQLite runs in WAL mode with a busy timeout. Schema version is held in `PRAGMA user_version`; migration backs up an existing older database before upgrading. Compose orders the migration service before bot and web startup.
 
-The current schema is v3. Administration writes use transactions with revision checks. Lore activation identities survive moves between the existing lore tables; an import ledger tracks baselines and moved/deleted dispositions. Guild preset activation points to an immutable revision. Each scene captures that revision before its first model call. Provider gateways consume the renderer's ordered messages, with explicit adaptations for Anthropic's top-level system field.
+The current schema is v4. Administration writes use transactions with revision checks. Lore activation identities survive moves between the existing lore tables; an import ledger tracks baselines and moved/deleted dispositions. Guild preset activation points to an immutable revision. Each scene captures that revision before its first model call. Provider gateways consume the renderer's ordered messages, with explicit adaptations for Anthropic's top-level system field.
 
 NiceGUI runs inside FastAPI under `/admin/` with one web worker. Existing form routes remain available for compatibility/testing and reuse the same authorization/storage services. Character avatars remain in SQLite; published Discord CDN assets provide per-message avatar overrides without exposing the private dashboard. An emotion header is resolved before the webhook placeholder is posted and is excluded from stored dialogue.
 

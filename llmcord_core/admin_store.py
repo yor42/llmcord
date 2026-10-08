@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS prompt_revisions (
 );
 CREATE TABLE IF NOT EXISTS guild_settings (
  guild_id INTEGER PRIMARY KEY, preset_id INTEGER, preset_revision INTEGER,
- asset_channel_id INTEGER
+ asset_channel_id INTEGER, usage_footer INTEGER NOT NULL DEFAULT 1
 );
 CREATE TABLE IF NOT EXISTS avatar_slots (
  character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
@@ -201,6 +201,7 @@ class AdminStore:
             'lore': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0'},
             'lorebook_entries': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0', 'pinned': 'INTEGER NOT NULL DEFAULT 0', 'source_message_id': 'INTEGER', 'promoted_from': 'INTEGER'},
             'characters': {'avatar_manual': 'INTEGER NOT NULL DEFAULT 0'},
+            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1'},
         }.items():
             columns = {row[1] for row in self.db.execute(f'PRAGMA table_info({table})')}
             for name, spec in additions.items():
@@ -659,6 +660,14 @@ class AdminStore:
             raise ValueError('Resolve preset compatibility: ' + '; '.join(problems))
         with self.write_admin():
             self.db.execute('INSERT INTO guild_settings(guild_id,preset_id,preset_revision) VALUES(?,?,?) ON CONFLICT(guild_id) DO UPDATE SET preset_id=excluded.preset_id,preset_revision=excluded.preset_revision', (guild_id, preset_id, revision))
+
+    def usage_footer_enabled(self, guild_id):
+        row = self.one('SELECT usage_footer FROM guild_settings WHERE guild_id=?', (guild_id,))
+        return bool(row['usage_footer']) if row else True
+
+    def set_usage_footer(self, guild_id, enabled):
+        with self.write_admin():
+            self.db.execute('INSERT INTO guild_settings(guild_id,usage_footer) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET usage_footer=excluded.usage_footer', (guild_id, int(bool(enabled))))
 
     def active_preset(self, guild_id):
         row = self.one('SELECT * FROM guild_settings WHERE guild_id=?', (guild_id,))

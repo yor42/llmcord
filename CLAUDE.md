@@ -10,7 +10,7 @@ The main session may directly edit docs, `CLAUDE.md`, and `.claude/` config. Lar
 ## Processes (no IPC — they share one SQLite file)
 - `llmcord.py` → `discord_bot.SkitBot`: events, slash commands (`register_commands`), webhooks, daily cleanup task.
 - `web_main.py` → `web.create_app`: OAuth, legacy Jinja form routes, mounts NiceGUI (`dashboard.mount_dashboard`).
-- `migrate.py` → `Store(path)`: creates/upgrades schema (`PRAGMA user_version`, currently 3; backs up before upgrading).
+- `migrate.py` → `Store(path)`: creates/upgrades schema (`PRAGMA user_version`, currently 4; backs up before upgrading).
 The bot reads DB state fresh each turn, so dashboard edits apply on the next turn.
 
 ## Module map (`llmcord_core/`)

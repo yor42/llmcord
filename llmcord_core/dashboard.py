@@ -312,6 +312,13 @@ async def setup_panel(ctx):
                 return True
             ctx.button('Save ambient setting', save_ambient, 'channel.ambient')
     ui.separator()
+    ui.label('Reply footer').classes('text-xl font-bold')
+    footer = ui.switch('Show model and cost footer on replies', value=store.usage_footer_enabled(gid))
+    def save_footer():
+        store.set_usage_footer(gid, footer.value)
+        return True
+    ctx.button('Save footer setting', save_footer, 'settings.footer')
+    ui.separator()
     ui.label('Avatar asset channel').classes('text-xl font-bold')
     setting = store.one('SELECT asset_channel_id FROM guild_settings WHERE guild_id=?', (gid,))
     asset_channel = ui.select(channel_names, value=setting['asset_channel_id'] if setting and setting['asset_channel_id'] in channel_names else None, label='Private text channel')
