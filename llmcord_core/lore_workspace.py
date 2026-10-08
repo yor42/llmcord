@@ -5,6 +5,7 @@ import asyncio
 
 from nicegui import ui
 
+from .icons import lucide, lucide_button
 from .lore_drag import LoreDrag
 from .lorebooks import normalize_entry
 
@@ -19,7 +20,7 @@ def render_lore_workspace(ctx, entry_editor, on_import=None, on_entry_import=Non
     from .dashboard import section
     with section('Lore workspace'):
         if on_import:
-            ui.button('Import lorebook', icon='upload_file', on_click=on_import).props('outline')
+            lucide_button('Import lorebook', 'upload', on_click=on_import).props('outline')
             ui.label('Import JSON directly into either owner below, or manage reusable named lorebooks in Imports.').classes('ll-muted')
         ui.label('Drag entries onto either drop area, or select entries to move or delete together. Higher insertion orders appear later in each prompt position.').classes('ll-muted')
         if not owners:
@@ -67,11 +68,11 @@ class _LoreWorkspace:
         selected, bulk_buttons = self.selected, self.bulk_buttons
         with toolbar:
             self.counter = ui.label('0 selected').classes('ll-muted')
-            bulk_buttons.append(ui.button('Move selected left', icon='arrow_back',
+            bulk_buttons.append(lucide_button('Move selected left', 'arrow-left',
                                           on_click=lambda: self.move(list(selected.values()), self.left)).props('outline'))
-            bulk_buttons.append(ui.button('Move selected right', icon='arrow_forward',
+            bulk_buttons.append(lucide_button('Move selected right', 'arrow-right',
                                           on_click=lambda: self.move(list(selected.values()), self.right)).props('outline'))
-            bulk_buttons.append(ui.button('Delete selected', icon='delete', color='negative',
+            bulk_buttons.append(lucide_button('Delete selected', 'trash-2', color='negative',
                                           on_click=lambda: self.confirm_delete(list(selected.values()))))
             ui.button('Clear selection', on_click=lambda: self.select(list(selected.values()), False)).props('flat')
             self.update_selection()
@@ -216,7 +217,7 @@ class _LoreWorkspace:
                 checkbox = ui.checkbox('Select entry', value=entry['entry_key'] in self.selected,
                     on_change=lambda event, entry=entry: self.select([entry], event.value)).props('dense')
                 self.checkboxes.setdefault(entry['entry_key'], []).append(checkbox)
-                ui.icon('drag_indicator').classes('drag-handle cursor-grab')
+                lucide('grip-vertical', '1.25em').classes('drag-handle cursor-grab ll-icon-solo')
                 ui.label(' · '.join(entry['rule']['keys']) or 'No keywords').classes('font-bold min-w-0').style('overflow-wrap: anywhere')
             ui.label(entry['content'][:220]).classes('ll-muted text-sm').style('overflow-wrap: anywhere')
             ui.label(f"Priority {entry['rule']['order']} · {'Enabled' if entry['rule']['enabled'] else 'Disabled'}").classes('ll-faint text-xs')
@@ -228,10 +229,10 @@ class _LoreWorkspace:
                         self.entry_editor(ctx, fresh, self.options, self.render_board.refresh)
             with ui.row().classes('items-center flex-wrap gap-2'):
                 ui.button('Edit / transfer', on_click=edit).props('size=sm')
-                ui.button('Move right' if side == 'left' else 'Move left',
-                    icon='arrow_forward' if side == 'left' else 'arrow_back',
+                lucide_button('Move right' if side == 'left' else 'Move left',
+                    'arrow-right' if side == 'left' else 'arrow-left',
                     on_click=lambda entry=entry, opposite=opposite: self.move([snapshot(entry)], opposite)).props('outline size=sm').set_enabled(control.value != opposite.value)
-                ui.button('Delete', icon='delete', color='negative',
+                lucide_button('Delete', 'trash-2', color='negative',
                           on_click=lambda entry=entry: self.confirm_delete([snapshot(entry)])).props('size=sm')
 
     def _render_panel_actions(self, kind, ident):
@@ -253,4 +254,4 @@ class _LoreWorkspace:
                     self.selected.clear()
                     self.update_selection()
                     render_board.refresh()
-                ui.button('Import JSON entries', icon='upload_file', on_click=lambda kind=kind, ident=ident: self.on_entry_import(kind, ident, imported)).props('outline')
+                lucide_button('Import JSON entries', 'upload', on_click=lambda kind=kind, ident=ident: self.on_entry_import(kind, ident, imported)).props('outline')

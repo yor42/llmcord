@@ -19,6 +19,7 @@ from fastapi.responses import PlainTextResponse
 from .auth import guild_icon_url, is_server_admin, user_avatar_url
 from .avatars import MAX_AVATAR_BYTES, avatar_version, normalize_avatar
 from .cards import parse_card
+from .icons import icon_css, lucide, lucide_button
 from .lorebooks import parse_lorebook
 from .prompts import PURPOSES, SOURCES, block, compatibility, default_bundle, export_preset, parse_preset
 from .scene_ui import confirm_dialog, delete_book_dialog, delete_space_dialog, direct_import_dialog, guideline_editor
@@ -233,6 +234,7 @@ def apply_theme():
     from nicegui import ui
     ui.colors(primary=THEME_PRIMARY, negative=THEME_NEGATIVE, dark=THEME_CARD)
     ui.add_css(_THEME_CSS)
+    ui.add_css(icon_css())
 
 
 def server_initials(name):
@@ -540,7 +542,7 @@ async def setup_panel(ctx):
         for space in ctx.snapshot.spaces:
             with ui.expansion(f"{space['name']} · {space['kind']}").classes('space-card w-full rounded-lg'):
                 guideline_editor(ctx, 'space', space['id'], 'World guidelines' if space['kind'] == 'world' else 'Hub guidelines')
-                ui.button('Delete ' + space['kind'], icon='delete', color='negative', on_click=lambda space=space: delete_space_dialog(ctx, space))
+                lucide_button('Delete ' + space['kind'], 'trash-2', color='negative', on_click=lambda space=space: delete_space_dialog(ctx, space))
         with ui.element('div').classes('ll-form-row'):
             name = ui.input('Space name')
             kind = ui.select(['world', 'hub'], value='world', label='Kind')
@@ -633,7 +635,7 @@ def characters_panel(ctx):
         dialog.open()
     rows = ctx.snapshot.characters
     with section('Characters'):
-        ui.button('Create character', icon='add', on_click=new_character).set_enabled(bool(worlds))
+        lucide_button('Create character', 'plus', on_click=new_character).set_enabled(bool(worlds))
         if not worlds:
             ui.label('Create a home world in Server setup first.').classes('ll-muted')
         for row in rows:
@@ -673,7 +675,7 @@ def character_card(ctx, row, worlds):
                                     'This cannot be undone. Use Archive if you may want to restore the character later.'],
                                    'Delete permanently', lambda: store.delete_character(gid, row['id'], revision),
                                    'character.delete', {'id': row['id']}, then=lambda _: ctx.refresh('characters'))
-                ui.button('Delete character', icon='delete', color='negative', on_click=confirm_delete)
+                lucide_button('Delete character', 'trash-2', color='negative', on_click=confirm_delete)
             static_avatar_editor(ctx, row)
             ui.label('Emotion avatars').classes('ll-subtitle')
             ui.label('The selected emotion image is used first. If unavailable, the fallback static avatar is used.').classes('ll-muted')
@@ -710,7 +712,7 @@ def static_avatar_editor(ctx, character):
                 def remove():
                     ctx.store.save_static_avatar(ctx.guild_id, character['id'], None, revision)
                     return True
-                ui.button('Remove fallback avatar', icon='delete', color='negative', on_click=lambda: confirm_dialog(
+                lucide_button('Remove fallback avatar', 'trash-2', color='negative', on_click=lambda: confirm_dialog(
                     ctx, 'Remove fallback avatar?', ['The character falls back to emotion images only. Emotion images stay.'],
                     'Remove fallback avatar', remove, 'avatar.fallback.delete', {'character': character['id']}, then=reload))
 
@@ -742,7 +744,7 @@ def avatar_editor(ctx, character_id, slot):
                 def remove_image():
                     ctx.store.clear_avatar_image(ctx.guild_id, character_id, slot['slot_key'], slot['revision'])
                     return True
-                ui.button('Remove emotion image', icon='delete', color='negative', on_click=lambda: confirm_dialog(
+                lucide_button('Remove emotion image', 'trash-2', color='negative', on_click=lambda: confirm_dialog(
                     ctx, f"Remove the image from {slot['label']}?", ['The emotion and its label stay; only the image is removed.'],
                     'Remove emotion image', remove_image, 'avatar.image.delete', {'character': character_id, 'slot': slot['slot_key']},
                     then=lambda _: ctx.refresh('characters')))
@@ -750,7 +752,7 @@ def avatar_editor(ctx, character_id, slot):
                 def delete():
                     ctx.store.delete_avatar(ctx.guild_id, character_id, slot['slot_key'], slot['revision'])
                     return True
-                ui.button('Remove emotion', icon='delete', color='negative', on_click=lambda: confirm_dialog(
+                lucide_button('Remove emotion', 'trash-2', color='negative', on_click=lambda: confirm_dialog(
                     ctx, f"Remove emotion {slot['label']}?", ['This removes the emotion and its image. The neutral emotion and the fallback avatar stay.'],
                     'Remove emotion', delete, 'avatar.slot.delete', then=lambda _: ctx.refresh()))
 
@@ -892,7 +894,7 @@ def imports_panel(ctx):
                     raise ValueError('Choose a destination owner')
                 kind, ident = destination.value.split(':', 1)
                 direct_import_dialog(ctx, kind, int(ident))
-            ui.button('Import entries into selected owner', icon='upload_file', on_click=import_into_owner)
+            lucide_button('Import entries into selected owner', 'upload', on_click=import_into_owner)
     with section('Named lorebooks'):
         with ui.element('div').classes('ll-form-row'):
             book_name = ui.input('Lorebook name')
@@ -904,8 +906,8 @@ def imports_panel(ctx):
             with ui.expansion(book['name'] + ' · ' + ('server' if book['target_kind'] == 'guild' else book['target_kind'])).classes('w-full'):
                 with ui.element('div').classes('ll-stack'):
                     with ui.element('div').classes('ll-form-row'):
-                        ui.button('Edit entries in Lore', icon='edit', on_click=lambda book=book: ctx.refresh('lore', owner=f"book:{book['id']}")).props('outline')
-                        ui.button('Delete lorebook', icon='delete', color='negative', on_click=lambda book=book: delete_book_dialog(ctx, book))
+                        lucide_button('Edit entries in Lore', 'pencil', on_click=lambda book=book: ctx.refresh('lore', owner=f"book:{book['id']}")).props('outline')
+                        lucide_button('Delete lorebook', 'trash-2', color='negative', on_click=lambda book=book: delete_book_dialog(ctx, book))
                     if book['target_kind'] == 'guild':
                         linked_spaces = store.lorebook_links(book['id'])
                         with ui.element('div').classes('ll-form-row'):
@@ -1001,7 +1003,7 @@ def _preset_editor(ctx, state, purpose, collect):
                 with ui.card().classes('w-full prompt-block ll-stack ll-result') as card:
                     card.prompt_id = b['id']
                     with ui.element('div').classes('ll-form-row'):
-                        ui.icon('drag_indicator').classes('prompt-handle cursor-grab self-center')
+                        lucide('grip-vertical', '1.25em').classes('prompt-handle cursor-grab self-center ll-icon-solo')
                         ui.input('Block name').bind_value(b, 'name')
                         ui.switch('Enabled').bind_value(b, 'enabled')
                     ui.label('Stable ID: ' + b['id']).classes('ll-muted')
@@ -1073,7 +1075,7 @@ def _preset_actions(ctx, state, name, collect, save, saved):
             confirm_dialog(ctx, f"Delete preset {current['name'] if current else state['id']}?",
                            ['This permanently deletes the preset. The active preset cannot be deleted; activate another one first.'],
                            'Delete preset', delete, 'preset.delete', then=lambda _: ctx.refresh())
-        ui.button('Delete preset', icon='delete', color='negative', on_click=ask_delete)
+        lucide_button('Delete preset', 'trash-2', color='negative', on_click=ask_delete)
 
 
 def _preset_import(ctx, state, name, render_editor):
