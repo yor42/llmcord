@@ -9,42 +9,16 @@ from __future__ import annotations
 
 import asyncio
 import os
-import tempfile
 import time
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
 import anthropic
 import httpx
 import openai
 
-from llmcord_core.config import load_settings
+from helpers import ENV, settings_for
 from llmcord_core.models import ModelGateway, TurnMessage
-
-ENV = {"DISCORD_BOT_TOKEN": "test", "TEST_OPENAI_KEY": "sk-test", "TEST_ANTHROPIC_KEY": "sk-ant-test"}
-
-PROFILES = {
-    "compatible": "      provider: compatible\n      model: local\n      context_tokens: 8192\n"
-                  "      base_url: http://localhost:11434/v1\n",
-    "openai": "      provider: openai\n      model: gpt-test\n      context_tokens: 8192\n"
-              "      api_key_env: TEST_OPENAI_KEY\n",
-    "anthropic": "      provider: anthropic\n      model: claude-test\n      context_tokens: 8192\n"
-                 "      api_key_env: TEST_ANTHROPIC_KEY\n",
-}
-
-
-def write_config(directory: str, provider: str = "compatible", extra: str = "") -> Path:
-    path = Path(directory) / "config.yaml"
-    path.write_text("discord: {}\nmodels:\n  dialogue: main\n  profiles:\n    main:\n"
-                    + PROFILES[provider] + extra, encoding="utf-8")
-    return path
-
-
-def settings_for(provider: str = "compatible", extra: str = ""):
-    with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, ENV, clear=True):
-        return load_settings(write_config(directory, provider, extra))
-
 
 def seconds(timeout) -> float | None:
     """SDK clients store a float or an httpx.Timeout; compare on the read timeout."""

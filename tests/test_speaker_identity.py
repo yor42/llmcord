@@ -13,7 +13,7 @@ from llmcord_core.engine import Engine, SceneContext
 from llmcord_core.models import ImageInput
 from llmcord_core.prompts import default_bundle
 from llmcord_core.store import Store
-from test_core import FakeModels, settings
+from helpers import CoreFakeModels as FakeModels, core_settings as settings
 
 
 class RecordingModels(FakeModels):

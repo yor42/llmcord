@@ -2,16 +2,23 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
+import tempfile
 import time
 from collections import Counter
 from datetime import datetime, timezone
+from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import discord
 import httpx
+from PIL import Image
 
-from llmcord_core.config import ModelProfile, Settings
+from llmcord_core.avatars import normalize_avatar
+from llmcord_core.config import ModelProfile, Settings, load_settings
 
 LIMITS = {"max_input_tokens": 12000, "max_output_tokens": 700, "max_images": 3,
           "max_attachment_bytes": 8388608, "max_speakers": 3, "recent_messages": 12,
@@ -467,3 +474,123 @@ async def drain_memory_tasks(bot, within: float = 1.0) -> None:
         if remaining <= 0:
             raise AssertionError(f"{len(pending)} memory task(s) still pending after {within}s")
         await asyncio.wait(pending, timeout=remaining)
+
+
+def core_settings():
+    """Settings used by test_core/scene/identity tests (vision on, no memory-cadence keys)."""
+    profile = ModelProfile("compatible", "test", 16000, True, base_url="http://localhost/v1")
+    return Settings("test", None, ":memory:", 90, {"test": profile}, "test", "test", "test",
+        {"max_input_tokens": 12000, "max_output_tokens": 700, "max_images": 3,
+         "max_attachment_bytes": 8388608, "max_speakers": 3, "recent_messages": 12,
+         "recent_window_seconds": 600, "ambient_cooldown_seconds": 120})
+
+
+def image(color):
+    output = BytesIO()
+    Image.new('RGB', (40, 50), color).save(output, 'PNG')
+    return normalize_avatar(output.getvalue())
+
+
+ENV = {"DISCORD_BOT_TOKEN": "test", "TEST_OPENAI_KEY": "sk-test", "TEST_ANTHROPIC_KEY": "sk-ant-test"}
+
+PROFILES = {
+    "compatible": "      provider: compatible\n      model: local\n      context_tokens: 8192\n"
+                  "      base_url: http://localhost:11434/v1\n",
+    "openai": "      provider: openai\n      model: gpt-test\n      context_tokens: 8192\n"
+              "      api_key_env: TEST_OPENAI_KEY\n",
+    "anthropic": "      provider: anthropic\n      model: claude-test\n      context_tokens: 8192\n"
+                 "      api_key_env: TEST_ANTHROPIC_KEY\n",
+}
+
+
+def write_config(directory: str, provider: str = "compatible", extra: str = "") -> Path:
+    path = Path(directory) / "config.yaml"
+    path.write_text("discord: {}\nmodels:\n  dialogue: main\n  profiles:\n    main:\n"
+                    + PROFILES[provider] + extra, encoding="utf-8")
+    return path
+
+
+def settings_for(provider: str = "compatible", extra: str = ""):
+    with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, ENV, clear=True):
+        return load_settings(write_config(directory, provider, extra))
+
+
+class FlowFakeModels(CompiledAdapter):
+    def __init__(self, speakers):
+        self.speakers = speakers
+        self.lines = iter(["First line", "Second line"])
+
+    async def structured(self, role, system, messages, schema_name, schema):
+        if schema_name == "choose_speakers":
+            return {"speakers": self.speakers}
+        return {"shared_facts": [], "personal_facts": [], "encounter_facts": []}
+
+    async def stream_text(self, role, system, messages):
+        yield next(self.lines)
+
+    async def text(self, role, system, messages, max_tokens=None):
+        return "The group met."
+
+
+class FakeMessage:
+    def __init__(self, ident, content):
+        self.id, self.content = ident, content
+        self.deleted = False
+        self.edits = []
+
+    async def edit(self, *, content, **kwargs):
+        self.content = content
+        self.edits.append(content)
+
+    async def delete(self):
+        self.deleted = True
+
+
+class FakeWebhook:
+    def __init__(self, start):
+        self.next_id = start
+        self.posts = []
+        self.options = []
+
+    async def send(self, content, **kwargs):
+        # discord.py dereferences thread.id when the keyword is present.
+        if kwargs.get('thread', discord.utils.MISSING) is None:
+            raise AttributeError("'NoneType' object has no attribute 'id'")
+        result = FakeMessage(self.next_id, content)
+        self.next_id += 1
+        self.posts.append(result)
+        self.options.append(kwargs)
+        return result
+
+
+class FakeChannel:
+    def __init__(self, ident):
+        self.id = ident
+        self.messages = []
+        self.options = []
+
+    @property
+    def errors(self):
+        return [message.content for message in self.messages
+                if not message.deleted and is_turn_failure(message.content)]
+
+    async def send(self, content, **kwargs):
+        message = FakeMessage(5000 + len(self.messages), content)
+        self.messages.append(message)
+        self.options.append(kwargs)
+        return message
+
+
+class CoreFakeModels(CompiledAdapter):
+    """FakeModels variant without call recording; subclasses record their own calls."""
+
+    def __init__(self, speakers=None):
+        self.chosen = speakers
+
+    async def structured(self, role, system, messages, schema_name, schema):
+        if schema_name == "choose_speakers":
+            return {"speakers": self.chosen or []}
+        return {"shared_facts": [], "personal_facts": [], "encounter_facts": []}
+
+    async def text(self, role, system, messages, max_tokens=None):
+        return "Earlier scene summary"

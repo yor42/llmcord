@@ -12,7 +12,7 @@ from unittest.mock import patch
 from helpers import MemoryModels, make_settings
 from llmcord_core.engine import Engine, SceneContext
 from llmcord_core.store import Store
-from test_model_timeouts import settings_for
+from helpers import settings_for
 
 USER = 111
 OTHER_USER = 222

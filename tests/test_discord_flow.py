@@ -1,78 +1,11 @@
 import unittest
 import asyncio
-import discord
 from pathlib import Path
 
 from llmcord_core.config import ModelProfile, Settings
 from llmcord_core.discord_bot import SkitBot, split_discord
 from llmcord_core.engine import SceneContext
-from helpers import CompiledAdapter, drain_memory_tasks, is_turn_failure
-
-
-class FakeModels(CompiledAdapter):
-    def __init__(self, speakers):
-        self.speakers = speakers
-        self.lines = iter(["First line", "Second line"])
-
-    async def structured(self, role, system, messages, schema_name, schema):
-        if schema_name == "choose_speakers":
-            return {"speakers": self.speakers}
-        return {"shared_facts": [], "personal_facts": [], "encounter_facts": []}
-
-    async def stream_text(self, role, system, messages):
-        yield next(self.lines)
-
-    async def text(self, role, system, messages, max_tokens=None):
-        return "The group met."
-
-
-class FakeMessage:
-    def __init__(self, ident, content):
-        self.id, self.content = ident, content
-        self.deleted = False
-        self.edits = []
-
-    async def edit(self, *, content, **kwargs):
-        self.content = content
-        self.edits.append(content)
-
-    async def delete(self):
-        self.deleted = True
-
-
-class FakeWebhook:
-    def __init__(self, start):
-        self.next_id = start
-        self.posts = []
-        self.options = []
-
-    async def send(self, content, **kwargs):
-        # discord.py dereferences thread.id when the keyword is present.
-        if kwargs.get('thread', discord.utils.MISSING) is None:
-            raise AttributeError("'NoneType' object has no attribute 'id'")
-        result = FakeMessage(self.next_id, content)
-        self.next_id += 1
-        self.posts.append(result)
-        self.options.append(kwargs)
-        return result
-
-
-class FakeChannel:
-    def __init__(self, ident):
-        self.id = ident
-        self.messages = []
-        self.options = []
-
-    @property
-    def errors(self):
-        return [message.content for message in self.messages
-                if not message.deleted and is_turn_failure(message.content)]
-
-    async def send(self, content, **kwargs):
-        message = FakeMessage(5000 + len(self.messages), content)
-        self.messages.append(message)
-        self.options.append(kwargs)
-        return message
+from helpers import FakeChannel, FakeMessage, FakeWebhook, FlowFakeModels, drain_memory_tasks
 
 
 class DiscordFlowTests(unittest.IsolatedAsyncioTestCase):
@@ -96,7 +29,7 @@ class DiscordFlowTests(unittest.IsolatedAsyncioTestCase):
         changed['purposes']['dialogue'][0]['content'] = 'NEW PRESET'
         other, newer = bot.store.save_preset(1, 'Other', changed)
         calls = []
-        class Models(FakeModels):
+        class Models(FlowFakeModels):
             async def stream_text(self, role, system, messages):
                 calls.append(system)
                 if len(calls) == 1:
@@ -138,7 +71,7 @@ class DiscordFlowTests(unittest.IsolatedAsyncioTestCase):
         alice = bot.store.add_character(1, world, "Alice", {"name": "Alice"}, None, [])
         bob = bot.store.add_character(1, world, "Bob", {"name": "Bob"}, None, [])
         bot.store.set_cast(100, None, [alice, bob])
-        fake_models = FakeModels([alice, bob])
+        fake_models = FlowFakeModels([alice, bob])
         bot.engine.models = bot.models = fake_models
         hooks = {alice: FakeWebhook(2000), bob: FakeWebhook(3000)}
 
@@ -180,7 +113,7 @@ class DiscordFlowTests(unittest.IsolatedAsyncioTestCase):
         bot.store.bind_channel(1, 100, world)
         alice = bot.store.add_character(1, world, 'Alice', {'name': 'Alice'}, None, [])
         bot.store.set_cast(100, None, [alice])
-        bot.engine.models = bot.models = FakeModels([alice])
+        bot.engine.models = bot.models = FlowFakeModels([alice])
         class BrokenMessage(FakeMessage):
             async def edit(self, **kwargs):
                 raise RuntimeError('Webhook edit rejected')
@@ -263,7 +196,7 @@ class DiscordFlowTests(unittest.IsolatedAsyncioTestCase):
         bot.store.bind_channel(1, 100, world)
         alice = bot.store.add_character(1, world, 'Alice', {'name': 'Alice'}, None, [])
         bot.store.set_cast(100, None, [alice])
-        bot.engine.models = bot.models = FakeModels([alice])
+        bot.engine.models = bot.models = FlowFakeModels([alice])
         hook = FakeWebhook(2000)
         async def webhook(channel, character):
             return hook

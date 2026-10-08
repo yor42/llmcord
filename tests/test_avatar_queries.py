@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from llmcord_core.admin_store import ConflictError
 from llmcord_core.avatars import avatar_version
 from llmcord_core.store import Store
-from test_avatar_fallback import image
+from helpers import image
 
 META_KEYS = {'character_id', 'slot_key', 'label', 'description', 'revision', 'has_image', 'image_hash', 'image_version'}
 

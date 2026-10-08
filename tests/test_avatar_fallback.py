@@ -1,25 +1,14 @@
 import hashlib
 import unittest
-from io import BytesIO
 from types import SimpleNamespace
 
 import discord
-from PIL import Image
 
 from llmcord_core.admin_store import ConflictError
-from llmcord_core.avatars import normalize_avatar
 from llmcord_core.discord_bot import SkitBot
 from llmcord_core.engine import SceneContext
 from llmcord_core.store import Store
-from test_core import settings
-from test_discord_flow import FakeChannel, FakeModels, FakeWebhook
-from helpers import drain_memory_tasks
-
-
-def image(color):
-    output = BytesIO()
-    Image.new('RGB', (40, 50), color).save(output, 'PNG')
-    return normalize_avatar(output.getvalue())
+from helpers import FakeChannel, FakeWebhook, FlowFakeModels, core_settings, drain_memory_tasks, image
 
 
 class StaticAvatarTests(unittest.TestCase):
@@ -67,7 +56,7 @@ class StaticAvatarTests(unittest.TestCase):
 
 class AvatarDeliveryTests(unittest.IsolatedAsyncioTestCase):
     async def test_emotion_then_static_fallback_across_streaming_and_missing_assets(self):
-        bot = SkitBot(settings())
+        bot = SkitBot(core_settings())
         store = bot.store
         world = store.create_space(1, 'World', 'world')
         store.bind_channel(1, 100, world)
@@ -101,7 +90,7 @@ class AvatarDeliveryTests(unittest.IsolatedAsyncioTestCase):
         async def webhook(channel, row):
             return await bot._webhook_locked(channel, row, (100, character))
         bot._webhook = webhook
-        class Models(FakeModels):
+        class Models(FlowFakeModels):
             reply = ''
             async def stream_text(self, role, system, messages):
                 # Split the emotion header and force continuation messages.

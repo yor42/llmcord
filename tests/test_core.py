@@ -9,34 +9,12 @@ from pathlib import Path
 
 from PIL import Image, PngImagePlugin
 
-from helpers import CompiledAdapter
+from helpers import FakeModels, core_settings
 from llmcord_core.cards import _embedded_png_card, parse_card
-from llmcord_core.config import ModelProfile, Settings
 from llmcord_core.engine import Engine, SceneContext
 from llmcord_core.lore import estimate_tokens, lore_scopes
 from llmcord_core.store import Store
 from llmcord_core.world_info import evaluate
-
-
-class FakeModels(CompiledAdapter):
-    def __init__(self, speakers=None):
-        self.chosen = speakers
-
-    async def structured(self, role, system, messages, schema_name, schema):
-        if schema_name == "choose_speakers":
-            return {"speakers": self.chosen or []}
-        return {"shared_facts": [], "personal_facts": [], "encounter_facts": []}
-
-    async def text(self, role, system, messages, max_tokens=None):
-        return "Earlier scene summary"
-
-
-def settings():
-    profile = ModelProfile("compatible", "test", 16000, True, base_url="http://localhost/v1")
-    return Settings("test", None, ":memory:", 90, {"test": profile}, "test", "test", "test",
-        {"max_input_tokens": 12000, "max_output_tokens": 700, "max_images": 3,
-         "max_attachment_bytes": 8388608, "max_speakers": 3, "recent_messages": 12,
-         "recent_window_seconds": 600, "ambient_cooldown_seconds": 120})
 
 
 class CoreTests(unittest.TestCase):
@@ -126,7 +104,7 @@ class CoreTests(unittest.TestCase):
         self.store.add_personal(1, 9, self.alice, "User likes later event", 1002)
         self.store.add_encounter(1, self.alice, self.hub, "Saw later event", 1002)
         scene = SceneContext(1, 300, None, self.hub, 9, 1003, "rewind", 1001, [], [])
-        engine = Engine(self.store, FakeModels(), settings())
+        engine = Engine(self.store, FakeModels(), core_settings())
         engine.record_user(scene)
         request, sources = asyncio.run(engine.prepare_dialogue(scene, self.store.character_by_id(self.alice), []))
         system = "\n\n".join(m.text for m in request.messages if m.role == "system")
@@ -200,7 +178,7 @@ class CoreTests(unittest.TestCase):
 
     def test_director_forced_guest_and_ambient_gate(self):
         self.store.set_cast(300, None, [self.alice])
-        engine = Engine(self.store, FakeModels([self.bob, self.alice]), settings())
+        engine = Engine(self.store, FakeModels([self.bob, self.alice]), core_settings())
         scene = SceneContext(1, 300, None, self.hub, 9, 123, "Bob, join this", None, [], [], forced_character_id=self.bob)
         chosen = asyncio.run(engine.speakers(scene))
         self.assertEqual([row["name"] for row in chosen], ["Bob", "Alice"])

@@ -12,7 +12,7 @@ from llmcord_core.models import TurnMessage
 from llmcord_core.prompts import block, compile_prompt, default_bundle
 from llmcord_core.store import Store
 from llmcord_core.world_info import evaluate
-from test_core import FakeModels, settings
+from helpers import core_settings as settings, FakeModels
 
 
 def imported(content='Imported fact'):

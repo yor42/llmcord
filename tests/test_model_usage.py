@@ -11,8 +11,7 @@ from llmcord_core.engine import SceneContext
 from llmcord_core.models import ModelGateway, TurnMessage
 from llmcord_core.store import Store
 from llmcord_core.usage import ModelUsage, capture_usage, collect_usage, rates, reply_footer
-from test_core import settings
-from test_discord_flow import FakeChannel, FakeWebhook
+from helpers import FakeChannel, FakeWebhook, core_settings as settings
 from helpers import drain_memory_tasks
 
 
