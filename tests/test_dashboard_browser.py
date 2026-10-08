@@ -703,3 +703,96 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             self.page = original_page
             context.close()
+
+    def ux_page(self, path):
+        """Open a page in its own context/session (UX-01 tests); returns (context, page, errors)."""
+        context = self.browser.new_context(ignore_https_errors=True, viewport={'width': 1400, 'height': 1000})
+        context.add_cookies([{'name': 'llmcord_session', 'value': 'browser-ux-session', 'url': self.url,
+                              'secure': True, 'httpOnly': True, 'sameSite': 'Lax'}])
+        errors = []
+        page = context.new_page()
+        page.on('pageerror', lambda e: errors.append(e.stack or str(e)))
+        page.goto(self.url + path)
+        page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
+        return context, page, errors
+
+    def tab_selected(self, page, name):
+        return page.get_by_role('tab', name=name, exact=True).get_attribute('aria-selected') == 'true'
+
+    def test_tab_query_selects_prompt_presets(self):
+        """UX-01: ?tab=prompts opens Prompt presets (and an unknown value falls back to Server setup)."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=prompts')
+        try:
+            page.get_by_role('tab', name='Prompt presets', exact=True).wait_for()
+            self.assertTrue(self.tab_selected(page, 'Prompt presets'))
+            page.goto(self.url + '/admin/guild/1?tab=bogus')
+            page.get_by_role('tab', name='Server setup', exact=True).wait_for()
+            self.assertTrue(self.tab_selected(page, 'Server setup'))
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_tab_switch_is_recorded_in_url_and_survives_reload(self):
+        """UX-01: switching tabs updates ?tab= in place (keeping owner=), so a reload stays on that tab."""
+        context, page, errors = self.ux_page('/admin/guild/1?owner=channel:100')
+        try:
+            page.get_by_role('tab', name='Characters', exact=True).click()
+            page.wait_for_url('**tab=characters*')
+            self.assertIn('owner=channel', page.url)
+            page.reload()
+            page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
+            page.get_by_role('tab', name='Characters', exact=True).wait_for()
+            self.assertTrue(self.tab_selected(page, 'Characters'))
+            self.assertIn('tab=characters', page.url)
+            self.assertIn('owner=channel', page.url)
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_save_cast_shows_success_toast(self):
+        """UX-01: Save cast (an operation returning None) reports 'Cast saved'."""
+        context, page, errors = self.ux_page('/admin/guild/1')
+        try:
+            page.get_by_role('button', name='Save cast', exact=True).first.click()
+            page.get_by_text('Cast saved', exact=True).wait_for(timeout=5000)
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_channel_selects_show_names_not_ids(self):
+        """UX-01: lore owner, imports channel and presets sample-channel selects show '#scene', not '100'."""
+        context, page, errors = self.ux_page('/admin/guild/1')
+        try:
+            page.get_by_role('tab', name='Lore', exact=True).click()
+            page.locator('.lore-drop-zone').first.wait_for(state='attached')
+            page.get_by_label('Left owner', exact=True).click()
+            page.get_by_role('option', name='Channel: #scene', exact=True).wait_for()
+            self.assertEqual(page.get_by_role('option', name='Channel: 100', exact=True).count(), 0)
+            page.keyboard.press('Escape')
+            page.get_by_role('tab', name='Imports', exact=True).click()
+            page.get_by_label('Channel (for channel books)', exact=True).click()
+            page.get_by_role('option', name='#scene', exact=True).wait_for()
+            self.assertEqual(page.get_by_role('option', name='100', exact=True).count(), 0)
+            page.keyboard.press('Escape')
+            page.get_by_role('tab', name='Prompt presets', exact=True).click()
+            page.get_by_label('Sample channel (optional)', exact=True).click()
+            page.get_by_role('option', name='#scene', exact=True).wait_for()
+            self.assertEqual(page.get_by_role('option', name='100', exact=True).count(), 0)
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_page_load_fetches_discord_channels_once(self):
+        """UX-01: one page load makes exactly one Discord /guilds/1/channels call (shared by setup panel and names)."""
+        context, page, errors = self.ux_page('/admin/')
+        try:
+            self.assertEqual(context.request.post(self.url + '/_test/metrics/reset').status, 200)
+            page.goto(self.url + '/admin/guild/1')
+            page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
+            page.get_by_label('Space name', exact=True).wait_for()
+            page.wait_for_timeout(300)
+            calls = context.request.get(self.url + '/_test/metrics').json()
+            self.assertEqual(calls.get('GET /guilds/1/channels', 0), 1, calls)
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()

@@ -53,7 +53,7 @@ async def delete_book_dialog(ctx, book):
 
 
 def direct_import_dialog(ctx, kind, owner_id, on_saved=None):
-    owner = next((owner for owner in ctx.service.owners(ctx.guild_id) if (owner['kind'], owner['id']) == (kind, owner_id)), None)
+    owner = next((owner for owner in ctx.service.owners(ctx.guild_id, ctx.channel_names) if (owner['kind'], owner['id']) == (kind, owner_id)), None)
     if owner is None:
         raise ValueError('Choose an owner in this server')
     with ui.dialog() as dialog, ui.card().classes('w-full max-w-4xl'):

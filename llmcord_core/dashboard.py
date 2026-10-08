@@ -7,6 +7,7 @@ import json
 import sqlite3
 import inspect
 import types
+import httpx
 from urllib.parse import parse_qs
 from http.cookies import SimpleCookie
 
@@ -28,6 +29,18 @@ class LiveContext:
         self.service = app.state.admin
         self.store = self.service.store
         self.lore_owner = request.query_params.get('owner')
+        self.channel_names = {}
+
+    async def load_channel_names(self):
+        # One Discord channel fetch per page render; a failure leaves the mapping empty.
+        from nicegui import ui
+        try:
+            channels = await self.run(lambda: self.service.avatars.channels(self.guild_id)) or []
+        except httpx.HTTPError:
+            ui.notify('Discord channels are unavailable', type='negative', timeout=8000)
+            channels = []
+        self.channel_names = {int(c['id']): '#' + c['name'] for c in channels if c['type'] == 0}
+        return self.channel_names
 
     @functools.cached_property
     def snapshot(self):
@@ -38,22 +51,30 @@ class LiveContext:
         return types.SimpleNamespace(spaces=spaces, characters=characters, channels=channels, lorebooks=lorebooks,
             worlds={r['id']: r['name'] for r in spaces if r['kind'] == 'world'},
             hubs={r['id']: r['name'] for r in spaces if r['kind'] == 'hub'},
-            owners=self.service.owners_from(gid, spaces, characters, channels, lorebooks, scopes))
+            owners=self.service.owners_from(gid, spaces, characters, channels, lorebooks, scopes, self.channel_names))
 
     async def run(self, operation, action=None, detail=None):
+        return (await self._attempt(operation, action, detail))[1]
+
+    async def _attempt(self, operation, action=None, detail=None):
+        """Run an operation, returning (succeeded, result); a failure is notified and yields (False, None)."""
         from nicegui import ui
         try:
-            return await self.service.run(self.ident, self.guild_id, operation, action, detail)
+            return True, await self.service.run(self.ident, self.guild_id, operation, action, detail)
         except (ValueError, HTTPException, sqlite3.IntegrityError, TypeError, KeyError) as error:
             message = error.detail if isinstance(error, HTTPException) else 'This name already exists' if isinstance(error, sqlite3.IntegrityError) else 'Choose valid values for all required fields' if isinstance(error, (TypeError, KeyError)) else str(error)
             ui.notify(message, type='negative', timeout=8000)
-            return None
+            return False, None
 
-    def button(self, text, operation, action=None, detail=None, then=None, **kwargs):
+    def button(self, text, operation, action=None, detail=None, then=None, success=None, **kwargs):
         from nicegui import ui
         async def clicked():
-            result = await self.run(operation, action, detail)
-            if result is not None and then:
+            ok, result = await self._attempt(operation, action, detail)
+            if not ok:
+                return
+            if success:
+                ui.notify(success, type='positive')
+            if then:
                 then(result)
         return ui.button(text, on_click=clicked, **kwargs)
 
@@ -207,13 +228,19 @@ def mount_dashboard(app):
         ui.label('Server administration').classes('text-3xl font-bold mt-4')
         ui.label('Changes apply on the next bot turn. Prompt drafts require activation.').classes('text-slate-400')
         with ui.tabs().classes('w-full') as tabs:
-            setup = ui.tab('Server setup')
-            characters = ui.tab('Characters')
-            lore = ui.tab('Lore')
-            imports = ui.tab('Imports')
-            prompts = ui.tab('Prompt presets')
-        selected_tab = {'characters': characters, 'lore': lore, 'imports': imports}.get(request.query_params.get('tab'), setup)
-        with ui.tab_panels(tabs, value=selected_tab).classes('w-full'):
+            setup = ui.tab('setup', 'Server setup')
+            characters = ui.tab('characters', 'Characters')
+            lore = ui.tab('lore', 'Lore')
+            imports = ui.tab('imports', 'Imports')
+            prompts = ui.tab('prompts', 'Prompt presets')
+        selected_tab = request.query_params.get('tab')
+        if selected_tab not in ('setup', 'characters', 'lore', 'imports', 'prompts'):
+            selected_tab = 'setup'
+        await ctx.load_channel_names()  # must precede any ctx.snapshot access: it bakes channel names into owner labels
+        def record_tab(event):
+            # Keep ?tab= current so ui.navigate.reload() returns to this tab.
+            ui.run_javascript(f'const u = new URL(location.href); u.searchParams.set("tab", {json.dumps(event.value)}); history.replaceState(history.state, "", u);')
+        with ui.tab_panels(tabs, value=selected_tab, on_change=record_tab).classes('w-full'):
             with ui.tab_panel(setup):
                 await setup_panel(ctx)
             with ui.tab_panel(characters):
@@ -241,8 +268,7 @@ async def setup_panel(ctx):
     from nicegui import ui
     store, gid = ctx.store, ctx.guild_id
     spaces = {r['id']: r['name'] + ' (' + r['kind'] + ')' for r in ctx.snapshot.spaces}
-    channels = await ctx.run(lambda: ctx.service.avatars.channels(gid)) or []
-    channel_names = {int(c['id']): '#' + c['name'] for c in channels if c['type'] == 0}
+    channel_names = ctx.channel_names
     ui.label('Models and usage · last 24 hours').classes('text-xl font-bold')
     models = ctx.service.model_config
     grouped = {}
@@ -317,19 +343,19 @@ async def setup_panel(ctx):
             def save_cast(binding=binding, cast=cast):
                 store.set_cast(binding['channel_id'], None, cast.value or [], default=True)
                 return True
-            ctx.button('Save cast', save_cast, 'cast.default')
+            ctx.button('Save cast', save_cast, 'cast.default', success='Cast saved')
             ambient = ui.switch('Ambient participation', value=bool(binding['ambient']))
             def save_ambient(binding=binding, ambient=ambient):
                 store.set_ambient(binding['channel_id'], ambient.value)
                 return True
-            ctx.button('Save ambient setting', save_ambient, 'channel.ambient')
+            ctx.button('Save ambient setting', save_ambient, 'channel.ambient', success='Ambient setting saved')
     ui.separator()
     ui.label('Reply footer').classes('text-xl font-bold')
     footer = ui.switch('Show model and cost footer on replies', value=store.usage_footer_enabled(gid))
     def save_footer():
         store.set_usage_footer(gid, footer.value)
         return True
-    ctx.button('Save footer setting', save_footer, 'settings.footer')
+    ctx.button('Save footer setting', save_footer, 'settings.footer', success='Footer setting saved')
     ui.separator()
     ui.label('Avatar asset channel').classes('text-xl font-bold')
     current_asset = store.asset_channel_id(gid)
@@ -337,7 +363,7 @@ async def setup_panel(ctx):
     async def configure():
         await ctx.service.avatars.configure(gid, asset_channel.value)
         return True
-    ctx.button('Save asset channel', configure, 'avatar.channel')
+    ctx.button('Save asset channel', configure, 'avatar.channel', success='Asset channel saved')
     ui.label('Deny View Channel to @everyone and allow the bot to upload images. Images become Discord CDN assets.')
 
 
@@ -459,7 +485,7 @@ def avatar_editor(ctx, character_id, slot):
         ctx.button('Save slot', save, 'avatar.slot.edit', {'character': character_id, 'slot': slot['slot_key']}, then=lambda _: ui.navigate.reload())
         async def publish():
             return await ctx.service.avatars.publish(ctx.guild_id, character_id, slot['slot_key'], repair=True)
-        ctx.button('Publish / repair image', publish, 'avatar.publish', {'character': character_id, 'slot': slot['slot_key']})
+        ctx.button('Publish / repair image', publish, 'avatar.publish', {'character': character_id, 'slot': slot['slot_key']}, success='Image published')
         if slot['has_image']:
             def remove_image():
                 ctx.store.clear_avatar_image(ctx.guild_id, character_id, slot['slot_key'], slot['revision'])
@@ -609,7 +635,7 @@ def imports_panel(ctx):
     with ui.row().classes('items-end'):
         book_name = ui.input('Book name')
         target = ui.select(['guild', 'channel'], value='guild', label='Book scope')
-        channels = {r['channel_id']: str(r['channel_id']) for r in ctx.snapshot.channels}
+        channels = {r['channel_id']: ctx.channel_names.get(r['channel_id'], str(r['channel_id'])) for r in ctx.snapshot.channels}
         channel = ui.select(channels, label='Channel (for channel books)')
         ctx.button('Create book', lambda: store.create_lorebook(gid, book_name.value or '', target.value, channel.value or 0), 'book.create', then=lambda _: ui.navigate.reload())
     for book in ctx.snapshot.lorebooks:
@@ -794,7 +820,7 @@ def presets_panel(ctx):
     ui.label('Assembled request preview').classes('text-xl font-bold')
     chars = {r['id']: r['name'] for r in ctx.snapshot.characters}
     character = ui.select(chars, label='Sample character')
-    channel = ui.select({row['channel_id']: str(row['channel_id']) for row in ctx.snapshot.channels}, label='Sample channel (optional)')
+    channel = ui.select({row['channel_id']: ctx.channel_names.get(row['channel_id'], str(row['channel_id'])) for row in ctx.snapshot.channels}, label='Sample channel (optional)')
     sample = ui.textarea('Sample input', value='Hello!').classes('w-full')
     history = ui.textarea('Sample history (one message per line)').classes('w-full')
     def preview():

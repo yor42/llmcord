@@ -237,6 +237,35 @@ class OwnersFromRowsTests(unittest.TestCase):
             store.close()
 
 
+class OwnersChannelNamesTests(unittest.TestCase):
+    def test_owners_label_channels_by_name_when_known(self):
+        """UX-01: owners/owners_from label known channels 'Channel: #name' and unknown ones 'Channel: <id>'."""
+        transport, _ = discord_transport(admin_guilds=[1])
+        app = create_app(":memory:", "https://pi.test", "client", "secret", "bot",
+                         httpx.AsyncClient(transport=transport), enable_dashboard=False,
+                         config_path="tests/nonexistent-config.yaml")
+        store = app.state.store
+        try:
+            seed(store)
+            store.bind_channel(1, 300, store.harbor)
+            store.bind_channel(1, 100, store.plaza)
+            admin = app.state.admin
+            names = {100: "#scene", 999: "#other-guild-channel"}
+            labels = lambda owners: [(o["id"], o["label"]) for o in owners if o["kind"] == "channel"]  # noqa: E731
+            self.assertEqual(labels(admin.owners(1, channel_names=names)),
+                             [(100, "Channel: #scene"), (300, "Channel: 300")])
+            rows = (store.list_spaces(1), store.list_characters(1), store.list_channels(1),
+                    store.list_lorebooks(1), store.thread_lore_scopes(1))
+            self.assertEqual(admin.owners_from(1, *rows, channel_names=names), admin.owners(1, channel_names=names))
+            # Names for ids that are not bound in this guild never appear as owners.
+            self.assertFalse(any("other-guild" in o["label"] for o in admin.owners(1, channel_names=names)))
+            # Without a mapping the labels are unchanged.
+            self.assertEqual(labels(admin.owners(1)), [(100, "Channel: 100"), (300, "Channel: 300")])
+            self.assertEqual(labels(admin.owners(1, channel_names={})), [(100, "Channel: 100"), (300, "Channel: 300")])
+        finally:
+            store.close()
+
+
 class SourceGuardTests(unittest.TestCase):
     def test_no_raw_sql_or_private_store_access_in_ui_modules(self):
         """ARCH-02: dashboard.py and admin.py go through public Store methods only."""

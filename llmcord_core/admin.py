@@ -39,19 +39,19 @@ class AdminService:
             self.store.audit(guild_id, int(session['user']['id']), action, detail or {})
         return result
 
-    def owners(self, guild_id):
+    def owners(self, guild_id, channel_names=None):
         store = self.store
         return self.owners_from(guild_id, store.list_spaces(guild_id), store.list_characters(guild_id), store.list_channels(guild_id),
-            store.list_lorebooks(guild_id), store.thread_lore_scopes(guild_id))
+            store.list_lorebooks(guild_id), store.thread_lore_scopes(guild_id), channel_names)
 
-    def owners_from(self, guild_id, spaces, characters, channels, lorebooks, thread_scopes):
+    def owners_from(self, guild_id, spaces, characters, channels, lorebooks, thread_scopes, channel_names=None):
         owners = []
         for row in spaces:
             owners.append({'kind': 'space', 'id': row['id'], 'label': f"{row['kind'].title()}: {row['name']}"})
         for row in characters:
             owners.append({'kind': 'character', 'id': row['id'], 'label': 'Character: ' + row['name']})
         for row in channels:
-            owners.append({'kind': 'channel', 'id': row['channel_id'], 'label': f"Channel: {row['channel_id']}"})
+            owners.append({'kind': 'channel', 'id': row['channel_id'], 'label': f"Channel: {(channel_names or {}).get(row['channel_id'], row['channel_id'])}"})
         owners.append({'kind': 'guild', 'id': guild_id, 'label': 'Guild: Server-wide lore'})
         for row in lorebooks:
             owners.append({'kind': 'book', 'id': row['id'], 'label': 'Book: ' + row['name']})

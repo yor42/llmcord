@@ -49,7 +49,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 | ARCH-03 | Duplicated constants and logic | low | CONFIRMED | preference |
 | ARCH-04 | Production-dead code and test-double fallbacks | low | CONFIRMED | unconventional |
 | ARCH-05 | Scene deletion and expiry leave derived memory | medium | SUSPECTED | incorrect |
-| UX-01 | Missing success feedback; wrong tab after reload; raw IDs | medium | CONFIRMED | incorrect |
+| UX-01 | Missing success feedback; wrong tab after reload; raw IDs — **Resolved (R5 step 5)** | medium | CONFIRMED | incorrect |
 | UX-02 | Inconsistent terminology | medium | CONFIRMED | preference |
 | UX-03 | Rebinding a channel silently resets cast and ambient | medium | CONFIRMED (test) | incorrect |
 | UX-04 | Inconsistent name matching across commands | low | CONFIRMED (test) | incorrect |
@@ -318,6 +318,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 
 ### UX-01: Missing success feedback; wrong tab after reload; raw IDs
 - **Severity:** medium. **Confidence:** CONFIRMED. **Label:** incorrect.
+- **Status:** Resolved in R5 step 5: `LiveContext.button` tells success from failure (`then` now runs after a successful operation returning None, so saves/deletes that return nothing reload as intended) and takes `success=` for a positive toast (Save cast, ambient, footer, asset channel, Publish); tabs have names `setup|characters|lore|imports|prompts`, `?tab=` selects any of them and the URL tracks the selected tab so a reload stays on it; channels show as `#name` in lore owners and the Imports/presets selects (one Discord channel fetch per page load). Threads still show as IDs.
 - **Evidence:**
   - Save cast, Save ambient, asset channel and Publish give no success toast.
   - `LiveContext.button` runs `then` only when the result is not None (`dashboard.py:43`). SUSPECTED: this is why operations returning None show nothing.

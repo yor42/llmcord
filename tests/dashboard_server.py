@@ -71,6 +71,10 @@ def main():
     app.state.sessions['browser-snapshot-session'] = {'user': {'id': '4', 'username': 'Test admin'}, 'expires': time.time() + 3600,
         'token_expires': time.time() + 3600, 'csrf': 'browser-snapshot-csrf', 'access': 'test', 'refresh': 'test'}
 
+    # Its own session for the UX-01 tests (tab URL sync, success toasts, channel names).
+    app.state.sessions['browser-ux-session'] = {'user': {'id': '4', 'username': 'Test admin'}, 'expires': time.time() + 3600,
+        'token_expires': time.time() + 3600, 'csrf': 'browser-ux-csrf', 'access': 'test', 'refresh': 'test'}
+
     # Count lore board renders (PERF-01/02): render_board loads each side through AdminStore.admin_entries_page,
     # counted here under the 'admin_entries' counter keys (one per side per render).
     counters = Counter()
