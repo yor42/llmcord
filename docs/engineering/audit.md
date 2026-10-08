@@ -374,6 +374,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Direction:** product decision (see the roadmap).
 
 ### UX-09: `/scene delete` removes the whole root tree
+- **Status:** resolved in R4 step 5c (D5): deletes the given message's subtree only and reports the count.
 - **Severity:** medium. **Confidence:** CONFIRMED. **Label:** fragile.
 - **Evidence:**
   - `delete_scene(guild, root_id)` deletes every node under the root, including other users' branches (`store.py:422-431`).

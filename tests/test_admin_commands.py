@@ -56,7 +56,7 @@ ADMIN_OPTIONS = {
     "admin lore edit": ["lore_id", "content"],
     "admin lore promote": ["lore_id", "destination", "space"],
     "admin lore delete": ["lore_id"],
-    "admin scene delete": ["root_message_id"],
+    "admin scene delete": ["message_id"],
 }
 # Arguments for invoking each member command (DM test); everything else uses defaults.
 MEMBER_ARGS = {
@@ -205,20 +205,20 @@ class AdminInvocationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(interaction.replies, ["Bound <#300> to hub Plaza."])
         self.assertEqual(self.store.channel(300)["space_id"], self.hub)
 
-    async def test_admin_scene_delete_removes_the_scene_tree(self):
-        """UX-06 (D11): ``/admin scene delete`` behaves like the old ``/scene delete``: deletes the root and its
-        branches in this channel, and refuses a root from another channel."""
+    async def test_admin_scene_delete_removes_the_node_and_descendants(self):
+        """UX-09 (D5): ``/admin scene delete`` deletes the given node and its descendants in this channel (not the
+        whole tree), and refuses a node from another channel."""
         self.store.record_node(500, 1, 100, None, 9, None, "start", created_at=1.0)
         self.store.record_node(501, 1, 100, 500, None, self.alice, "reply", created_at=2.0)
         elsewhere = FakeInteraction(admin=True, channel_id=101)
         await invoke(self.bot, "admin scene delete", elsewhere, "500")
-        self.assertEqual(elsewhere.replies, ["Scene root not found in this channel"])
+        self.assertIn("not found", elsewhere.replies[0])
         self.assertIsNotNone(self.store.node(500))
         interaction = FakeInteraction(admin=True)
-        await invoke(self.bot, "admin scene delete", interaction, "500")
-        self.assertEqual(interaction.replies, ["Stored scene and branches deleted."])
-        self.assertIsNone(self.store.node(500))
+        await invoke(self.bot, "admin scene delete", interaction, "501")
+        self.assertIn("1", interaction.replies[0])
         self.assertIsNone(self.store.node(501))
+        self.assertIsNotNone(self.store.node(500))
 
 
 class MemberDirectMessageTests(unittest.IsolatedAsyncioTestCase):

@@ -836,19 +836,20 @@ def register_commands(bot: SkitBot) -> None:
         bot.store.reset_scene(interaction.channel.id)
         await interaction.response.send_message("Scene reset. Your next mention or summon starts fresh.", ephemeral=True)
 
-    @admin_scene.command(name="delete", description="Delete a stored scene and its branches")
+    @admin_scene.command(name="delete", description="Delete a stored message and everything after it in its branch")
+    @app_commands.describe(message_id="Any stored message in this channel's scene")
     @app_commands.checks.has_permissions(administrator=True)
-    async def scene_delete(interaction: discord.Interaction, root_message_id: str):
+    async def scene_delete(interaction: discord.Interaction, message_id: str):
         await binding_for(interaction)
         try:
-            root_id = int(root_message_id)
+            target_id = int(message_id)
         except ValueError as error:
-            raise ValueError("Give a numeric root message ID") from error
-        node = bot.store.node(root_id)
+            raise ValueError("Give a numeric message ID") from error
+        node = bot.store.node(target_id)
         if not node or node["guild_id"] != interaction.guild_id or node["channel_id"] != interaction.channel.id:
-            raise ValueError("Scene root not found in this channel")
-        bot.store.delete_scene(interaction.guild_id, node["root_id"])
-        await interaction.response.send_message("Stored scene and branches deleted.", ephemeral=True)
+            raise ValueError("Scene message not found in this channel")
+        count = bot.store.delete_subtree(interaction.guild_id, target_id)
+        await interaction.response.send_message(f"Deleted {count} stored messages from this scene.", ephemeral=True)
 
     bot.tree.add_command(scene)
     bot.tree.add_command(admin)

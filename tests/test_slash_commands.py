@@ -133,7 +133,7 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
     async def test_scene_delete_requires_numeric_id(self):
         interaction = FakeInteraction(admin=True)
         await invoke(self.bot, "admin scene delete", interaction, "abc")
-        self.assertEqual(interaction.replies, ["Give a numeric root message ID"])
+        self.assertEqual(interaction.replies, ["Give a numeric message ID"])
 
     async def test_context_without_trace(self):
         interaction = FakeInteraction()

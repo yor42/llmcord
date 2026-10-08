@@ -520,6 +520,27 @@ class Store(AdminStore):
             self.db.execute("UPDATE candidates SET evidence_count=(SELECT COUNT(*) FROM evidence WHERE candidate_id=candidates.id)")
             self.db.execute("DELETE FROM candidates WHERE evidence_count=0 AND promoted=0")
 
+    def delete_subtree(self, guild_id: int, message_id: int) -> int:
+        with self.db:
+            self.db.execute("CREATE TEMP TABLE IF NOT EXISTS doomed(message_id INTEGER PRIMARY KEY)")
+            self.db.execute("DELETE FROM doomed")
+            self.db.execute(
+                "WITH RECURSIVE sub(message_id) AS (SELECT message_id FROM nodes WHERE guild_id=? AND message_id=? "
+                "UNION SELECT n.message_id FROM nodes n JOIN sub ON n.parent_id=sub.message_id WHERE n.guild_id=?) "
+                "INSERT INTO doomed SELECT message_id FROM sub", (guild_id, message_id, guild_id))
+            count = self.db.execute("SELECT COUNT(*) FROM doomed").fetchone()[0]
+            if count:
+                clause = "SELECT message_id FROM doomed"
+                self.db.execute(f"DELETE FROM evidence WHERE source_message_id IN ({clause})")
+                self.db.execute(f"DELETE FROM trace WHERE response_id IN ({clause})")
+                self.db.execute(f"DELETE FROM lore_activations WHERE node_id IN ({clause})")
+                self.db.execute(f"DELETE FROM summaries WHERE node_id IN ({clause})")
+                self.db.execute(f"DELETE FROM nodes WHERE message_id IN ({clause})")
+                self.db.execute("UPDATE candidates SET evidence_count=(SELECT COUNT(*) FROM evidence WHERE candidate_id=candidates.id)")
+                self.db.execute("DELETE FROM candidates WHERE evidence_count=0 AND promoted=0")
+            self.db.execute("DELETE FROM doomed")
+            return count
+
     def expire_history(self, days: int, now: float | None = None) -> int:
         cutoff = (now or time.time()) - days * 86400
         with self.db:

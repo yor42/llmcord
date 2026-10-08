@@ -49,14 +49,27 @@ class StoreLifecycleTests(unittest.TestCase):
         self.store.reset_scene(100, now=123.0)
         self.assertEqual(self.store.scene_reset_at(100), 123.0)
 
-    def test_delete_scene_removes_whole_tree_including_other_branches(self):
-        """Characterization (UX-09): any node's root deletes every branch under that root."""
+    def test_delete_subtree_keeps_ancestors_and_sibling_branches(self):
+        """UX-09 (D5): deleting a node removes it and its descendants only, with their summaries and traces."""
         last = self.chain(3)
         self.store.record_node(2000, 1, 100, 1000, 10, None, "other user's branch")
         self.store.save_summary(last, "summary")
         self.store.save_trace(last, {"lore": []})
-        root = self.store.node(2000)["root_id"]
-        self.store.delete_scene(1, root)
+        self.assertEqual(self.store.delete_subtree(1, 1001), 2)
+        self.assertIsNotNone(self.store.node(1000))
+        self.assertIsNotNone(self.store.node(2000))
+        self.assertIsNone(self.store.node(1001))
+        self.assertIsNone(self.store.node(last))
+        self.assertIsNone(self.store.summary(last))
+        self.assertIsNone(self.store.trace(last))
+
+    def test_delete_subtree_of_root_removes_whole_tree_including_other_branches(self):
+        """UX-09 (D5): deleting the root removes every branch under it."""
+        last = self.chain(3)
+        self.store.record_node(2000, 1, 100, 1000, 10, None, "other user's branch")
+        self.store.save_summary(last, "summary")
+        self.store.save_trace(last, {"lore": []})
+        self.assertEqual(self.store.delete_subtree(1, 1000), 4)
         self.assertIsNone(self.store.node(1000))
         self.assertIsNone(self.store.node(2000))
         self.assertIsNone(self.store.summary(last))

@@ -39,7 +39,7 @@ Character prompts include the card, relevant character and home-world lore, the 
 
 The bot extracts short scene facts after replies. A repeated fact in two separate scenes becomes durable lore **in that channel or thread only**. Admins can use `/admin lore add`, `/admin lore edit`, `/admin lore pin`, `/admin lore delete`, and `/admin lore promote` to control shared facts and explicitly copy them into a channel, world, or hub. `/context` shows which lore and memories informed a saved character line.
 
-Replies to an older character line branch from that line's saved parent chain. A new mention can also use up to 12 recent human messages from the last 10 minutes as group context. `/scene reset` starts the next invitation without the channel's recent context. Admins can use `/admin scene delete` to remove a stored scene and its branches. Conversation text and response traces expire after 90 days by default; change `history_retention_days` in `config.yaml`. Durable lore and opted-in personal facts stay until removed with their controls. Application logs do not include raw chat transcripts.
+Replies to an older character line branch from that line's saved parent chain. A new mention can also use up to 12 recent human messages from the last 10 minutes as group context. `/scene reset` starts the next invitation without the channel's recent context. Admins can use `/admin scene delete` to remove a stored message and everything after it in its branch (Discord messages stay). Conversation text and response traces expire after 90 days by default; change `history_retention_days` in `config.yaml`. Durable lore and opted-in personal facts stay until removed with their controls. Application logs do not include raw chat transcripts.
 
 ## Model providers
 
