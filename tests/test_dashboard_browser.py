@@ -14,6 +14,8 @@ import httpx
 
 @unittest.skipUnless(os.environ.get('LLMCORD_BROWSER_TESTS') == '1', 'Set LLMCORD_BROWSER_TESTS=1 to run browser integration tests')
 class DashboardBrowserTests(unittest.TestCase):
+    SLOW_SERVER_POLLS = 300  # poll count (x 100 ms = 30 s): publishing an emotion image can take seconds on a busy machine
+
     @classmethod
     def setUpClass(cls):
         import trustme
@@ -51,7 +53,7 @@ class DashboardBrowserTests(unittest.TestCase):
         cls.context.add_cookies([{'name': 'llmcord_session', 'value': 'browser-test-session', 'url': cls.url, 'secure': True, 'httpOnly': True, 'sameSite': 'Lax'}])
         cls.page = cls.context.new_page()
         cls.errors = []
-        cls.page.on('pageerror', lambda e: cls.errors.append(e.stack or str(e)))
+        cls.watch(cls.page, cls.errors)
 
     @classmethod
     def tearDownClass(cls):
@@ -81,8 +83,8 @@ class DashboardBrowserTests(unittest.TestCase):
                 })),
             })"""), indent=2))
 
-    def wait_for(self, predicate):
-        for _ in range(50):
+    def wait_for(self, predicate, polls=50):
+        for _ in range(polls):
             if predicate():
                 return
             self.page.wait_for_timeout(100)
@@ -189,7 +191,7 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             anonymous.close()
         page = self.page
-        page.goto(self.url + '/admin/')
+        self.load(page, self.url + '/admin/')
         page.get_by_role('link', name='Test server', exact=True).click()
         page.wait_for_url(self.url + '/admin/guild/1')
         page.get_by_role('link', name='llmcord / Servers', exact=True).click()
@@ -268,7 +270,7 @@ class DashboardBrowserTests(unittest.TestCase):
         self.assertEqual(json.loads(next(row for row in self.state()['characters'] if row['id'] == blank['id'])['card'])['description'], 'A character created without an import')
         character.get_by_text('Browser blank', exact=True).click()
         character.get_by_text('Fallback static avatar', exact=True).click()
-        fallback.get_by_role('button', name='Remove fallback avatar', exact=True).click()
+        self.open_dialog(fallback.get_by_role('button', name='Remove fallback avatar', exact=True), dialog)
         dialog.get_by_role('button', name='Remove fallback avatar', exact=True).click()
         self.wait_for(lambda: not next(row for row in self.state()['characters'] if row['id'] == blank['id'])['has_static_avatar'])
         character.get_by_text('Browser blank', exact=True).click()
@@ -459,7 +461,7 @@ class DashboardBrowserTests(unittest.TestCase):
         character.get_by_text('Joy', exact=True).click()
         joy = character.locator('.q-expansion-item').filter(has=page.get_by_text('Joy', exact=True)).first
         joy.get_by_role('button', name='Publish / repair image', exact=True).click()
-        self.wait_for(lambda: bool(self.state()['assets']))
+        self.wait_for(lambda: bool(self.state()['assets']), self.SLOW_SERVER_POLLS)
         upload_target = self.context.request.get(self.url + '/_test/uploads').json()[-1]
         upload = {'file': {'name': 'test.json', 'mimeType': 'application/json', 'buffer': b'{}'}}
         self.assertEqual(self.context.request.post(self.url + upload_target, multipart=upload).status, 403)
@@ -530,7 +532,7 @@ class DashboardBrowserTests(unittest.TestCase):
         self.assertFalse(any(r['name'] == 'Forbidden' for r in self.state()['spaces']))
         # /_test/restore likewise drops the cached (non-admin) guild list, as if the TTL had elapsed.
         self.context.request.post(self.url + '/_test/restore')
-        page.goto(self.url + '/admin/guild/1')
+        self.load(page, self.url + '/admin/guild/1')
         page.get_by_label('Space name', exact=True).fill('Forbidden')
         page.wait_for_timeout(200)
         self.context.request.post(self.url + '/_test/expire')
@@ -559,9 +561,8 @@ class DashboardBrowserTests(unittest.TestCase):
         try:
             post('/_test/restore')
             page = self.page = context.new_page()
-            page.on('pageerror', lambda e: errors.append(e.stack or str(e)))
-            page.goto(self.url + '/admin/guild/1')
-            page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
+            self.watch(page, errors)
+            self.load(page, self.url + '/admin/guild/1')
             page.get_by_role('tab', name='Server setup', exact=True).click()
             page.get_by_label('Space name', exact=True).fill('Rejected')
             page.wait_for_timeout(200)
@@ -612,9 +613,8 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertEqual(context.request.post(self.url + '/_test/restore').status, 200)
             owner = context.request.post(self.url + '/_test/seed-search-lore').json()['owner']
             page = self.page = context.new_page()
-            page.on('pageerror', lambda e: errors.append(e.stack or str(e)))
-            page.goto(f'{self.url}/admin/guild/1?owner={owner}')
-            page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
+            self.watch(page, errors)
+            self.load(page, f'{self.url}/admin/guild/1?owner={owner}')
             page.get_by_role('tab', name='Lore', exact=True).click()
             kind, ident = owner.split(':')
             self.lore_idle({'left': [kind, int(ident)]})
@@ -673,13 +673,12 @@ class DashboardBrowserTests(unittest.TestCase):
         try:
             self.assertEqual(context.request.post(self.url + '/_test/restore').status, 200)
             page = self.page = context.new_page()
-            page.on('pageerror', lambda e: errors.append(e.stack or str(e)))
+            self.watch(page, errors)
             # /_test/state uses the unwrapped store methods, so reading it does not disturb the counters.
             guild_books = sum(1 for book in context.request.get(self.url + '/_test/state').json()['lorebooks']
                               if book['target_kind'] == 'guild')
             self.assertEqual(context.request.post(self.url + '/_test/counters/reset').status, 200)
-            page.goto(self.url + '/admin/guild/1')
-            page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
+            self.load(page, self.url + '/admin/guild/1')
             page.get_by_role('tab', name='Server setup', exact=True).click()
             page.get_by_label('Space name', exact=True).wait_for()
             page.wait_for_timeout(300)
@@ -702,6 +701,38 @@ class DashboardBrowserTests(unittest.TestCase):
             self.page = original_page
             context.close()
 
+    def open_dialog(self, trigger, dialog):
+        """Click `trigger` and wait until `dialog` is open and its buttons sit inside the viewport (Quasar animates it in).
+        A click that lands while the page is still re-rendering can be lost, so click once more if no dialog appeared."""
+        from playwright.sync_api import TimeoutError as PlaywrightTimeout, expect
+        trigger.click()
+        try:
+            dialog.wait_for(timeout=5000)
+        except PlaywrightTimeout:
+            trigger.click()
+            dialog.wait_for(timeout=10000)
+        expect(dialog.get_by_role('button').last).to_be_in_viewport(timeout=10000)
+
+    @staticmethod
+    def watch(page, errors):
+        page.on('pageerror', lambda e: errors.append(e.stack or str(e)))
+        page.watched_errors, page.failed_assets = errors, []
+        page.on('requestfailed', lambda r: page.failed_assets.append(r.url) if '/_nicegui/' in r.url and 'ERR_ABORTED' not in (r.failure or '') else None)
+
+    def load(self, page, url):
+        """goto + live-socket wait. Chromium sometimes fails a NiceGUI static asset itself (net::ERR_TOO_MANY_RETRIES, the request
+        never reaches the server) and nicegui.js then throws a cssRules SecurityError. Only that pair (every page error is that
+        SecurityError and a /_nicegui/ request failed) is reloaded, up to twice; any other page error is kept for the assertion.
+        """
+        for attempt in range(3):
+            page.goto(url)
+            page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
+            errors = page.watched_errors
+            if attempt == 2 or not (page.failed_assets and errors and all(e.startswith("SecurityError: Failed to read the 'cssRules'") for e in errors)):
+                return
+            errors.clear()
+            page.failed_assets.clear()
+
     def ux_page(self, path):
         """Open a page in its own context/session (UX-01 tests); returns (context, page, errors)."""
         context = self.browser.new_context(ignore_https_errors=True, viewport={'width': 1400, 'height': 1000})
@@ -710,12 +741,11 @@ class DashboardBrowserTests(unittest.TestCase):
         errors = []
         network = []
         page = context.new_page()
-        page.on('pageerror', lambda e: errors.append(e.stack or str(e)))
+        self.watch(page, errors)
         page.on('requestfailed', lambda r: network.append(f'failed {r.url} {r.failure}'))
         page.on('response', lambda r: network.append(f'{r.status} {r.url}') if r.status >= 400 else None)
         page.network = network
-        page.goto(self.url + path)
-        page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
+        self.load(page, self.url + path)
         return context, page, errors
 
     def tab_selected(self, page, name):
@@ -741,8 +771,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.get_by_role('tab', name='Characters', exact=True).click()
             page.wait_for_url('**tab=characters*')
             self.assertIn('owner=channel', page.url)
-            page.goto(page.url)
-            page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
+            self.load(page, page.url)
             page.get_by_role('tab', name='Characters', exact=True).wait_for()
             self.assertTrue(self.tab_selected(page, 'Characters'))
             self.assertIn('tab=characters', page.url)
@@ -808,8 +837,7 @@ class DashboardBrowserTests(unittest.TestCase):
         context, page, errors = self.ux_page('/admin/')
         try:
             self.assertEqual(context.request.post(self.url + '/_test/metrics/reset').status, 200)
-            page.goto(self.url + '/admin/guild/1')
-            page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
+            self.load(page, self.url + '/admin/guild/1')
             page.get_by_label('Space name', exact=True).wait_for()
             page.wait_for_timeout(300)
             calls = context.request.get(self.url + '/_test/metrics').json()
@@ -854,7 +882,7 @@ class DashboardBrowserTests(unittest.TestCase):
                               'secure': True, 'httpOnly': True, 'sameSite': 'Lax'}])
         page = context.new_page()
         errors = []
-        page.on('pageerror', lambda e: errors.append(e.stack or str(e)))
+        self.watch(page, errors)
         try:
             page.goto(self.url + '/admin/')
             expect(page.get_by_role('link', name='llmcord / Servers', exact=True)).to_be_visible()
@@ -892,8 +920,7 @@ class DashboardBrowserTests(unittest.TestCase):
         context, page, errors = self.ux_page('/admin/')
         try:
             self.assertEqual(context.request.post(self.url + '/_test/counters/reset').status, 200)
-            page.goto(self.url + '/admin/guild/1?tab=characters')
-            page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
+            self.load(page, self.url + '/admin/guild/1?tab=characters')
             page.get_by_role('button', name='Create character', exact=True).wait_for()
             page.wait_for_timeout(300)
             self.assertEqual(self.panel_reads(context), {'model_usage_summary': 0, 'list_presets': 0})
@@ -1021,13 +1048,13 @@ class DashboardBrowserTests(unittest.TestCase):
             page.get_by_label('Preset name', exact=True).fill('Doomed preset')
             page.get_by_role('button', name='Save as new preset', exact=True).click()
             self.wait_for(lambda: any(r['name'] == 'Doomed preset' for r in self.state()['presets']))
-            page.get_by_role('button', name='Delete preset', exact=True).click()
             dialog = page.get_by_role('dialog')
+            self.open_dialog(page.get_by_role('button', name='Delete preset', exact=True), dialog)
             dialog.get_by_text('Delete preset Doomed preset?', exact=True).wait_for(timeout=5000)
             dialog.get_by_role('button', name='Cancel', exact=True).click()
             dialog.wait_for(state='hidden')
             self.assertTrue(any(r['name'] == 'Doomed preset' for r in self.state()['presets']))
-            page.get_by_role('button', name='Delete preset', exact=True).click()
+            self.open_dialog(page.get_by_role('button', name='Delete preset', exact=True), dialog)
             dialog.get_by_role('button', name='Delete preset', exact=True).click()
             self.wait_for(lambda: not any(r['name'] == 'Doomed preset' for r in self.state()['presets']))
             self.assertFalse(errors, (errors, getattr(page, 'network', [])))
