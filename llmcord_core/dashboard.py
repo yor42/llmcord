@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import copy
+import functools
 import json
 import sqlite3
 import inspect
+import types
 from urllib.parse import parse_qs
 from http.cookies import SimpleCookie
 
@@ -26,6 +28,17 @@ class LiveContext:
         self.service = app.state.admin
         self.store = self.service.store
         self.lore_owner = request.query_params.get('owner')
+
+    @functools.cached_property
+    def snapshot(self):
+        # Render-time lookups for one page build; callbacks must use live store reads.
+        store, gid = self.store, self.guild_id
+        spaces, characters, channels = store.list_spaces(gid), store.list_characters(gid), store.list_channels(gid)
+        lorebooks, scopes = store.list_lorebooks(gid), store.thread_lore_scopes(gid)
+        return types.SimpleNamespace(spaces=spaces, characters=characters, channels=channels, lorebooks=lorebooks,
+            worlds={r['id']: r['name'] for r in spaces if r['kind'] == 'world'},
+            hubs={r['id']: r['name'] for r in spaces if r['kind'] == 'hub'},
+            owners=self.service.owners_from(gid, spaces, characters, channels, lorebooks, scopes))
 
     async def run(self, operation, action=None, detail=None):
         from nicegui import ui
@@ -227,7 +240,7 @@ def signout(app, session):
 async def setup_panel(ctx):
     from nicegui import ui
     store, gid = ctx.store, ctx.guild_id
-    spaces = {r['id']: r['name'] + ' (' + r['kind'] + ')' for r in store.list_spaces(gid)}
+    spaces = {r['id']: r['name'] + ' (' + r['kind'] + ')' for r in ctx.snapshot.spaces}
     channels = await ctx.run(lambda: ctx.service.avatars.channels(gid)) or []
     channel_names = {int(c['id']): '#' + c['name'] for c in channels if c['type'] == 0}
     ui.label('Models and usage · last 24 hours').classes('text-xl font-bold')
@@ -251,7 +264,7 @@ async def setup_panel(ctx):
         ui.label('No model profiles are configured for the dashboard.')
     ui.separator()
     ui.label('Spaces').classes('text-xl font-bold')
-    for space in store.list_spaces(gid):
+    for space in ctx.snapshot.spaces:
         with ui.expansion(f"{space['name']} · {space['kind']}").classes('space-card w-full border rounded-lg'):
             guideline_editor(ctx, 'space', space['id'], 'World guidelines' if space['kind'] == 'world' else 'Hub guidelines')
             ui.button('Delete ' + space['kind'], icon='delete', color='negative', on_click=lambda space=space: delete_space_dialog(ctx, space))
@@ -261,8 +274,7 @@ async def setup_panel(ctx):
         ctx.button('Create space', lambda: store.create_space(gid, name.value or '', kind.value), 'space.create', then=lambda _: ui.navigate.reload())
     ui.separator()
     ui.label('Hub links').classes('text-xl font-bold')
-    hubs = {r['id']: r['name'] for r in store.list_spaces(gid) if r['kind'] == 'hub'}
-    worlds = {r['id']: r['name'] for r in store.list_spaces(gid) if r['kind'] == 'world'}
+    hubs, worlds = ctx.snapshot.hubs, ctx.snapshot.worlds
     with ui.row().classes('items-end'):
         hub = ui.select(hubs, label='Hub')
         world = ui.select(worlds, label='World')
@@ -296,7 +308,7 @@ async def setup_panel(ctx):
             ui.navigate.reload()
         ctx.button('Bind channel', bind, 'channel.bind', then=bound)
     ui.label('Rebinding a channel keeps its ambient mode and removes cast members not available in the new space.').classes('text-amber-300')
-    for binding in store.list_channels(gid):
+    for binding in ctx.snapshot.channels:
         with ui.card().classes('w-full channel-card'):
             ui.label(channel_names.get(binding['channel_id'], str(binding['channel_id']))).classes('text-lg font-bold')
             guideline_editor(ctx, 'channel', binding['channel_id'], 'Channel guidelines')
@@ -334,7 +346,7 @@ def characters_panel(ctx):
     store, gid = ctx.store, ctx.guild_id
     def reload_characters(_):
         ui.navigate.to(f'/guild/{gid}?tab=characters')
-    worlds = {r['id']: r['name'] for r in store.list_spaces(gid) if r['kind'] == 'world'}
+    worlds = ctx.snapshot.worlds
     def new_character():
         with ui.dialog() as dialog, ui.card().classes('w-full max-w-lg'):
             ui.label('Create character').classes('text-xl font-bold')
@@ -349,7 +361,7 @@ def characters_panel(ctx):
     ui.button('Create character', icon='add', on_click=new_character).set_enabled(bool(worlds))
     if not worlds:
         ui.label('Create a home world in Server setup first.')
-    rows = store.list_characters(gid)
+    rows = ctx.snapshot.characters
     for row in rows:
         with ui.expansion(row['name'] + (' · Archived' if row['archived'] else '')).classes('w-full border rounded-lg character-card'):
             card = json.loads(row['card'])
@@ -556,7 +568,7 @@ def imports_panel(ctx):
     from nicegui import ui
     store, gid = ctx.store, ctx.guild_id
     ui.label('Character cards').classes('text-xl font-bold')
-    worlds = {r['id']: r['name'] for r in store.list_spaces(gid) if r['kind'] == 'world'}
+    worlds = ctx.snapshot.worlds
     world = ui.select(worlds, label='Home world')
     preview_area = ui.column().classes('w-full')
     async def card_uploaded(event):
@@ -584,7 +596,7 @@ def imports_panel(ctx):
     ctx.upload(card_uploaded, 'Upload V2/V3 JSON or PNG card')
     ui.separator()
     ui.label('Direct lore entry import').classes('text-xl font-bold')
-    owners = {f"{owner['kind']}:{owner['id']}": owner['label'] for owner in ctx.service.owners(gid)}
+    owners = {f"{owner['kind']}:{owner['id']}": owner['label'] for owner in ctx.snapshot.owners}
     destination = ui.select(owners, label='Destination owner').classes('w-full')
     def import_into_owner():
         if destination.value not in owners:
@@ -597,15 +609,16 @@ def imports_panel(ctx):
     with ui.row().classes('items-end'):
         book_name = ui.input('Book name')
         target = ui.select(['guild', 'channel'], value='guild', label='Book scope')
-        channels = {r['channel_id']: str(r['channel_id']) for r in store.list_channels(gid)}
+        channels = {r['channel_id']: str(r['channel_id']) for r in ctx.snapshot.channels}
         channel = ui.select(channels, label='Channel (for channel books)')
         ctx.button('Create book', lambda: store.create_lorebook(gid, book_name.value or '', target.value, channel.value or 0), 'book.create', then=lambda _: ui.navigate.reload())
-    for book in store.list_lorebooks(gid):
+    for book in ctx.snapshot.lorebooks:
         with ui.expansion(book['name'] + ' · ' + book['target_kind']).classes('w-full'):
             ui.button('Delete book', icon='delete', color='negative', on_click=lambda book=book: delete_book_dialog(ctx, book))
             if book['target_kind'] == 'guild':
-                for space in store.list_spaces(gid):
-                    enabled = space['id'] in store.lorebook_links(book['id'])
+                linked_spaces = store.lorebook_links(book['id'])
+                for space in ctx.snapshot.spaces:
+                    enabled = space['id'] in linked_spaces
                     def assign(book=book, space=space, enabled=enabled):
                         store.set_lorebook_space(gid, book['id'], space['id'], not enabled)
                         return True
@@ -779,9 +792,9 @@ def presets_panel(ctx):
     ctx.button('Export SillyTavern dialogue preset', st_export)
     ui.separator()
     ui.label('Assembled request preview').classes('text-xl font-bold')
-    chars = {r['id']: r['name'] for r in store.list_characters(gid)}
+    chars = {r['id']: r['name'] for r in ctx.snapshot.characters}
     character = ui.select(chars, label='Sample character')
-    channel = ui.select({row['channel_id']: str(row['channel_id']) for row in store.list_channels(gid)}, label='Sample channel (optional)')
+    channel = ui.select({row['channel_id']: str(row['channel_id']) for row in ctx.snapshot.channels}, label='Sample channel (optional)')
     sample = ui.textarea('Sample input', value='Hello!').classes('w-full')
     history = ui.textarea('Sample history (one message per line)').classes('w-full')
     def preview():

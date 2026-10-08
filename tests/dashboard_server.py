@@ -53,6 +53,9 @@ def main():
     book_id = store.create_lorebook(1, 'Test book', 'channel', 100)
     from llmcord_core.lorebooks import parse_lorebook
     store.sync_lorebook(1, book_id, parse_lorebook(json.dumps({'entries': {str(i): {'key': ['fixture'], 'content': f'Fixture entry {i}'} for i in range(75)}}).encode()), {}, 0)
+    # PERF-05: a guild-target book (named to sort before 'Test book', which the lore board picks as the default right owner) and a second space, so lorebook_links is observably once per book (not books x spaces).
+    store.create_space(1, 'Annex', 'world')
+    store.create_lorebook(1, 'Guild book', 'guild')
     if bench:
         seed_benchmark(store, world, os.environ.get('LLMCORD_BENCH_SEED', '10,500'))
     app.state.sessions['browser-test-session'] = {'user': {'id': '4', 'username': 'Test admin'}, 'expires': time.time() + 3600,
@@ -63,6 +66,10 @@ def main():
     # Its own session for the rejected-live-event test, which revokes, rate-limits and finally expires it.
     app.state.sessions['browser-reject-session'] = {'user': {'id': '4', 'username': 'Test admin'}, 'expires': time.time() + 3600,
         'token_expires': time.time() + 3600, 'csrf': 'browser-reject-csrf', 'access': 'test', 'refresh': 'test'}
+
+    # Its own session for the guild-lookup counting test (PERF-05).
+    app.state.sessions['browser-snapshot-session'] = {'user': {'id': '4', 'username': 'Test admin'}, 'expires': time.time() + 3600,
+        'token_expires': time.time() + 3600, 'csrf': 'browser-snapshot-csrf', 'access': 'test', 'refresh': 'test'}
 
     # Count lore board renders (PERF-01/02): render_board loads each side through AdminStore.admin_entries_page,
     # counted here under the 'admin_entries' counter keys (one per side per render).
@@ -75,12 +82,25 @@ def main():
         return original_admin_entries_page(guild_id, kind, owner_id, *args, **kwargs)
     admin_store.admin_entries_page = counting_admin_entries_page
 
+    # PERF-05: count guild-wide lookups under 'store:<name>'. app.state.store and app.state.admin.store are the same
+    # object, so wrapping it once covers every dashboard call. /_test/state keeps using the unwrapped originals.
+    assert admin_store is store
+    originals = {}
+    def count_store_method(name):
+        original = originals[name] = getattr(store, name)
+        def counting(*args, **kwargs):
+            counters[f'store:{name}'] += 1
+            return original(*args, **kwargs)
+        setattr(store, name, counting)
+    for name in ('list_spaces', 'list_characters', 'list_channels', 'list_lorebooks', 'thread_lore_scopes', 'lorebook_links'):
+        count_store_method(name)
+
     @app.get('/_test/state')
     async def snapshot():
-        return {'spaces': [dict(r) for r in store.list_spaces(1)],
+        return {'spaces': [dict(r) for r in originals['list_spaces'](1)],
             'guidelines': [dict(r) for r in store.all('SELECT * FROM scene_guidelines')],
             'guild_lore': [dict(r) for r in store.all('SELECT * FROM guild_lore_entries')],
-            'lorebooks': [dict(r) for r in store.list_lorebooks(1)],
+            'lorebooks': [dict(r) for r in originals['list_lorebooks'](1)],
             'characters': [dict(r) for r in store.all('SELECT id,guild_id,world_id,name,card,archived,avatar IS NOT NULL AS has_static_avatar FROM characters')],
             'lore': [dict(r) for r in store.all('SELECT * FROM lore')],
             'books': [dict(r) for r in store.all('SELECT * FROM lorebook_entries')],

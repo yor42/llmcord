@@ -27,7 +27,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 | PERF-02 | Lore workspace N+1 and in-Python search/pagination | medium | CONFIRMED | fragile |
 | PERF-03 | Avatar slot reads load every blob | low | CONFIRMED | fragile |
 | PERF-04 | No gzip; CSP middleware buffers every `/admin` HTML response | low | CONFIRMED | unconventional |
-| PERF-05 | Same lookups repeated per page render | low | CONFIRMED | preference |
+| PERF-05 | Same lookups repeated per page render — **Resolved (R5 step 4)** | low | CONFIRMED | preference |
 | BUG-01 | `/lore add` keys are ignored — **Resolved (R1, branch `rework/r1-correctness`)** | high | CONFIRMED (test) | incorrect |
 | BUG-02 | Daily cleanup loop dies permanently on one error — **Resolved (R1, branch `rework/r1-correctness`)** | medium | CONFIRMED (test) | incorrect |
 | BUG-03 | Scene summary stops after 30 unsummarized nodes | medium | SUSPECTED (characterized) | incorrect |
@@ -115,6 +115,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
   - Low priority over Tailscale on a LAN.
 
 ### PERF-05: Same lookups repeated per page render
+- **Status:** Resolved in R5 step 4: a per-render snapshot on `LiveContext` reads each guild-wide list once per page load (was up to 8×); `owners` is built from the snapshot rows; `lorebook_links` is read once per book. Callbacks keep live reads.
 - **Severity:** low. **Confidence:** CONFIRMED. **Label:** preference.
 - **Evidence:**
   - `store.list_spaces(gid)` has 8 call sites in one guild page render: `dashboard.py:211,235,245,246,300,532,580`, plus inside `AdminService.owners`.

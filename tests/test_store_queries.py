@@ -209,6 +209,34 @@ class OwnersTests(unittest.TestCase):
             store.close()
 
 
+class OwnersFromRowsTests(unittest.TestCase):
+    def test_owners_from_preloaded_rows_match_owners(self):
+        """PERF-05: owners built from already-loaded rows equal AdminService.owners(guild_id).
+
+        Seam under test:
+        ``AdminService.owners_from(guild_id, spaces, characters, channels, lorebooks, thread_scopes)``.
+        """
+        transport, _ = discord_transport(admin_guilds=[1])
+        app = create_app(":memory:", "https://pi.test", "client", "secret", "bot",
+                         httpx.AsyncClient(transport=transport), enable_dashboard=False,
+                         config_path="tests/nonexistent-config.yaml")
+        store = app.state.store
+        try:
+            seed(store)
+            store.bind_channel(1, 300, store.harbor)
+            store.bind_channel(1, 100, store.plaza)
+            store.create_lorebook(1, "Tales", "guild")
+            store.add_lore(1, "thread", 900, "a")
+            store.bind_channel(2, 200, store.faraway)
+            admin = app.state.admin
+            rows = (store.list_spaces(1), store.list_characters(1), store.list_channels(1),
+                    store.list_lorebooks(1), store.thread_lore_scopes(1))
+            self.assertEqual(admin.owners_from(1, *rows), admin.owners(1))
+            self.assertTrue(any(o["kind"] == "book" for o in admin.owners(1)))
+        finally:
+            store.close()
+
+
 class SourceGuardTests(unittest.TestCase):
     def test_no_raw_sql_or_private_store_access_in_ui_modules(self):
         """ARCH-02: dashboard.py and admin.py go through public Store methods only."""

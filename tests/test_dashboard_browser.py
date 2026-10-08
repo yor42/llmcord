@@ -287,6 +287,7 @@ class DashboardBrowserTests(unittest.TestCase):
         self.assertFalse(any(row['character_id'] == blank['id'] for row in self.state()['slots']))
         page.get_by_role('button', name='Create character', exact=True).wait_for()
 
+        books_before = len(self.state()['lorebooks'])
         page.get_by_role('tab', name='Imports', exact=True).click()
         page.get_by_label('Book name', exact=True).fill('Browser empty book')
         with page.expect_navigation():
@@ -311,7 +312,7 @@ class DashboardBrowserTests(unittest.TestCase):
         with page.expect_navigation():
             dialog.get_by_role('button', name='Apply entry import', exact=True).click()
         self.assertTrue(any(row['content'] == 'Direct guild fact' for row in self.state()['guild_lore']))
-        self.assertEqual(len(self.state()['lorebooks']), 1)
+        self.assertEqual(len(self.state()['lorebooks']), books_before)
         self.choose_lore_owner('left', 'World: World', 'space', 1)
         data = json.dumps({'entries': [{'content': 'Direct world fact', 'constant': True, 'order': 37}]}).encode()
         for count in (1, 0):
@@ -321,7 +322,7 @@ class DashboardBrowserTests(unittest.TestCase):
             dialog.get_by_role('button', name='Apply entry import', exact=True).click()
             self.lore_idle()
         self.assertEqual(sum(row['content'] == 'Direct world fact' for row in self.state()['lore']), 1)
-        self.assertEqual(len(self.state()['lorebooks']), 1)
+        self.assertEqual(len(self.state()['lorebooks']), books_before)
 
         page.get_by_role('tab', name='Lore', exact=True).click()
         page.get_by_label('Page', exact=True).wait_for()
@@ -661,6 +662,44 @@ class DashboardBrowserTests(unittest.TestCase):
 
             # Debounce: at most two board renders (two admin_entries_page calls each) for the whole burst.
             self.assertLessEqual(renders, 4, f'admin_entries_page called {renders} times while typing 10 characters')
+        finally:
+            self.page = original_page
+            context.close()
+
+    def test_guild_page_load_reads_each_guild_list_once(self):
+        """PERF-05: one load of the guild page reads each guild-wide list once, not once per panel.
+
+        All five tabs render eagerly, so before the per-render snapshot a single load called ``list_spaces`` about
+        eight times and ``lorebook_links`` once per guild book per space. Targets: one call each to
+        ``list_spaces``, ``list_characters``, ``list_channels``, ``list_lorebooks`` and ``thread_lore_scopes``,
+        and exactly one ``lorebook_links`` per guild-target book (the fixture has several spaces, so the old
+        per-space loop would give books x spaces).
+        """
+        context = self.browser.new_context(ignore_https_errors=True, viewport={'width': 1400, 'height': 1000})
+        context.add_cookies([{'name': 'llmcord_session', 'value': 'browser-snapshot-session', 'url': self.url,
+                              'secure': True, 'httpOnly': True, 'sameSite': 'Lax'}])
+        original_page, errors = self.page, []
+        try:
+            self.assertEqual(context.request.post(self.url + '/_test/restore').status, 200)
+            page = self.page = context.new_page()
+            page.on('pageerror', lambda e: errors.append(e.stack or str(e)))
+            # /_test/state uses the unwrapped store methods, so reading it does not disturb the counters.
+            guild_books = sum(1 for book in context.request.get(self.url + '/_test/state').json()['lorebooks']
+                              if book['target_kind'] == 'guild')
+            self.assertEqual(context.request.post(self.url + '/_test/counters/reset').status, 200)
+            page.goto(self.url + '/admin/guild/1')
+            page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
+            page.get_by_role('tab', name='Server setup', exact=True).click()
+            page.get_by_label('Space name', exact=True).wait_for()
+            page.wait_for_timeout(300)
+            counters = context.request.get(self.url + '/_test/counters').json()
+            self.assertFalse(errors, errors)
+            got = {name: counters.get('store:' + name, 0) for name in
+                   ('list_spaces', 'list_characters', 'list_channels', 'list_lorebooks', 'thread_lore_scopes', 'lorebook_links')}
+            self.assertEqual({k: v for k, v in got.items() if k != 'lorebook_links'},
+                             {'list_spaces': 1, 'list_characters': 1, 'list_channels': 1, 'list_lorebooks': 1, 'thread_lore_scopes': 1}, got)
+            self.assertGreaterEqual(guild_books, 1)
+            self.assertEqual(got['lorebook_links'], guild_books, got)
         finally:
             self.page = original_page
             context.close()

@@ -40,17 +40,22 @@ class AdminService:
         return result
 
     def owners(self, guild_id):
+        store = self.store
+        return self.owners_from(guild_id, store.list_spaces(guild_id), store.list_characters(guild_id), store.list_channels(guild_id),
+            store.list_lorebooks(guild_id), store.thread_lore_scopes(guild_id))
+
+    def owners_from(self, guild_id, spaces, characters, channels, lorebooks, thread_scopes):
         owners = []
-        for row in self.store.list_spaces(guild_id):
+        for row in spaces:
             owners.append({'kind': 'space', 'id': row['id'], 'label': f"{row['kind'].title()}: {row['name']}"})
-        for row in self.store.list_characters(guild_id):
+        for row in characters:
             owners.append({'kind': 'character', 'id': row['id'], 'label': 'Character: ' + row['name']})
-        for row in self.store.list_channels(guild_id):
+        for row in channels:
             owners.append({'kind': 'channel', 'id': row['channel_id'], 'label': f"Channel: {row['channel_id']}"})
         owners.append({'kind': 'guild', 'id': guild_id, 'label': 'Guild: Server-wide lore'})
-        for row in self.store.list_lorebooks(guild_id):
+        for row in lorebooks:
             owners.append({'kind': 'book', 'id': row['id'], 'label': 'Book: ' + row['name']})
-        for scope_id in self.store.thread_lore_scopes(guild_id):
+        for scope_id in thread_scopes:
             owners.append({'kind': 'thread', 'id': scope_id, 'label': f"Thread: {scope_id}"})
         return owners
 
