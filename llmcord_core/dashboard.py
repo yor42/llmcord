@@ -14,6 +14,7 @@ from http.cookies import SimpleCookie
 from fastapi import HTTPException, Request
 from fastapi.responses import PlainTextResponse
 
+from .auth import is_server_admin
 from .avatars import MAX_AVATAR_BYTES, avatar_version, normalize_avatar
 from .cards import parse_card
 from .lorebooks import parse_lorebook
@@ -257,7 +258,7 @@ def mount_dashboard(app):
         guilds = await app.state.auth.guilds(session)
         ui.label('Your servers').classes('text-3xl font-bold')
         for guild in guilds:
-            if guild.get('owner') or int(guild.get('permissions', '0')) & 8:
+            if is_server_admin(guild):
                 with ui.card().classes('w-full max-w-xl'):
                     ui.link(guild['name'], f"/guild/{guild['id']}").classes('text-xl')  # ui.link adds the /admin mount prefix
         signout(app, session)

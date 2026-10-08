@@ -46,7 +46,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 | REL-05 | Shutdown order can skip `store.close()` — **Resolved (R1, branch `rework/r1-correctness`)** | low | CONFIRMED | fragile |
 | ARCH-01 | Oversized functions | medium | CONFIRMED | fragile |
 | ARCH-02 | Raw SQL and private store helpers in UI code | medium | CONFIRMED | fragile |
-| ARCH-03 | Duplicated constants and logic | low | CONFIRMED | preference |
+| ARCH-03 | Duplicated constants and logic — **Mostly resolved (R6 step 4)** | low | CONFIRMED | preference |
 | ARCH-04 | Production-dead code and test-double fallbacks — **Resolved (R6 step 3)** | low | CONFIRMED | unconventional |
 | ARCH-05 | Scene deletion and expiry leave derived memory | medium | SUSPECTED | incorrect |
 | UX-01 | Missing success feedback; wrong tab after reload; raw IDs — **Resolved (R5 step 5)** | medium | CONFIRMED | incorrect |
@@ -293,6 +293,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Direction:** route the logic through `Store`/`AdminStore` methods with revision checks.
 
 ### ARCH-03: Duplicated constants and logic
+- **Status:** Mostly resolved in R6 step 4. One `auth.DISCORD_API` (used by `web.py`, `avatars.py`), one `auth.is_server_admin` (guard and dashboard server list), one `discord_bot.recent_human_lines` (`on_message` and `/summon`). The duplicate guild channel fetch went away with the legacy routes (SEC-02). Left as is: the per-method provider branches in `models.py`. Follow-ups (low): `avatars.py` now imports `auth.py` (the bot process loads FastAPI); a leaf constants module would be cleaner; `test_single_api_base` asserts string identity and would not catch a re-added equal literal.
 - **Severity:** low. **Confidence:** CONFIRMED. **Label:** preference.
 - **Evidence:**
   - **Discord API base URL:** `auth.py:13`, `web.py:26`, plus literals in `avatars.py:102,129`.

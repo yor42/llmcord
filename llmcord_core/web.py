@@ -16,11 +16,10 @@ from starlette.datastructures import MutableHeaders
 from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES, GZipMiddleware
 
 from .store import Store
-from .auth import AuthService
+from .auth import DISCORD_API, AuthService
 from .admin import AdminService
 
 
-DISCORD_API = "https://discord.com/api/v10"
 AVATAR_CACHE = {"Cache-Control": "private, max-age=300"}
 
 

@@ -11,6 +11,7 @@ import httpx
 from fastapi import HTTPException
 
 DISCORD_API = 'https://discord.com/api/v10'
+ADMINISTRATOR = 1 << 3
 GUILD_CACHE_TTL = 300  # seconds a session's guild list is reused (roadmap D1)
 
 
@@ -21,6 +22,10 @@ def token_key(token):
 def busy(lock):
     # Held or awaited locks must stay shared, or two refreshes/requests for one key could run at once (SEC-04).
     return lock.locked() or bool(getattr(lock, '_waiters', None))
+
+
+def is_server_admin(guild: dict) -> bool:
+    return bool(guild.get('owner') or int(guild.get('permissions', '0')) & ADMINISTRATOR)
 
 
 class AuthService:
@@ -162,7 +167,7 @@ class AuthService:
         guilds = await self.guilds(session)
         if self.app.state.sessions.get(ident) is not session or session['expires'] < time.time():
             raise HTTPException(401, 'Discord session expired')
-        if not any(int(g['id']) == guild_id and (g.get('owner') or int(g.get('permissions', '0')) & 8) for g in guilds):
+        if not any(int(g['id']) == guild_id and is_server_admin(g) for g in guilds):
             raise HTTPException(403, 'Server administrator permission required')
         return session
 

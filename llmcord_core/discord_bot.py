@@ -32,6 +32,21 @@ MEMORY_CLOSE_SECONDS = 5
 NO_CHARACTER_NOTE_SECONDS = 15
 
 
+async def recent_human_lines(channel, limits: dict, cutoff, floor: float, before=None) -> list:
+    kwargs = {"before": before} if before is not None else {}
+    recent = []
+    async for old in channel.history(limit=limits["recent_messages"] * 5, **kwargs):
+        if old.created_at < cutoff or old.created_at.timestamp() < floor:
+            break
+        if old.author.bot or old.webhook_id or not old.content:
+            continue
+        recent.append(message_context(old))
+        if len(recent) >= limits["recent_messages"]:
+            break
+    recent.reverse()
+    return recent
+
+
 def split_discord(text: str, limit: int = 1900) -> list[str]:
     chunks = []
     while len(text) > limit:
@@ -144,15 +159,7 @@ class SkitBot(commands.Bot):
             cutoff = message.created_at - timedelta(seconds=self.settings.limits["recent_window_seconds"])
             reset_at = self.store.scene_reset_at(message.channel.id)
             after_parent = referenced["created_at"] if explicit_reply and referenced else 0.0
-            async for old in message.channel.history(before=message, limit=self.settings.limits["recent_messages"] * 5):
-                if old.created_at < cutoff or old.created_at.timestamp() < max(reset_at, after_parent):
-                    break
-                if old.author.bot or old.webhook_id or not old.content:
-                    continue
-                recent.append(message_context(old))
-                if len(recent) >= self.settings.limits["recent_messages"]:
-                    break
-            recent.reverse()
+            recent = await recent_human_lines(message.channel, self.settings.limits, cutoff, max(reset_at, after_parent), before=message)
         text = message.content
         if self.user:
             text = text.replace(self.user.mention, "", 1).strip()
@@ -723,16 +730,7 @@ def register_commands(bot: SkitBot) -> None:
         latest = bot.store.latest_character_node(interaction.channel.id)
         parent_message_id = latest["message_id"] if latest and latest["created_at"] >= max(cutoff.timestamp(), reset_at) else None
         after_parent = latest["created_at"] if parent_message_id else 0.0
-        recent = []
-        async for old in interaction.channel.history(limit=bot.settings.limits["recent_messages"] * 5):
-            if old.created_at < cutoff or old.created_at.timestamp() < max(reset_at, after_parent):
-                break
-            if old.author.bot or old.webhook_id or not old.content:
-                continue
-            recent.append(message_context(old))
-            if len(recent) >= bot.settings.limits["recent_messages"]:
-                break
-        recent.reverse()
+        recent = await recent_human_lines(interaction.channel, bot.settings.limits, cutoff, max(reset_at, after_parent))
         await interaction.response.send_message(
             f"{interaction.user.display_name} summons {row['name']}: {prompt[:1700]}",
             allowed_mentions=discord.AllowedMentions.none())

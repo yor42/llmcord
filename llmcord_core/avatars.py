@@ -10,6 +10,8 @@ from urllib.parse import urlsplit
 
 from PIL import Image, ImageOps
 
+from .auth import DISCORD_API
+
 DEFAULT_SLOTS = ('neutral', 'happy', 'sad', 'angry', 'surprised', 'embarrassed')
 MAX_AVATAR_BYTES = 8 * 1024 * 1024
 
@@ -103,7 +105,7 @@ class AvatarPublisher:
         self.store, self.http, self.bot_token = store, http, bot_token
 
     async def channels(self, guild_id):
-        result = await self.http.get(f'https://discord.com/api/v10/guilds/{guild_id}/channels', headers={'Authorization': 'Bot ' + self.bot_token})
+        result = await self.http.get(f'{DISCORD_API}/guilds/{guild_id}/channels', headers={'Authorization': 'Bot ' + self.bot_token})
         if result.status_code != 200:
             raise ValueError('Discord channels are unavailable')
         return result.json()
@@ -130,7 +132,7 @@ class AvatarPublisher:
         if asset and asset['image_hash'] == image_hash and not repair:
             return asset['url']
         channel_id = settings['asset_channel_id']
-        response = await self.http.post(f'https://discord.com/api/v10/channels/{channel_id}/messages', headers={'Authorization': 'Bot ' + self.bot_token},
+        response = await self.http.post(f'{DISCORD_API}/channels/{channel_id}/messages', headers={'Authorization': 'Bot ' + self.bot_token},
             data={'payload_json': json.dumps({'content': f'Character {character_id} / {slot_key}', 'allowed_mentions': {'parse': []}})},
             files={'files[0]': (f'{image_hash}.png', slot['image'], 'image/png')})
         if response.status_code >= 400:
