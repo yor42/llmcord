@@ -310,168 +310,196 @@ class SkitBot(commands.Bot):
         task.add_done_callback(self.note_tasks.discard)
 
     async def _run_scene(self, scene: SceneContext, channel, interaction=None):
-        progress = None
         model_label = discord.utils.escape_markdown(self.settings.profile('dialogue').model[:120])
-
-        def status(phase):
-            summary = self.store.model_usage_summary(scene.guild_id, self.settings.dialogue, self.settings.profile('dialogue').model)
-            tokens = summary['input_tokens'] + summary['output_tokens']
-            qualifier = f" (+{summary['unreported']} unreported calls)" if summary['unreported'] else ''
-            return f'⏳ {phase} · {model_label} · 24h tracked: {tokens:,} tokens{qualifier}'
-
-        async def update_progress(content):
-            nonlocal progress
-            try:
-                if progress:
-                    await progress.edit(content=content, allowed_mentions=discord.AllowedMentions.none())
-                else:
-                    progress = await channel.send(content, silent=True,
-                        allowed_mentions=discord.AllowedMentions.none())
-                return True
-            except discord.DiscordException as error:
-                logging.warning('Generation status update failed: %s', error_detail(error))
-                return False
-
-        async def clear_progress(fallback='Generation stopped.'):
-            nonlocal progress
-            if progress:
-                try:
-                    await progress.delete()
-                except discord.DiscordException as error:
-                    logging.warning('Generation status cleanup failed: %s', error_detail(error))
-                    await update_progress(fallback)
-                progress = None
-
-        stage = 'speaker selection'
+        progress = _SceneProgress(self.store, self.settings, scene, channel, model_label)
+        stage = _Stage('speaker selection')
         try:
             if not scene.ambient:
-                await update_progress(status('Generating a reply…'))
+                await progress.update(progress.status('Generating a reply…'))
             scene = replace(scene, preset=scene.preset or self.store.active_preset(scene.guild_id),
                 guidelines=scene.guidelines if scene.guidelines is not None else self.store.scene_guidelines(scene.guild_id, scene.space_id, scene.parent_channel_id or scene.channel_id))
             speakers = await self.engine.speakers(scene)
             if not speakers:
-                if not scene.ambient:
-                    if await update_progress("No active character is available here. Use /cast set or /summon."):
-                        self._delete_later(progress)
-                        progress = None
+                if not scene.ambient and await progress.update("No active character is available here. Use /cast set or /summon."):
+                    self._delete_later(progress.message)
+                    progress.message = None
                 return
             if scene.ambient:
-                await update_progress(status('Generating a reply…'))
-            stage = 'image description'
+                await progress.update(progress.status('Generating a reply…'))
+            stage.name = 'image description'
             image_description = await self.engine.describe_images(scene)
             stored_text = scene.text + (f"\n[Image description: {image_description}]" if image_description else "")
-            stage = 'saving scene input'
+            stage.name = 'saving scene input'
             root_id = self.engine.record_user(scene, stored_text)
             preceding: list[tuple[str, str]] = []
             parent_message_id = scene.user_message_id
             completed = []
             for character in speakers:
                 name = discord.utils.escape_markdown(character['name'])
-                await update_progress(status(f'**{name}** is preparing a reply…'))
-                stage = 'preparing character prompt'
+                await progress.update(progress.status(f'**{name}** is preparing a reply…'))
+                stage.name = 'preparing character prompt'
                 request, sources = await self.engine.prepare_dialogue(scene, character, preceding)
-                stage = 'webhook setup'
-                webhook = await self._webhook(channel, character)
-                thread_options = {'thread': channel} if isinstance(channel, discord.Thread) else {}
-                slots = {row['slot_key']: row for row in self.store.usable_avatars(scene.guild_id, character['id'])}
-                emotion, chosen_avatar, placeholder = 'neutral', slots['neutral'], None
-                pieces, last_edit = [], 0.0
-                try:
-                    stage = 'dialogue generation'
-                    await update_progress(status(f'Streaming **{name}**'))
-                    with capture_usage() as usage_records:
-                        stream = self.models.stream_compiled('dialogue', request)
-                        async for event in emotion_stream(stream, slots):
-                            if event.emotion is not None:
-                                emotion = event.emotion
-                                stage = 'avatar lookup'
-                                chosen_avatar = await self.resolve_avatar(slots.get(emotion, slots['neutral']))
-                                stage = 'webhook delivery'
-                                try:
-                                    placeholder = await webhook.send('…', **thread_options, wait=True, silent=True,
-                                        username=character['name'], avatar_url=chosen_avatar['url'], allowed_mentions=discord.AllowedMentions.none())
-                                except discord.NotFound:
-                                    self._forget_webhook(self._webhook_key(channel, character))
-                                    stage = 'webhook setup'
-                                    webhook = await self._webhook(channel, character)
-                                    stage = 'webhook delivery'
-                                    placeholder = await webhook.send('…', **thread_options, wait=True, silent=True,
-                                        username=character['name'], avatar_url=chosen_avatar['url'], allowed_mentions=discord.AllowedMentions.none())
-                                stage = 'dialogue generation'
-                                continue
-                            pieces.append(event.text)
-                            current = "".join(pieces)
-                            if time.monotonic() - last_edit > 1.2 and len(current) < 1800:
-                                stage = 'webhook delivery'
-                                await placeholder.edit(content=current + " ▌", allowed_mentions=discord.AllowedMentions.none())
-                                last_edit = time.monotonic()
-                                stage = 'dialogue generation'
-                    line = re.sub(r'<emotion>[^\n]*?</emotion>\s*', '', "".join(pieces)).strip()
-                    usage = usage_records[-1] if usage_records else None
-                    footer = reply_footer(model_label, usage) if self.store.usage_footer_enabled(scene.guild_id) else ''
-                    chunks = split_discord(line, limit=min(1900, 2000 - len(footer)))
-                    stage = 'webhook delivery'
-                    await placeholder.edit(content=chunks[0] + footer, allowed_mentions=discord.AllowedMentions.none())
-                except Exception as error:
-                    if isinstance(error, discord.NotFound):
-                        self._forget_webhook(self._webhook_key(channel, character))
-                    if placeholder:
-                        try:
-                            await placeholder.delete()
-                        except Exception as cleanup_error:
-                            logging.warning('Failed response cleanup: %s', error_detail(cleanup_error))
-                    raise
-                outgoing = [placeholder]
-                try:
-                    for chunk in chunks[1:]:
-                        outgoing.append(await webhook.send(chunk + footer, **thread_options, wait=True, silent=True,
-                            username=character['name'], avatar_url=chosen_avatar['url'],
-                            allowed_mentions=discord.AllowedMentions.none()))
-                except discord.NotFound:
-                    self._forget_webhook(self._webhook_key(channel, character))
-                    raise
-                for posted, chunk in zip(outgoing, chunks):
-                    stage = 'saving character reply'
-                    self.store.record_node(posted.id, scene.guild_id, scene.channel_id,
-                        parent_message_id, None, character["id"], chunk,
-                        sources=sources["messages"])
-                    self.store.save_trace(posted.id, {"character_id": character["id"], 'emotion': emotion,
-                        'usage': usage.as_dict() if usage else None,
-                        'avatar_source': 'emotion' if chosen_avatar['asset_id'] else 'static' if character['avatar'] else 'default',
-                        'avatar_asset_id': chosen_avatar['asset_id'], **sources})
-                    self.store.save_lore_activations(posted.id, sources.get("lore_activations", []))
-                    parent_message_id = posted.id
+                line, outgoing, chunks, emotion, chosen_avatar, usage = await self._stream_speaker(
+                    scene, channel, character, request, progress, stage, name, model_label)
+                parent_message_id = self._record_reply(scene, character, sources, outgoing, chunks, emotion,
+                                                       chosen_avatar, usage, parent_message_id, stage)
                 preceding.append((character["name"], line))
                 completed.append(character)
-            await clear_progress('Reply sent.')
+            await progress.clear('Reply sent.')
             if scene.ambient:
                 self.store.mark_ambient_response(scene.channel_id)
             self._schedule_memory(channel.id, scene, completed, preceding, root_id, parent_message_id)
         except Exception as error:
-            ref = reference_id()
-            logging.error('Scene failed during %s [ref %s]: %s\n%s', stage, ref, error_detail(error), error_stack(error))
-            failure = f"The character couldn't reply (ref {ref}). An admin can find details in the bot log."
-            try:
-                if progress:
-                    try:
-                        await progress.edit(content=failure, allowed_mentions=discord.AllowedMentions.none())
-                        progress = None
-                    except discord.DiscordException:
-                        await channel.send(failure, allowed_mentions=discord.AllowedMentions.none())
-                else:
-                    await channel.send(failure, allowed_mentions=discord.AllowedMentions.none())
-            except discord.DiscordException as post_error:
-                logging.warning('Public failure notice failed [ref %s]: %s', ref, error_detail(post_error))
-            if interaction:
-                detail = (user_detail(error) if stage in PROVIDER_STAGES
-                          else 'internal error. An admin can find details in the bot log.')
-                try:
-                    await interaction.followup.send(f"Your turn failed during {stage} (ref {ref}): {detail}"[:1900],
-                        ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
-                except Exception as notify_error:
-                    logging.warning('Private failure notice failed [ref %s]: %s', ref, error_detail(notify_error))
+            await self._report_scene_failure(error, stage.name, progress, channel, interaction)
         finally:
-            await clear_progress()
+            await progress.clear()
+
+    async def _stream_speaker(self, scene, channel, character, request, progress, stage, name, model_label):
+        """Post one character's reply through its webhook, streaming into a placeholder; returns
+        (line, outgoing messages, chunks, emotion, chosen avatar, usage)."""
+        stage.name = 'webhook setup'
+        webhook = await self._webhook(channel, character)
+        thread_options = {'thread': channel} if isinstance(channel, discord.Thread) else {}
+        slots = {row['slot_key']: row for row in self.store.usable_avatars(scene.guild_id, character['id'])}
+        emotion, chosen_avatar, placeholder = 'neutral', slots['neutral'], None
+        pieces, last_edit = [], 0.0
+
+        async def send_placeholder():
+            return await webhook.send('…', **thread_options, wait=True, silent=True,
+                username=character['name'], avatar_url=chosen_avatar['url'], allowed_mentions=discord.AllowedMentions.none())
+
+        try:
+            stage.name = 'dialogue generation'
+            await progress.update(progress.status(f'Streaming **{name}**'))
+            with capture_usage() as usage_records:
+                stream = self.models.stream_compiled('dialogue', request)
+                async for event in emotion_stream(stream, slots):
+                    if event.emotion is not None:
+                        emotion = event.emotion
+                        stage.name = 'avatar lookup'
+                        chosen_avatar = await self.resolve_avatar(slots.get(emotion, slots['neutral']))
+                        stage.name = 'webhook delivery'
+                        try:
+                            placeholder = await send_placeholder()
+                        except discord.NotFound:
+                            self._forget_webhook(self._webhook_key(channel, character))
+                            stage.name = 'webhook setup'
+                            webhook = await self._webhook(channel, character)
+                            stage.name = 'webhook delivery'
+                            placeholder = await send_placeholder()
+                        stage.name = 'dialogue generation'
+                        continue
+                    pieces.append(event.text)
+                    current = "".join(pieces)
+                    if time.monotonic() - last_edit > 1.2 and len(current) < 1800:
+                        stage.name = 'webhook delivery'
+                        await placeholder.edit(content=current + " ▌", allowed_mentions=discord.AllowedMentions.none())
+                        last_edit = time.monotonic()
+                        stage.name = 'dialogue generation'
+            line = re.sub(r'<emotion>[^\n]*?</emotion>\s*', '', "".join(pieces)).strip()
+            usage = usage_records[-1] if usage_records else None
+            footer = reply_footer(model_label, usage) if self.store.usage_footer_enabled(scene.guild_id) else ''
+            chunks = split_discord(line, limit=min(1900, 2000 - len(footer)))
+            stage.name = 'webhook delivery'
+            await placeholder.edit(content=chunks[0] + footer, allowed_mentions=discord.AllowedMentions.none())
+        except Exception as error:
+            if isinstance(error, discord.NotFound):
+                self._forget_webhook(self._webhook_key(channel, character))
+            if placeholder:
+                try:
+                    await placeholder.delete()
+                except Exception as cleanup_error:
+                    logging.warning('Failed response cleanup: %s', error_detail(cleanup_error))
+            raise
+        outgoing = [placeholder]
+        try:
+            for chunk in chunks[1:]:
+                outgoing.append(await webhook.send(chunk + footer, **thread_options, wait=True, silent=True,
+                    username=character['name'], avatar_url=chosen_avatar['url'],
+                    allowed_mentions=discord.AllowedMentions.none()))
+        except discord.NotFound:
+            self._forget_webhook(self._webhook_key(channel, character))
+            raise
+        return line, outgoing, chunks, emotion, chosen_avatar, usage
+
+    def _record_reply(self, scene, character, sources, outgoing, chunks, emotion, chosen_avatar, usage,
+                      parent_message_id, stage):
+        for posted, chunk in zip(outgoing, chunks):
+            stage.name = 'saving character reply'
+            self.store.record_node(posted.id, scene.guild_id, scene.channel_id,
+                parent_message_id, None, character["id"], chunk,
+                sources=sources["messages"])
+            self.store.save_trace(posted.id, {"character_id": character["id"], 'emotion': emotion,
+                'usage': usage.as_dict() if usage else None,
+                'avatar_source': 'emotion' if chosen_avatar['asset_id'] else 'static' if character['avatar'] else 'default',
+                'avatar_asset_id': chosen_avatar['asset_id'], **sources})
+            self.store.save_lore_activations(posted.id, sources.get("lore_activations", []))
+            parent_message_id = posted.id
+        return parent_message_id
+
+    async def _report_scene_failure(self, error, stage, progress, channel, interaction):
+        ref = reference_id()
+        logging.error('Scene failed during %s [ref %s]: %s\n%s', stage, ref, error_detail(error), error_stack(error))
+        failure = f"The character couldn't reply (ref {ref}). An admin can find details in the bot log."
+        try:
+            if progress.message:
+                try:
+                    await progress.message.edit(content=failure, allowed_mentions=discord.AllowedMentions.none())
+                    progress.message = None
+                except discord.DiscordException:
+                    await channel.send(failure, allowed_mentions=discord.AllowedMentions.none())
+            else:
+                await channel.send(failure, allowed_mentions=discord.AllowedMentions.none())
+        except discord.DiscordException as post_error:
+            logging.warning('Public failure notice failed [ref %s]: %s', ref, error_detail(post_error))
+        if interaction:
+            detail = (user_detail(error) if stage in PROVIDER_STAGES
+                      else 'internal error. An admin can find details in the bot log.')
+            try:
+                await interaction.followup.send(f"Your turn failed during {stage} (ref {ref}): {detail}"[:1900],
+                    ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+            except Exception as notify_error:
+                logging.warning('Private failure notice failed [ref %s]: %s', ref, error_detail(notify_error))
+
+
+class _Stage:
+    """Mutable label of the turn step in progress; the failure report reads it."""
+    def __init__(self, name):
+        self.name = name
+
+
+class _SceneProgress:
+    """The public 'generating' status message of one turn."""
+    def __init__(self, store, settings, scene, channel, model_label):
+        self.store, self.settings, self.scene, self.channel, self.model_label = store, settings, scene, channel, model_label
+        self.message = None
+
+    def status(self, phase):
+        summary = self.store.model_usage_summary(self.scene.guild_id, self.settings.dialogue, self.settings.profile('dialogue').model)
+        tokens = summary['input_tokens'] + summary['output_tokens']
+        qualifier = f" (+{summary['unreported']} unreported calls)" if summary['unreported'] else ''
+        return f'⏳ {phase} · {self.model_label} · 24h tracked: {tokens:,} tokens{qualifier}'
+
+    async def update(self, content):
+        try:
+            if self.message:
+                await self.message.edit(content=content, allowed_mentions=discord.AllowedMentions.none())
+            else:
+                self.message = await self.channel.send(content, silent=True,
+                    allowed_mentions=discord.AllowedMentions.none())
+            return True
+        except discord.DiscordException as error:
+            logging.warning('Generation status update failed: %s', error_detail(error))
+            return False
+
+    async def clear(self, fallback='Generation stopped.'):
+        if self.message:
+            try:
+                await self.message.delete()
+            except discord.DiscordException as error:
+                logging.warning('Generation status cleanup failed: %s', error_detail(error))
+                await self.update(fallback)
+            self.message = None
 
 
 def _command_context(bot: SkitBot) -> SimpleNamespace:

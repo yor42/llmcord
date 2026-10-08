@@ -193,6 +193,28 @@ class WebhookCacheTests(unittest.IsolatedAsyncioTestCase):
         self.assert_delivered_by(new)
         self.assertEqual(self.store.webhook_id(100, self.alice), new.id)
 
+    async def test_placeholder_not_found_retry_delivers_every_chunk_through_new_webhook(self):
+        """Characterization (ARCH-01): when the placeholder send hits NotFound on a multi-chunk reply, the retry
+        replaces the webhook and the placeholder edit and every extra chunk go through the new one; the old
+        webhook gets no posts and is forgotten."""
+        self.bot.engine.models = self.bot.models = LongModels([self.alice])
+        await self.turn()
+        old = self.channel.hooks[0]
+        old_posts = len(old.posts)
+        self.assertGreater(old_posts, 1)
+        self.channel.doom(old)
+        await self.turn()
+        self.assertEqual(self.channel.errors, [])
+        self.assertTrue(old.dead)
+        self.assertEqual(len(old.posts), old_posts)
+        self.assertNotIn(old, self.channel.hooks)
+        new = self.channel.hooks[0]
+        self.assertIsNot(new, old)
+        self.assertEqual(self.channel.creates, 2)
+        self.assertEqual(len(new.posts), old_posts)
+        self.assertGreater(len(new.posts), 1)
+        self.assertEqual(self.store.webhook_id(100, self.alice), new.id)
+
     async def test_edit_not_found_recreates_webhook(self):
         """REL-04 (fixed): NotFound from webhook.edit (identity change on a deleted webhook) drops it and proceeds
         to lookup/create, so the turn still delivers under the new name."""

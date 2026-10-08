@@ -252,6 +252,47 @@ class DiscordFlowTests(unittest.IsolatedAsyncioTestCase):
         finally:
             bot.store.close()
 
+    async def test_ambient_turn_with_speaker_posts_status_after_director_and_marks_response(self):
+        """Characterization (ARCH-01): an ambient turn that has a speaker posts the "Generating a reply…" status
+        only after the director returned, clears it at the end, and records the ambient response."""
+        profile = ModelProfile('compatible', 'test', 16000, False, base_url='http://localhost/v1')
+        settings = Settings('token', None, ':memory:', 90, {'test': profile}, 'test', 'test', 'test',
+                            {'max_input_tokens': 12000, 'max_output_tokens': 700, 'max_speakers': 3})
+        bot = SkitBot(settings)
+        world = bot.store.create_space(1, 'World', 'world')
+        bot.store.bind_channel(1, 100, world)
+        alice = bot.store.add_character(1, world, 'Alice', {'name': 'Alice'}, None, [])
+        bot.store.set_cast(100, None, [alice])
+        bot.engine.models = bot.models = FakeModels([alice])
+        hook = FakeWebhook(2000)
+        async def webhook(channel, character):
+            return hook
+        bot._webhook = webhook
+        channel = FakeChannel(100)
+        seen = []
+        real_speakers = bot.engine.speakers
+        async def speakers(scene):
+            seen.append(len(channel.messages))
+            result = await real_speakers(scene)
+            seen.append(len(channel.messages))
+            return result
+        bot.engine.speakers = speakers
+        try:
+            self.assertEqual(bot.store.ambient_state(100)[1], 0.0)
+            await bot.run_scene(SceneContext(1, 100, None, world, 9, 1000, 'Alice, join us', None, [], [], ambient=True), channel)
+            await drain_memory_tasks(bot)
+            self.assertEqual(seen, [0, 0])
+            self.assertEqual(channel.errors, [])
+            self.assertEqual(len(channel.messages), 1)
+            self.assertTrue(channel.messages[0].content.startswith('⏳'))
+            self.assertTrue(all(message.deleted for message in channel.messages))
+            self.assertEqual(hook.posts[0].content.split('\n\n-# ')[0], 'First line')
+            count, last = bot.store.ambient_state(100)
+            self.assertEqual(count, 0)
+            self.assertGreater(last, 0)
+        finally:
+            bot.store.close()
+
 
 if __name__ == "__main__":
     unittest.main()

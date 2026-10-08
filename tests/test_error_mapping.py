@@ -280,6 +280,18 @@ class TurnFailureTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("KeyError", line)
         self.assert_no_internal_detail(private)
 
+    async def test_avatar_lookup_failure_is_logged_with_stage(self):
+        """ARCH-01: a failure while resolving the emotion avatar mid-stream is logged with stage 'avatar lookup' and
+        the invoker sees the generic internal-error text."""
+        async def resolve_avatar(_slot):
+            raise RuntimeError("avatar boom")
+
+        self.bot.resolve_avatar = resolve_avatar
+        private, line = await self.summon_internal_failure()
+        self.assertIn("avatar lookup", line)
+        self.assertIn("avatar lookup", private)
+        self.assertNotIn("avatar boom", private)
+
     def direct_turn(self, interaction):
         """A scene run directly through ``run_scene`` with an interaction (so an escaping exception is visible to
         the test instead of being swallowed by ``invoke``)."""
