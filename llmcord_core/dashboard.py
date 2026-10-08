@@ -910,21 +910,20 @@ def presets_panel(ctx):
     presets = store.list_presets(gid)
     choices = {0: 'Built-in default', **{r['id']: f"{r['name']} · draft {r['revision']}" for r in presets}}
     active = store.active_preset(gid)
-    ui.label(f"Active preset: {choices.get(active['id'], str(active['id']))} · revision {active['revision']}").classes('text-xl font-bold')
-    select = ui.select(choices, value=active['id'], label='Preset library').classes('w-full')
-    purpose = ui.select({p: p.title() for p in PURPOSES}, value='dialogue', label='Purpose')
     selected = next((r for r in presets if r['id'] == active['id']), None)
     state = {'id': active['id'], 'revision': selected['revision'] if selected else 0, 'bundle': store.preset_bundle(gid, active['id']), 'raw_controls': {}}
-    name = ui.input('Preset name', value=selected['name'] if selected else 'Default copy').classes('w-full')
-    editor = ui.column().classes('w-full')
-    diagnostics = ui.column().classes('w-full')
 
     def collect():
         for b, control in state['raw_controls'].values():
             b['raw'] = json.loads(control.value or '{}')
         return copy.deepcopy(state['bundle'])
 
-    render_editor = _preset_editor(ctx, state, purpose, collect)
+    with section('Preset library'):
+        ui.label(f"Active preset: {choices.get(active['id'], str(active['id']))} · revision {active['revision']}").classes('ll-subtitle')
+        with ui.element('div').classes('ll-form-row'):
+            select = ui.select(choices, value=active['id'], label='Preset library').classes('ll-wide')
+            ctx.button('Load selected preset', lambda: load()).props('outline')
+        name = ui.input('Preset name', value=selected['name'] if selected else 'Default copy').classes('w-full')
 
     async def load():
         bundle = await ctx.run(lambda: store.preset_bundle(gid, select.value))
@@ -944,18 +943,19 @@ def presets_panel(ctx):
         select.set_options({0: 'Built-in default', **{r['id']: f"{r['name']} · draft {r['revision']}" for r in fresh}}, value=state['id'])
         ui.notify('Draft saved. Activate it when ready.', type='positive')
 
-    ctx.button('Load selected preset', lambda: load())
-    with editor:
+    with section('Prompt blocks'):
+        purpose = ui.select({p: p.title() for p in PURPOSES}, value='dialogue', label='Purpose')
+        render_editor = _preset_editor(ctx, state, purpose, collect)
         render_editor()
-    async def change_purpose():
-        if await ctx.run(lambda: True):
-            collect()
-            render_editor.refresh()
-    purpose.on_value_change(lambda _: change_purpose())
-    _preset_actions(ctx, state, name, collect, save, saved)
+        async def change_purpose():
+            if await ctx.run(lambda: True):
+                collect()
+                render_editor.refresh()
+        purpose.on_value_change(lambda _: change_purpose())
+        _preset_actions(ctx, state, name, collect, save, saved)
     _preset_import(ctx, state, name, render_editor)
     _preset_export(ctx, collect)
-    _preset_preview(ctx, purpose, collect, diagnostics)
+    _preset_preview(ctx, purpose, collect)
 
 
 def _preset_editor(ctx, state, purpose, collect):
@@ -965,35 +965,36 @@ def _preset_editor(ctx, state, purpose, collect):
     def render_editor():
         state['raw_controls'] = {}
         blocks = state['bundle']['purposes'].setdefault(purpose.value, copy.deepcopy(default_bundle()['purposes'][purpose.value]))
-        with ui.column().classes('w-full') as ordered:
+        with ui.column().classes('w-full gap-4') as ordered:
             for b in blocks:
-                with ui.card().classes('w-full prompt-block') as card:
+                with ui.card().classes('w-full prompt-block ll-stack ll-result') as card:
                     card.prompt_id = b['id']
-                    with ui.row().classes('items-center w-full'):
-                        ui.icon('drag_indicator').classes('prompt-handle cursor-grab')
-                        ui.input('Block name').bind_value(b, 'name').classes('flex-1')
+                    with ui.element('div').classes('ll-form-row'):
+                        ui.icon('drag_indicator').classes('prompt-handle cursor-grab self-center')
+                        ui.input('Block name').bind_value(b, 'name')
                         ui.switch('Enabled').bind_value(b, 'enabled')
-                    ui.label('Stable ID: ' + b['id']).classes('text-slate-400')
+                    ui.label('Stable ID: ' + b['id']).classes('ll-muted')
                     sources = list(dict.fromkeys(sorted(SOURCES) + [b['source']]))
                     ui.select(sources, label='Context source').bind_value(b, 'source').classes('w-full')
-                    ui.textarea('Prompt text / template').bind_value(b, 'content').classes('w-full')
-                    with ui.row():
+                    ui.textarea('Prompt text / template').bind_value(b, 'content').classes('w-full').props('rows=6')
+                    with ui.element('div').classes('ll-form-row'):
                         ui.select(['system', 'user', 'assistant'], label='Role').bind_value(b, 'role')
                         ui.select(['relative', 'in_chat'], label='Placement').bind_value(b, 'placement')
-                        ui.number('Depth', precision=0).bind_value(b, 'depth', backward=lambda v: int(v or 0))
-                        ui.number('Injection order', precision=0).bind_value(b, 'order', backward=lambda v: int(v or 0))
-                        ui.number('Trimming priority', precision=0).bind_value(b, 'priority', backward=lambda v: int(v or 0))
+                        ui.number('Depth', precision=0).bind_value(b, 'depth', backward=lambda v: int(v or 0)).props('outlined dense')
+                        ui.number('Injection order', precision=0).bind_value(b, 'order', backward=lambda v: int(v or 0)).props('outlined dense')
+                        ui.number('Trimming priority', precision=0).bind_value(b, 'priority', backward=lambda v: int(v or 0)).props('outlined dense')
                     ui.select({'': 'Exact placement', 'top_system': 'Move to top-level system instructions', 'user': 'Convert late system block to user instructions'}, label='System instruction placement').bind_value(b, 'adaptation').classes('w-full')
-                    with ui.expansion('Preserved import fields and compatibility remapping').classes('w-full'):
-                        raw = ui.textarea('Original prompt fields (JSON)', value=pretty(b['raw'])).classes('w-full')
+                    with ui.expansion('Preserved import fields and compatibility remapping').classes('w-full ll-subpanel'), ui.element('div').classes('ll-stack'):
+                        raw = ui.textarea('Original prompt fields (JSON)', value=pretty(b['raw'])).classes('w-full').props('rows=6')
                         state['raw_controls'][b['id']] = (b, raw)
-                        ui.label('To remap triggers/extensions: clear injection_trigger and set extension to false.')
+                        ui.label('To remap triggers/extensions: clear injection_trigger and set extension to false.').classes('ll-muted')
                     async def remove(b=b):
                         if await ctx.run(lambda: True):
                             collect()
                             blocks.remove(b)
                             render_editor.refresh()
-                    ui.button('Remove block', on_click=remove, color='negative')
+                    with ui.element('div').classes('ll-form-row'):
+                        ui.button('Remove block', on_click=remove, color='negative')
             async def reordered(event):
                 if await ctx.run(lambda: True):
                     collect()
@@ -1007,7 +1008,8 @@ def _preset_editor(ctx, state, purpose, collect):
                 import uuid
                 blocks.append(block('custom-' + uuid.uuid4().hex[:8]))
                 render_editor.refresh()
-        ui.button('Add prompt block', on_click=add)
+        with ui.element('div').classes('ll-form-row'):
+            ui.button('Add prompt block', on_click=add).props('outline')
         for problem in compatibility(state['bundle'], ctx.service.providers):
             ui.label(problem).classes('text-amber-300')
         source = state['bundle'].setdefault('source', {})
@@ -1020,15 +1022,15 @@ def _preset_editor(ctx, state, purpose, collect):
 def _preset_actions(ctx, state, name, collect, save, saved):
     from nicegui import ui
     store, gid = ctx.store, ctx.guild_id
-    with ui.row():
+    with ui.element('div').classes('ll-form-row'):
         ctx.button('Save draft', save, 'preset.save', then=saved)
         def duplicate():
             return store.save_preset(gid, name.value or '', collect())
-        ctx.button('Save as new preset', duplicate, 'preset.create', then=saved)
+        ctx.button('Save as new preset', duplicate, 'preset.create', then=saved).props('outline')
         def activate():
             store.activate_preset(gid, state['id'], state['revision'], ctx.service.providers)
             return True
-        ctx.button('Activate saved revision', activate, 'preset.activate', then=lambda _: ctx.refresh())
+        ctx.button('Activate saved revision', activate, 'preset.activate', then=lambda _: ctx.refresh()).props('outline')
         def delete():
             store.delete_preset(gid, state['id'])
             return True
@@ -1045,64 +1047,67 @@ def _preset_actions(ctx, state, name, collect, save, saved):
 
 def _preset_import(ctx, state, name, render_editor):
     from nicegui import ui
-    ui.separator()
-    ui.label('Import preset').classes('text-xl font-bold')
-    order_area = ui.column().classes('w-full')
-    async def uploaded(event):
-        data = await event.file.read()
-        bundle, profiles = parse_preset(data)
-        if profiles:
-            order_area.clear()
-            with order_area:
-                order = ui.select({p['index']: 'SillyTavern order ' + p['label'] for p in profiles}, label='Choose an order profile')
-                def choose():
-                    if order.value is None:
-                        raise ValueError('Choose an order profile')
-                    return parse_preset(data, order.value)[0]
-                ctx.button('Preview selected profile', choose, then=imported)
-        else:
-            imported(bundle)
-    def imported(bundle):
-        state.update(id=0, revision=0, bundle=bundle)
-        name.value = 'Imported preset'
-        render_editor.refresh()
-        ui.notify('Import preview loaded. Resolve compatibility items, save a draft, then activate.')
-    ctx.upload(uploaded, 'Upload native or SillyTavern Chat Completion JSON')
+    with section('Import preset'):
+        order_area = ui.column().classes('w-full')
+        async def uploaded(event):
+            data = await event.file.read()
+            bundle, profiles = parse_preset(data)
+            if profiles:
+                order_area.clear()
+                with order_area, ui.element('div').classes('ll-form-row'):
+                    order = ui.select({p['index']: 'SillyTavern order ' + p['label'] for p in profiles}, label='Choose an order profile')
+                    def choose():
+                        if order.value is None:
+                            raise ValueError('Choose an order profile')
+                        return parse_preset(data, order.value)[0]
+                    ctx.button('Preview selected profile', choose, then=imported)
+            else:
+                imported(bundle)
+        def imported(bundle):
+            state.update(id=0, revision=0, bundle=bundle)
+            name.value = 'Imported preset'
+            render_editor.refresh()
+            ui.notify('Import preview loaded. Resolve compatibility items, save a draft, then activate.')
+        with ui.element('div').classes('ll-stack'):
+            ctx.upload(uploaded, 'Upload native or SillyTavern Chat Completion JSON')
 
 
 def _preset_export(ctx, collect):
     from nicegui import ui
-    ui.separator()
-    ui.label('Export preset').classes('text-xl font-bold')
-    def native_export():
-        ui.download.content(pretty(export_preset(collect())), 'llmcord-preset.json', 'application/json')
-        return True
-    ctx.button('Export full native bundle', native_export)
-    omit = ui.input('Explicitly omit nonportable block IDs (JSON array)', value='[]').classes('w-full')
-    def st_export():
-        ui.download.content(pretty(export_preset(collect(), sillytavern=True, omit=json.loads(omit.value))), 'sillytavern-preset.json', 'application/json')
-        return True
-    ctx.button('Export SillyTavern dialogue preset', st_export)
+    with section('Export preset'):
+        def native_export():
+            ui.download.content(pretty(export_preset(collect())), 'llmcord-preset.json', 'application/json')
+            return True
+        with ui.element('div').classes('ll-form-row'):
+            ctx.button('Export full native bundle', native_export).props('outline')
+        omit = ui.input('Explicitly omit nonportable block IDs (JSON array)', value='[]').classes('w-full')
+        def st_export():
+            ui.download.content(pretty(export_preset(collect(), sillytavern=True, omit=json.loads(omit.value))), 'sillytavern-preset.json', 'application/json')
+            return True
+        with ui.element('div').classes('ll-form-row'):
+            ctx.button('Export SillyTavern dialogue preset', st_export).props('outline')
 
 
-def _preset_preview(ctx, purpose, collect, diagnostics):
+def _preset_preview(ctx, purpose, collect):
     from nicegui import ui
-    ui.separator()
-    ui.label('Assembled request preview').classes('text-xl font-bold')
-    chars = {r['id']: r['name'] for r in ctx.snapshot.characters}
-    character = ui.select(chars, label='Sample character')
-    channel = ui.select({row['channel_id']: ctx.channel_names.get(row['channel_id'], str(row['channel_id'])) for row in ctx.snapshot.channels}, label='Sample channel (optional)')
-    sample = ui.textarea('Sample input', value='Hello!').classes('w-full')
-    history = ui.textarea('Sample history (one message per line)').classes('w-full')
-    def preview():
-        request = ctx.service.preview_prompt(ctx.guild_id, collect(), purpose.value, character.value, sample.value or '', history.value or '', channel.value)
-        diagnostics.clear()
-        with diagnostics:
-            ui.label(f'Estimated input tokens: {request.estimated_tokens}')
-            ui.label('Omitted: ' + ', '.join(request.omitted))
-            ui.label('Adaptations: ' + ', '.join(request.adaptations))
-            for message in request.messages:
-                with ui.expansion(message.role).classes('w-full'):
-                    ui.label(message.text).classes('whitespace-pre-wrap')
-        return True
-    ctx.button('Preview without a model call', preview)
+    with section('Assembled request preview'):
+        chars = {r['id']: r['name'] for r in ctx.snapshot.characters}
+        with ui.element('div').classes('ll-form-row'):
+            character = ui.select(chars, label='Sample character')
+            channel = ui.select({row['channel_id']: ctx.channel_names.get(row['channel_id'], str(row['channel_id'])) for row in ctx.snapshot.channels}, label='Sample channel (optional)')
+        sample = ui.textarea('Sample input', value='Hello!').classes('w-full')
+        history = ui.textarea('Sample history (one message per line)').classes('w-full')
+        diagnostics = ui.column().classes('w-full')
+        def preview():
+            request = ctx.service.preview_prompt(ctx.guild_id, collect(), purpose.value, character.value, sample.value or '', history.value or '', channel.value)
+            diagnostics.clear()
+            with diagnostics:
+                ui.label(f'Estimated input tokens: {request.estimated_tokens}')
+                ui.label('Omitted: ' + ', '.join(request.omitted))
+                ui.label('Adaptations: ' + ', '.join(request.adaptations))
+                for message in request.messages:
+                    with ui.expansion(message.role).classes('w-full'):
+                        ui.label(message.text).classes('whitespace-pre-wrap')
+            return True
+        with ui.element('div').classes('ll-form-row'):
+            ctx.button('Preview without a model call', preview)
