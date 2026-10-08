@@ -1,6 +1,6 @@
 # Rework roadmap
 
-**Status:** approved by the user on 2026-10-07. R1–R5 are complete and merged into `main`; R5 was fast-forwarded to `d2dec8a` on 2026-10-08. R6 is in progress on `rework/r6-legacy-structure`. All decisions D1–D12 are taken (see "Decisions taken").
+**Status:** approved by the user on 2026-10-07. R1–R5 are complete and merged into `main`; R5 was fast-forwarded to `d2dec8a` on 2026-10-08. R6 is complete on `rework/r6-legacy-structure` (pushed 2026-10-08, not yet merged). All decisions D1–D12 are taken (see "Decisions taken").
 
 Every phase goes through the `orchestrate-change` skill: needed tests → scoped worker → final verification → review. Model routing and evidence ownership follow [the Claude workflow](claude-workflow.md). Finding IDs refer to `audit.md`.
 
@@ -221,6 +221,7 @@ R1 and R2 are independent and could swap. R1 goes first because its tests alread
   - Step 5c done (reviewed, Opus for the socket-auth move and the lore workspace state): ARCH-01. `mount_dashboard` → `_install_socket_auth`, `_install_upload_guard`, `_register_pages` (same order, bodies verbatim); `presets_panel` → `_preset_editor`/`_actions`/`_import`/`_export`/`_preview`; `render_lore_workspace` (210 lines) → `_LoreWorkspace` (one instance per render, shared state on the instance, same operation lock and refreshable). `create_app` (137) and `setup_panel` (100) left. `verify.sh --browser`: offline OK, 18 browser OK. Follow-up (low): the moved socket handlers are covered only by the browser suite.
   - Step 6 done (reviewed, Opus for consent/isolation/concurrency): ARCH-05 per D10. `/admin scene delete` also forgets personal facts and encounters sourced from the deleted nodes (guild-scoped), promoted lore stays, expiry unchanged; the reply appends "Also forgot N personal fact(s) and M encounter(s)." when any went. `add_personal`/`add_encounter`/`add_candidate`/`save_summary` write only when the source node exists in that guild, closing the delete-vs-background-memory race (R3 step 5 / R4 step 5c follow-ups). `delete_scene` removed. Pinned by 23 new tests in `tests/test_scene_delete.py` (7 failed before the fix); test fixtures that wrote memory for unstored ids now record the node first. User docs updated (`server-guide.md`, `lore-and-memory.md`). Follow-ups (low): a fact repeated in a surviving branch is forgotten with its first source; consent check and insert are two statements.
   - Step 7 done: TOOL-01. No test file imports another test file any more; shared fakes and settings (`image`, `settings_for`/`write_config`, `core_settings`, `FakeChannel`/`FakeWebhook`/`FakeMessage`, `FlowFakeModels`, `CoreFakeModels`) live in `tests/helpers.py`; `test_core`/`test_scene_settings` use `helpers.FakeModels`. Tests only; no assertion or test name changed; 560 ran before and after. Left: the inline `Settings(...)` variants in `test_discord_flow`, `test_models`, `test_risu_lorebooks` (different limits), and `FakeChannel`/`FakeWebhook` vs `FakeTextChannel`/`FakeHook`.
+  - Stage end: `verify.sh --browser` on `da29e05`: 560 offline OK (18 browser skipped there), 18 browser OK, 0 expected failures.
 
 ---
 
