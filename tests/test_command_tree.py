@@ -243,6 +243,15 @@ EXPECTED_COMMANDS = {
         "None",
         False,
     ),
+    "time clear": ("Remove your timezone in this server", (), 0, "None", False),
+    "time set": (
+        "Choose your timezone in this server",
+        (("zone", "string", True, "IANA timezone name, such as Asia/Seoul", True, ()),),
+        0,
+        "None",
+        False,
+    ),
+    "time show": ("Show the timezone characters use for you", (), 0, "None", False),
 }
 
 # group -> (description, default_permissions, guild_only)
@@ -261,6 +270,7 @@ EXPECTED_GROUPS = {
     "memory": ("Control your personal character memories", "None", False),
     "scene": ("Start a fresh scene", "None", False),
     "space": ("List the server's worlds and hubs", "None", False),
+    "time": ("Set the timezone characters use for you", "None", False),
 }
 
 

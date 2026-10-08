@@ -10,6 +10,7 @@ from dataclasses import replace
 from datetime import timedelta
 from types import SimpleNamespace
 from typing import Literal
+from zoneinfo import available_timezones
 
 import discord
 from discord import app_commands
@@ -19,6 +20,7 @@ from .cards import parse_card
 from .config import Settings
 from .engine import Engine, SceneContext
 from .models import ImageInput, ModelGateway
+from .prompts import time_values
 from .names import resolve, resolve_space, suggest
 from .store import Store
 from .avatars import emotion_stream
@@ -819,6 +821,68 @@ def _register_memory_commands(bot: SkitBot, ctx: SimpleNamespace) -> None:
     bot.tree.add_command(memory)
 
 
+_TIMEZONE_NAMES: list[str] = []
+UNKNOWN_TIMEZONE = "Unknown timezone. Pick one from the list, such as Asia/Seoul."
+
+
+async def _timezone_choices(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    if len(current) > 64:
+        return []
+    if not _TIMEZONE_NAMES:
+        _TIMEZONE_NAMES.extend(sorted(available_timezones()))
+    needle = current.lower()
+    return [app_commands.Choice(name=z, value=z) for z in _TIMEZONE_NAMES if needle in z.lower()][:25]
+
+
+def _register_time_commands(bot: SkitBot, ctx: SimpleNamespace) -> None:
+    require_guild = ctx.require_guild
+    time_group = app_commands.Group(name="time", description="Set the timezone characters use for you")
+
+    def local_time(interaction: discord.Interaction, zone: str) -> str:
+        return time_values(interaction.id, zone)["local_time"]
+
+    @time_group.command(name="set", description="Choose your timezone in this server")
+    @app_commands.describe(zone="IANA timezone name, such as Asia/Seoul")
+    @app_commands.autocomplete(zone=_timezone_choices)
+    async def time_set(interaction: discord.Interaction, zone: str):
+        require_guild(interaction)
+        if len(zone) > 64:
+            message = UNKNOWN_TIMEZONE
+        else:
+            try:
+                bot.store.set_user_timezone(interaction.guild_id, interaction.user.id, zone)
+                message = f"Your timezone here is now {zone}. Local time: {local_time(interaction, zone)}."
+            except ValueError:
+                message = UNKNOWN_TIMEZONE
+        await interaction.response.send_message(message, ephemeral=True)
+
+    @time_group.command(name="show", description="Show the timezone characters use for you")
+    async def time_show(interaction: discord.Interaction):
+        require_guild(interaction)
+        zone, source = bot.store.resolve_timezone(interaction.guild_id, interaction.user.id)
+        now = local_time(interaction, zone)
+        if source == "member":
+            message = f"Your timezone here is {zone} (your setting). Local time: {now}."
+        elif source == "server":
+            message = f"Your timezone here is {zone} (server default). Local time: {now}. Use /time set to choose your own."
+        else:
+            message = f"Your timezone here is UTC (no timezone set). Local time: {now}. Use /time set to choose yours."
+        await interaction.response.send_message(message, ephemeral=True)
+
+    @time_group.command(name="clear", description="Remove your timezone in this server")
+    async def time_clear(interaction: discord.Interaction):
+        require_guild(interaction)
+        if not bot.store.clear_user_timezone(interaction.guild_id, interaction.user.id):
+            message = "You had no timezone set here."
+        else:
+            zone, source = bot.store.resolve_timezone(interaction.guild_id, interaction.user.id)
+            now_using = f"{zone} (server default)" if source == "server" else "UTC (no timezone set)"
+            message = f"Cleared your timezone. Characters now use {now_using}."
+        await interaction.response.send_message(message, ephemeral=True)
+
+    bot.tree.add_command(time_group)
+
+
 def _register_lore_commands(bot: SkitBot, ctx: SimpleNamespace, admin_lore: app_commands.Group) -> None:
     binding_for, require_guild, guild_space, space_choices, local_scope = ctx.binding_for, ctx.require_guild, ctx.guild_space, ctx.space_choices, ctx.local_scope
     lore = app_commands.Group(name="lore", description="Show the lore available here")
@@ -1004,6 +1068,7 @@ def register_commands(bot: SkitBot) -> None:
     _register_ambient_commands(bot, ctx, admin_ambient)
     _register_summon_command(bot, ctx)
     _register_memory_commands(bot, ctx)
+    _register_time_commands(bot, ctx)
     _register_lore_commands(bot, ctx, admin_lore)
     _register_scene_commands(bot, ctx, admin_scene)
     bot.tree.add_command(admin)
