@@ -636,6 +636,9 @@ class Store(AdminStore):
             (guild_id, actor_id, action, json.dumps(detail), time.time()))
 
     def archive_character(self, guild_id: int, character_id: int, archived: bool) -> None:
+        character = self.character_by_id(character_id)
+        if not character or character["guild_id"] != guild_id:
+            raise ValueError("Character not found in this server")
         with self.db:
             self.db.execute("UPDATE characters SET archived=? WHERE guild_id=? AND id=?",
                 (int(archived), guild_id, character_id))
@@ -667,9 +670,13 @@ class Store(AdminStore):
                     self.db.execute(f"UPDATE channels SET {field}=? WHERE channel_id=?",
                         (json.dumps(cleaned), binding["channel_id"]))
         if not character or character["archived"]:
-            self._remove_from_thread_casts(character_id)
+            self._remove_from_thread_casts(guild_id, character_id)
 
-    def _remove_from_thread_casts(self, character_id: int) -> None:
+    def _remove_from_thread_casts(self, guild_id: int, character_id: int) -> None:
+        # thread_casts has no guild column; character ids are global, so ownership of the character is the scope
+        character = self.character_by_id(character_id)
+        if character and character["guild_id"] != guild_id:
+            return
         rows = self.all('SELECT thread_id,"cast" FROM thread_casts')
         for row in rows:
             cast = json.loads(row["cast"])
@@ -695,7 +702,7 @@ class Store(AdminStore):
                 (world_id, name.strip(), json.dumps(card), guild_id, character_id))
             self._prune_character_casts(guild_id, character_id)
             if moved:
-                self._remove_from_thread_casts(character_id)
+                self._remove_from_thread_casts(guild_id, character_id)
             self.bump_owner(guild_id, 'character', character_id)
 
     def list_characters(self, guild_id: int) -> list:

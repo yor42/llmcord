@@ -222,6 +222,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
   - But `_prune_character_casts` → `_remove_from_thread_casts` scans `thread_casts` without a guild filter (`store.py:526-566`).
   - Practically harmless, because character ids are global. It still breaks the "every store write is guild-scoped" invariant.
 - **Direction:** validate the owner first and scope `thread_casts` by guild.
+- **Status:** Resolved in R6 step 1 (branch `rework/r6-legacy-structure`). `archive_character` checks the owner first and raises `ValueError("Character not found in this server")` for an unknown or other-server character, writing nothing. `_remove_from_thread_casts(guild_id, character_id)` skips a character owned by another server; `thread_casts` has no guild column, so ownership of the (globally numbered) character is the scope, and a deleted character is still pruned everywhere. Pinned by the SEC-06 tests in `tests/test_store_lifecycle.py`. Follow-ups (low): archiving uses `with self.db` and has no revision check (not `write_admin()`); a `thread_casts.guild_id` column would remove the reliance on character ownership.
 
 ## Reliability
 

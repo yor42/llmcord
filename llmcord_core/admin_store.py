@@ -651,7 +651,7 @@ class AdminStore:
             self.db.execute('INSERT INTO card_imports VALUES(?,?) ON CONFLICT(character_id) DO UPDATE SET baseline_json=excluded.baseline_json', (ident, json.dumps(card.data)))
             self._prune_character_casts(guild_id, ident)
             if existing and existing['world_id'] != world_id:
-                self._remove_from_thread_casts(ident)
+                self._remove_from_thread_casts(guild_id, ident)
         return ident
 
     def list_presets(self, guild_id):

@@ -104,8 +104,40 @@ class StoreLifecycleTests(unittest.TestCase):
         self.assertEqual([r["id"] for r in self.store.eligible_characters(1, self.world)], [self.alice])
 
     def test_archive_from_other_guild_does_not_archive(self):
-        self.store.archive_character(2, self.alice, True)
+        """SEC-06: archiving through the wrong guild raises (like update_character) and archives nothing."""
+        with self.assertRaisesRegex(ValueError, "Character not found in this server"):
+            self.store.archive_character(2, self.alice, True)
         self.assertEqual(self.store.character_by_id(self.alice)["archived"], 0)
+
+    def test_archive_from_other_guild_leaves_thread_casts_alone(self):
+        """SEC-06: a wrong-guild archive must not strip the character from another server's thread cast."""
+        self.store.set_cast(100, None, [self.alice], default=True)
+        self.store.set_cast(101, 100, [self.alice])
+        with self.assertRaises(ValueError):
+            self.store.archive_character(2, self.alice, True)
+        self.assertEqual(self.store.get_cast(101, 100), [self.alice])
+        self.assertEqual(self.store.get_cast(100), [self.alice])
+
+    def test_archive_from_other_guild_of_archived_character_leaves_thread_casts_alone(self):
+        """SEC-06: the cast scan must not run for a wrong guild even when the character is already archived."""
+        self.store.set_cast(100, None, [self.alice], default=True)
+        self.store.set_cast(101, 100, [self.alice])
+        self.store.db.execute("UPDATE characters SET archived=1 WHERE id=?", (self.alice,))
+        with self.assertRaises(ValueError):
+            self.store.archive_character(2, self.alice, True)
+        self.assertEqual(self.store.get_cast(101, 100), [self.alice])
+
+    def test_archive_unknown_character_raises(self):
+        """SEC-06: an unknown character id raises the same not-found error."""
+        with self.assertRaisesRegex(ValueError, "Character not found in this server"):
+            self.store.archive_character(1, 99999, True)
+
+    def test_archive_in_own_guild_removes_character_from_thread_casts(self):
+        """SEC-06: the guild-scoped archive still prunes the character from thread casts."""
+        self.store.set_cast(100, None, [self.alice], default=True)
+        self.store.set_cast(101, 100, [self.alice])
+        self.store.archive_character(1, self.alice, True)
+        self.assertEqual(self.store.get_cast(101, 100), [])
 
     def test_rerecording_node_keeps_its_summary(self):
         """BUG-04 (fixed): re-recording an existing node updates it in place, so its summary row survives."""

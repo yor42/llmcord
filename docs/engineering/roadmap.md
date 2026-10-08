@@ -1,6 +1,6 @@
 # Rework roadmap
 
-**Status:** approved by the user on 2026-10-07. R1–R5 are complete and merged into `main`; R5 was fast-forwarded to `d2dec8a` on 2026-10-08. R6 has not started. All decisions D1–D12 are taken (see "Decisions taken").
+**Status:** approved by the user on 2026-10-07. R1–R5 are complete and merged into `main`; R5 was fast-forwarded to `d2dec8a` on 2026-10-08. R6 is in progress on `rework/r6-legacy-structure`. All decisions D1–D12 are taken (see "Decisions taken").
 
 Every phase goes through the `orchestrate-change` skill: needed tests → scoped worker → final verification → review. Model routing and evidence ownership follow [the Claude workflow](claude-workflow.md). Finding IDs refer to `audit.md`.
 
@@ -211,6 +211,8 @@ R1 and R2 are independent and could swap. R1 goes first because its tests alread
   - `verify.sh --browser`.
   - A grep proof that no caller remains.
   - Docs updated: `docs/admin-console.md` and `docs/architecture.md`.
+- **Progress:** branch `rework/r6-legacy-structure` (from `main` at `048ffab`), started 2026-10-08.
+  - Step 1 done (reviewed, Opus for the isolation invariant): SEC-06. `archive_character` validates the owner and raises `ValueError` for an unknown or other-server character, writing nothing; thread-cast pruning skips characters owned by another server. Pinned by 4 new SEC-06 tests and one changed test in `tests/test_store_lifecycle.py`; 523 tests, 0 expected failures. Follow-ups (low): archive is not a `write_admin()` write and has no revision check; no `thread_casts.guild_id` column.
 
 ---
 
