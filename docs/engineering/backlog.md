@@ -32,6 +32,7 @@
 | MNT-17 | Dependency and CI upkeep: review Dependabot PRs, keep Python 3.12/3.13 and the arm64 container green. | standing | standing |
 | MNT-18 | Discord images on the dashboard: the admin CSP is `img-src 'self' data: blob:` (`web.py:40`), so server icons and user avatars from `cdn.discordapp.com` are blocked. Decided (user 2026-10-08): add `https://cdn.discordapp.com` to the admin `img-src`, nothing else. Build icon and avatar URLs from the hashes already in `/users/@me` (kept in the session, `web.py:156`) and `/users/@me/guilds`; no new Discord calls. Opus review (CSP). | UI-28, UI-29 | now |
 | MNT-19 | `Store.__init__`/`migrate_admin` run each `ALTER`/`CREATE` in its own implicit commit, so a failure part-way leaves a partly migrated file at the old `user_version`; every step is guarded, so a retry finishes it, but it writes a second backup of the partial file. Consider one transaction around the schema steps. | FEAT-01 review | later |
+| MNT-20 | Flaky browser test: CI run 37749238662 failed `test_tab_query_selects_prompt_presets` because `quasar.unimportant.prod.css` hit `net::ERR_TOO_MANY_RETRIES` and NiceGUI then raised a `cssRules` SecurityError; the next run passed unchanged. Make the page-error check tolerate (or retry) a failed static asset load, or find why the fixture drops it. | CI, 2026-10-08 | later |
 
 ## UI polish
 
