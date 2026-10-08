@@ -3,7 +3,7 @@
 **Mode since 2026-10-08:** maintenance and UI polish. The hardening rework (R1–R6) is closed; its audit, roadmap and decisions D1–D12 are in [history/](history/). This file replaces both: one list of small items, each done through the `orchestrate-change` skill.
 
 ## Rules
-- **IDs:** `MNT-NN` for maintenance (correctness, reliability, structure, tooling, dependencies), `UI-NN` for dashboard and Discord-facing polish. Never renumber; mark an item **Done (commit)** and keep it until the next tidy. Old IDs (`BUG-01`, `SEC-02`, …) still mean what [the audit](history/audit-2026-10-07.md) says; a follow-up carried from them names its origin.
+- **IDs:** `MNT-NN` for maintenance (correctness, reliability, structure, tooling, dependencies), `UI-NN` for dashboard and Discord-facing polish, `FEAT-NN` for small features the user asked for (each step still one item). Never renumber; mark an item **Done (commit)** and keep it until the next tidy. Old IDs (`BUG-01`, `SEC-02`, …) still mean what [the audit](history/audit-2026-10-07.md) says; a follow-up carried from them names its origin.
 - **Size:** one item = one small change, green on `scripts/verify.sh` at the level the `verify` skill requires. Anything bigger, any schema change, and any change to an invariant in `CLAUDE.md` needs the user's go-ahead first.
 - **UI items** follow [the UI guide](ui-guide.md) and the [glossary](../glossary.md), and carry before/after evidence (screenshot or exact reply text) in the report.
 - **Priority:** `now` (user asked or user-visible harm), `next`, `later`. The user picks what moves to `now`.
@@ -46,6 +46,17 @@
 | UI-09 | Coverage for polish-sensitive flows: only the Save cast success toast is browser-tested; emotion-removal dialogs and the button-to-audit wiring (link/unlink/bind) are untested; the avatar `?v=` URLs are not asserted. | UX-01, UX-05, SEC-02 | next |
 | UI-10 | Time the Lore panel build and the character expand separately (character expand went 0.05 → 0.30 s at the end of R5, not profiled). | R5 stage end | later |
 
+## Features
+
+**Local time (D14).** Characters know the local time of the member whose message started the turn. Discord does not expose a user's timezone, so it resolves in two steps: the member's own setting for this server, else the server default, else UTC.
+
+| ID | Item | Origin | Priority |
+| --- | --- | --- | --- |
+| FEAT-01 | Storage: `guild_settings.timezone` (IANA name, empty = UTC) and a `user_timezones(guild_id, user_id, timezone)` table, scoped by server. Schema bump 4 → 5 with backup-before-upgrade; add the `tzdata` package (the slim container may lack system zone files). Store helpers validate names with `zoneinfo`. Opus review (migration). | user 2026-10-08 | now |
+| FEAT-02 | Prompt: compute the time from the triggering message's timestamp (so a rewind or retry sees the same time), in the resolved zone. Add macros `{{time}}`, `{{date}}`, `{{weekday}}`, `{{isotime}}`, `{{isodate}}` (SillyTavern names) and `{{local_time}}`; add a short `time` block to the default dialogue bundle ("Local time for {{user}}: …"). Existing saved presets get the macros only. Document in `admin-console.md`. | user 2026-10-08 | now (after FEAT-01) |
+| FEAT-03 | Member commands `/time set <zone>` (autocomplete over zone names), `/time show` (shows the zone in use and where it came from), `/time clear`. Replies are ephemeral. Document in `server-guide.md`. | user 2026-10-08 | now (after FEAT-01) |
+| FEAT-04 | Dashboard: a server timezone select in Server setup next to the reply footer, saved through `ctx.button` with audit action `settings.timezone` (detail: old → new). Browser test and screenshots. | user 2026-10-08 | now (after FEAT-01) |
+
 ## Decisions
 
 Decisions D1–D12 from the rework stay in force ([history/roadmap-r1-r6.md](history/roadmap-r1-r6.md#decisions-taken-2026-10-07)). New decisions continue the numbering here.
@@ -53,3 +64,4 @@ Decisions D1–D12 from the rework stay in force ([history/roadmap-r1-r6.md](his
 | ID | Date | Decision | Applies to |
 | --- | --- | --- | --- |
 | D13 | 2026-10-08 | The project moves from hardening to maintenance and UI polish; work is tracked as `MNT-*`/`UI-*` items in this file. | all |
+| D14 | 2026-10-08 | Local time: a member's timezone is stored per server (`/time set`), falls back to a server default set in the dashboard, then UTC. It is an explicit setting, not a personal memory: it does not need `/memory opt_in` and `/memory opt_out` does not clear it (`/time clear` does). Characters get it through a default prompt block and SillyTavern-style time macros, using the timezone of the member whose message started the turn. | FEAT-01..04 |
