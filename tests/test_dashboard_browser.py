@@ -176,8 +176,10 @@ class DashboardBrowserTests(unittest.TestCase):
             anonymous.route('https://discord.com/oauth2/authorize?*',
                             lambda route: route.fulfill(status=200, body='Mock Discord authorization'))
             login_page.goto(self.url + '/admin/')
-            login_page.get_by_role('link', name='Sign in with Discord', exact=True).click()
-            login_page.wait_for_url('https://discord.com/oauth2/authorize?*')
+            # Wait only for the redirect to commit: the assertions need the URL and cookies, not the
+            # mocked page's load event, which intermittently never fired on CI (30 s timeout).
+            with login_page.expect_navigation(url='https://discord.com/oauth2/authorize?*', wait_until='commit'):
+                login_page.get_by_role('link', name='Sign in with Discord', exact=True).click()
             query = parse_qs(urlparse(login_page.url).query)
             self.assertEqual(query['redirect_uri'], [self.url + '/auth/callback'])
             cookies = {c['name']: c for c in anonymous.cookies(self.url)}
