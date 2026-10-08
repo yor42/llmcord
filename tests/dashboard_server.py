@@ -14,7 +14,7 @@ from llmcord_core.web import create_app
 
 def main():
     port = int(os.environ['LLMCORD_TEST_PORT'])
-    state = {'admin': True, 'guild_checks': 0, 'permission_delay': 0, 'rate_limited': False}
+    state = {'admin': True, 'guild_checks': 0, 'permission_delay': 0, 'rate_limited': False, 'guild_name': 'Test server'}
     # Opt-in benchmark knobs (scripts/bench_dashboard.py); unset keeps the browser-test behavior.
     bench = os.environ.get('LLMCORD_BENCH') == '1'
     latency = float(os.environ.get('LLMCORD_BENCH_DISCORD_LATENCY', '0'))
@@ -35,7 +35,7 @@ def main():
                 return httpx.Response(429, json={'retry_after': 0.01})
             if state['guild_checks'] == 1 and not bench:
                 return httpx.Response(429, json={'retry_after': 0.05})
-            return httpx.Response(200, json=[{'id': '1', 'name': 'Test server', 'permissions': '8' if state['admin'] else '0'}],
+            return httpx.Response(200, json=[{'id': '1', 'name': state['guild_name'], 'permissions': '8' if state['admin'] else '0'}],
                                   headers={'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset-After': reset_after})
         if request.method == 'POST' and request.url.path.endswith('/messages'):
             return httpx.Response(200, json={'id': '900', 'attachments': [{'url': 'https://cdn.discordapp.com/attachments/100/900/image.png?ex=test'}]})
@@ -185,6 +185,13 @@ def main():
         state['rate_limited'] = False
         # Stand-in for the 300 s guild-list TTL (PERF-01 / D1) elapsing after access was restored: the revoke
         # check cached a non-admin guild list, so drop it for the next guard to see the restored permission.
+        app.state.auth.forget_guilds()
+        return {'ok': True}
+
+    @app.post('/_test/guild-name')
+    async def guild_name(request: Request):
+        state['guild_name'] = (await request.json())['name']
+        # Drop cached guild lists so the next page load shows the new name.
         app.state.auth.forget_guilds()
         return {'ok': True}
 

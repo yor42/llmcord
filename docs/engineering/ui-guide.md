@@ -12,6 +12,7 @@ Conventions for polish work on the two user surfaces: the NiceGUI dashboard unde
 **Style (D20, UI-28)**
 - One dark Discord-like style. Tokens are the `THEME_*` constants in `dashboard.py` (page `#1e1f22`, header `#111214`, cards `#2b2d31`, primary `#5865f2`, destructive `#da373c`, muted text `#b5bac1`, faint `#949ba4`). `apply_theme()` runs first in every `@ui.page`; it sets `ui.colors` and one CSS block. Add new shared classes there with the `ll-` prefix instead of per-page colours.
 - Buttons and tabs are sentence case (no uppercase transform); cards have a 12 px radius.
+- Server page frame: header breadcrumb (`ll-crumb`: link "llmcord" with `aria-label="llmcord / Servers"`, aria-hidden "/", 24 px server icon `ll-crumb-icon` or initials tile `ll-crumb-tile`, name `ll-crumb-name`); content sits in `ll-page` (32/48 px padding, 16 px on phones); tabs use `ll-tabs` (muted inactive, white active, primary indicator, `THEME_DIVIDER` bottom border). Tab panels are transparent so top-level cards (`THEME_CARD`) stand out; nested cards (`.q-card .q-card`) use `THEME_NESTED`. Tokens added: `THEME_DIVIDER` `#3f4147`, `THEME_NESTED` `#313338`.
 - Server cards: one link per server whose accessible name is the server name (`aria-label`); the icon comes from `auth.guild_icon_url(guild, 128)`, else an `aria-hidden` initials tile (`server_initials`).
 
 **Actions and feedback**

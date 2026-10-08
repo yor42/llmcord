@@ -153,11 +153,26 @@ THEME_BODY, THEME_HEADER, THEME_CARD = '#1e1f22', '#111214', '#2b2d31'
 THEME_CARD_HOVER, THEME_TILE, THEME_TILE_TEXT = '#35373c', '#404249', '#dbdee1'
 THEME_TEXT_MUTED, THEME_TEXT_FAINT, THEME_BORDER = '#b5bac1', '#949ba4', '#4e5058'
 THEME_PRIMARY, THEME_NEGATIVE = '#5865f2', '#da373c'
+THEME_DIVIDER, THEME_NESTED = '#3f4147', '#313338'
 
 _THEME_CSS = f"""
 body.body--dark, body.body--dark .q-page, body.body--dark .q-layout {{ background: {THEME_BODY}; }}
-body.body--dark .q-header, .q-header {{ background: {THEME_HEADER} !important; }}
-body.body--dark .q-card, body.body--dark .q-tab-panels, body.body--dark .q-tab-panel {{ background: {THEME_CARD}; }}
+.q-header {{ background: {THEME_HEADER}; }}
+body.body--dark .q-card {{ background: {THEME_CARD}; }}
+body.body--dark .q-card .q-card {{ background: {THEME_NESTED}; }}
+body.body--dark .q-tab-panels, body.body--dark .q-tab-panel {{ background: transparent; }}
+.ll-tabs {{ border-bottom: 1px solid {THEME_DIVIDER}; }}
+.ll-tabs .q-tab {{ color: {THEME_TEXT_MUTED}; }}
+.ll-tabs .q-tab--active {{ color: #fff; }}
+.ll-tabs .q-tab__indicator {{ background: {THEME_PRIMARY}; height: 3px; }}
+.ll-page {{ width: 100%; padding: 32px 48px; gap: 4px; align-items: stretch; }}
+@media (max-width: 600px) {{ .ll-page {{ padding: 16px; }} }}
+.ll-crumb {{ display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; }}
+.ll-crumb a {{ color: #fff !important; text-decoration: none !important; font-size: 18px; font-weight: 600; }}
+.ll-crumb-sep {{ color: {THEME_TEXT_FAINT}; }}
+.ll-crumb-icon {{ flex: none; width: 24px; height: 24px; border-radius: 8px; object-fit: cover; }}
+.ll-crumb-tile {{ flex: none; width: 24px; height: 24px; border-radius: 8px; background: {THEME_TILE}; color: {THEME_TILE_TEXT}; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; }}
+.ll-crumb-name {{ min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }}
 .q-card {{ border-radius: 12px; }}
 .q-btn, .q-tab {{ text-transform: none; }}
 .q-field--outlined .q-field__control:before {{ border-color: {THEME_BORDER}; }}
@@ -342,33 +357,49 @@ def _register_pages(app):
         session = await app.state.auth.require_admin(request, guild_id)
         ui.context.client.llmcord_binding = (request.cookies['llmcord_session'], guild_id)
         ctx = LiveContext(app, request, guild_id, session)
-        with ui.header().classes('items-center justify-between bg-slate-900'):
-            ui.link('llmcord / Servers', '/').classes('text-white text-xl')
-            ui.label(session['user']['username'])
-        ui.label('Server administration').classes('text-3xl font-bold mt-4')
-        ui.label('Changes apply on the next bot turn. Prompt drafts require activation.').classes('text-slate-400')
-        with ui.tabs().classes('w-full') as tabs:
-            setup = ui.tab('setup', 'Server setup')
-            characters = ui.tab('characters', 'Characters')
-            lore = ui.tab('lore', 'Lore')
-            imports = ui.tab('imports', 'Imports')
-            prompts = ui.tab('prompts', 'Prompt presets')
-        selected_tab = request.query_params.get('tab')
-        if selected_tab not in ('setup', 'characters', 'lore', 'imports', 'prompts'):
-            selected_tab = 'setup'
-        await ctx.load_channel_names()  # must precede any ctx.snapshot access: it bakes channel names into owner labels
-        ui.add_css('.lore-drop-zone:empty::before { content: "Drop entries here"; color: #94a3b8; pointer-events: none; }')
-        ui.add_css('.q-select:not(.owner-heading) { min-width: min(16rem, 100%); }')
-        async def changed(event):
-            ctx.set_url(tab=event.value)
-            await ctx.build(event.value)
-        ctx.builders = {'setup': lambda: setup_panel(ctx), 'characters': lambda: characters_panel(ctx),
-                        'lore': lambda: lore_panel(ctx, on_import=lambda: ctx.selector.set_value('imports')),
-                        'imports': lambda: imports_panel(ctx), 'prompts': lambda: presets_panel(ctx)}
-        with ui.tab_panels(tabs, value=selected_tab, on_change=changed).classes('w-full') as ctx.selector:
-            for tab in (setup, characters, lore, imports, prompts):
-                ctx.containers[tab.props['name']] = ui.tab_panel(tab)
-        await ctx.build(selected_tab)
+        try:  # cached by require_admin; the header must not fail the page if a refetch does
+            current = next((g for g in await app.state.auth.guilds(session) if str(g.get('id')) == str(guild_id)), None)
+        except HTTPException:
+            current = None
+        with ui.header().classes('items-center justify-between no-wrap'):
+            with ui.element('div').classes('ll-crumb'):
+                crumb = ui.link('llmcord', '/')
+                crumb.props['aria-label'] = 'llmcord / Servers'
+                if current:
+                    ui.label('/').classes('ll-crumb-sep').props('aria-hidden=true')
+                    # guild_icon_url only returns a CDN URL built from a digit snowflake and a hex hash, so it is safe inside the quoted prop.
+                    icon = guild_icon_url(current, 128)
+                    if icon:
+                        ui.element('img').classes('ll-crumb-icon').props(f'src="{icon}" alt=""')
+                    else:
+                        ui.label(server_initials(current.get('name'))).classes('ll-crumb-tile').props('aria-hidden=true')
+                    ui.label(str(current.get('name', ''))).classes('ll-crumb-name')
+            ui.label(session['user']['username']).classes('ml-2')
+        with ui.column().classes('ll-page'):
+            ui.label('Server administration').classes('text-3xl font-bold')
+            ui.label('Changes apply on the next bot turn. Prompt drafts require activation.').classes('ll-muted')
+            with ui.tabs().classes('w-full ll-tabs').props('align=left') as tabs:
+                setup = ui.tab('setup', 'Server setup')
+                characters = ui.tab('characters', 'Characters')
+                lore = ui.tab('lore', 'Lore')
+                imports = ui.tab('imports', 'Imports')
+                prompts = ui.tab('prompts', 'Prompt presets')
+            selected_tab = request.query_params.get('tab')
+            if selected_tab not in ('setup', 'characters', 'lore', 'imports', 'prompts'):
+                selected_tab = 'setup'
+            await ctx.load_channel_names()  # must precede any ctx.snapshot access: it bakes channel names into owner labels
+            ui.add_css('.lore-drop-zone:empty::before { content: "Drop entries here"; color: #94a3b8; pointer-events: none; }')
+            ui.add_css('.q-select:not(.owner-heading) { min-width: min(16rem, 100%); }')
+            async def changed(event):
+                ctx.set_url(tab=event.value)
+                await ctx.build(event.value)
+            ctx.builders = {'setup': lambda: setup_panel(ctx), 'characters': lambda: characters_panel(ctx),
+                            'lore': lambda: lore_panel(ctx, on_import=lambda: ctx.selector.set_value('imports')),
+                            'imports': lambda: imports_panel(ctx), 'prompts': lambda: presets_panel(ctx)}
+            with ui.tab_panels(tabs, value=selected_tab, on_change=changed).classes('w-full') as ctx.selector:
+                for tab in (setup, characters, lore, imports, prompts):
+                    ctx.containers[tab.props['name']] = ui.tab_panel(tab)
+            await ctx.build(selected_tab)
         signout(app, session)
 
 

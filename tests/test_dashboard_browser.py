@@ -816,6 +816,34 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def test_server_name_with_markup_renders_as_text(self):
+        """UI-28: a server name with markup and quotes is plain text on the servers page and the server header."""
+        from playwright.sync_api import expect
+        name = '<b>"Moon</b> & Tavern'
+        initials = '<&'  # first character of the first two whitespace-separated words
+        context, page, errors = self.ux_page('/admin/')
+        try:
+            self.assertEqual(context.request.post(self.url + '/_test/guild-name', data={'name': name}).status, 200)
+            page.goto(self.url + '/admin/')
+            card = page.get_by_role('link', name=name, exact=True)
+            expect(card).to_have_count(1)
+            self.assertEqual(page.locator('a.ll-server-card').count(), 1)
+            expect(card.locator('.ll-server-name')).to_have_text(name)
+            expect(card.locator('.ll-server-tile')).to_have_text(initials)
+            self.assertEqual(card.locator('b').count(), 0)
+            self.assertEqual(card.locator('img.ll-server-icon').count(), 0)
+            card.click()
+            page.wait_for_url('**/admin/guild/1')
+            crumb = page.locator('.ll-crumb')
+            expect(crumb.locator('.ll-crumb-name')).to_have_text(name)
+            expect(crumb.locator('.ll-crumb-tile')).to_have_text(initials)
+            self.assertEqual(crumb.locator('b').count(), 0)
+            expect(page.get_by_role('link', name='llmcord / Servers', exact=True)).to_have_count(1)
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.request.post(self.url + '/_test/guild-name', data={'name': 'Test server'})
+            context.close()
+
     def panel_reads(self, context):
         counters = context.request.get(self.url + '/_test/counters').json()
         return {name: counters.get('store:' + name, 0) for name in ('model_usage_summary', 'list_presets')}
