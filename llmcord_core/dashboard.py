@@ -148,6 +148,16 @@ def rejection_notice(error):
 
 
 def mount_dashboard(app):
+    from nicegui import ui
+
+    _install_socket_auth(app)
+    _install_upload_guard(app)
+    _register_pages(app)
+    ui.run_with(app, mount_path='/admin', title='llmcord admin', dark=True, reconnect_timeout=15,
+                gzip_middleware_factory=None, on_air=None, show_welcome_message=False)
+
+
+def _install_socket_auth(app):
     from nicegui import Client, core, ui
 
     core.sio.eio.cors_allowed_origins = [app.state.base_url]
@@ -217,6 +227,10 @@ def mount_dashboard(app):
                     await value
         core.sio.on(name, guarded_socket)
 
+
+def _install_upload_guard(app):
+    from nicegui import Client
+
     @app.middleware('http')
     async def protected_uploads(request, call_next):
         path = request.url.path
@@ -243,6 +257,10 @@ def mount_dashboard(app):
                 return message
             request._receive = bounded_receive
         return await call_next(request)
+
+
+def _register_pages(app):
+    from nicegui import ui
 
     @ui.page('/')
     async def servers(request: Request):
@@ -296,9 +314,6 @@ def mount_dashboard(app):
                 ctx.containers[tab.props['name']] = ui.tab_panel(tab)
         await ctx.build(selected_tab)
         signout(app, session)
-
-    ui.run_with(app, mount_path='/admin', title='llmcord admin', dark=True, reconnect_timeout=15,
-                gzip_middleware_factory=None, on_air=None, show_welcome_message=False)
 
 
 def link_operation(store, guild_id, hub, world, enabled):
@@ -745,6 +760,43 @@ def presets_panel(ctx):
             b['raw'] = json.loads(control.value or '{}')
         return copy.deepcopy(state['bundle'])
 
+    render_editor = _preset_editor(ctx, state, purpose, collect)
+
+    async def load():
+        bundle = await ctx.run(lambda: store.preset_bundle(gid, select.value))
+        if bundle is None:
+            return
+        selected = next((r for r in store.list_presets(gid) if r['id'] == select.value), None)
+        state.update(id=select.value, revision=selected['revision'] if selected else 0, bundle=bundle)
+        name.value = selected['name'] if selected else 'Default copy'
+        render_editor.refresh()
+
+    def save():
+        return store.save_preset(gid, name.value or '', collect(), state['id'] or None, state['revision'] if state['id'] else None)
+
+    def saved(result):
+        state['id'], state['revision'] = result
+        fresh = store.list_presets(gid)
+        select.set_options({0: 'Built-in default', **{r['id']: f"{r['name']} · draft {r['revision']}" for r in fresh}}, value=state['id'])
+        ui.notify('Draft saved. Activate it when ready.', type='positive')
+
+    ctx.button('Load selected preset', lambda: load())
+    with editor:
+        render_editor()
+    async def change_purpose():
+        if await ctx.run(lambda: True):
+            collect()
+            render_editor.refresh()
+    purpose.on_value_change(lambda _: change_purpose())
+    _preset_actions(ctx, state, name, collect, save, saved)
+    _preset_import(ctx, state, name, render_editor)
+    _preset_export(ctx, collect)
+    _preset_preview(ctx, purpose, collect, diagnostics)
+
+
+def _preset_editor(ctx, state, purpose, collect):
+    from nicegui import ui
+
     @ui.refreshable
     def render_editor():
         state['raw_controls'] = {}
@@ -798,32 +850,12 @@ def presets_panel(ctx):
         if source.get('assistant_prefill'):
             ui.checkbox('Disable imported assistant prefill').bind_value(source, 'prefill_disabled')
 
-    async def load():
-        bundle = await ctx.run(lambda: store.preset_bundle(gid, select.value))
-        if bundle is None:
-            return
-        selected = next((r for r in store.list_presets(gid) if r['id'] == select.value), None)
-        state.update(id=select.value, revision=selected['revision'] if selected else 0, bundle=bundle)
-        name.value = selected['name'] if selected else 'Default copy'
-        render_editor.refresh()
+    return render_editor
 
-    def save():
-        return store.save_preset(gid, name.value or '', collect(), state['id'] or None, state['revision'] if state['id'] else None)
 
-    def saved(result):
-        state['id'], state['revision'] = result
-        fresh = store.list_presets(gid)
-        select.set_options({0: 'Built-in default', **{r['id']: f"{r['name']} · draft {r['revision']}" for r in fresh}}, value=state['id'])
-        ui.notify('Draft saved. Activate it when ready.', type='positive')
-
-    ctx.button('Load selected preset', lambda: load())
-    with editor:
-        render_editor()
-    async def change_purpose():
-        if await ctx.run(lambda: True):
-            collect()
-            render_editor.refresh()
-    purpose.on_value_change(lambda _: change_purpose())
+def _preset_actions(ctx, state, name, collect, save, saved):
+    from nicegui import ui
+    store, gid = ctx.store, ctx.guild_id
     with ui.row():
         ctx.button('Save draft', save, 'preset.save', then=saved)
         def duplicate():
@@ -845,6 +877,10 @@ def presets_panel(ctx):
                            ['This permanently deletes the preset. The active preset cannot be deleted; activate another one first.'],
                            'Delete preset', delete, 'preset.delete', then=lambda _: ctx.refresh())
         ui.button('Delete preset', icon='delete', color='negative', on_click=ask_delete)
+
+
+def _preset_import(ctx, state, name, render_editor):
+    from nicegui import ui
     ui.separator()
     ui.label('Import preset').classes('text-xl font-bold')
     order_area = ui.column().classes('w-full')
@@ -868,6 +904,10 @@ def presets_panel(ctx):
         render_editor.refresh()
         ui.notify('Import preview loaded. Resolve compatibility items, save a draft, then activate.')
     ctx.upload(uploaded, 'Upload native or SillyTavern Chat Completion JSON')
+
+
+def _preset_export(ctx, collect):
+    from nicegui import ui
     ui.separator()
     ui.label('Export preset').classes('text-xl font-bold')
     def native_export():
@@ -879,6 +919,10 @@ def presets_panel(ctx):
         ui.download.content(pretty(export_preset(collect(), sillytavern=True, omit=json.loads(omit.value))), 'sillytavern-preset.json', 'application/json')
         return True
     ctx.button('Export SillyTavern dialogue preset', st_export)
+
+
+def _preset_preview(ctx, purpose, collect, diagnostics):
+    from nicegui import ui
     ui.separator()
     ui.label('Assembled request preview').classes('text-xl font-bold')
     chars = {r['id']: r['name'] for r in ctx.snapshot.characters}
@@ -887,7 +931,7 @@ def presets_panel(ctx):
     sample = ui.textarea('Sample input', value='Hello!').classes('w-full')
     history = ui.textarea('Sample history (one message per line)').classes('w-full')
     def preview():
-        request = ctx.service.preview_prompt(gid, collect(), purpose.value, character.value, sample.value or '', history.value or '', channel.value)
+        request = ctx.service.preview_prompt(ctx.guild_id, collect(), purpose.value, character.value, sample.value or '', history.value or '', channel.value)
         diagnostics.clear()
         with diagnostics:
             ui.label(f'Estimated input tokens: {request.estimated_tokens}')

@@ -44,7 +44,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 | REL-03 | New V8 isolate per regex key match | medium | CONFIRMED | fragile |
 | REL-04 | Unbounded and stale bot caches; webhooks listed every turn | low | CONFIRMED | fragile |
 | REL-05 | Shutdown order can skip `store.close()` — **Resolved (R1, branch `rework/r1-correctness`)** | low | CONFIRMED | fragile |
-| ARCH-01 | Oversized functions | medium | CONFIRMED | fragile |
+| ARCH-01 | Oversized functions — **Resolved (R6 step 5)** | medium | CONFIRMED | fragile |
 | ARCH-02 | Raw SQL and private store helpers in UI code | medium | CONFIRMED | fragile |
 | ARCH-03 | Duplicated constants and logic — **Mostly resolved (R6 step 4)** | low | CONFIRMED | preference |
 | ARCH-04 | Production-dead code and test-double fallbacks — **Resolved (R6 step 3)** | low | CONFIRMED | unconventional |
@@ -274,6 +274,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 ## Architecture
 
 ### ARCH-01: Oversized functions
+- **Status:** Resolved in R6 step 5 (5a–5c): `register_commands`, `_run_scene`, `mount_dashboard`, `presets_panel` and `render_lore_workspace` were split along their seams with no behaviour change (`tests/test_command_tree.py` snapshot plus new `_run_scene` characterization tests). Left: `create_app` (137 lines after SEC-02) and `setup_panel` (100), both readable as they are.
 - **Severity:** medium. **Confidence:** CONFIRMED. **Label:** fragile.
 - **Evidence:**
   - `register_commands` (`discord_bot.py:349-716`, about 370 lines).
