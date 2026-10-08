@@ -8,10 +8,14 @@ description: Run and interpret llmcord's verification suite (lint, repo hygiene,
 ## Choose the level
 | Changed | Run |
 | --- | --- |
-| docs / `.claude/` only | nothing (or `ruff` if scripts changed) |
+| docs / `.claude/` only | `git diff --check`; parse settings JSON and agent/skill YAML; `claude plugin validate .claude/agents --strict` and `claude plugin validate .claude/skills --strict`; inspect scope/model routing |
 | bot, engine, store, models, prompts, world_info, cards, lorebooks | `scripts/verify.sh` |
 | web.py, auth.py, admin*.py, dashboard.py, scene_ui.py, lore_workspace.py, lore_drag.*, templates, tests/dashboard_server.py | `scripts/verify.sh --browser` |
 | a performance claim | `scripts/verify.sh --bench` (compare with `docs/engineering/perf-baseline.md`, see the `dashboard-perf` skill) |
+
+Changes to other executable scripts or tests require the default suite; browser/perf fixtures require the corresponding additional level. Use `scripts/verify.sh --browser --bench` when both apply. A `.claude/` hook script change also needs its syntax check and a controlled fixture invocation; metadata validation alone is insufficient.
+
+During orchestration, `verify-runner` owns the final full run and saves verbose output outside the repo. The main session checks the actual evidence and final diff; workers run targeted checks and the reviewer consumes evidence. Reuse passing evidence only while the checked state is unchanged. No additional agent is needed just to invoke a short local validation command.
 
 ## Read the results
 - The unittest summary looks like `OK (skipped=1, expected failures=N)`. `skipped=1` is the browser test in default mode. **N must equal the number of `test_known_defect_*` tests** (`grep -rc "def test_known_defect_" tests/`).
@@ -23,7 +27,7 @@ description: Run and interpret llmcord's verification suite (lint, repo hygiene,
 1. **Regression from the change:** fix in the change.
 2. **Environment:** e.g. Playwright browser missing (`.venv/bin/python -m playwright install chromium`) or the venv missing deps (`.venv/bin/pip install -r requirements-dev.txt`).
 3. **Flaky:** rerun once. If it passes, note it; don't ignore a second failure.
-4. **Pre-existing:** confirm on a clean `git stash` base before claiming this.
+4. **Pre-existing:** confirm using the recorded baseline or an isolated checkout of the intended base. Preserve dirty user work; do not stash/reset it merely to classify a failure.
 
 Never skip, delete, or loosen a test to get green. Report failures verbatim.
 

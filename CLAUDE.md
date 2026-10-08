@@ -3,9 +3,11 @@
 Discord roleplay "skit" bot (characters speak through webhooks, director model picks speakers, SQLite-held scene trees) plus a private admin dashboard (FastAPI + NiceGUI under `/admin`, Discord OAuth, served via Tailscale). Self-hosted on a Raspberry Pi 5 (arm64), Python 3.12/3.13.
 
 ## Working model: orchestrator + agents
-The main session **orchestrates; it does not edit application code directly.** For any change to `llmcord_core/`, entry points, or tests, follow the `orchestrate-change` skill:
-brief → `test-writer` (pin behavior) → `implementer` (change) → `scripts/verify.sh` → `change-reviewer` (read-only) → report.
+The main session **orchestrates; it does not edit application code directly.** For any change to `llmcord_core/`, entry points, scripts, or tests, follow the `orchestrate-change` skill:
+brief → `test-writer` if coverage is needed → `implementer` or `quick-editor` → `verify-runner` → `change-reviewer` → report.
 The main session may directly edit docs, `CLAUDE.md`, and `.claude/` config. Large rework needs explicit user approval of the roadmap first.
+
+Use Sonnet for routine coordination, implementation, tests, and review; Haiku for bounded exploration (`Explore`), exact mechanical edits (`quick-editor`), and verification summaries (`verify-runner`). Reserve Opus for difficult reasoning or review of security, isolation, consent, migration, or concurrency changes. Each project agent has an explicit model and turn limit. Follow the routing and escalation rules in `orchestrate-change`; do not override agents to match the parent model or start agent teams by default. A directly answerable lookup needs no agent. See `docs/engineering/claude-workflow.md` for the audit, provider/version caveats, and how to check actual model usage.
 
 ## Processes (no IPC — they share one SQLite file)
 - `llmcord.py` → `discord_bot.SkitBot`: events, slash commands (`register_commands`), webhooks, daily cleanup task.
@@ -25,7 +27,7 @@ The bot reads DB state fresh each turn, so dashboard edits apply on the next tur
 
 ## Commands
 - Setup: `python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt` (browser tests also need `.venv/bin/python -m playwright install chromium`).
-- **Verify (run before declaring any change done):** `scripts/verify.sh` — ruff, repo hygiene, compileall, offline unittest suite.
+- **Verify before declaring a change done:** choose the level in the `verify` skill. Application/script/test changes require `scripts/verify.sh` — ruff, repo hygiene, compileall, offline unittest suite. Docs and Claude config changes require metadata/diff checks instead.
   - `scripts/verify.sh --browser` adds the Playwright dashboard suite (~2 min) — required when touching `web.py`, `auth.py`, `dashboard.py`, `scene_ui.py`, `lore_*`, templates.
   - `scripts/verify.sh --bench` adds `scripts/bench_dashboard.py` — required when claiming a dashboard perf change.
 - Single test file: `.venv/bin/python -m unittest discover -s tests -p test_slash_commands.py -v`

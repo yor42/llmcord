@@ -1,39 +1,61 @@
 ---
 name: orchestrate-change
-description: The required workflow for making any code change in llmcord — orchestrator briefs test-writer, implementer, and change-reviewer subagents and verifies between steps. Use whenever a roadmap item, finding ID (BUG-/PERF-/SEC-/UX-/ARCH-), or bug fix needs code edits.
+description: Required workflow for llmcord code changes. Routes bounded work to Haiku, behavioral implementation/tests to Sonnet, and difficult reasoning to Opus; verifies and reviews the final diff.
 ---
 
 # Orchestrate a change
 
-The main session coordinates and does not edit `llmcord_core/`, entry points, or tests itself.
+The main session coordinates and does not edit `llmcord_core/`, entry points, scripts, or tests itself. Delegated workers execute their brief directly; they must not restart this workflow.
 
-## 0. Preconditions
-- The item comes from `docs/engineering/roadmap.md` (or the user named it), and its roadmap phase is approved by the user.
-- `git status` is clean or only has expected work. `scripts/verify.sh` passes on the base (record expected-failure count).
+## 0. Establish scope and baseline
+- Work within the user's request or an approved roadmap phase. A direct request authorizes its scoped change; do not request roadmap approval again. Large rework outside that scope still needs approval.
+- Inspect `git status` and the existing diff. Preserve unrelated/pre-existing edits; record a starting snapshot and include new files. Never stash or reset the user's work to obtain a clean base.
+- For code changes, establish a passing `scripts/verify.sh` baseline once per unchanged starting state or approved batch. Record skips and expected failures. Use `verify-runner`; reuse that evidence until the base changes.
+- Read docs/config directly. For a simple lookup, search directly; for noisy bounded investigation, use `Explore`. Broad debugging or architecture belongs to Sonnet/Opus.
 
-## 1. Write the brief (in your own context, ~10 lines)
+## 1. Write a brief (~10 lines)
 ```
-ID / title:
+ID / title (or user request):
 Goal (observable outcome):
-Files in scope:
-Out of scope / must not change:
-Tests that must flip (known-defect IDs) or stay green:
+Files in scope / starting snapshot:
+Out of scope / behavior to preserve:
+Existing coverage / tests needed / known defects to fix:
 User-visible changes allowed:
-Verification level: default | --browser | --bench
+Risk and reason:
+Agents / model choices and reason:
+Targeted checks / final level: default | --browser | --bench | both
+Evidence/log paths outside the repo:
 ```
-If the item needs a product decision (see "Open product decisions" in roadmap.md), ask the user before continuing.
+Resolve necessary product decisions before dependent work; continue independent work while waiting.
 
-## 2. Pin behavior → `test-writer`
-Send the brief. Skip only if an existing test already pins the exact behavior (name it in the brief). Check the report: are the tests observable-behavior tests, and was each expected-failure validated?
+## 2. Choose the smallest adequate route
+| Work | Route |
+| --- | --- |
+| Docs or Claude config only | Main session edits; metadata/diff validation via `verify` |
+| Exact low-risk replacement/format/syntax fix, covered behavior | `quick-editor` (Haiku) → final verification → `change-reviewer` (Sonnet) |
+| Behavior change or bug fix | `test-writer` when needed (Sonnet) → `implementer` (Sonnet) → final verification → `change-reviewer` (Sonnet) |
+| Auth/security, isolation, consent, migration, concurrency, or unresolved cross-module reasoning | Sonnet workers; Opus for the difficult reasoning/review, with a reason in the brief |
 
-## 3. Implement → `implementer`
-Send the brief plus the test names from step 2. One item per implementer run. For independent items, use separate runs (in a worktree via `isolation: "worktree"` if they touch the same files).
+- Every custom agent has a `model`; never set `inherit` or override all invocations to the parent's model. Leave the invocation's model unset to use the role default; supply an explicit override only for a justified escalation.
+- Haiku may write a narrowly specified test by overriding `test-writer` only when the assertion, seam, and existing test pattern are supplied. It must not determine intended behavior or review security invariants on its own.
+- Use `Explore` for bounded inventories and sanitized summaries. Run repetitive transformations with a deterministic script/command when possible; use Haiku to summarize exceptions. Do not spawn one agent per row/file/query.
+- Built-in Plan still inherits: if used, explicitly select Sonnet for routine planning or Opus for difficult reasoning. Generic agents also need an intentional task/model choice. Do not use forks, agent teams, or background swarms by default.
 
-## 4. Verify yourself
-Re-run `scripts/verify.sh` (with the brief's level). Don't rely on the agent's report alone. Compare the expected-failure count: it should drop by exactly the defects fixed.
+## 3. Pin and implement
+- Skip `test-writer` when existing tests pin the exact behavior (name them), or when no executable behavior changes. Otherwise supply the brief and inspect its behavioral tests and expected-failure evidence.
+- Send `implementer` the brief and exact test names. Use `quick-editor` only when its eligibility rules hold. One scoped item per worker; workers run targeted checks, not repeated full suites.
+- Default to sequential work. Parallelize only independent tasks with separate file ownership and a clear benefit. If isolated worktrees are needed, explicitly select the intended base, include required existing changes, and integrate all worker edits before final verification; dependent test/implementation stages share one checkout.
+- Respect `maxTurns`. Partial output requires inspection and a narrower brief, one justified continuation, or escalation; do not blindly resume to bypass the limit. Haiku uncertainty goes to Sonnet; unresolved Sonnet reasoning goes to Opus. Carry forward existing evidence rather than restarting the search.
 
-## 5. Review → `change-reviewer`
-Send the brief. On **request changes**, send the findings back to `implementer` (max 2 rounds, then escalate to the user).
+## 4. Verify the final state once
+Assign the brief's full verification level to `verify-runner`. Inspect its exit codes, saved log, counts, and final diff yourself; do not rely on a prose claim of success. Expected failures should drop by exactly the defects fixed. Use `--browser --bench` when both requirements apply.
 
-## 6. Report to the user
-ID, what changed (files), user-visible changes, verification output summary, reviewer verdict, and follow-ups. Update the item's status in `docs/engineering/roadmap.md` and, if it was a finding, mark it in `audit.md`. Commit only when the user asks.
+After any subsequent executable/test edit, repeat the required checks for the new final state. Reuse evidence only when the checked state is unchanged. No duplicate full run by implementer, reviewer, and orchestrator just to repeat the same passing result.
+
+## 5. Review
+Give `change-reviewer` the brief, saved task diff, new-file inventory, pre-existing changes, and verification evidence. It has no command or editing tools. For high-risk work, invoke it with `model: opus` and record why; routine review uses its Sonnet default.
+
+On **request changes**, send findings to the appropriate worker (test findings to `test-writer`). Reverify after fixes and resume the reviewer with the delta; at most two correction rounds before surfacing the unresolved issue to the user. Never report a partial review as approval.
+
+## 6. Report
+State the change, files, user-visible behavior, verification evidence, reviewer verdict, and follow-ups. Record roles/models and escalation reasons. Update roadmap/audit status for the item when applicable. Commit only when requested.

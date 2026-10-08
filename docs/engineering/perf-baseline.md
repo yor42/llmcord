@@ -146,3 +146,35 @@ Reading:
 - An unfiltered page no longer grows with book size beyond one indexed COUNT.
 - A filtered page is still linear, because the casefold match runs as a Python SQL function on every row of the owner. It runs once per row, since the count comes from a window function in the same query.
 - FTS5 would make filtered search sub-linear, but its tokenization would change the substring semantics. It is not needed at current sizes.
+
+## 2026-10-08: end of R5 (steps 1–8)
+
+Same host and seed (`10,500`), two consecutive runs on `rework/r5-dashboard-data` at `2d5ebf7`: run 1 is `scripts/verify.sh --bench` (14:12 KST, 62 s wall), run 2 is `scripts/bench_dashboard.py` alone (14:13 KST, 47 s wall). Load average 0.2–0.6, SoC 59 °C, `get_throttled` = `0x50000` (nothing active), as before. Times in seconds; "Checks" = `GET /users/@me/guilds` calls. "End of R2" is the mean of its two runs.
+
+### `latency`
+
+| Scenario | Run 1 ready / settled | Run 2 ready / settled | End of R2 settled | Checks | Other Discord calls |
+| --- | --- | --- | --- | --- | --- |
+| Guild page cold load | 1.39 / 1.39 | 1.36 / 1.36 | 2.09 | 1 | 1 channels |
+| Switch to Characters tab | 0.06 / 0.31 | 0.06 / 0.32 | 0.96 | 0 | — |
+| Expand one character | 0.31 / 0.31 | 0.31 / 0.31 | 0.06 | 0 | — |
+| Type 10 chars in lore search | 1.68 / 1.68 | 1.71 / 1.71 | 1.52 | 0 | — |
+| Click Save cast | 0.64 / 0.67 | 0.62 / 0.63 | 0.56 | 0 | — |
+
+### `ratelimited`
+
+| Scenario | Run 1 ready / settled | Run 2 ready / settled | End of R2 settled | Checks | Other Discord calls |
+| --- | --- | --- | --- | --- | --- |
+| Guild page cold load | 1.38 / 1.38 | 1.38 / 1.38 | 2.02 | 1 | 1 channels |
+| Switch to Characters tab | 0.07 / 0.32 | 0.07 / 0.32 | 0.56 | 0 | — |
+| Expand one character | 0.29 / 0.30 | 0.35 / 0.35 | 0.04 | 0 | — |
+| Type 10 chars in lore search | 1.69 / 1.69 | 1.68 / 1.69 | 1.51 | 0 | — |
+| Click Save cast | 0.63 / 0.64 | 0.60 / 0.61 | 0.58 | 0 | — |
+
+Reading:
+- Cold load: 2.0–2.1 s → 1.4 s settled in both profiles. Since step 6 the page builds only the Server setup panel at load.
+- The target metric, lore search settled, went **up** by about 0.17 s (1.5 → 1.7 s). The scenario clicks the Lore tab inside the measurement, and since step 6 that click builds the Lore panel (500 entries, first page) instead of the cold load doing it. This attribution follows from the code and the matching drop in cold load; the panel build was not timed on its own. Discord checks stay at 0, so lore search no longer waits on Discord at all (it was 21 checks and 23 s at the original baseline).
+- The Characters tab now settles in 0.31 s (lazy build), and expanding a character takes 0.30 s instead of 0.05 s. Each expanded card now renders its emotion editor and confirm dialogs; this was not profiled.
+- Save cast is 0.05–0.10 s slower, within the spread of the earlier runs plus the new success toast.
+- Summed over the five scenarios (settled): 4.4 s now in both profiles, vs 5.2 s (latency; 4.8 s without the 1.36 s tab outlier) and 4.7 s (rate limited) at the end of R2.
+- The 500-entry seed is too small to show PERF-02 end to end; see the store micro-benchmark in the step 2 section. PERF-04 (gzip, cached assets) cannot show here either: the bench runs on localhost, where transfer size barely matters, and each run starts with an empty browser cache.
