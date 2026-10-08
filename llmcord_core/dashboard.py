@@ -15,7 +15,7 @@ from http.cookies import SimpleCookie
 from fastapi import HTTPException, Request
 from fastapi.responses import PlainTextResponse
 
-from .auth import is_server_admin
+from .auth import guild_icon_url, is_server_admin
 from .avatars import MAX_AVATAR_BYTES, avatar_version, normalize_avatar
 from .cards import parse_card
 from .lorebooks import parse_lorebook
@@ -148,6 +148,46 @@ def rejection_notice(error):
     return str(error.detail or 'This action was rejected')
 
 
+# Discord-like style tokens (UI-28, D20). Later steps reuse these names.
+THEME_BODY, THEME_HEADER, THEME_CARD = '#1e1f22', '#111214', '#2b2d31'
+THEME_CARD_HOVER, THEME_TILE, THEME_TILE_TEXT = '#35373c', '#404249', '#dbdee1'
+THEME_TEXT_MUTED, THEME_TEXT_FAINT, THEME_BORDER = '#b5bac1', '#949ba4', '#4e5058'
+THEME_PRIMARY, THEME_NEGATIVE = '#5865f2', '#da373c'
+
+_THEME_CSS = f"""
+body.body--dark, body.body--dark .q-page, body.body--dark .q-layout {{ background: {THEME_BODY}; }}
+body.body--dark .q-header, .q-header {{ background: {THEME_HEADER} !important; }}
+body.body--dark .q-card, body.body--dark .q-tab-panels, body.body--dark .q-tab-panel {{ background: {THEME_CARD}; }}
+.q-card {{ border-radius: 12px; }}
+.q-btn, .q-tab {{ text-transform: none; }}
+.q-field--outlined .q-field__control:before {{ border-color: {THEME_BORDER}; }}
+.ll-muted {{ color: {THEME_TEXT_MUTED}; }}
+.ll-faint {{ color: {THEME_TEXT_FAINT}; }}
+.ll-signin-card {{ width: 100%; max-width: 420px; padding: 40px; margin: 80px auto 0; align-items: stretch; text-align: center; gap: 12px; }}
+.ll-logo {{ width: 56px; height: 56px; border-radius: 16px; background: {THEME_PRIMARY}; color: #fff; font-size: 30px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin: 0 auto; }}
+.ll-signin-btn {{ display: flex; align-items: center; justify-content: center; width: 100%; height: 48px; margin-top: 12px; border-radius: 8px; background: {THEME_PRIMARY}; color: #fff !important; font-weight: 600; text-decoration: none !important; }}
+.ll-signin-btn:hover {{ background: #4752c4; }}
+.ll-servers {{ width: 100%; max-width: 1100px; margin: 0 auto; padding: 16px; }}
+.ll-server-card {{ display: flex; align-items: center; gap: 16px; padding: 20px; border-radius: 12px; background: {THEME_CARD}; color: #fff !important; text-decoration: none !important; font-size: 18px; font-weight: 600; min-width: 0; }}
+.ll-server-card:hover {{ background: {THEME_CARD_HOVER}; }}
+.ll-server-icon {{ flex: none; width: 56px; height: 56px; border-radius: 16px; object-fit: cover; }}
+.ll-server-tile {{ flex: none; width: 56px; height: 56px; border-radius: 16px; background: {THEME_TILE}; color: {THEME_TILE_TEXT}; font-size: 20px; font-weight: 600; display: flex; align-items: center; justify-content: center; }}
+.ll-server-name {{ min-width: 0; overflow-wrap: anywhere; }}
+"""
+
+
+def apply_theme():
+    from nicegui import ui
+    ui.colors(primary=THEME_PRIMARY, negative=THEME_NEGATIVE, dark=THEME_CARD)
+    ui.add_css(_THEME_CSS)
+
+
+def server_initials(name):
+    """Up to two uppercase initials from a server name; '?' when blank."""
+    words = str(name or '').split()
+    return ''.join(word[0] for word in words[:2]).upper() or '?'
+
+
 def mount_dashboard(app):
     from nicegui import ui
 
@@ -265,25 +305,40 @@ def _register_pages(app):
 
     @ui.page('/')
     async def servers(request: Request):
+        apply_theme()
         try:
             session = await app.state.auth.session_for(request)
         except HTTPException:
-            with ui.card().classes('mx-auto mt-20 p-8 max-w-xl'):
+            with ui.card().classes('ll-signin-card'):
+                ui.label('l').classes('ll-logo').props('aria-hidden=true')
                 ui.label('llmcord').classes('text-3xl font-bold')
-                ui.label('Manage your characters, worlds, lore, and prompt presets.')
-                ui.link('Sign in with Discord', app.state.base_url + '/login').classes('text-lg')
+                ui.label('Manage your characters, worlds, lore, and prompt presets.').classes('ll-muted')
+                ui.link('Sign in with Discord', app.state.base_url + '/login').classes('ll-signin-btn')
+                ui.label('You will see the servers where you are an administrator.').classes('ll-faint text-sm')
             return
         ui.context.client.llmcord_binding = (request.cookies['llmcord_session'], None)
         guilds = await app.state.auth.guilds(session)
-        ui.label('Your servers').classes('text-3xl font-bold')
-        for guild in guilds:
-            if is_server_admin(guild):
-                with ui.card().classes('w-full max-w-xl'):
-                    ui.link(guild['name'], f"/guild/{guild['id']}").classes('text-xl')  # ui.link adds the /admin mount prefix
+        with ui.column().classes('ll-servers gap-1'):
+            ui.label('Your servers').classes('text-3xl font-bold')
+            ui.label('Servers where you are an administrator.').classes('ll-muted')
+            with ui.element('div').classes('grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full mt-4'):
+                for guild in guilds:
+                    if not is_server_admin(guild):
+                        continue
+                    card = ui.link(target=f"/guild/{guild['id']}").classes('ll-server-card')  # ui.link adds the /admin mount prefix
+                    card.props['aria-label'] = str(guild['name'])
+                    with card:
+                        icon = guild_icon_url(guild, 128)
+                        if icon:
+                            ui.element('img').classes('ll-server-icon').props(f'src="{icon}" alt=""')
+                        else:
+                            ui.label(server_initials(guild['name'])).classes('ll-server-tile').props('aria-hidden=true')
+                        ui.label(str(guild['name'])).classes('ll-server-name')
         signout(app, session)
 
     @ui.page('/guild/{guild_id}', response_timeout=30)
     async def guild(request: Request, guild_id: int):
+        apply_theme()
         session = await app.state.auth.require_admin(request, guild_id)
         ui.context.client.llmcord_binding = (request.cookies['llmcord_session'], guild_id)
         ctx = LiveContext(app, request, guild_id, session)

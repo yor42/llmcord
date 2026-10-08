@@ -9,6 +9,11 @@ Conventions for polish work on the two user surfaces: the NiceGUI dashboard unde
 - Panels build lazily on first selection. `LiveContext.refresh(tab=None, owner=None)` rebuilds in place; there are no full-page reloads or `ui.navigate` calls. Keep it that way.
 - A builder must not `await` during a build (a refresh mid-build would double-fill).
 
+**Style (D20, UI-28)**
+- One dark Discord-like style. Tokens are the `THEME_*` constants in `dashboard.py` (page `#1e1f22`, header `#111214`, cards `#2b2d31`, primary `#5865f2`, destructive `#da373c`, muted text `#b5bac1`, faint `#949ba4`). `apply_theme()` runs first in every `@ui.page`; it sets `ui.colors` and one CSS block. Add new shared classes there with the `ll-` prefix instead of per-page colours.
+- Buttons and tabs are sentence case (no uppercase transform); cards have a 12 px radius.
+- Server cards: one link per server whose accessible name is the server name (`aria-label`); the icon comes from `auth.guild_icon_url(guild, 128)`, else an `aria-hidden` initials tile (`server_initials`).
+
 **Actions and feedback**
 - Every write goes through `ctx.button(...)` or `ctx.upload(...)` (guarded, audited via `AdminService.run`). Never wire a raw `ui.button` to a store write.
 - Success: pass `success='…'` for a positive toast when the result is not otherwise visible. Failure: the context shows a negative toast (8 s) with the error text; write that text for the user (see "Messages").
