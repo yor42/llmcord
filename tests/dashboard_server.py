@@ -168,6 +168,16 @@ def main():
                          ref=row['ref'], expected_revision=row['revision'])
         return {'ok': True}
 
+    @app.post('/_test/change-character')
+    async def change_character(request: Request):
+        # Another admin edits a character's description behind the open page's back (MNT-21 conflict test).
+        value = await request.json()
+        row = next(r for r in store.list_characters(1) if r['name'] == value['name'])
+        card = {**json.loads(row['card']), 'description': value['description']}
+        store.update_character(1, row['id'], row['world_id'], row['name'], card,
+                               expected_revision=store.owner_revision(1, 'character', row['id']))
+        return {'ok': True}
+
     @app.post('/_test/delay-permission')
     async def delay_permission():
         state['permission_delay'] = 0.5

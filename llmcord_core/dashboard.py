@@ -22,6 +22,7 @@ from .cards import parse_card
 from .icons import icon_css, lucide, lucide_button
 from .lorebooks import parse_lorebook
 from .prompts import PURPOSES, SOURCES, block, compatibility, default_bundle, export_preset, parse_preset
+from .savebar import SaveBar
 from .scene_ui import confirm_dialog, delete_book_dialog, delete_space_dialog, direct_import_dialog, guideline_editor
 
 
@@ -35,6 +36,7 @@ class LiveContext:
         self.lore_owner = request.query_params.get('owner')
         self.channel_names = {}
         self.selector, self.containers, self.builders, self.built = None, {}, {}, set()
+        self.savebar = None
 
     async def load_channel_names(self):
         # One Discord channel fetch per page render; a failure leaves the mapping empty.
@@ -81,9 +83,13 @@ class LiveContext:
 
     async def refresh(self, tab=None, owner=None):
         """In-page replacement for a browser reload: stale every built panel, optionally switch tab, rebuild the visible one."""
+        if self.savebar and self.savebar.refuse():
+            return
         if owner:
             self.lore_owner = owner
             self.set_url(owner=owner)
+        if self.savebar:
+            self.savebar.clear()
         for built in self.built:
             self.containers[built].clear()
         self.built.clear()
@@ -93,6 +99,8 @@ class LiveContext:
             await self.build(self.selector.value)
 
     async def run(self, operation, action=None, detail=None):
+        if action is not None and self.savebar and self.savebar.refuse():
+            return None
         return (await self._attempt(operation, action, detail))[1]
 
     async def _attempt(self, operation, action=None, detail=None):
@@ -108,6 +116,8 @@ class LiveContext:
     def button(self, text, operation, action=None, detail=None, then=None, success=None, **kwargs):
         from nicegui import ui
         async def clicked():
+            if self.savebar and self.savebar.refuse():
+                return
             ok, result = await self._attempt(operation, action, detail)
             if not ok:
                 return
@@ -123,6 +133,8 @@ class LiveContext:
         from nicegui import ui
         async def uploaded(event):
             # Upload endpoint also validates session binding and CSRF before reading the body.
+            if self.savebar and self.savebar.refuse():
+                return
             ok, result = await self._attempt(lambda: handler(event), action, detail)
             if not ok:
                 return
@@ -174,6 +186,12 @@ body.body--dark .q-card .q-card, body.body--dark .q-card .q-expansion-item {{ ba
 .ll-subtitle {{ font-size: 16px; font-weight: 700; line-height: 1.3; }}
 .ll-drop.nicegui-column {{ background: {THEME_BODY}; border: 1px dashed {THEME_BORDER}; border-radius: 8px; gap: 8px; }}
 .ll-entry.q-card {{ padding: 8px 12px; gap: 4px; border: 1px solid {THEME_DIVIDER}; border-radius: 8px; box-shadow: none; }}
+.ll-savebar {{ position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 2000; box-sizing: border-box; width: calc(100% - 32px); max-width: 960px; display: flex; flex-flow: row wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 12px 16px; background: {THEME_HEADER}; color: {THEME_TILE_TEXT}; border: 1px solid {THEME_DIVIDER}; border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }}
+.ll-savebar.hidden {{ display: none; }}
+body:has(.ll-savebar:not(.hidden)) .ll-page {{ padding-bottom: 120px; }}
+.ll-savebar.ll-savebar-alert {{ border-color: {THEME_NEGATIVE}; box-shadow: 0 0 0 2px {THEME_NEGATIVE}; }}
+.ll-savebar .ll-savebar-reset {{ color: {THEME_TILE_TEXT}; }}
+.ll-savebar-actions {{ display: flex; gap: 8px; }}
 @media (max-width: 600px) {{ .ll-section {{ padding: 16px; }} .ll-form-row .q-field {{ flex-basis: 100%; }} }}
 body.body--dark .q-tab-panels, body.body--dark .q-tab-panel {{ background: transparent; }}
 .ll-page .q-tab-panel {{ padding-left: 0; padding-right: 0; }}
@@ -447,6 +465,7 @@ def _register_pages(app):
             with ui.tab_panels(tabs, value=selected_tab, on_change=changed).classes('w-full') as ctx.selector:
                 for tab in (setup, characters, lore, imports, prompts):
                     ctx.containers[tab.props['name']] = ui.tab_panel(tab)
+            ctx.savebar = SaveBar(ctx)
             await ctx.build(selected_tab)
 
 
@@ -663,8 +682,9 @@ def character_card(ctx, row, worlds):
                 new = {**card, **{key: control.value or '' for key, control in fields.items()}, 'name': name.value}
                 store.update_character(gid, row['id'], world.value, name.value or '', new, expected_revision=revision)
                 return True
+            tracked = {name: row['name'], world: row['world_id'], **{control: card.get(key, '') for key, control in fields.items()}}
+            ctx.savebar.track(row['name'], tracked, save, 'character.edit', {'id': row['id']}, then=lambda _: ctx.refresh('characters'), on_reset=lambda: confirm.set_value(False))
             with ui.element('div').classes('ll-form-row'):
-                ctx.button('Save character', save, 'character.edit', {'id': row['id']}, then=lambda _: ctx.refresh('characters'))
                 def archive(row=row):
                     store.archive_character(gid, row['id'], not row['archived'])
                     return True

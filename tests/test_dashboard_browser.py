@@ -261,7 +261,9 @@ class DashboardBrowserTests(unittest.TestCase):
         self.assertFalse(any(slot['has_image'] for slot in self.state()['slots'] if slot['character_id'] == blank['id']))
         character.get_by_text('Browser blank', exact=True).click()
         character.get_by_label('Description', exact=True).fill('A character created without an import')
-        character.get_by_role('button', name='Save character', exact=True).click()
+        savebar = page.get_by_role('region', name='Unsaved changes')
+        savebar.get_by_role('button', name='Save changes', exact=True).click()
+        savebar.wait_for(state='hidden')
         self.wait_for(lambda: json.loads(next(row for row in self.state()['characters'] if row['id'] == blank['id'])['card'])['description'] == 'A character created without an import')
         self.assertEqual(json.loads(next(row for row in self.state()['characters'] if row['id'] == blank['id'])['card'])['description'], 'A character created without an import')
         character.get_by_text('Browser blank', exact=True).click()
@@ -1091,5 +1093,251 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertGreater(measured, 5)
             self.assertEqual({tab: items for tab, items in clipped.items() if items}, {})
             self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    # MNT-21: the editor save bar (D21), first user: the Character editor.
+    def open_alice(self, path='/admin/guild/1?tab=characters'):
+        context, page, errors = self.ux_page(path)
+        page.get_by_role('tab', name='Characters', exact=True).click()
+        card = page.locator('.character-card').filter(has=page.get_by_text('Alice', exact=True)).first
+        card.get_by_text('Alice', exact=True).first.click()
+        description = card.get_by_label('Description', exact=True)
+        description.wait_for()
+        return context, page, errors, card, description
+
+    def alice_row(self):
+        return next(row for row in self.state()['characters'] if row['name'] == 'Alice')
+
+    def restore_alice(self, original):
+        self.context.request.post(self.url + '/_test/change-character', data={'name': 'Alice', 'description': original})
+
+    def test_savebar_hidden_until_character_field_differs(self):
+        """MNT-21: no bar on load; editing Description shows 'Alice has unsaved changes.'; typing the old value back hides it."""
+        context, page, errors, card, description = self.open_alice()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            self.assertFalse(bar.is_visible())
+            original = description.input_value()
+            description.fill(original + ' edited')
+            bar.wait_for(state='visible', timeout=5000)
+            self.assertEqual(bar.get_by_text('Alice has unsaved changes.', exact=True).count(), 1)
+            description.fill(original)
+            bar.wait_for(state='hidden', timeout=5000)
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_savebar_reset_restores_fields_without_store_change(self):
+        """MNT-21: Reset puts the field back, hides the bar, and makes no store call or audit row."""
+        context, page, errors, card, description = self.open_alice()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            original = description.input_value()
+            before = self.state()
+            description.fill(original + ' discarded')
+            bar.wait_for(state='visible', timeout=5000)
+            page.wait_for_function('() => window.onbeforeunload !== null', timeout=5000)
+            bar.get_by_role('button', name='Reset', exact=True).click()
+            bar.wait_for(state='hidden', timeout=5000)
+            page.wait_for_function('() => window.onbeforeunload === null', timeout=5000)
+            self.assertEqual(description.input_value(), original)
+            after = self.state()
+            self.assertEqual(after['characters'], before['characters'])
+            self.assertEqual(after['audit'], before['audit'])
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_savebar_save_changes_stores_edit_and_audits(self):
+        """MNT-21: Save changes stores the edit, hides the bar, and writes a character.edit audit row."""
+        context, page, errors, card, description = self.open_alice()
+        original = description.input_value()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            audit_before = len([r for r in self.state()['audit'] if r['action'] == 'character.edit'])
+            description.fill('A courier edited through the save bar')
+            bar.wait_for(state='visible', timeout=5000)
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            bar.wait_for(state='hidden', timeout=5000)
+            self.wait_for(lambda: json.loads(self.alice_row()['card'])['description'] == 'A courier edited through the save bar')
+            rows = [r for r in self.state()['audit'] if r['action'] == 'character.edit']
+            self.assertEqual(len(rows), audit_before + 1)
+            self.assertEqual(json.loads(rows[-1]['detail_json']), {'id': self.alice_row()['id']})
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+            self.restore_alice(original)
+
+    def test_savebar_conflict_keeps_bar_and_edit(self):
+        """MNT-21: a stale save shows the conflict toast; the bar stays and the edit stays in the field."""
+        context, page, errors, card, description = self.open_alice()
+        original = description.input_value()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            description.fill('My edit that will conflict')
+            bar.wait_for(state='visible', timeout=5000)
+            response = self.context.request.post(self.url + '/_test/change-character', data={'name': 'Alice', 'description': 'Another admin was here'})
+            self.assertTrue(response.ok)
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Character changed; reload before saving', exact=True).wait_for(timeout=5000)
+            self.assertTrue(bar.is_visible())
+            self.assertEqual(description.input_value(), 'My edit that will conflict')
+            self.assertEqual(json.loads(self.alice_row()['card'])['description'], 'Another admin was here')
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+            self.restore_alice(original)
+
+    def test_savebar_blocks_other_writes_while_dirty(self):
+        """MNT-21: while Alice is dirty another write is refused (toast, alert class, no store call); edits survive a tab switch."""
+        context, page, errors, card, description = self.open_alice()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            description.fill(description.input_value() + ' dirty')
+            bar.wait_for(state='visible', timeout=5000)
+            before = self.state()
+            card.get_by_role('button', name='Archive', exact=True).click()
+            page.get_by_text('Save or reset your changes to Alice first.', exact=True).wait_for(timeout=5000)
+            page.wait_for_function("() => document.querySelector('.ll-savebar')?.classList.contains('ll-savebar-alert')", timeout=2000)
+            after = self.state()
+            self.assertEqual(after['characters'], before['characters'])
+            self.assertFalse(self.alice_row()['archived'])
+            self.assertEqual(after['audit'], before['audit'])
+            dirty_value = description.input_value()
+            page.get_by_role('tab', name='Server setup', exact=True).click()
+            page.wait_for_function("() => document.querySelector('[role=tab][aria-selected=true]')?.textContent.includes('Server setup')", timeout=5000)
+            self.assertTrue(bar.is_visible())
+            page.get_by_role('tab', name='Characters', exact=True).click()
+            page.wait_for_function("() => document.querySelector('[role=tab][aria-selected=true]')?.textContent.includes('Characters')", timeout=5000)
+            self.assertTrue(bar.is_visible())
+            self.assertEqual(description.input_value(), dirty_value)
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_savebar_blocks_lore_move_while_dirty(self):
+        """MNT-21: a lore Move (LiveContext.run with an action) is refused while Alice is dirty; lore rows are unchanged."""
+        context, page, errors, card, description = self.open_alice('/admin/guild/1?tab=lore')
+        try:
+            page.get_by_role('tab', name='Lore', exact=True).click()
+            page.get_by_role('button', name='New entry', exact=True).first.wait_for(timeout=5000)
+            page.get_by_role('button', name='New entry', exact=True).first.click()
+            page.get_by_label('Content', exact=True).fill('Savebar guarded lore')
+            page.get_by_role('button', name='Save lore', exact=True).click()
+            self.wait_for(lambda: any(r['content'] == 'Savebar guarded lore' for r in self.state()['lore']))
+            page.get_by_role('tab', name='Characters', exact=True).click()
+            bar = page.get_by_role('region', name='Unsaved changes')
+            description.fill(description.input_value() + ' dirty')
+            bar.wait_for(state='visible', timeout=5000)
+            page.get_by_role('tab', name='Lore', exact=True).click()
+            entry = page.locator('.lore-drop-left .lore-entry').filter(has_text='Savebar guarded lore')
+            entry.wait_for(timeout=5000)
+            before = self.state()
+            entry.get_by_role('button', name='Move right', exact=True).click()
+            page.get_by_text('Save or reset your changes to Alice first.', exact=True).wait_for(timeout=5000)
+            after = self.state()
+            self.assertEqual(after['lore'], before['lore'])
+            self.assertEqual(after['books'], before['books'])
+            bar.get_by_role('button', name='Reset', exact=True).click()
+            bar.wait_for(state='hidden', timeout=5000)
+            entry.get_by_role('button', name='Delete', exact=True).click()
+            page.get_by_role('button', name='Delete 1 entry', exact=True).click()
+            self.wait_for(lambda: not any(r['content'] == 'Savebar guarded lore' for r in self.state()['lore']))
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_savebar_refuses_refresh_navigation_while_dirty(self):
+        """MNT-21: ctx.refresh() (Imports 'Edit entries in Lore') is refused while Alice is dirty; the edit stays and the tab does not change."""
+        context, page, errors, card, description = self.open_alice()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            description.fill(description.input_value() + ' dirty')
+            bar.wait_for(state='visible', timeout=5000)
+            dirty_value = description.input_value()
+            page.get_by_role('tab', name='Imports', exact=True).click()
+            expansion = page.locator('.q-expansion-item').filter(has=page.get_by_text('Test book · channel', exact=True)).first
+            expansion.get_by_text('Test book · channel', exact=True).click()
+            expansion.get_by_role('button', name='Edit entries in Lore', exact=True).click()
+            page.get_by_text('Save or reset your changes to Alice first.', exact=True).wait_for(timeout=5000)
+            self.assertTrue(self.tab_selected(page, 'Imports'))
+            self.assertTrue(bar.is_visible())
+            page.get_by_role('tab', name='Characters', exact=True).click()
+            self.assertEqual(description.input_value(), dirty_value)
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_savebar_reset_unchecks_world_move_confirmation(self):
+        """MNT-21: Reset also unticks 'Confirm moving worlds; ineligible casts will be cleared'."""
+        context, page, errors, card, description = self.open_alice()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            confirm = card.get_by_role('checkbox', name='Confirm moving worlds; ineligible casts will be cleared')
+            confirm.click()
+            page.wait_for_function("() => [...document.querySelectorAll('.character-card [role=checkbox]')].some(c => c.getAttribute('aria-checked') === 'true')", timeout=5000)
+            description.fill(description.input_value() + ' dirty')
+            bar.wait_for(state='visible', timeout=5000)
+            bar.get_by_role('button', name='Reset', exact=True).click()
+            bar.wait_for(state='hidden', timeout=5000)
+            page.wait_for_function("() => ![...document.querySelectorAll('.character-card [role=checkbox]')].some(c => c.getAttribute('aria-checked') === 'true')", timeout=5000)
+            self.assertFalse(confirm.is_checked())
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_savebar_name_edit_shows_saved_name(self):
+        """MNT-21: editing Name shows the bar with the SAVED name, not the edited one."""
+        context, page, errors, card, description = self.open_alice()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            name = card.get_by_label('Name', exact=True)
+            name.fill('Alicia')
+            bar.wait_for(state='visible', timeout=5000)
+            self.assertEqual(bar.get_by_text('Alice has unsaved changes.', exact=True).count(), 1)
+            bar.get_by_role('button', name='Reset', exact=True).click()
+            bar.wait_for(state='hidden', timeout=5000)
+            self.assertEqual(name.input_value(), 'Alice')
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_savebar_unconfirmed_world_move_is_refused(self):
+        """MNT-21: changing Home world without the confirm box makes Save changes toast 'Confirm the world move before saving'; bar stays, store unchanged. (Fixture has a second world, 'Annex'.)"""
+        context, page, errors, card, description = self.open_alice()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            before = self.alice_row()
+            card.get_by_label('Home world', exact=True).click()
+            page.get_by_role('option', name='Annex', exact=True).click()
+            bar.wait_for(state='visible', timeout=5000)
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Confirm the world move before saving', exact=True).wait_for(timeout=5000)
+            self.assertTrue(bar.is_visible())
+            self.assertEqual(self.alice_row(), before)
+            bar.get_by_role('button', name='Reset', exact=True).click()
+            bar.wait_for(state='hidden', timeout=5000)
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_savebar_fits_phone_width(self):
+        """MNT-21: at 390 px the bar's buttons are visible and the page does not scroll horizontally."""
+        context, page, errors, card, description = self.open_alice()
+        try:
+            page.set_viewport_size({'width': 390, 'height': 800})
+            bar = page.get_by_role('region', name='Unsaved changes')
+            description.fill(description.input_value() + ' phone')
+            bar.wait_for(state='visible', timeout=5000)
+            self.assertTrue(bar.get_by_role('button', name='Save changes', exact=True).is_visible())
+            self.assertTrue(bar.get_by_role('button', name='Reset', exact=True).is_visible())
+            self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'))
+            box = bar.bounding_box()
+            width, height = page.evaluate('[window.innerWidth, window.innerHeight]')
+            self.assertGreaterEqual(box['x'], 0)
+            self.assertLessEqual(box['x'] + box['width'], width)
+            self.assertLessEqual(box['y'] + box['height'], height)
+            self.assertFalse(errors, errors)
         finally:
             context.close()

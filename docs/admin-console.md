@@ -12,7 +12,7 @@ Guidelines are managed instructions included after preset/card instructions, ind
 
 **Delete world** or **Delete hub** shows a confirmation. First move/delete home characters, including archived characters, and rebind any channels elsewhere. Deletion removes owned lore, guidelines, encounters, and hub/book links; shared lorebooks, entries moved elsewhere, and past messages remain. **Delete book** in Imports removes a named lorebook, including empty books, its remaining entries, and its world/hub links after confirmation. Deleted world/book IDs are not reused.
 
-**Characters** edits card fields, including main and post-history instructions, moves home worlds with confirmation, and archives or restores characters. Card instructions are added to the server's selected prompt structure. Post-history instructions are placed after conversation history when the provider permits it.
+**Characters** edits card fields, including main and post-history instructions, moves home worlds with confirmation, and archives or restores characters. Editing a character shows a bar at the bottom of the page (**Reset** and **Save changes**) while any field differs from what is saved; other changes are refused until you save or reset. Card instructions are added to the server's selected prompt structure. Post-history instructions are placed after conversation history when the provider permits it.
 
 Choose **Create character**, enter a name and home world, and choose **Create** to start with empty card fields and the default emotion slots. Create a world in Server setup first if none exists. Names must be unique within the server.
 
