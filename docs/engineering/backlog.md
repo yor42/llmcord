@@ -92,6 +92,27 @@ Settled 2026-10-08 (D15): a per-server switch, off until an admin turns it on; e
 | FEAT-06 | Engine and bot: record each model call and each `_run_scene` failure into the log without slowing the turn (one insert per call, after it returns). | user 2026-10-08 | next (after FEAT-05) |
 | FEAT-07 | Dashboard: a `Log` tab (newest first, filter by channel, errors only, and by reference ID; collapsed rows that expand to the full input and output). Read-only, through `AuthService.guard`; the on/off switch and 14/30-day choice live in Server setup and are saved through `ctx.button` with audit `settings.turn_log`; browser test and screenshots. | user 2026-10-08 | next (after FEAT-06) |
 
+**Backend settings and monitoring (proposed, not decided).** The user's idea (2026-10-08): edit model providers, models and API keys from the dashboard, with keys given as an environment-variable reference such as `${GEMINI_API_KEY}` rather than stored in the database; and grow the Log tab into a monitoring area with these settings and a stacked token-usage chart.
+
+What exists today: profiles live in `config.yaml` (`models.profiles`, roles `dialogue`/`director`/`memory`) and are read once at start (`config.py:88` `load_settings`). Keys are already referenced by name (`api_key_env`, checked at `config.py:129`), so `${NAME}` is the same idea in a friendlier spelling. Per-call token usage is already recorded per server, profile and model (`model_usage`, `admin_store.py:13`), but it is deleted with message history after `history_retention_days` (`store.py:560`).
+
+Decisions needed before any of this starts (each becomes a D-number):
+1. **Who may edit.** Model settings are bot-wide, while today's dashboard permission is per server (a Discord server admin). An admin of any server the bot is in must not be able to repoint the bot for everyone. Proposal: a separate *operator* allowlist of Discord user IDs from the environment (for example `LLMCORD_OPERATOR_IDS`), with its own page outside the per-server tabs.
+2. **Which variables a reference may name.** An editable `${NAME}` plus an editable `base_url` would let an editor send any environment variable to their own server, for example `${DISCORD_BOT_TOKEN}`. Proposal: accept only `${NAME}` with an uppercase name, from an allowlist (names ending in `_API_KEY`, or a list in `config.yaml`). Never accept a literal key, never show a key's value, and only report "set" or "missing".
+3. **Source of truth.** Proposal: `config.yaml` profiles stay as the seed and fallback. Profiles and role assignments edited in the dashboard live in the database, use revision checks, and the bot picks them up on the next turn like other settings. A schema change is needed, with a backup before upgrade.
+4. **Usage chart scope.** Proposal: server admins see their own server's usage, and operators see all servers. Usage history is kept longer than chat history (or rolled up per day), so the chart is not emptied by `history_retention_days`.
+
+Items once decided (all `later`; order roughly as listed):
+
+| ID | Item | Origin | Priority |
+| --- | --- | --- | --- |
+| FEAT-08 | Operator role (decision 1): environment allowlist, an `AuthService` guard for bot-wide pages, and audit rows for operator actions without a server. Opus review (auth). | user 2026-10-08 | later |
+| FEAT-09 | Schema and store for model profiles and role assignments (decisions 2–3). Key references are validated as `${NAME}` against the allowlist and resolved only in the bot process when a call is made. A missing variable gives a clear error naming it. Revision checks on writes. Opus review (migration, secrets). | user 2026-10-08 | later |
+| FEAT-10 | Bot: read profiles fresh per turn, rebuilding a provider client only when its revision changes. A turn snapshots its profile the way presets do, so every speaker in a turn uses the same model. | user 2026-10-08 | later |
+| FEAT-11 | Dashboard *Backend* page for operators: profile list and editor, role assignment, and a "Test connection" button that runs a tiny request in the bot's environment and shows ok or the provider error. Secrets are never echoed. Browser test and screenshots. | user 2026-10-08 | later |
+| FEAT-12 | Usage chart (decision 4): a daily stacked bar of tokens by model (input/output stacks) over 7/30 days, using NiceGUI's bundled ECharts so no external script is loaded. Includes the retention or roll-up change for `model_usage`. Browser test and screenshots. | user 2026-10-08 | later |
+| FEAT-13 | Monitoring area: group the turn Log tab (FEAT-07), the usage chart and the Backend page under one menu. The per-server parts stay behind the server-admin guard and the bot-wide parts behind the operator guard. UI mockups first. | user 2026-10-08 | later |
+
 ## Decisions
 
 Decisions D1–D12 from the rework stay in force ([history/roadmap-r1-r6.md](history/roadmap-r1-r6.md#decisions-taken-2026-10-07)). New decisions continue the numbering here.
