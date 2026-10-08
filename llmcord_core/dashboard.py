@@ -165,9 +165,11 @@ body.body--dark .q-card .q-card, body.body--dark .q-card .q-expansion-item {{ ba
 .ll-section-title {{ font-size: 20px; font-weight: 700; line-height: 1.3; }}
 .ll-form-row {{ width: 100%; display: flex; flex-flow: row wrap; align-items: flex-end; gap: 16px; }}
 .ll-form-row .q-field {{ flex: 0 1 16rem; min-width: min(16rem, 100%); }}
+.ll-form-row .ll-wide {{ flex-basis: 22rem; }}
 .ll-section > .q-expansion-item, .ll-subpanel {{ border: 1px solid {THEME_DIVIDER}; border-radius: 8px; }}
 .ll-stack {{ width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; gap: 16px; padding: 4px 0 8px; }}
 .ll-stack .q-uploader {{ max-width: min(20rem, 100%); }}
+.ll-result.q-card {{ padding: 16px; box-shadow: none; border: 1px solid {THEME_DIVIDER}; border-radius: 8px; }}
 .ll-subtitle {{ font-size: 16px; font-weight: 700; line-height: 1.3; }}
 .ll-drop.nicegui-column {{ background: {THEME_BODY}; border: 1px dashed {THEME_BORDER}; border-radius: 8px; gap: 8px; }}
 .ll-entry.q-card {{ padding: 8px 12px; gap: 4px; border: 1px solid {THEME_DIVIDER}; border-radius: 8px; box-shadow: none; }}
@@ -805,93 +807,101 @@ def import_changes(changes):
     from nicegui import ui
     resolutions = {}
     for change in changes:
-        with ui.expansion(f"{change['uid']} · {change['status']} · {change.get('disposition', '')}").classes('w-full'):
-            ui.label('Current: ' + change.get('before', '')).classes('whitespace-pre-wrap')
-            ui.label('Incoming: ' + change.get('after', '')).classes('whitespace-pre-wrap')
-            for warning in change.get('warnings', []):
-                ui.label(warning).classes('text-amber-300')
-            if change['status'] == 'conflict':
-                resolutions[change['uid']] = ui.select({'keep': 'Keep current entry', 'import': 'Use imported entry'}, label='Resolve conflict')
+        with ui.expansion(f"{change['uid']} · {change['status']} · {change.get('disposition', '')}").classes('w-full ll-subpanel'):
+            with ui.element('div').classes('ll-stack'):
+                ui.label('Current: ' + change.get('before', '')).classes('whitespace-pre-wrap ll-muted')
+                ui.label('Incoming: ' + change.get('after', '')).classes('whitespace-pre-wrap ll-muted')
+                for warning in change.get('warnings', []):
+                    ui.label(warning).classes('text-amber-300')
+                if change['status'] == 'conflict':
+                    with ui.element('div').classes('ll-form-row'):
+                        resolutions[change['uid']] = ui.select({'keep': 'Keep current entry', 'import': 'Use imported entry'}, label='Resolve conflict')
     return resolutions
 
 
 def imports_panel(ctx):
     from nicegui import ui
     store, gid = ctx.store, ctx.guild_id
-    ui.label('Character cards').classes('text-xl font-bold')
-    worlds = ctx.snapshot.worlds
-    world = ui.select(worlds, label='Home world')
-    preview_area = ui.column().classes('w-full')
-    async def card_uploaded(event):
-        card = parse_card(event.file.name, await event.file.read())
-        selected_world = world.value
-        preview = store.preview_card(gid, selected_world, card)
-        preview_area.clear()
-        with preview_area:
-            ui.label('Preview: ' + card.name).classes('text-xl font-bold')
-            ui.label(card.data.get('description', '')).classes('whitespace-pre-wrap')
-            if card.avatar:
-                import base64
-                ui.image('data:image/png;base64,' + base64.b64encode(card.avatar).decode()).classes('w-24 h-24')
-            decisions = {key: ui.select({'keep': 'Keep current ' + key, 'import': 'Use imported ' + key}, label=f'Resolve {key} conflict') for key in preview['conflicts']}
-            decisions.update(import_changes(preview['changes']))
-            confirm = ui.checkbox('Confirm updating the existing character and home world') if preview['character_id'] else None
-            expires = __import__('time').time() + 900
-            def apply():
-                if __import__('time').time() > expires:
-                    raise ValueError('Preview expired; upload again')
-                if confirm and not confirm.value:
-                    raise ValueError('Confirm updating the existing character')
-                return store.apply_card(gid, selected_world, card, {key: c.value for key, c in decisions.items()}, preview['revision'])
-            ctx.button('Apply card import', apply, 'character.import', then=lambda _: ctx.refresh())
-    ctx.upload(card_uploaded, 'Upload V2/V3 JSON or PNG card')
-    ui.separator()
-    ui.label('Direct lore entry import').classes('text-xl font-bold')
-    owners = {f"{owner['kind']}:{owner['id']}": owner['label'] for owner in ctx.snapshot.owners}
-    destination = ui.select(owners, label='Destination owner').classes('w-full')
-    def import_into_owner():
-        if destination.value not in owners:
-            raise ValueError('Choose a destination owner')
-        kind, ident = destination.value.split(':', 1)
-        direct_import_dialog(ctx, kind, int(ident))
-    ui.button('Import entries into selected owner', icon='upload_file', on_click=import_into_owner)
-    ui.separator()
-    ui.label('Named lorebooks').classes('text-xl font-bold')
-    with ui.row().classes('items-end'):
-        book_name = ui.input('Lorebook name')
-        target = ui.select({'guild': 'Server lorebook', 'channel': 'Channel lorebook'}, value='guild', label='Lorebook scope')
-        channels = {r['channel_id']: ctx.channel_names.get(r['channel_id'], str(r['channel_id'])) for r in ctx.snapshot.channels}
-        channel = ui.select(channels, label='Channel (channel lorebooks only)').style('min-width: 20rem; max-width: 100%')
-        ctx.button('Create lorebook', lambda: store.create_lorebook(gid, book_name.value or '', target.value, channel.value or 0), 'book.create', then=lambda _: ctx.refresh())
-    for book in ctx.snapshot.lorebooks:
-        with ui.expansion(book['name'] + ' · ' + ('server' if book['target_kind'] == 'guild' else book['target_kind'])).classes('w-full'):
-            ui.button('Edit entries in Lore', icon='edit', on_click=lambda book=book: ctx.refresh('lore', owner=f"book:{book['id']}"))
-            ui.button('Delete lorebook', icon='delete', color='negative', on_click=lambda book=book: delete_book_dialog(ctx, book))
-            if book['target_kind'] == 'guild':
-                linked_spaces = store.lorebook_links(book['id'])
-                for space in ctx.snapshot.spaces:
-                    enabled = space['id'] in linked_spaces
-                    def assign(book=book, space=space, enabled=enabled):
-                        store.set_lorebook_space(gid, book['id'], space['id'], not enabled)
-                        return True
-                    ctx.button(('Disable in ' if enabled else 'Enable in ') + space['name'], assign, 'book.assign', then=lambda _: ctx.refresh())
-            area = ui.column().classes('w-full')
-            async def book_uploaded(event, book=book, area=area):
-                imported = parse_lorebook(await event.file.read())
-                revision = store.owner_revision(gid, 'book', book['id'])
-                changes = store.preview_import(gid, 'book', book['id'], imported)
-                area.clear()
-                with area:
-                    label = 'RisuAI' if imported.source_format == 'risu' else 'SillyTavern'
-                    ui.label(f'{label} lorebook detected · {len(imported.entries)} entries').classes('font-bold')
-                    decisions = import_changes(changes)
-                    expires = __import__('time').time() + 900
-                    def apply():
-                        if __import__('time').time() > expires:
-                            raise ValueError('Preview expired; upload again')
-                        return store.sync_lorebook(gid, book['id'], imported, {key: c.value for key, c in decisions.items()}, revision)
-                    ctx.button('Apply lorebook sync', apply, 'book.sync', {'id': book['id']}, then=lambda _: ctx.refresh())
-            ctx.upload(book_uploaded, 'Upload JSON lorebook for preview')
+    with section('Character cards'):
+        worlds = ctx.snapshot.worlds
+        world = ui.select(worlds, label='Home world')
+        preview_area = ui.column().classes('w-full')
+        async def card_uploaded(event):
+            card = parse_card(event.file.name, await event.file.read())
+            selected_world = world.value
+            preview = store.preview_card(gid, selected_world, card)
+            preview_area.clear()
+            with preview_area, ui.card().classes('w-full ll-stack ll-result'):
+                ui.label('Preview: ' + card.name).classes('ll-subtitle')
+                ui.label(card.data.get('description', '')).classes('whitespace-pre-wrap ll-muted')
+                if card.avatar:
+                    import base64
+                    ui.image('data:image/png;base64,' + base64.b64encode(card.avatar).decode()).classes('w-24 h-24 rounded-lg')
+                with ui.element('div').classes('ll-form-row'):
+                    decisions = {key: ui.select({'keep': 'Keep current ' + key, 'import': 'Use imported ' + key}, label=f'Resolve {key} conflict') for key in preview['conflicts']}
+                decisions.update(import_changes(preview['changes']))
+                confirm = ui.checkbox('Confirm updating the existing character and home world') if preview['character_id'] else None
+                expires = __import__('time').time() + 900
+                def apply():
+                    if __import__('time').time() > expires:
+                        raise ValueError('Preview expired; upload again')
+                    if confirm and not confirm.value:
+                        raise ValueError('Confirm updating the existing character')
+                    return store.apply_card(gid, selected_world, card, {key: c.value for key, c in decisions.items()}, preview['revision'])
+                with ui.element('div').classes('ll-form-row'):
+                    ctx.button('Apply card import', apply, 'character.import', then=lambda _: ctx.refresh())
+        with ui.element('div').classes('ll-stack'):
+            ctx.upload(card_uploaded, 'Upload V2/V3 JSON or PNG card')
+    with section('Direct lore entry import'):
+        owners = {f"{owner['kind']}:{owner['id']}": owner['label'] for owner in ctx.snapshot.owners}
+        with ui.element('div').classes('ll-form-row'):
+            destination = ui.select(owners, label='Destination owner')
+            def import_into_owner():
+                if destination.value not in owners:
+                    raise ValueError('Choose a destination owner')
+                kind, ident = destination.value.split(':', 1)
+                direct_import_dialog(ctx, kind, int(ident))
+            ui.button('Import entries into selected owner', icon='upload_file', on_click=import_into_owner)
+    with section('Named lorebooks'):
+        with ui.element('div').classes('ll-form-row'):
+            book_name = ui.input('Lorebook name')
+            target = ui.select({'guild': 'Server lorebook', 'channel': 'Channel lorebook'}, value='guild', label='Lorebook scope')
+            channels = {r['channel_id']: ctx.channel_names.get(r['channel_id'], str(r['channel_id'])) for r in ctx.snapshot.channels}
+            channel = ui.select(channels, label='Channel (channel lorebooks only)').classes('ll-wide')
+            ctx.button('Create lorebook', lambda: store.create_lorebook(gid, book_name.value or '', target.value, channel.value or 0), 'book.create', then=lambda _: ctx.refresh())
+        for book in ctx.snapshot.lorebooks:
+            with ui.expansion(book['name'] + ' · ' + ('server' if book['target_kind'] == 'guild' else book['target_kind'])).classes('w-full'):
+                with ui.element('div').classes('ll-stack'):
+                    with ui.element('div').classes('ll-form-row'):
+                        ui.button('Edit entries in Lore', icon='edit', on_click=lambda book=book: ctx.refresh('lore', owner=f"book:{book['id']}")).props('outline')
+                        ui.button('Delete lorebook', icon='delete', color='negative', on_click=lambda book=book: delete_book_dialog(ctx, book))
+                    if book['target_kind'] == 'guild':
+                        linked_spaces = store.lorebook_links(book['id'])
+                        with ui.element('div').classes('ll-form-row'):
+                            for space in ctx.snapshot.spaces:
+                                enabled = space['id'] in linked_spaces
+                                def assign(book=book, space=space, enabled=enabled):
+                                    store.set_lorebook_space(gid, book['id'], space['id'], not enabled)
+                                    return True
+                                ctx.button(('Disable in ' if enabled else 'Enable in ') + space['name'], assign, 'book.assign', then=lambda _: ctx.refresh()).props('outline')
+                    area = ui.column().classes('w-full')
+                    async def book_uploaded(event, book=book, area=area):
+                        imported = parse_lorebook(await event.file.read())
+                        revision = store.owner_revision(gid, 'book', book['id'])
+                        changes = store.preview_import(gid, 'book', book['id'], imported)
+                        area.clear()
+                        with area, ui.element('div').classes('ll-stack'):
+                            label = 'RisuAI' if imported.source_format == 'risu' else 'SillyTavern'
+                            ui.label(f'{label} lorebook detected · {len(imported.entries)} entries').classes('ll-subtitle')
+                            decisions = import_changes(changes)
+                            expires = __import__('time').time() + 900
+                            def apply():
+                                if __import__('time').time() > expires:
+                                    raise ValueError('Preview expired; upload again')
+                                return store.sync_lorebook(gid, book['id'], imported, {key: c.value for key, c in decisions.items()}, revision)
+                            with ui.element('div').classes('ll-form-row'):
+                                ctx.button('Apply lorebook sync', apply, 'book.sync', {'id': book['id']}, then=lambda _: ctx.refresh())
+                    ctx.upload(book_uploaded, 'Upload JSON lorebook for preview')
 
 
 def presets_panel(ctx):

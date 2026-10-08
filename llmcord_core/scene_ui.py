@@ -22,15 +22,15 @@ def confirm_dialog(ctx, title, lines, button_label, operation, action, detail=No
     with ui.dialog() as dialog, ui.card().classes('w-full max-w-lg'):
         ui.label(title).classes('text-xl font-bold')
         for line in lines:
-            ui.label(line)
+            ui.label(line).classes('ll-muted')
         async def done(result):
             dialog.close()
             if then:
                 followup = then(result)
                 if inspect.isawaitable(followup):
                     await followup
-        with ui.row():
-            ui.button('Cancel', on_click=dialog.close)
+        with ui.element('div').classes('ll-form-row justify-end'):
+            ui.button('Cancel', on_click=dialog.close).props('flat')
             ctx.button(button_label, operation, action, detail, then=done, color='negative').set_enabled(enabled)
     dialog.open()
 
@@ -70,7 +70,7 @@ def direct_import_dialog(ctx, kind, owner_id, on_saved=None):
         raise ValueError('Choose an owner in this server')
     with ui.dialog() as dialog, ui.card().classes('w-full max-w-4xl'):
         ui.label('Import entries into ' + owner['label']).classes('text-xl font-bold')
-        ui.label('Adds entries directly to this owner. Existing lore stays in place; identical entries are skipped. No new lorebook is created.')
+        ui.label('Adds entries directly to this owner. Existing lore stays in place; identical entries are skipped. No new lorebook is created.').classes('ll-muted')
         area = ui.column().classes('w-full')
         async def uploaded(event):
             imported = parse_lorebook(await event.file.read())
@@ -81,7 +81,7 @@ def direct_import_dialog(ctx, kind, owner_id, on_saved=None):
             with area:
                 additions = sum(change['status'] == 'add' for change in changes)
                 format_name = 'RisuAI' if imported.source_format == 'risu' else 'SillyTavern'
-                ui.label(f'{format_name}: {additions} new entries, {len(changes) - additions} already present').classes('font-bold')
+                ui.label(f'{format_name}: {additions} new entries, {len(changes) - additions} already present').classes('ll-subtitle')
                 ui.table(columns=[{'name': key, 'label': label, 'field': key, 'align': 'left'} for key, label in
                                   (('uid', 'Source ID'), ('status', 'Action'), ('content', 'Content'), ('warnings', 'Compatibility notes'))],
                          rows=[{'uid': change['uid'], 'status': change['status'], 'content': change['after'], 'warnings': '; '.join(change['warnings'])} for change in changes],
@@ -93,8 +93,11 @@ def direct_import_dialog(ctx, kind, owner_id, on_saved=None):
                         on_saved(refs)
                     else:
                         return ctx.refresh('lore', owner=f'{kind}:{owner_id}')
-                ctx.button('Apply entry import', lambda: ctx.store.import_lore_entries(ctx.guild_id, kind, owner_id, imported, revision),
-                           'lore.import', {'kind': kind, 'id': owner_id}, then=saved)
-        ctx.upload(uploaded, 'Upload JSON entries')
-        ui.button('Cancel', on_click=dialog.close)
+                with ui.element('div').classes('ll-form-row justify-end'):
+                    ctx.button('Apply entry import', lambda: ctx.store.import_lore_entries(ctx.guild_id, kind, owner_id, imported, revision),
+                               'lore.import', {'kind': kind, 'id': owner_id}, then=saved)
+        with ui.element('div').classes('ll-stack'):
+            ctx.upload(uploaded, 'Upload JSON entries')
+        with ui.element('div').classes('ll-form-row justify-end'):
+            ui.button('Cancel', on_click=dialog.close).props('flat')
     dialog.open()
