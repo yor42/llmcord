@@ -36,6 +36,8 @@ class AdminService:
         if inspect.isawaitable(result):
             result = await result
         if action:
+            if callable(detail):  # detail may be derived from the operation result
+                detail = detail(result)
             self.store.audit(guild_id, int(session['user']['id']), action, detail or {})
         return result
 

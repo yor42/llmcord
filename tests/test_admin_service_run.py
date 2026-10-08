@@ -62,6 +62,21 @@ class AdminServiceRunTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.audit_rows(), [{"guild_id": 1, "actor_id": 4, "action": "space.create",
                                               "detail_json": json.dumps({"name": "X"})}])
 
+    async def test_callable_detail_is_audited_from_the_result(self):
+        """SEC-02 (audit detail kept after legacy retirement): a callable detail is called with the operation result."""
+        await run_action(self.service, self.session, 1, self.operation, "x.y", lambda result: {"got": result})
+        self.assertEqual([json.loads(r["detail_json"]) for r in self.audit_rows()], [{"got": "done"}])
+
+    async def test_failed_operation_does_not_call_detail_or_audit(self):
+        """SEC-02: an operation that raises audits nothing and never calls the detail callable."""
+        called = []
+        def boom():
+            raise ValueError("no")
+        with self.assertRaises(ValueError):
+            await run_action(self.service, self.session, 1, boom, "x.y", lambda result: called.append(result) or {})
+        self.assertEqual(called, [])
+        self.assertEqual(self.audit_rows(), [])
+
     async def test_async_operation_is_awaited_and_unaudited_without_action(self):
         """SEC-03: an awaitable operation is awaited; no action name means no audit row."""
         async def operation():

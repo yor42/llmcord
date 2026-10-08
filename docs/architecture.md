@@ -32,8 +32,7 @@ flowchart LR
 | [`llmcord_core/world_info.py`](../llmcord_core/world_info.py) | Runtime World Info evaluation. |
 | [`llmcord_core/lorebooks.py`](../llmcord_core/lorebooks.py) | Standalone lorebook parsing and rule normalization. |
 | [`llmcord_core/cards.py`](../llmcord_core/cards.py) | V2/V3 JSON and PNG character-card parsing. |
-| [`llmcord_core/web.py`](../llmcord_core/web.py) | Discord OAuth, administrator checks, CSRF, and dashboard actions. |
-| [`llmcord_core/templates/`](../llmcord_core/templates/) | Server-rendered dashboard pages. |
+| [`llmcord_core/web.py`](../llmcord_core/web.py) | FastAPI app: Discord OAuth, sign-out, avatar images, security headers; mounts the NiceGUI dashboard. Dashboard actions live in `dashboard.py` and `admin.py`. |
 | [`llmcord_core/dashboard.py`](../llmcord_core/dashboard.py) | NiceGUI pages, reusable editors, authenticated live events, and uploads. |
 | [`llmcord_core/auth.py`](../llmcord_core/auth.py) | Discord authorization shared by HTTP and live callbacks. |
 | [`llmcord_core/admin.py`](../llmcord_core/admin.py) | Shared admin orchestration and sample-only prompt previews. |

@@ -1,7 +1,6 @@
 """Private, Discord-authenticated administration for one llmcord installation."""
 from __future__ import annotations
 
-import json
 import secrets
 import sqlite3
 import time
@@ -11,15 +10,11 @@ from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
-from fastapi.templating import Jinja2Templates
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import PlainTextResponse, RedirectResponse, Response
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES, GZipMiddleware
 
-from .avatars import avatar_version
-from .cards import parse_card
-from .lorebooks import MAX_BOOK_BYTES, parse_lorebook
 from .store import Store
 from .auth import AuthService
 from .admin import AdminService
@@ -27,9 +22,6 @@ from .admin_store import ConflictError
 
 
 DISCORD_API = "https://discord.com/api/v10"
-ADMINISTRATOR = 1 << 3
-TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
-TEMPLATES.env.filters["avatar_version"] = avatar_version
 AVATAR_CACHE = {"Cache-Control": "private, max-age=300"}
 
 
@@ -131,22 +123,9 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
     async def conflicting_value(_request, error):
         return PlainTextResponse(str(error), status_code=409)
 
-    def redirect(guild_id: int):
-        return RedirectResponse(f"/guild/{guild_id}", status_code=303)
-
-    @app.get("/", response_class=HTMLResponse)
-    async def index(request: Request):
-        if enable_dashboard:
-            return RedirectResponse('/admin/', status_code=303)
-        try:
-            session = await session_for(request)
-        except HTTPException:
-            return TEMPLATES.TemplateResponse(request, "login.html", {"base_url": base_url})
-        guilds = await app.state.auth.guilds(session)
-        allowed = [guild for guild in guilds if guild.get("owner") or
-            int(guild.get("permissions", "0")) & ADMINISTRATOR]
-        return TEMPLATES.TemplateResponse(request, "index.html",
-            {"guilds": allowed, "user": session["user"], "csrf": session["csrf"]})
+    @app.get("/")
+    async def index():
+        return RedirectResponse("/admin/", status_code=303)
 
     @app.get("/login")
     async def login():
@@ -202,107 +181,9 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
         result.delete_cookie("llmcord_session")
         return result
 
-    @app.get("/guild/{guild_id}", response_class=HTMLResponse)
-    async def guild_page(request: Request, guild_id: int):
-        session = await require_admin(request, guild_id)
-        if enable_dashboard:
-            return RedirectResponse(f'/admin/guild/{guild_id}', status_code=303)
-        store = app.state.store
-        channels_response = await app.state.http.get(
-            f"{DISCORD_API}/guilds/{guild_id}/channels",
-            headers={"Authorization": "Bot " + bot_token})
-        channels = [item for item in channels_response.json() if item.get("type") == 0] if channels_response.status_code == 200 else []
-        spaces = store.list_spaces(guild_id)
-        bindings = store.all("SELECT * FROM channels WHERE guild_id=? ORDER BY channel_id", (guild_id,))
-        characters = store.all("SELECT * FROM characters WHERE guild_id=? ORDER BY name", (guild_id,))
-        lore = store.all("SELECT * FROM lore WHERE guild_id=? AND scope_kind IN ('channel','space') ORDER BY id DESC", (guild_id,))
-        books = store.list_lorebooks(guild_id)
-        cast_choices = {binding["channel_id"]: store.eligible_characters(
-            guild_id, binding["space_id"]) for binding in bindings}
-        cast_selected = {binding["channel_id"]: json.loads(binding["default_cast"])
-            for binding in bindings}
-        return TEMPLATES.TemplateResponse(request, "guild.html", {
-            "guild_id": guild_id, "user": session["user"], "csrf": session["csrf"],
-            "spaces": spaces, "channels": channels, "bindings": bindings,
-            "characters": characters, "lore": lore, "books": books,
-            "card_fields": {row["id"]: json.loads(row["card"]) for row in characters},
-            "cast_choices": cast_choices, "cast_selected": cast_selected,
-            "book_entries": {book["id"]: store.lorebook_entries(book["id"]) for book in books},
-            "book_entry_rules": {entry["id"]: json.loads(entry["rule_json"])
-                for book in books for entry in store.lorebook_entries(book["id"])},
-            "links": {book["id"]: store.lorebook_links(book["id"]) for book in books},
-            "hub_links": {space["id"]: store.allowed_worlds(space["id"]) for space in spaces if space["kind"] == "hub"},
-            "store": store})
-
-    async def posted(request: Request, guild_id: int):
-        session = await require_admin(request, guild_id, True)
-        return session, await request.form()
-
-    @app.post("/guild/{guild_id}/spaces")
-    async def create_space(request: Request, guild_id: int):
-        session, form = await posted(request, guild_id)
-        ident = app.state.store.create_space(guild_id, str(form.get("name", "")), str(form.get("kind", "")))
-        app.state.store.audit(guild_id, int(session["user"]["id"]), "space.create", {"id": ident})
-        return redirect(guild_id)
-
-    @app.post("/guild/{guild_id}/links")
-    async def link_world(request: Request, guild_id: int):
-        session, form = await posted(request, guild_id)
-        hub_id, world_id = int(form["hub_id"]), int(form["world_id"])
-        enabled = form.get("enabled") == "yes"
-        result = (app.state.store.link_world if enabled else app.state.store.unlink_world)(guild_id, hub_id, world_id)
-        detail = {"hub": hub_id, "world": world_id, "enabled": enabled}
-        if not enabled:
-            detail["pruned"] = result
-        app.state.store.audit(guild_id, int(session["user"]["id"]), "hub.link", detail)
-        return redirect(guild_id)
-
-    @app.post("/guild/{guild_id}/bindings")
-    async def bind_channel(request: Request, guild_id: int):
-        session, form = await posted(request, guild_id)
-        channel_id, space_id = int(form["channel_id"]), int(form["space_id"])
-        response = await app.state.http.get(f"{DISCORD_API}/guilds/{guild_id}/channels",
-            headers={"Authorization": "Bot " + bot_token})
-        if response.status_code != 200 or not any(int(item["id"]) == channel_id and item["type"] == 0 for item in response.json()):
-            raise HTTPException(400, "Choose a text channel in this server")
-        dropped = app.state.store.bind_channel(guild_id, channel_id, space_id)
-        app.state.store.audit(guild_id, int(session["user"]["id"]), "channel.bind", {"channel": channel_id, "space": space_id, "dropped": dropped})
-        return redirect(guild_id)
-
-    @app.post("/guild/{guild_id}/characters/import")
-    async def preview_character(request: Request, guild_id: int):
-        session, form = await posted(request, guild_id)
-        upload: UploadFile = form["file"]
-        if not upload.filename or not upload.filename.lower().endswith((".json", ".png")):
-            raise HTTPException(400, "Upload a JSON or PNG character card")
-        data = await upload.read(8 * 1024 * 1024 + 1)
-        await upload.close()
-        card = parse_card(upload.filename, data)
-        world_id = int(form["world_id"])
-        world = app.state.store.space_by_id(world_id)
-        if not world or world["guild_id"] != guild_id or world["kind"] != "world":
-            raise HTTPException(400, "Choose a home world in this server")
-        existing = app.state.store.character(guild_id, card.name)
-        session["card_preview"] = {"world_id": world_id, "card": card, "changes": app.state.store.preview_card(guild_id, world_id, card),
-            "expires": time.time() + 900}
-        return TEMPLATES.TemplateResponse(request, "card_preview.html", {
-            "guild_id": guild_id, "card": card, "world": world,
-            "existing": existing, "csrf": session["csrf"], 'changes': session['card_preview']['changes']})
-
-    @app.post("/guild/{guild_id}/characters/apply")
-    async def apply_character(request: Request, guild_id: int):
-        session, form = await posted(request, guild_id)
-        preview = session.get("card_preview")
-        if not preview or preview["expires"] < time.time():
-            raise HTTPException(409, "Card preview expired; upload again")
-        card = preview["card"]
-        existing = app.state.store.character(guild_id, card.name)
-        if existing and form.get("replace") != "yes":
-            raise HTTPException(409, "Confirm replacing the existing card")
-        ident = app.state.store.apply_card(guild_id, preview["world_id"], card, {key[8:]: str(value) for key, value in form.items() if key.startswith("resolve:")}, preview["changes"]["revision"])
-        session.pop("card_preview", None)
-        app.state.store.audit(guild_id, int(session["user"]["id"]), "character.import", {"id": ident})
-        return redirect(guild_id)
+    @app.get("/guild/{guild_id}")
+    async def guild_page(guild_id: int):
+        return RedirectResponse(f"/admin/guild/{guild_id}", status_code=303)
 
     @app.get("/guild/{guild_id}/characters/{character_id}/avatar")
     async def character_avatar(request: Request, guild_id: int, character_id: int):
@@ -321,184 +202,7 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
             raise HTTPException(404, 'Avatar not found')
         return Response(row['image'], media_type='image/png', headers=AVATAR_CACHE)
 
-    @app.get("/guild/{guild_id}/card-preview/avatar")
-    async def preview_avatar(request: Request, guild_id: int):
-        session = await require_admin(request, guild_id)
-        preview = session.get("card_preview")
-        if not preview or preview["expires"] < time.time() or not preview["card"].avatar:
-            raise HTTPException(404, "Preview avatar not found")
-        return Response(preview["card"].avatar, media_type="image/png")
-
     cacheable.update((character_avatar, emotion_avatar))
-
-    @app.post("/guild/{guild_id}/characters/{character_id}")
-    async def edit_character(request: Request, guild_id: int, character_id: int):
-        session, form = await posted(request, guild_id)
-        store = app.state.store
-        row = store.one("SELECT * FROM characters WHERE guild_id=? AND id=?", (guild_id, character_id))
-        if not row:
-            raise HTTPException(404, "Character not found")
-        card = json.loads(row["card"])
-        for field in ("description", "personality", "scenario", "first_mes", "mes_example"):
-            card[field] = str(form.get(field, card.get(field, "")))
-        name = str(form.get("name", row["name"])).strip()
-        card["name"] = name
-        world_id = int(form.get("world_id", row["world_id"]))
-        if world_id != row["world_id"] and form.get("confirm_move") != "yes":
-            impact = store.cast_impact(guild_id, character_id, world_id)
-            raise HTTPException(409, f"Moving worlds affects {len(impact)} channel casts; confirm the move")
-        store.update_character(guild_id, character_id, world_id, name, card)
-        store.audit(guild_id, int(session["user"]["id"]), "character.edit", {"id": character_id, "world": world_id})
-        return redirect(guild_id)
-
-    @app.post("/guild/{guild_id}/characters/{character_id}/archive")
-    async def archive_character(request: Request, guild_id: int, character_id: int):
-        session, form = await posted(request, guild_id)
-        app.state.store.archive_character(guild_id, character_id, form.get("archived") == "yes")
-        app.state.store.audit(guild_id, int(session["user"]["id"]), "character.archive", {"id": character_id})
-        return redirect(guild_id)
-
-    @app.post("/guild/{guild_id}/casts")
-    async def set_cast(request: Request, guild_id: int):
-        session, form = await posted(request, guild_id)
-        channel_id = int(form["channel_id"])
-        binding = app.state.store.channel(channel_id)
-        if not binding or binding["guild_id"] != guild_id:
-            raise HTTPException(400, "Channel not bound in this server")
-        ids = [int(value) for value in form.getlist("character_id")]
-        app.state.store.set_cast(channel_id, None, ids, default=True)
-        app.state.store.audit(guild_id, int(session["user"]["id"]), "cast.default", {"channel": channel_id, "characters": ids})
-        return redirect(guild_id)
-
-    @app.post("/guild/{guild_id}/ambient")
-    async def set_ambient(request: Request, guild_id: int):
-        session, form = await posted(request, guild_id)
-        channel_id = int(form["channel_id"])
-        binding = app.state.store.channel(channel_id)
-        if not binding or binding["guild_id"] != guild_id:
-            raise HTTPException(400, "Channel not bound in this server")
-        enabled = form.get("enabled") == "yes"
-        app.state.store.set_ambient(channel_id, enabled)
-        app.state.store.audit(guild_id, int(session["user"]["id"]), "channel.ambient",
-            {"channel": channel_id, "enabled": enabled})
-        return redirect(guild_id)
-
-    @app.post("/guild/{guild_id}/lore")
-    async def add_lore(request: Request, guild_id: int):
-        session, form = await posted(request, guild_id)
-        kind, raw_ident = str(form["scope"]).split(":", 1)
-        ident = int(raw_ident)
-        if kind == "space":
-            scope = app.state.store.space_by_id(ident)
-            valid = scope and scope["guild_id"] == guild_id
-        elif kind == "channel":
-            scope = app.state.store.channel(ident)
-            valid = scope and scope["guild_id"] == guild_id
-        else:
-            valid = False
-        if not valid:
-            raise HTTPException(400, "Invalid lore scope")
-        keys = [value.strip() for value in str(form.get("keys", "")).split(",") if value.strip()]
-        lore_id = app.state.store.add_lore(guild_id, kind, ident, str(form.get("content", "")),
-            keys, constant=not keys)
-        app.state.store.audit(guild_id, int(session["user"]["id"]), "lore.add", {"id": lore_id})
-        return redirect(guild_id)
-
-    @app.post("/guild/{guild_id}/lore/{lore_id}")
-    async def edit_lore(request: Request, guild_id: int, lore_id: int):
-        session, form = await posted(request, guild_id)
-        app.state.store.edit_lore(guild_id, lore_id, str(form.get("content", "")))
-        app.state.store.audit(guild_id, int(session["user"]["id"]), "lore.edit", {"id": lore_id})
-        return redirect(guild_id)
-
-    @app.post("/guild/{guild_id}/lore/{lore_id}/delete")
-    async def delete_lore(request: Request, guild_id: int, lore_id: int):
-        session, _ = await posted(request, guild_id)
-        app.state.store.delete_lore(guild_id, lore_id)
-        app.state.store.audit(guild_id, int(session["user"]["id"]), "lore.delete", {"id": lore_id})
-        return redirect(guild_id)
-
-    @app.post("/guild/{guild_id}/lore/{lore_id}/pin")
-    async def pin_lore(request: Request, guild_id: int, lore_id: int):
-        session, _ = await posted(request, guild_id)
-        if not app.state.store.lore_row(guild_id, lore_id):
-            raise HTTPException(404, "Lore entry not found")
-        app.state.store.pin_lore(guild_id, lore_id)
-        app.state.store.audit(guild_id, int(session["user"]["id"]), "lore.pin", {"id": lore_id})
-        return redirect(guild_id)
-
-    @app.post("/guild/{guild_id}/lore/{lore_id}/promote")
-    async def promote_lore(request: Request, guild_id: int, lore_id: int):
-        session, form = await posted(request, guild_id)
-        kind, raw_ident = str(form["scope"]).split(":", 1)
-        ident = int(raw_ident)
-        scope = (app.state.store.space_by_id(ident) if kind == "space" else
-                 app.state.store.channel(ident) if kind == "channel" else None)
-        if not scope or scope["guild_id"] != guild_id:
-            raise HTTPException(400, "Choose a world, hub, or bound channel in this server")
-        new_id = app.state.store.promote_lore(guild_id, lore_id, kind, ident)
-        app.state.store.audit(guild_id, int(session["user"]["id"]), "lore.promote",
-            {"source": lore_id, "new_id": new_id, "scope": kind, "scope_id": ident})
-        return redirect(guild_id)
-
-    @app.post("/guild/{guild_id}/books")
-    async def create_book(request: Request, guild_id: int):
-        session, form = await posted(request, guild_id)
-        ident = app.state.store.create_lorebook(guild_id, str(form.get("name", "")),
-            str(form.get("target_kind", "")), int(form.get("target_id", 0) or 0))
-        app.state.store.audit(guild_id, int(session["user"]["id"]), "book.create", {"id": ident})
-        return redirect(guild_id)
-
-    @app.post("/guild/{guild_id}/books/{book_id}/assign")
-    async def assign_book(request: Request, guild_id: int, book_id: int):
-        session, form = await posted(request, guild_id)
-        space_id = int(form["space_id"])
-        enabled = form.get("enabled") == "yes"
-        app.state.store.set_lorebook_space(guild_id, book_id, space_id, enabled)
-        app.state.store.audit(guild_id, int(session["user"]["id"]), "book.assign", {"id": book_id, "space": space_id, "enabled": enabled})
-        return redirect(guild_id)
-
-    @app.post("/guild/{guild_id}/books/{book_id}/preview", response_class=HTMLResponse)
-    async def preview_book(request: Request, guild_id: int, book_id: int):
-        session, form = await posted(request, guild_id)
-        upload: UploadFile = form["file"]
-        if not upload.filename or not upload.filename.lower().endswith(".json"):
-            raise HTTPException(400, "Upload a JSON lorebook")
-        data = await upload.read(MAX_BOOK_BYTES + 1)
-        await upload.close()
-        imported = parse_lorebook(data)
-        book = app.state.store.lorebook(guild_id, book_id)
-        if not book:
-            raise HTTPException(404, "Lorebook not found")
-        changes = app.state.store.preview_lorebook_sync(guild_id, book_id, imported)
-        session["preview"] = {"book_id": book_id, "revision": book["revision"],
-            "imported": imported, "expires": time.time() + 900}
-        return TEMPLATES.TemplateResponse(request, "preview.html", {
-            "guild_id": guild_id, "book": book, "changes": changes, "csrf": session["csrf"]})
-
-    @app.post("/guild/{guild_id}/books/{book_id}/apply")
-    async def apply_book(request: Request, guild_id: int, book_id: int):
-        session, form = await posted(request, guild_id)
-        preview = session.get("preview")
-        if not preview or preview["book_id"] != book_id or preview["expires"] < time.time():
-            raise HTTPException(409, "Import preview expired; upload again")
-        resolutions = {key[8:]: str(value) for key, value in form.items() if key.startswith("resolve:")}
-        changes = app.state.store.sync_lorebook(guild_id, book_id, preview["imported"],
-            resolutions, preview["revision"])
-        session.pop("preview", None)
-        app.state.store.audit(guild_id, int(session["user"]["id"]), "book.sync", {"id": book_id,
-            "changes": [{"uid": change["uid"], "status": change["status"]} for change in changes]})
-        return redirect(guild_id)
-
-    @app.post("/guild/{guild_id}/books/{book_id}/entries/{entry_id}")
-    async def edit_book_entry(request: Request, guild_id: int, book_id: int, entry_id: int):
-        session, form = await posted(request, guild_id)
-        row = app.state.store.one("SELECT * FROM lorebook_entries WHERE id=? AND book_id=?", (entry_id, book_id))
-        if not row or not app.state.store.lorebook(guild_id, book_id):
-            raise HTTPException(404, "Entry not found")
-        app.state.store.edit_lorebook_entry(guild_id, entry_id, str(form.get("content", "")))
-        app.state.store.audit(guild_id, int(session["user"]["id"]), "book.entry.edit", {"id": entry_id})
-        return redirect(guild_id)
 
     if enable_dashboard:
         from .dashboard import mount_dashboard

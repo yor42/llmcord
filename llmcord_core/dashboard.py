@@ -259,7 +259,7 @@ def mount_dashboard(app):
         for guild in guilds:
             if guild.get('owner') or int(guild.get('permissions', '0')) & 8:
                 with ui.card().classes('w-full max-w-xl'):
-                    ui.link(guild['name'], f"/guild/{guild['id']}").classes('text-xl')
+                    ui.link(guild['name'], f"/guild/{guild['id']}").classes('text-xl')  # ui.link adds the /admin mount prefix
         signout(app, session)
 
     @ui.page('/guild/{guild_id}', response_timeout=30)
@@ -298,6 +298,25 @@ def mount_dashboard(app):
 
     ui.run_with(app, mount_path='/admin', title='llmcord admin', dark=True, reconnect_timeout=15,
                 gzip_middleware_factory=None, on_air=None, show_welcome_message=False)
+
+
+def link_operation(store, guild_id, hub, world, enabled):
+    pruned = (store.link_world if enabled else store.unlink_world)(guild_id, hub, world) or 0
+    return {'hub': hub, 'world': world, 'enabled': enabled, 'pruned': pruned}
+
+
+def link_detail(result):
+    return {'hub': result['hub'], 'world': result['world'], 'enabled': result['enabled'], 'pruned': result['pruned']}
+
+
+def bind_operation(store, guild_id, channel, space):
+    dropped = store.bind_channel(guild_id, channel, space)
+    names = [row['name'] for ident in dropped if (row := store.character_by_id(ident)) and row['guild_id'] == guild_id]
+    return {'channel': channel, 'space': space, 'dropped': dropped, 'names': names}
+
+
+def bind_detail(result):
+    return {'channel': result['channel'], 'space': result['space'], 'dropped': result['dropped']}
 
 
 def signout(app, session):
@@ -348,14 +367,13 @@ async def setup_panel(ctx):
         hub = ui.select(hubs, label='Hub')
         world = ui.select(worlds, label='World')
         def link(enabled):
-            result = (store.link_world if enabled else store.unlink_world)(gid, hub.value, world.value)
-            return {'pruned': result or 0}
+            return link_operation(store, gid, hub.value, world.value, enabled)
         def linked(result):
             if result['pruned']:
                 ui.notify(f"Removed {result['pruned']} cast entries no longer available in the hub.")
             return ctx.refresh()
-        ctx.button('Link', lambda: link(True), 'hub.link', then=linked)
-        ctx.button('Unlink', lambda: link(False), 'hub.unlink', then=linked)
+        ctx.button('Link', lambda: link(True), 'hub.link', link_detail, then=linked)
+        ctx.button('Unlink', lambda: link(False), 'hub.unlink', link_detail, then=linked)
     for ident in hubs:
         ui.label(hubs[ident] + ': ' + ', '.join(worlds.get(x, str(x)) for x in store.allowed_worlds(ident)))
     ui.separator()
@@ -366,16 +384,16 @@ async def setup_panel(ctx):
         def bind():
             if channel.value not in channel_names:
                 raise ValueError('Choose a text channel in this server')
-            dropped = store.bind_channel(gid, channel.value, space.value)
-            return [row['name'] for ident in dropped if (row := store.character_by_id(ident)) and row['guild_id'] == gid]
-        def bound(names):
+            return bind_operation(store, gid, channel.value, space.value)
+        def bound(result):
+            names = result['names']
             if names:
                 shown = ', '.join(names[:5]) + (f' ...and {len(names) - 5} more' if len(names) > 5 else '')
                 ui.notify(f'Removed from the cast (not available there): {shown}.')
             else:
                 ui.notify('Cast kept.')
             return ctx.refresh()
-        ctx.button('Bind channel', bind, 'channel.bind', then=bound)
+        ctx.button('Bind channel', bind, 'channel.bind', bind_detail, then=bound)
     ui.label('Rebinding a channel keeps its ambient mode and removes cast members not available in the new space.').classes('text-amber-300')
     for binding in ctx.snapshot.channels:
         with ui.card().classes('w-full channel-card'):

@@ -18,7 +18,7 @@ def main() -> None:
     root = Path.cwd()
     sys.path.insert(0, str(root))
     for path in ('llmcord.py', 'web_main.py', 'migrate.py', 'config-gemini.yaml',
-                 'llmcord_core/lore_drag.js', 'llmcord_core/templates/login.html'):
+                 'llmcord_core/lore_drag.js', 'llmcord_core/web.py'):
         if not (root / path).is_file():
             raise RuntimeError(f'Application asset missing from image: {path}')
     for path in ('.env', 'config.yaml', '.git', 'data', 'secrets', '.secrets'):

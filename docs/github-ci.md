@@ -42,7 +42,7 @@ There is deliberately no floating `latest` tag. Use a version, or an image diges
 
 ## Use a published image on a Pi
 
-Keep `docker-compose.yaml`, a private `.env`, your private `config.yaml`, and the persistent `data/` directory together. The image contains application code, templates, JavaScript, and sample cards. Compose mounts only your configuration and data. `.env` supplies runtime environment variables and is never copied into the image.
+Keep `docker-compose.yaml`, a private `.env`, your private `config.yaml`, and the persistent `data/` directory together. The image contains application code, JavaScript, and sample cards. Compose mounts only your configuration and data. `.env` supplies runtime environment variables and is never copied into the image.
 
 Add the published image name to `.env`:
 

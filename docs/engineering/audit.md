@@ -34,7 +34,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 | BUG-04 | `record_node` replace cascade-deletes the node's summary — **Resolved (R1, branch `rework/r1-correctness`)** | medium | CONFIRMED mechanism (test) | incorrect |
 | BUG-05 | `migrate.py` ignores `config.yaml` `database_path` — **Resolved (R1, branch `rework/r1-correctness`)** | low | CONFIRMED | fragile |
 | SEC-01 | Mutating legacy routes parse the body before auth — **Resolved (R1, branch `rework/r1-correctness`)** | medium | CONFIRMED (test) | incorrect |
-| SEC-02 | Legacy Jinja POST routes still live | medium | CONFIRMED | fragile |
+| SEC-02 | Legacy Jinja POST routes still live — **Resolved (R6 step 2)** | medium | CONFIRMED | fragile |
 | SEC-03 | Live-call CSRF and origin checks pass by construction — **Resolved (R2 step 2)** | low | CONFIRMED | unconventional |
 | SEC-04 | Unbounded in-memory auth state; sessions lost on restart — **Resolved in R2 step 6 (pruning; restart sign-out remains, by design)** | low | CONFIRMED | fragile |
 | SEC-05 | Slash commands not guild-only or permission-gated; errors public | medium | CONFIRMED | incorrect |
@@ -168,7 +168,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 ## Security
 
 ### SEC-01: Mutating legacy routes parse the body before auth
-- **Status:** Resolved in R1 (branch `rework/r1-correctness`): `require_admin(mutate=True)` validates the session before `request.form()`. R2 step 2 added the origin check before the body too (session → origin → body). R2 follow-up: `/logout` now checks origin too (it previously never did, so a cross-site POST with a valid csrf could sign the user out); all 19 POST routes run session → origin → body. Positive same-origin tests added for a mutate and for logout.
+- **Status:** Resolved in R1 (branch `rework/r1-correctness`): `require_admin(mutate=True)` validates the session before `request.form()`. R2 step 2 added the origin check before the body too (session → origin → body). R2 follow-up: `/logout` now checks origin too (it previously never did, so a cross-site POST with a valid csrf could sign the user out); all 19 POST routes run session → origin → body. Positive same-origin tests added for a mutate and for logout. R6 step 2 removed the 19 legacy POST routes (SEC-02); the session → origin → body order stays pinned on `/logout` and the NiceGUI upload guard in `tests/test_web_auth_boundaries.py`.
 - **Severity:** medium. **Confidence:** CONFIRMED (test in `tests/test_web_auth_boundaries.py`, expectedFailure). **Label:** incorrect.
 - **Evidence:** `require_admin(mutate=True)` awaits `request.form()` before `guard` checks the session (`auth.py:105-107`). Unauthenticated multipart bodies are parsed and spooled to disk. The suite shows `ResourceWarning: unclosed SpooledTemporaryFile`.
 - **Why it matters:** an unauthenticated client can make the Pi write upload bodies to disk, bounded only by python-multipart limits.
@@ -178,6 +178,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
   - Or move the CSRF token to a header.
 
 ### SEC-02: Legacy Jinja POST routes still live
+- **Status:** Resolved in R6 step 2 (D9, branch `rework/r6-legacy-structure`). The 19 POST routes, `GET /guild/{id}/card-preview/avatar` and `llmcord_core/templates/` are gone; NiceGUI is the only admin write path. `GET /` and `GET /guild/{id}` redirect to `/admin/` and `/admin/guild/{id}`. Remaining state-changing HTTP POSTs: `/logout` and NiceGUI uploads, which carry the SEC-01 tests. The dashboard's link/unlink/bind buttons now audit the detail the legacy routes recorded (`AdminService.run` accepts a detail derived from the result). Follow-ups (low): `require_admin(mutate=True)` and the FastAPI `ConflictError` handler have no callers left (ARCH-04); nothing checks offline that the dashboard avatar `src` carries `?v=`; the bind/link button wiring itself is browser-only and untested.
 - **Severity:** medium. **Confidence:** CONFIRMED. **Label:** fragile.
 - **Evidence:**
   - 19 `@app.post` routes in `web.py:201-456` remain mounted next to NiceGUI.
@@ -284,7 +285,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Direction:** extract along existing seams (command groups, scene stages, route groups) only when a roadmap phase already touches them.
 
 ### ARCH-02: Raw SQL and private store helpers in UI code
-- **Status:** Resolved in R5 step 1 for `dashboard.py` and `admin.py` (store methods with a revision check on the character save). Legacy `web.py` routes keep their raw SQL until R6 (SEC-02).
+- **Status:** Resolved in R5 step 1 for `dashboard.py` and `admin.py` (store methods with a revision check on the character save). Legacy `web.py` routes keep their raw SQL until R6 (SEC-02). R6 step 2 removed them, so `web.py` has no raw SQL left.
 - **Severity:** medium. **Confidence:** CONFIRMED. **Label:** fragile.
 - **Evidence:**
   - The dashboard character save reimplements `store.update_character` with a raw `UPDATE` and calls `store._prune_character_casts` and `store._remove_from_thread_casts` (`dashboard.py:325-340`, `:335-338`).

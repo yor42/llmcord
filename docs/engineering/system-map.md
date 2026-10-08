@@ -7,7 +7,7 @@ Snapshot at commit `1270c09`. This is engineer-facing; the user-facing overview 
 | Process | Entry point | Runs | Owns in memory | Talks to |
 | --- | --- | --- | --- | --- |
 | **bot** | `llmcord.py` → `discord_bot.SkitBot` | discord.py gateway client. Events (`on_message`), slash commands (`register_commands`), webhook delivery, daily `_cleanup_loop` | `channel_locks`, `webhook_locks`, `webhook_defaults`, `checked_avatar_assets` (REL-04); one `Store`; `Models` clients | Discord gateway + REST (bot token), model providers, SQLite |
-| **web** | `web_main.py` → `web.create_app` (uvicorn, one worker) | FastAPI: OAuth, legacy Jinja routes, NiceGUI mounted at `/admin` (`dashboard.mount_dashboard`) | `app.state.sessions`; `AuthService.request_locks`, `retry_at`, `refresh_locks` (SEC-04); one `Store`; NiceGUI `Client` instances | Discord OAuth + REST (user bearer tokens; bot token for channels/avatar publish), SQLite |
+| **web** | `web_main.py` → `web.create_app` (uvicorn, one worker) | FastAPI: OAuth, avatar GETs, redirects to `/admin`, NiceGUI mounted at `/admin` (`dashboard.mount_dashboard`) | `app.state.sessions`; `AuthService.request_locks`, `retry_at`, `refresh_locks` (SEC-04); one `Store`; NiceGUI `Client` instances | Discord OAuth + REST (user bearer tokens; bot token for channels/avatar publish), SQLite |
 | **migrate** | `migrate.py` → `Store(path).close()` | One-shot before the others (Compose ordering). Backs up, then upgrades `PRAGMA user_version` to 3 | — | SQLite (path from `config.resolve_database_path`: env, then YAML, then default; shared with bot and web since R1) |
 
 The processes do not use IPC. They share one SQLite file in WAL mode with `busy_timeout=5000` (`store.py:140`). The bot reads the database fresh on each turn, so dashboard edits apply on the next turn. All sqlite calls are synchronous on each process's event loop (REL-01).
@@ -29,7 +29,7 @@ flowchart LR
     Usage[usage, identity, errors]
   end
   subgraph web[web process]
-    Web[web.create_app<br/>OAuth + legacy Jinja routes]
+    Web[web.create_app<br/>OAuth + avatar routes]
     Auth[auth.AuthService.guard]
     Admin[admin.AdminService.run]
     Dash[dashboard / scene_ui /<br/>lore_workspace / lore_drag]
@@ -140,7 +140,7 @@ sequenceDiagram
   MW->>A: require_admin → guard  [check per image]
 ```
 
-Uploads (`/admin/_nicegui/client/*/upload/*`) run `guard` with the `X-CSRF-Token` header and the Origin header before reading the body. Legacy POST routes run `require_admin(mutate=True)`, which reads the form *before* `guard` (SEC-01).
+Uploads (`/admin/_nicegui/client/*/upload/*`) run `guard` with the `X-CSRF-Token` header and the Origin header before reading the body. The only other state-changing HTTP POST is `/logout` (form csrf + Origin); socket.io long-polling POSTs carry live events, which the patched socket handlers and `AdminService.run` guard. The legacy Jinja POST routes were removed in R6 (SEC-02).
 
 ## Shared state
 
@@ -166,7 +166,7 @@ Uploads (`/admin/_nicegui/client/*/upload/*`) run `guard` with the `X-CSRF-Token
 | Discord REST with the bot token (`httpx`) | web | Guild channel list; avatar publication to the asset channel | Publish raises `ValueError` and shows a notify |
 | Model providers: `openai==2.6.1`, `anthropic==0.69.0`, OpenAI-compatible | bot (web only builds previews) | Director, dialogue stream, image description, memory, summary | Per-profile `timeout_seconds` (120) and `max_retries` (1) since R3 |
 | `mini-racer==0.14.1` (V8) | bot | JS-compatible regex lore keys | Exceptions → no match; new isolate per match (REL-03) |
-| `nicegui==3.17.1`, `fastapi==0.142.2`, `uvicorn`, `Jinja2`, `python-multipart` | web | Dashboard, legacy pages, uploads | `dashboard.py` monkey-patches socket handlers |
+| `nicegui==3.17.1`, `fastapi==0.142.2`, `uvicorn`, `Jinja2`, `python-multipart` | web | Dashboard, uploads (Jinja2 stays pinned because NiceGUI requires it; app code no longer imports it) | `dashboard.py` monkey-patches socket handlers |
 | `Pillow` | web | Avatar normalization | Invalid image → `ValueError` |
 | SQLite (stdlib) | all | Single source of truth | `busy_timeout` 5 s, blocks the event loop (REL-01); slow calls ≥ 50 ms logged since R3 |
 | Tailscale Serve | deployment | HTTPS + private reachability for `/admin` | Outside the app |

@@ -6,7 +6,7 @@ from io import BytesIO
 import httpx
 from fastapi.testclient import TestClient
 
-from helpers import discord_transport, install_session
+from helpers import discord_transport, install_session, shared_dashboard
 
 from llmcord_core.web import create_app
 
@@ -18,6 +18,10 @@ IDENTITY = {"accept-encoding": "identity"}
 
 
 def make_client(*, dashboard):
+    if dashboard:
+        app, client = shared_dashboard()
+        client.cookies.set("llmcord_session", install_session(app))
+        return app, client
     transport, _ = discord_transport(admin_guilds=(1,))
     app = create_app(":memory:", "https://pi.test", "client", "secret", "bot",
                      httpx.AsyncClient(transport=transport), enable_dashboard=dashboard,
@@ -33,7 +37,6 @@ class DashboardCompressionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app, cls.client = make_client(dashboard=True)
-        cls.addClassCleanup(cls.client.__exit__, None, None, None)
         cls.page = cls.client.get("/admin/guild/1", headers=IDENTITY)
 
     def _static_paths(self):
@@ -136,9 +139,10 @@ class LegacyHeaderTests(unittest.TestCase):
         self.assertEqual(response.headers["referrer-policy"], "same-origin")
 
     def test_legacy_page_headers(self):
-        """Characterization (PERF-04): a legacy page is no-store with the base policy (no script-src, no nonce)."""
-        response = self.client.get("/guild/1", headers=GZIP)
-        self.assertEqual(response.status_code, 200)
+        """Characterization (PERF-04; SEC-02): the legacy pages were retired, so the non-/admin response checked is the
+        `/login` redirect to Discord; it is no-store with the base policy (no script-src, no nonce)."""
+        response = self.client.get("/login", headers=GZIP, follow_redirects=False)
+        self.assertEqual(response.status_code, 307)
         self._assert_common(response)
         self.assertEqual(response.headers["cache-control"], "no-store")
         self.assertIsNone(response.headers.get("content-encoding"))

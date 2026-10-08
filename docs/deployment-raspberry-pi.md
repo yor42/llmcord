@@ -44,7 +44,7 @@ In the Discord developer portal for the **same application as the bot**, registe
 https://my-pi.my-tailnet.ts.net/auth/callback
 ```
 
-The scheme, hostname, and path must match `WEB_BASE_URL` plus `/auth/callback`. The dashboard asks Discord for `identify` and `guilds` and checks server administrator permission on every protected request. It uses a browser-bound OAuth state, secure HTTP-only session cookie, and CSRF tokens for changes. A Tailscale login alone does not grant dashboard access; the Discord account also needs administrator permission in the server.
+The scheme, hostname, and path must match `WEB_BASE_URL` plus `/auth/callback`. The dashboard asks Discord for `identify` and `guilds` and checks server administrator permission on every protected request. It uses a browser-bound OAuth state, secure HTTP-only session cookie, and re-checks administrator permission on every change; uploads and sign-out also require a CSRF token. A Tailscale login alone does not grant dashboard access; the Discord account also needs administrator permission in the server.
 
 ## Start and check services
 

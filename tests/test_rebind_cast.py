@@ -9,23 +9,19 @@ Target behavior:
 - ``Store.unlink_world`` prunes now-ineligible characters from ``default_cast`` and ``active_cast`` of every channel
   bound to that hub in the same guild and returns the number of pruned entries (one per id removed from one cast
   list). ``/admin space unlink_world`` mentions that number. Other spaces and other guilds are untouched.
-- The legacy web routes (``/guild/{id}/bindings``, ``/guild/{id}/links``) go through the same store calls.
+- The dashboard's bind/unlink buttons call the same store methods (the legacy web routes were retired in SEC-02).
 
 Out of scope (gap): thread casts (``thread_casts`` has no parent column), pinned below as a characterization.
-Seams: store methods, slash commands via ``helpers.invoke``, web routes via TestClient + ``helpers.discord_transport``.
+Seams: store methods and slash commands via ``helpers.invoke``.
 """
 import json
 import unittest
 from types import SimpleNamespace
 
-import httpx
-from fastapi.testclient import TestClient
-
-from helpers import FakeInteraction, FakeThread, discord_transport, install_session, invoke, make_settings
+from helpers import FakeInteraction, FakeThread, invoke, make_settings
 
 from llmcord_core.discord_bot import SkitBot
 from llmcord_core.store import Store
-from llmcord_core.web import create_app
 
 
 def dropped_ids(result) -> list[int]:
@@ -273,68 +269,6 @@ class SlashRebindTests(World, unittest.IsolatedAsyncioTestCase):
         await invoke(self.bot, "admin space bind", interaction, SimpleNamespace(id=150, mention="<#150>"), "Harbor")
         self.assertEqual(self.store.channel(150)["space_id"], self.harbor, interaction.replies)
         self.assertIsNone(self.store.channel(101))
-
-
-class WebRebindTests(World, unittest.TestCase):
-    """Legacy Jinja routes; ``discord_transport`` lists text channel 100, so the web tests bind channel 100."""
-
-    def setUp(self):
-        transport, _ = discord_transport(admin_guilds=(1,))
-        self.app = create_app(":memory:", "https://pi.test", "client", "secret", "bot",
-                              httpx.AsyncClient(transport=transport), enable_dashboard=False,
-                              config_path="tests/nonexistent-config.yaml")
-        self.client = TestClient(self.app, base_url="https://pi.test")
-        self.client.__enter__()
-        self.build(self.app.state.store)
-        self.client.cookies.set("llmcord_session", install_session(self.app))
-
-    def tearDown(self):
-        self.client.__exit__(None, None, None)
-
-    def post(self, path, **data):
-        response = self.client.post(path, data={"csrf": "csrf", **data}, follow_redirects=False)
-        self.assertEqual(response.status_code, 303, response.text)
-
-    def test_bind_route_binds_a_new_channel(self):
-        """Regression (UX-03): ``POST /guild/1/bindings`` still binds a fresh channel to the chosen space."""
-        self.post("/guild/1/bindings", channel_id="100", space_id=str(self.plaza))
-        self.assertEqual(self.store.channel(100)["space_id"], self.plaza)
-
-    def test_bind_route_rebind_keeps_or_prunes_cast(self):
-        """UX-03: the legacy bind route keeps the cast and ambient on a same-space rebind and prunes on a space change
-        (Plaza -> Harbor drops Carol); currently both reset everything."""
-        self.store.bind_channel(1, 100, self.plaza)
-        self.set_casts(100, [self.carol, self.alice], [self.alice, self.carol])
-        self.post("/guild/1/bindings", channel_id="100", space_id=str(self.plaza))
-        self.assertEqual(self.casts(100), ([self.carol, self.alice], [self.alice, self.carol]))
-        self.assertEqual(self.store.channel(100)["ambient"], 1)
-        self.post("/guild/1/bindings", channel_id="100", space_id=str(self.harbor))
-        self.assertEqual(self.casts(100), ([self.alice], [self.alice]))
-        self.assertEqual(self.store.channel(100)["ambient"], 1)
-
-    def test_links_route_unlink_prunes_cast(self):
-        """UX-03: ``POST /guild/1/links`` with ``enabled=no`` unlinks Harbor from Plaza and prunes Alice from channel 100's
-        casts; relinking with ``enabled=yes`` still works (currently Alice stays as a stale member)."""
-        self.store.bind_channel(1, 100, self.plaza)
-        self.set_casts(100, [self.alice, self.carol], [self.carol, self.alice])
-        self.post("/guild/1/links", hub_id=str(self.plaza), world_id=str(self.harbor), enabled="no")
-        self.assertEqual(self.store.allowed_worlds(self.plaza), {self.forest})
-        self.assertEqual(self.casts(100), ([self.carol], [self.carol]))
-        self.post("/guild/1/links", hub_id=str(self.plaza), world_id=str(self.harbor), enabled="yes")
-        self.assertEqual(self.store.allowed_worlds(self.plaza), {self.harbor, self.forest})
-
-    def audit_details(self, action):
-        rows = self.store.all("SELECT detail_json FROM admin_audit WHERE action=?", (action,))
-        return [json.loads(row["detail_json"]) for row in rows]
-
-    def test_routes_audit_dropped_and_pruned(self):
-        """UX-03: the audit details record the dropped character ids (bind) and the pruned count (unlink)."""
-        self.store.bind_channel(1, 100, self.plaza)
-        self.set_casts(100, [self.alice, self.carol], [self.carol, self.alice])
-        self.post("/guild/1/links", hub_id=str(self.plaza), world_id=str(self.harbor), enabled="no")
-        self.assertEqual(self.audit_details("hub.link")[-1]["pruned"], 2)
-        self.post("/guild/1/bindings", channel_id="100", space_id=str(self.harbor))
-        self.assertEqual(self.audit_details("channel.bind")[-1]["dropped"], [self.carol])
 
 
 if __name__ == "__main__":

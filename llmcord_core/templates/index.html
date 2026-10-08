@@ -1,9 +1,0 @@
-{% extends "base.html" %}
-{% block title %}Servers · llmcord{% endblock %}
-{% block header %}<form action="/logout" method="post"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="secondary">Sign out</button></form>{% endblock %}
-{% block content %}
-<h1>Your servers</h1>
-<p class="muted">Signed in as {{ user.username }}. Select a server where you are an administrator.</p>
-{% for guild in guilds %}<div class="card"><a href="/guild/{{ guild.id }}">{{ guild.name }}</a></div>
-{% else %}<p>No servers with administrator permission are available.</p>{% endfor %}
-{% endblock %}

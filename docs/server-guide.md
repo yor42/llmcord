@@ -63,7 +63,7 @@ Discord presents the parameters for each slash command. Most command responses a
 
 ## Admin dashboard
 
-The dashboard is designed for the Pi's Tailscale HTTPS address. A visitor signs in with Discord. Each server page and change checks that their Discord account is an administrator of the selected server; forms also require a CSRF token. See [deployment](deployment-raspberry-pi.md) for login setup.
+The dashboard is designed for the Pi's Tailscale HTTPS address. A visitor signs in with Discord. Each server page and change checks that their Discord account is an administrator of the selected server; changes are checked again on every action, and uploads and sign-out also require a CSRF token. See [deployment](deployment-raspberry-pi.md) for login setup.
 
 From a server page, an admin can create spaces, link worlds to hubs, bind channels, choose default casts, toggle ambient mode, add/edit/pin/promote/delete shared lore, manage characters, and manage named lorebooks. Changes are read from SQLite on the bot's next turn; there is no separate publish step.
 

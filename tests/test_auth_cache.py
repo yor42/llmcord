@@ -253,20 +253,6 @@ class HttpCacheTests(unittest.TestCase):
     def tearDown(self):
         self.client.__exit__(None, None, None)
 
-    def test_index_then_guild_page_costs_one_guild_call(self):
-        """PERF-01 (fixed): the legacy guild picker (`GET /`) and the guild page share the session cache."""
-        index = self.client.get("/")
-        self.assertEqual(index.status_code, 200)
-        self.assertIn("Guild 1", index.text)
-        self.assertEqual(self.client.get("/guild/1").status_code, 200)
-        self.assertEqual(self.calls[GUILDS], 1)
-
-    def test_guild_page_then_index_costs_one_guild_call(self):
-        """PERF-01 (fixed): a guard warms the cache for the guild picker too."""
-        self.assertEqual(self.client.get("/guild/1").status_code, 200)
-        self.assertEqual(self.client.get("/").status_code, 200)
-        self.assertEqual(self.calls[GUILDS], 1)
-
     def test_logout_clears_cached_guilds(self):
         """PERF-01: sign-out invalidates immediately; a later session under the same ident refetches."""
         avatar = f"/guild/1/characters/{self.character}/avatar"

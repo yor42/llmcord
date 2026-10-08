@@ -11,7 +11,7 @@ Use Sonnet for routine coordination, implementation, tests, and review; Haiku fo
 
 ## Processes (no IPC — they share one SQLite file)
 - `llmcord.py` → `discord_bot.SkitBot`: events, slash commands (`register_commands`), webhooks, daily cleanup task.
-- `web_main.py` → `web.create_app`: OAuth, legacy Jinja form routes, mounts NiceGUI (`dashboard.mount_dashboard`).
+- `web_main.py` → `web.create_app`: OAuth, avatar images, mounts NiceGUI (`dashboard.mount_dashboard`).
 - `migrate.py` → `Store(path)`: creates/upgrades schema (`PRAGMA user_version`, currently 4; backs up before upgrading).
 The bot reads DB state fresh each turn, so dashboard edits apply on the next turn.
 
@@ -22,13 +22,13 @@ The bot reads DB state fresh each turn, so dashboard edits apply on the next tur
 | Turn engine (director, prompt, memory) | `engine.py`, `prompts.py`, `world_info.py`, `lore.py` |
 | Model providers | `models.py`, `config.py`, `errors.py` |
 | Persistence | `store.py` (scene/lore/core), `admin_store.py` (presets, lore identities, avatars, revisions) |
-| Dashboard | `web.py`, `auth.py`, `admin.py`, `dashboard.py`, `scene_ui.py`, `lore_workspace.py`, `lore_drag.{py,js}`, `templates/` |
+| Dashboard | `web.py`, `auth.py`, `admin.py`, `dashboard.py`, `scene_ui.py`, `lore_workspace.py`, `lore_drag.{py,js}` |
 | Imports/assets | `cards.py`, `lorebooks.py`, `avatars.py` |
 
 ## Commands
 - Setup: `python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt` (browser tests also need `.venv/bin/python -m playwright install chromium`).
 - **Verify before declaring a change done:** choose the level in the `verify` skill. Application/script/test changes require `scripts/verify.sh` — ruff, repo hygiene, compileall, offline unittest suite. Docs and Claude config changes require metadata/diff checks instead.
-  - `scripts/verify.sh --browser` adds the Playwright dashboard suite (~2 min) — required when touching `web.py`, `auth.py`, `dashboard.py`, `scene_ui.py`, `lore_*`, templates.
+  - `scripts/verify.sh --browser` adds the Playwright dashboard suite (~2 min) — required when touching `web.py`, `auth.py`, `dashboard.py`, `scene_ui.py`, `lore_*`.
   - `scripts/verify.sh --bench` adds `scripts/bench_dashboard.py` — required when claiming a dashboard perf change.
 - Single test file: `.venv/bin/python -m unittest discover -s tests -p test_slash_commands.py -v`
 - Tests are stdlib `unittest` (not pytest). "expected failures" in output are documented known defects, not regressions.
@@ -46,7 +46,7 @@ The bot reads DB state fresh each turn, so dashboard edits apply on the next tur
 - `dashboard.py` monkey-patches NiceGUI socket handlers for auth — changes there affect every live event.
 - All sqlite calls are synchronous on the event loop; the bot holds a per-channel lock across all model calls.
 - Never read, print, or edit `.env`, `config.yaml`, `*.key`/`*.crt`, or anything under `data/` (real user data). Tests use `:memory:` or temp dirs and fake Discord/model transports only.
-- Don't delete "dead" code or legacy routes without grep + a characterization test; legacy Jinja routes are still live.
+- Don't delete "dead" code or legacy routes without grep + a characterization test. NiceGUI is the only admin write path; the legacy Jinja routes were retired in R6 (SEC-02).
 
 ## Engineering docs
 `docs/engineering/` — system map, audit (finding IDs like `BUG-01`, `PERF-01`, `SEC-01`), roadmap, baselines. Test docstrings reference these IDs. User docs live in `docs/`.

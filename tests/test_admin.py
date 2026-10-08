@@ -127,7 +127,9 @@ class LorebookTests(unittest.TestCase):
 
 
 class WebTests(unittest.TestCase):
-    def test_oauth_admin_csrf_and_card_preview(self):
+    def test_oauth_admin_csrf_and_logout(self):
+        """SEC-02 (migrated from the legacy-route walk-through): OAuth state check, guild admin scoping on an avatar GET,
+        csrf-guarded logout. The legacy form routes this test used to post to were retired."""
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as directory:
             async def discord_api(request):
                 path = request.url.path
@@ -143,36 +145,19 @@ class WebTests(unittest.TestCase):
             http = httpx.AsyncClient(transport=httpx.MockTransport(discord_api))
             app = create_app(Path(directory) / "web.sqlite3", "https://pi.test", "client", "secret", "bot", http, enable_dashboard=False)
             with TestClient(app, base_url="https://pi.test") as client:
-                self.assertEqual(client.get("/guild/1").status_code, 401)
+                self.assertEqual(client.get("/guild/1/characters/1/avatar").status_code, 401)
                 login = client.get("/login", follow_redirects=False)
                 state = parse_qs(urlparse(login.headers["location"]).query)["state"][0]
                 self.assertEqual(client.get("/auth/callback", params={"code": "x", "state": "wrong"}).status_code, 403)
                 self.assertEqual(client.get("/auth/callback", params={"code": "x", "state": state}, follow_redirects=False).status_code, 303)
                 csrf = next(iter(app.state.sessions.values()))["csrf"]
-                self.assertEqual(client.get("/guild/2").status_code, 403)
-                self.assertEqual(client.post("/guild/1/spaces", data={"name": "A", "kind": "world"}).status_code, 403)
-                self.assertEqual(client.post("/guild/1/spaces", data={"csrf": csrf, "name": "A", "kind": "world"}, follow_redirects=False).status_code, 303)
-                world = app.state.store.space(1, "A")["id"]
-                page = client.get("/guild/1")
-                self.assertEqual(page.status_code, 200)
-                self.assertIn("Characters", page.text)
-                file = {"file": ("alice.json", json.dumps({"spec": "chara_card_v2", "data": {"name": "Alice", "description": "hello"}}).encode(), "application/json")}
-                preview = client.post("/guild/1/characters/import", data={"csrf": csrf, "world_id": world}, files=file)
-                self.assertEqual(preview.status_code, 200)
-                self.assertIn("Preview character card", preview.text)
-                self.assertEqual(client.post("/guild/1/characters/apply", data={"csrf": csrf}, follow_redirects=False).status_code, 303)
-                self.assertIsNotNone(app.state.store.character(1, "Alice"))
-                self.assertEqual(client.post("/guild/1/bindings", data={"csrf": csrf, "channel_id": "100", "space_id": str(world)}, follow_redirects=False).status_code, 303)
-                self.assertEqual(client.post("/guild/1/lore", data={"csrf": csrf, "scope": "channel:100", "content": "The cafe smells of tea", "keys": "cafe"}, follow_redirects=False).status_code, 303)
-                self.assertEqual(client.post("/guild/1/books", data={"csrf": csrf, "name": "World book", "target_kind": "guild", "target_id": "0"}, follow_redirects=False).status_code, 303)
-                book = app.state.store.list_lorebooks(1)[0]
-                imported = {"file": ("book.json", payload({"5": {"key": ["cafe"], "content": "Imported fact"}}), "application/json")}
-                preview = client.post(f"/guild/1/books/{book['id']}/preview", data={"csrf": csrf}, files=imported)
-                self.assertEqual(preview.status_code, 200)
-                self.assertIn("Imported fact", preview.text)
-                self.assertEqual(client.post(f"/guild/1/books/{book['id']}/apply", data={"csrf": csrf}, follow_redirects=False).status_code, 303)
-                self.assertEqual(len(app.state.store.lorebook_entries(book["id"])), 1)
-                self.assertEqual(client.get("/guild/1").status_code, 200)
+                self.assertEqual(client.get("/guild/2/characters/1/avatar").status_code, 403)
+                self.assertEqual(client.get("/guild/1/characters/1/avatar").status_code, 404)  # admin of guild 1, no such character
+                self.assertEqual(client.post("/logout", data={"csrf": "wrong"}, follow_redirects=False).status_code, 403)
+                self.assertTrue(app.state.sessions)
+                self.assertEqual(client.post("/logout", data={"csrf": csrf}, follow_redirects=False).status_code, 303)
+                self.assertFalse(app.state.sessions)
+                self.assertEqual(client.get("/guild/1/characters/1/avatar").status_code, 401)
 
 
 if __name__ == "__main__":

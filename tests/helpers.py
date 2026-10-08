@@ -254,6 +254,30 @@ class ShiftedClock:
         return False
 
 
+_DASHBOARD = {}
+
+
+def shared_dashboard():
+    """``(app, client)`` for the one NiceGUI-mounted app this process can build (NiceGUI's global app cannot be
+    mounted twice, so every test that needs ``enable_dashboard=True`` shares it). The client's cookies are reset on
+    each call; install your own session with ``install_session(app, ident)``."""
+    if not _DASHBOARD:
+        import atexit
+
+        from fastapi.testclient import TestClient
+
+        from llmcord_core.web import create_app
+        transport, _ = discord_transport(admin_guilds=(1,))
+        app = create_app(":memory:", "https://pi.test", "client", "secret", "bot", httpx.AsyncClient(transport=transport),
+                         enable_dashboard=True, config_path="tests/nonexistent-config.yaml")
+        client = TestClient(app, base_url="https://pi.test")
+        client.__enter__()
+        atexit.register(client.__exit__, None, None, None)
+        _DASHBOARD.update(app=app, client=client)
+    _DASHBOARD["client"].cookies.clear()
+    return _DASHBOARD["app"], _DASHBOARD["client"]
+
+
 def install_session(app, ident="session", user_id="4", csrf="csrf", access="access"):
     app.state.sessions[ident] = {"user": {"id": user_id, "username": "Admin"}, "expires": time.time() + 3600,
                                  "token_expires": time.time() + 3600, "csrf": csrf, "access": access, "refresh": "refresh"}

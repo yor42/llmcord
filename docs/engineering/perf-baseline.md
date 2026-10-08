@@ -90,7 +90,7 @@ A change claiming a dashboard performance improvement must re-run the bench with
 
 `AuthService.guilds(session)` caches `/users/@me/guilds` per session for 300 s (D1). The count-based tests changed deliberately:
 - `test_web_auth_boundaries.py`: 5 avatar GETs went from 5 guild checks to 1 (`test_repeated_avatar_requests_check_discord_once`). The `no-store` header is unchanged until R2 step 4.
-- `test_auth_cache.py` (new): repeat guards within the TTL cost 1 call, concurrent cold guards cost 1, the picker page plus a guild page cost 1, and guards queued behind a 401 cost 1.
+- `test_auth_cache.py` (new): repeat guards within the TTL cost 1 call, concurrent cold guards cost 1, the picker page plus a guild page cost 1, and guards queued behind a 401 cost 1. (R6 step 2 retired the legacy guild page with SEC-02, so the picker-plus-guild-page test and `test_legacy_guild_page_cost` were removed.)
 
 The bench has not been re-run for this step. The dated bench section (two runs, same seed and host) comes at the end of R2, after the debounce and probe removal (steps 2–3), which also affect the lore-search numbers.
 
