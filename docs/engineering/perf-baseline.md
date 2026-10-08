@@ -178,3 +178,5 @@ Reading:
 - Save cast is 0.05–0.10 s slower, within the spread of the earlier runs plus the new success toast.
 - Summed over the five scenarios (settled): 4.4 s now in both profiles, vs 5.2 s (latency; 4.8 s without the 1.36 s tab outlier) and 4.7 s (rate limited) at the end of R2.
 - The 500-entry seed is too small to show PERF-02 end to end; see the store micro-benchmark in the step 2 section. PERF-04 (gzip, cached assets) cannot show here either: the bench runs on localhost, where transfer size barely matters, and each run starts with an empty browser cache.
+
+Note (after the end-of-R5 runs): the fixture's uvicorn keep-alive went from 5 s to 120 s to fix a browser-test flake. The bench uses the same fixture, so later runs reuse connections longer than the runs above. Expect a small difference at most; re-run before comparing a later perf claim against these numbers.

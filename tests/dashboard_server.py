@@ -197,7 +197,9 @@ def main():
         server.should_exit = True
         return {'ok': True}
 
-    server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=port, ssl_keyfile=os.environ['LLMCORD_TEST_KEY'], ssl_certfile=os.environ['LLMCORD_TEST_CERT'], access_log=False, log_level='warning'))
+    server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=port, ssl_keyfile=os.environ['LLMCORD_TEST_KEY'], ssl_certfile=os.environ['LLMCORD_TEST_CERT'], access_log=False, log_level='warning',
+        # uvicorn's 5s default closes idle keep-alive sockets just as Chromium reuses them, which fails a request with ERR_TOO_MANY_RETRIES (a failed quasar css @import then throws a cssRules SecurityError in nicegui.js).
+        timeout_keep_alive=120))
     server.run()
 
 
