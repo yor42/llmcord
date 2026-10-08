@@ -257,7 +257,7 @@ class Store(AdminStore):
         """Unlink and prune now-ineligible characters from the hub's channel casts; returns the entries removed.
         Thread casts are not pruned (no parent column)."""
         hub, world = self.space_by_id(hub_id), self.space_by_id(world_id)
-        if not hub or not world or hub["guild_id"] != guild_id or world["guild_id"] != guild_id:
+        if not hub or not world or hub["guild_id"] != guild_id or world["guild_id"] != guild_id or hub["kind"] != "hub":
             raise ValueError("Choose a hub and world in this server")
         pruned = 0
         with self.db:

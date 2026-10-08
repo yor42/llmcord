@@ -216,8 +216,11 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
         session, form = await posted(request, guild_id)
         hub_id, world_id = int(form["hub_id"]), int(form["world_id"])
         enabled = form.get("enabled") == "yes"
-        (app.state.store.link_world if enabled else app.state.store.unlink_world)(guild_id, hub_id, world_id)
-        app.state.store.audit(guild_id, int(session["user"]["id"]), "hub.link", {"hub": hub_id, "world": world_id, "enabled": enabled})
+        result = (app.state.store.link_world if enabled else app.state.store.unlink_world)(guild_id, hub_id, world_id)
+        detail = {"hub": hub_id, "world": world_id, "enabled": enabled}
+        if not enabled:
+            detail["pruned"] = result
+        app.state.store.audit(guild_id, int(session["user"]["id"]), "hub.link", detail)
         return redirect(guild_id)
 
     @app.post("/guild/{guild_id}/bindings")
@@ -228,8 +231,8 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
             headers={"Authorization": "Bot " + bot_token})
         if response.status_code != 200 or not any(int(item["id"]) == channel_id and item["type"] == 0 for item in response.json()):
             raise HTTPException(400, "Choose a text channel in this server")
-        app.state.store.bind_channel(guild_id, channel_id, space_id)
-        app.state.store.audit(guild_id, int(session["user"]["id"]), "channel.bind", {"channel": channel_id, "space": space_id})
+        dropped = app.state.store.bind_channel(guild_id, channel_id, space_id)
+        app.state.store.audit(guild_id, int(session["user"]["id"]), "channel.bind", {"channel": channel_id, "space": space_id, "dropped": dropped})
         return redirect(guild_id)
 
     @app.post("/guild/{guild_id}/characters/import")

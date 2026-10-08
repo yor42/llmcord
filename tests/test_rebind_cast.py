@@ -182,6 +182,14 @@ class StoreUnlinkTests(World, unittest.TestCase):
         self.assertEqual(self.store.allowed_worlds(self.plaza), {self.harbor, self.forest})
         self.assertEqual(self.casts(200), ([self.alice, self.carol], [self.carol, self.alice]))
 
+    def test_unlink_world_rejects_a_non_hub(self):
+        """Regression (UX-03): unlinking from a world id (not a hub) is refused and prunes nothing."""
+        self.store.bind_channel(1, 101, self.harbor)
+        self.set_casts(101, [self.alice], [self.alice])
+        with self.assertRaises(ValueError):
+            self.store.unlink_world(1, self.harbor, self.forest)
+        self.assertEqual(self.casts(101), ([self.alice], [self.alice]))
+
     def test_unlink_world_leaves_thread_casts(self):
         """Characterization (UX-03, gap): thread casts are not pruned by ``unlink_world`` because ``thread_casts`` has no
         parent column to find the hub's threads; a Plaza thread keeps Alice after Harbor is unlinked."""
@@ -314,6 +322,19 @@ class WebRebindTests(World, unittest.TestCase):
         self.assertEqual(self.casts(100), ([self.carol], [self.carol]))
         self.post("/guild/1/links", hub_id=str(self.plaza), world_id=str(self.harbor), enabled="yes")
         self.assertEqual(self.store.allowed_worlds(self.plaza), {self.harbor, self.forest})
+
+    def audit_details(self, action):
+        rows = self.store.all("SELECT detail_json FROM admin_audit WHERE action=?", (action,))
+        return [json.loads(row["detail_json"]) for row in rows]
+
+    def test_routes_audit_dropped_and_pruned(self):
+        """UX-03: the audit details record the dropped character ids (bind) and the pruned count (unlink)."""
+        self.store.bind_channel(1, 100, self.plaza)
+        self.set_casts(100, [self.alice, self.carol], [self.carol, self.alice])
+        self.post("/guild/1/links", hub_id=str(self.plaza), world_id=str(self.harbor), enabled="no")
+        self.assertEqual(self.audit_details("hub.link")[-1]["pruned"], 2)
+        self.post("/guild/1/bindings", channel_id="100", space_id=str(self.harbor))
+        self.assertEqual(self.audit_details("channel.bind")[-1]["dropped"], [self.carol])
 
 
 if __name__ == "__main__":

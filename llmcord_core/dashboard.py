@@ -267,10 +267,14 @@ async def setup_panel(ctx):
         hub = ui.select(hubs, label='Hub')
         world = ui.select(worlds, label='World')
         def link(enabled):
-            (store.link_world if enabled else store.unlink_world)(gid, hub.value, world.value)
-            return True
-        ctx.button('Link', lambda: link(True), 'hub.link', then=lambda _: ui.navigate.reload())
-        ctx.button('Unlink', lambda: link(False), 'hub.unlink', then=lambda _: ui.navigate.reload())
+            result = (store.link_world if enabled else store.unlink_world)(gid, hub.value, world.value)
+            return {'pruned': result or 0}
+        def linked(result):
+            if result['pruned']:
+                ui.notify(f"Removed {result['pruned']} cast entries no longer available in the hub.")
+            ui.navigate.reload()
+        ctx.button('Link', lambda: link(True), 'hub.link', then=linked)
+        ctx.button('Unlink', lambda: link(False), 'hub.unlink', then=linked)
     for ident in hubs:
         ui.label(hubs[ident] + ': ' + ', '.join(worlds.get(x, str(x)) for x in store.allowed_worlds(ident)))
     ui.separator()
@@ -281,9 +285,16 @@ async def setup_panel(ctx):
         def bind():
             if channel.value not in channel_names:
                 raise ValueError('Choose a text channel in this server')
-            store.bind_channel(gid, channel.value, space.value)
-            return True
-        ctx.button('Bind channel', bind, 'channel.bind', then=lambda _: ui.navigate.reload())
+            dropped = store.bind_channel(gid, channel.value, space.value)
+            return [row['name'] for ident in dropped if (row := store.character_by_id(ident)) and row['guild_id'] == gid]
+        def bound(names):
+            if names:
+                shown = ', '.join(names[:5]) + (f' ...and {len(names) - 5} more' if len(names) > 5 else '')
+                ui.notify(f'Removed from the cast (not available there): {shown}.')
+            else:
+                ui.notify('Cast kept.')
+            ui.navigate.reload()
+        ctx.button('Bind channel', bind, 'channel.bind', then=bound)
     ui.label('Rebinding a channel keeps its ambient mode and removes cast members not available in the new space.').classes('text-amber-300')
     for binding in store.all('SELECT * FROM channels WHERE guild_id=?', (gid,)):
         with ui.card().classes('w-full channel-card'):

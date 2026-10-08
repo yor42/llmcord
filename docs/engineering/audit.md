@@ -330,6 +330,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Direction:** a glossary in `docs/`, then rename strings in one pass.
 
 ### UX-03: Rebinding a channel silently resets cast and ambient
+- **Status:** resolved in R4 step 4: same-space rebind keeps the cast; a cross-space rebind or a hub unlink prunes ineligible members and says which.
 - **Severity:** medium. **Confidence:** CONFIRMED (characterization test). **Label:** incorrect.
 - **Evidence:** the `bind_channel` upsert clears `default_cast`, `active_cast` and `ambient` even when rebinding to the same space (`store.py:224`).
 - **Direction:** keep them when the space is unchanged; when it changes, prune ineligible characters and say so.
