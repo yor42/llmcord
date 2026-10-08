@@ -6,10 +6,10 @@ from pathlib import Path
 from llmcord_core.config import ModelProfile, Settings
 from llmcord_core.discord_bot import SkitBot, split_discord
 from llmcord_core.engine import SceneContext
-from helpers import drain_memory_tasks, is_turn_failure
+from helpers import CompiledAdapter, drain_memory_tasks, is_turn_failure
 
 
-class FakeModels:
+class FakeModels(CompiledAdapter):
     def __init__(self, speakers):
         self.speakers = speakers
         self.lines = iter(["First line", "Second line"])

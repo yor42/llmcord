@@ -18,7 +18,6 @@ from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES, GZipMiddle
 from .store import Store
 from .auth import AuthService
 from .admin import AdminService
-from .admin_store import ConflictError
 
 
 DISCORD_API = "https://discord.com/api/v10"
@@ -102,6 +101,7 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
     app.state.client_secret = client_secret
     app.state.bot_token = bot_token
 
+    # ConflictError is a ValueError; no parent-app route writes, so none reaches here (NiceGUI actions handle it).
     @app.exception_handler(ValueError)
     async def invalid_value(_request: Request, error: ValueError):
         return PlainTextResponse(f"Invalid input: {str(error)}", status_code=400)
@@ -118,10 +118,6 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
     discord_get = app.state.auth.discord_get
     session_for = app.state.auth.session_for
     require_admin = app.state.auth.require_admin
-
-    @app.exception_handler(ConflictError)
-    async def conflicting_value(_request, error):
-        return PlainTextResponse(str(error), status_code=409)
 
     @app.get("/")
     async def index():

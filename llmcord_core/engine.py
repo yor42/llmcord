@@ -72,16 +72,12 @@ class Engine:
             values['speaker_identity'] = self.identities(scene)
         request = self.compile(scene, purpose, values, images=images, max_tokens=max_tokens)
         role = 'dialogue' if purpose == 'images' else 'memory'
-        if hasattr(self.models, 'text_compiled'):
-            return await self.models.text_compiled(role, request, max_tokens)
-        return await self.models.text(role, '\n\n'.join(m.text for m in request.messages if m.role == 'system'), [m for m in request.messages if m.role != 'system'], max_tokens)
+        return await self.models.text_compiled(role, request, max_tokens)
 
     async def purpose_structured(self, scene, purpose, payload, name, schema):
         request = self.compile(scene, purpose, {'payload': payload, 'speaker_identity': self.identities(scene)}, contract='Return only the required structured result. Output schema: ' + json.dumps(schema))
         role = 'director' if purpose == 'director' else 'memory'
-        if hasattr(self.models, 'structured_compiled'):
-            return await self.models.structured_compiled(role, request, name, schema)
-        return await self.models.structured(role, '\n\n'.join(m.text for m in request.messages if m.role == 'system'), [m for m in request.messages if m.role != 'system'], name, schema)
+        return await self.models.structured_compiled(role, request, name, schema)
 
     async def speakers(self, scene: SceneContext) -> list:
         eligible = {row["id"]: row for row in self.eligible(scene)}
@@ -264,11 +260,6 @@ class Engine:
         sources['preset'] = {'id': snapshot['id'], 'revision': snapshot['revision'], **request.trace()}
         sources['guidelines'] = {key: {field: row[field] for field in ('kind', 'owner_id', 'revision')} for key, row in guidelines.items() if key in included}
         return request, sources
-
-    async def prompt_for(self, scene: SceneContext, character, preceding_lines: list[tuple[str, str]]) -> tuple[str, list[TurnMessage], dict]:
-        """Compatibility view; delivery uses prepare_dialogue to retain exact order."""
-        request, sources = await self.prepare_dialogue(scene, character, preceding_lines)
-        return '\n\n'.join(m.text for m in request.messages if m.role == 'system'), [m for m in request.messages if m.role != 'system'], sources
 
     def limit(self, key: str) -> int:
         return self.settings.limits.get(key, LIMIT_DEFAULTS[key])

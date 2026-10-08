@@ -166,12 +166,5 @@ class AuthService:
             raise HTTPException(403, 'Server administrator permission required')
         return session
 
-    async def require_admin(self, request, guild_id, mutate=False):
-        ident = request.cookies.get('llmcord_session', '')
-        origin, csrf = request.headers.get('origin'), None
-        if mutate:
-            # Reject unauthenticated or cross-origin posts before parsing the body (SEC-01).
-            await self.session(ident)
-            self.check_origin(origin)
-            csrf = str((await request.form()).get('csrf', ''))
-        return await self.guard(ident, guild_id, csrf, origin)
+    async def require_admin(self, request, guild_id):
+        return await self.guard(request.cookies.get('llmcord_session', ''), guild_id, None, request.headers.get('origin'))

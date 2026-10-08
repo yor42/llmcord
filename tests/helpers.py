@@ -26,7 +26,28 @@ def make_settings(model: str = "test", **limits) -> Settings:
     return Settings("token", None, ":memory:", 90, {"test": profile}, "test", "test", "test", {**LIMITS, **limits})
 
 
-class FakeModels:
+class CompiledAdapter:
+    """Adapts compiled requests to the fakes' (system, messages) signature. Splits system messages out like the Anthropic path; production passes them inline for other providers (models.compiled_input)."""
+
+    @staticmethod
+    def _split(request):
+        return '\n\n'.join(m.text for m in request.messages if m.role == 'system'), [m for m in request.messages if m.role != 'system']
+
+    async def text_compiled(self, role, request, max_tokens=None):
+        system, messages = self._split(request)
+        return await self.text(role, system, messages, max_tokens)
+
+    async def structured_compiled(self, role, request, schema_name, schema):
+        system, messages = self._split(request)
+        return await self.structured(role, system, messages, schema_name, schema)
+
+    async def stream_compiled(self, role, request):
+        system, messages = self._split(request)
+        async for delta in self.stream_text(role, system, messages):
+            yield delta
+
+
+class FakeModels(CompiledAdapter):
     """Deterministic model gateway: fixed director choice, empty extraction, fixed summary."""
 
     def __init__(self, speakers=None, summary="Earlier scene summary"):

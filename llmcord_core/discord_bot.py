@@ -362,8 +362,6 @@ class SkitBot(commands.Bot):
                 await update_progress(status(f'**{name}** is preparing a reply…'))
                 stage = 'preparing character prompt'
                 request, sources = await self.engine.prepare_dialogue(scene, character, preceding)
-                system = '\n\n'.join(m.text for m in request.messages if m.role == 'system')
-                messages = [m for m in request.messages if m.role != 'system']
                 stage = 'webhook setup'
                 webhook = await self._webhook(channel, character)
                 thread_options = {'thread': channel} if isinstance(channel, discord.Thread) else {}
@@ -374,7 +372,7 @@ class SkitBot(commands.Bot):
                     stage = 'dialogue generation'
                     await update_progress(status(f'Streaming **{name}**'))
                     with capture_usage() as usage_records:
-                        stream = self.models.stream_compiled('dialogue', request) if hasattr(self.models, 'stream_compiled') else self.models.stream_text('dialogue', system, messages)
+                        stream = self.models.stream_compiled('dialogue', request)
                         async for event in emotion_stream(stream, slots):
                             if event.emotion is not None:
                                 emotion = event.emotion

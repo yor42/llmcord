@@ -47,7 +47,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 | ARCH-01 | Oversized functions | medium | CONFIRMED | fragile |
 | ARCH-02 | Raw SQL and private store helpers in UI code | medium | CONFIRMED | fragile |
 | ARCH-03 | Duplicated constants and logic | low | CONFIRMED | preference |
-| ARCH-04 | Production-dead code and test-double fallbacks | low | CONFIRMED | unconventional |
+| ARCH-04 | Production-dead code and test-double fallbacks — **Resolved (R6 step 3)** | low | CONFIRMED | unconventional |
 | ARCH-05 | Scene deletion and expiry leave derived memory | medium | SUSPECTED | incorrect |
 | UX-01 | Missing success feedback; wrong tab after reload; raw IDs — **Resolved (R5 step 5)** | medium | CONFIRMED | incorrect |
 | UX-02 | Inconsistent terminology — **Resolved (R5 step 8)** | medium | CONFIRMED | preference |
@@ -178,7 +178,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
   - Or move the CSRF token to a header.
 
 ### SEC-02: Legacy Jinja POST routes still live
-- **Status:** Resolved in R6 step 2 (D9, branch `rework/r6-legacy-structure`). The 19 POST routes, `GET /guild/{id}/card-preview/avatar` and `llmcord_core/templates/` are gone; NiceGUI is the only admin write path. `GET /` and `GET /guild/{id}` redirect to `/admin/` and `/admin/guild/{id}`. Remaining state-changing HTTP POSTs: `/logout` and NiceGUI uploads, which carry the SEC-01 tests. The dashboard's link/unlink/bind buttons now audit the detail the legacy routes recorded (`AdminService.run` accepts a detail derived from the result). Follow-ups (low): `require_admin(mutate=True)` and the FastAPI `ConflictError` handler have no callers left (ARCH-04); nothing checks offline that the dashboard avatar `src` carries `?v=`; the bind/link button wiring itself is browser-only and untested.
+- **Status:** Resolved in R6 step 2 (D9, branch `rework/r6-legacy-structure`). The 19 POST routes, `GET /guild/{id}/card-preview/avatar` and `llmcord_core/templates/` are gone; NiceGUI is the only admin write path. `GET /` and `GET /guild/{id}` redirect to `/admin/` and `/admin/guild/{id}`. Remaining state-changing HTTP POSTs: `/logout` and NiceGUI uploads, which carry the SEC-01 tests. The dashboard's link/unlink/bind buttons now audit the detail the legacy routes recorded (`AdminService.run` accepts a detail derived from the result). Follow-ups (low): `require_admin(mutate=True)` and the FastAPI `ConflictError` handler had no callers left (removed in R6 step 3, ARCH-04); nothing checks offline that the dashboard avatar `src` carries `?v=`; the bind/link button wiring itself is browser-only and untested.
 - **Severity:** medium. **Confidence:** CONFIRMED. **Label:** fragile.
 - **Evidence:**
   - 19 `@app.post` routes in `web.py:201-456` remain mounted next to NiceGUI.
@@ -303,6 +303,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Direction:** consolidate when a phase touches the code.
 
 ### ARCH-04: Production-dead code and test-double fallbacks
+- **Status:** Resolved in R6 step 3. Removed `lore.retrieve_lore`, `Engine.prompt_for`, `cards.character_prompt`, the `hasattr(self.models, '*_compiled')` fallbacks (fakes use `tests/helpers.py::CompiledAdapter`), `require_admin`'s `mutate` branch and the FastAPI `ConflictError` handler (a `ConflictError` from a future parent-app route would now return 400 via the `ValueError` handler). The lore-isolation, budget, local-promotion and rewind assertions moved to `test_production_*` tests in `tests/test_core.py` on the production path (`lore_scopes` + `world_info.evaluate`, `Engine.prepare_dialogue`). Note: production lore output follows insertion order; constants win only when the budget is short (the old `retrieve_lore` listed constants first). Follow-up (low): `CompiledAdapter` splits system messages like the Anthropic path, unlike the inline pass-through for other providers.
 - **Severity:** low. **Confidence:** CONFIRMED. **Label:** unconventional.
 - **Evidence:**
   - `lore.retrieve_lore` (`llmcord_core/lore.py:43`), `Engine.prompt_for` (`engine.py:262`) and `cards.character_prompt` (`cards.py:97`) have no production callers. `tests/test_core.py` uses the first two.

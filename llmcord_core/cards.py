@@ -92,19 +92,3 @@ def parse_card(filename: str, data: bytes) -> ParsedCard:
             "rule": normalized.rule,
         })
     return ParsedCard(name=name, data=card, entries=entries, avatar=avatar)
-
-
-def character_prompt(card: dict, include_examples: bool = True) -> str:
-    fields = (
-        ("Description", "description"), ("Personality", "personality"),
-        ("Scenario", "scenario"), ("Opening line", "first_mes"),
-        ("Character instructions", "system_prompt"),
-        ("After-history instructions", "post_history_instructions"),
-    )
-    parts = [f"Name: {card.get('name', 'Unknown')}"]
-    for label, key in fields:
-        if value := card.get(key):
-            parts.append(f"{label}: {value}")
-    if include_examples and card.get("mes_example"):
-        parts.append(f"Example dialogue: {card['mes_example']}")
-    return "\n".join(parts)
