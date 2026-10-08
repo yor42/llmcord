@@ -8,6 +8,7 @@ import re
 import hashlib
 from dataclasses import replace
 from datetime import timedelta
+from types import SimpleNamespace
 from typing import Literal
 
 import discord
@@ -473,7 +474,7 @@ class SkitBot(commands.Bot):
             await clear_progress()
 
 
-def register_commands(bot: SkitBot) -> None:
+def _command_context(bot: SkitBot) -> SimpleNamespace:
     async def binding_for(interaction: discord.Interaction):
         if not interaction.guild or not interaction.channel:
             raise ValueError("This command is available in server channels only")
@@ -544,15 +545,11 @@ def register_commands(bot: SkitBot) -> None:
     def local_scope(interaction: discord.Interaction) -> tuple[str, int]:
         return ("thread", interaction.channel.id) if isinstance(interaction.channel, discord.Thread) else ("channel", interaction.channel.id)
 
-    admin = app_commands.Group(name="admin", description="Server administrator commands",
-                               default_permissions=discord.Permissions(administrator=True))
-    admin_space = app_commands.Group(name="space", description="Manage worlds, hubs and channel bindings", parent=admin)
-    admin_character = app_commands.Group(name="character", description="Import characters", parent=admin)
-    admin_cast = app_commands.Group(name="cast", description="Set a channel's default cast", parent=admin)
-    admin_ambient = app_commands.Group(name="ambient", description="Turn ambient participation on or off", parent=admin)
-    admin_lore = app_commands.Group(name="lore", description="Add and manage lore", parent=admin)
-    admin_scene = app_commands.Group(name="scene", description="Delete stored scenes", parent=admin)
+    return SimpleNamespace(binding_for=binding_for, require_guild=require_guild, eligible_rows=eligible_rows, guild_characters=guild_characters, cast_rows=cast_rows, eligible_character=eligible_character, eligible_ids=eligible_ids, guild_space=guild_space, safe_choices=safe_choices, character_choices=character_choices, characters_choices=characters_choices, cast_member_choices=cast_member_choices, guild_character_choices=guild_character_choices, space_choices=space_choices, local_scope=local_scope)
 
+
+def _register_space_commands(bot: SkitBot, ctx: SimpleNamespace, admin_space: app_commands.Group) -> None:
+    require_guild, guild_space, space_choices = ctx.require_guild, ctx.guild_space, ctx.space_choices
     space = app_commands.Group(name="space", description="List the server's worlds and hubs")
 
     @admin_space.command(name="create", description="Create a world or hub")
@@ -611,6 +608,9 @@ def register_commands(bot: SkitBot) -> None:
 
     bot.tree.add_command(space)
 
+
+def _register_character_commands(bot: SkitBot, ctx: SimpleNamespace, admin_character: app_commands.Group) -> None:
+    binding_for, require_guild, guild_characters, guild_space, guild_character_choices, space_choices = ctx.binding_for, ctx.require_guild, ctx.guild_characters, ctx.guild_space, ctx.guild_character_choices, ctx.space_choices
     character = app_commands.Group(name="character", description="Inspect characters available here")
 
     @admin_character.command(name="import", description="Import a V2/V3 JSON or PNG character card")
@@ -643,6 +643,9 @@ def register_commands(bot: SkitBot) -> None:
 
     bot.tree.add_command(character)
 
+
+def _register_cast_commands(bot: SkitBot, ctx: SimpleNamespace, admin_cast: app_commands.Group) -> None:
+    binding_for, cast_rows, eligible_character, eligible_ids, character_choices, characters_choices, cast_member_choices = ctx.binding_for, ctx.cast_rows, ctx.eligible_character, ctx.eligible_ids, ctx.character_choices, ctx.characters_choices, ctx.cast_member_choices
     cast = app_commands.Group(name="cast", description="Manage this channel or thread's active cast")
 
     @cast.command(name="set", description="Set the active cast with comma-separated names")
@@ -697,6 +700,9 @@ def register_commands(bot: SkitBot) -> None:
 
     bot.tree.add_command(cast)
 
+
+def _register_ambient_commands(bot: SkitBot, ctx: SimpleNamespace, admin_ambient: app_commands.Group) -> None:
+    binding_for = ctx.binding_for
     ambient = app_commands.Group(name="ambient", description="Show this channel's ambient setting")
 
     @admin_ambient.command(name="on", description="Enable ambient participation in this channel")
@@ -720,6 +726,9 @@ def register_commands(bot: SkitBot) -> None:
 
     bot.tree.add_command(ambient)
 
+
+def _register_summon_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
+    binding_for, eligible_character, character_choices = ctx.binding_for, ctx.eligible_character, ctx.character_choices
     @bot.tree.command(name="summon", description="Invite an eligible character for one turn")
     @app_commands.autocomplete(character=character_choices)
     async def summon(interaction: discord.Interaction, character: str, prompt: str):
@@ -743,6 +752,9 @@ def register_commands(bot: SkitBot) -> None:
         async with bot.channel_locks.setdefault(interaction.channel.id, asyncio.Lock()):
             await bot.run_scene(scene, interaction.channel, interaction)
 
+
+def _register_memory_commands(bot: SkitBot, ctx: SimpleNamespace) -> None:
+    require_guild = ctx.require_guild
     memory = app_commands.Group(name="memory", description="Control your personal character memories")
 
     @memory.command(name="opt_in", description="Allow characters to remember facts you explicitly state")
@@ -778,6 +790,9 @@ def register_commands(bot: SkitBot) -> None:
 
     bot.tree.add_command(memory)
 
+
+def _register_lore_commands(bot: SkitBot, ctx: SimpleNamespace, admin_lore: app_commands.Group) -> None:
+    binding_for, require_guild, guild_space, space_choices, local_scope = ctx.binding_for, ctx.require_guild, ctx.guild_space, ctx.space_choices, ctx.local_scope
     lore = app_commands.Group(name="lore", description="Show the lore available here")
 
     @admin_lore.command(name="add", description="Add lore to this channel (or thread) or to its world or hub")
@@ -847,6 +862,9 @@ def register_commands(bot: SkitBot) -> None:
 
     bot.tree.add_command(lore)
 
+
+def _register_scene_commands(bot: SkitBot, ctx: SimpleNamespace, admin_scene: app_commands.Group) -> None:
+    binding_for = ctx.binding_for
     scene = app_commands.Group(name="scene", description="Start a fresh scene")
 
     @scene.command(name="reset", description="Start a fresh scene from your next invitation")
@@ -871,8 +889,10 @@ def register_commands(bot: SkitBot) -> None:
         await interaction.response.send_message(f"Deleted {count} stored messages from this scene.", ephemeral=True)
 
     bot.tree.add_command(scene)
-    bot.tree.add_command(admin)
 
+
+def _register_context_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
+    binding_for = ctx.binding_for
     @bot.tree.command(name="context", description="Inspect what informed the last character line")
     async def context(interaction: discord.Interaction, message_id: str = ""):
         await binding_for(interaction)
@@ -913,6 +933,8 @@ def register_commands(bot: SkitBot) -> None:
                 text += '\nProvider adaptations: ' + '; '.join(preset['adaptations'])[:300]
         await interaction.response.send_message(text[:1900], ephemeral=True)
 
+
+def _register_error_handler(bot: SkitBot) -> None:
     @bot.tree.error
     async def command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
         if isinstance(error, app_commands.MissingPermissions):
@@ -932,3 +954,27 @@ def register_commands(bot: SkitBot) -> None:
             await interaction.followup.send(message[:1900], ephemeral=True)
         else:
             await interaction.response.send_message(message[:1900], ephemeral=True)
+
+
+def register_commands(bot: SkitBot) -> None:
+    ctx = _command_context(bot)
+    admin = app_commands.Group(name="admin", description="Server administrator commands",
+                               default_permissions=discord.Permissions(administrator=True))
+    admin_space = app_commands.Group(name="space", description="Manage worlds, hubs and channel bindings", parent=admin)
+    admin_character = app_commands.Group(name="character", description="Import characters", parent=admin)
+    admin_cast = app_commands.Group(name="cast", description="Set a channel's default cast", parent=admin)
+    admin_ambient = app_commands.Group(name="ambient", description="Turn ambient participation on or off", parent=admin)
+    admin_lore = app_commands.Group(name="lore", description="Add and manage lore", parent=admin)
+    admin_scene = app_commands.Group(name="scene", description="Delete stored scenes", parent=admin)
+
+    _register_space_commands(bot, ctx, admin_space)
+    _register_character_commands(bot, ctx, admin_character)
+    _register_cast_commands(bot, ctx, admin_cast)
+    _register_ambient_commands(bot, ctx, admin_ambient)
+    _register_summon_command(bot, ctx)
+    _register_memory_commands(bot, ctx)
+    _register_lore_commands(bot, ctx, admin_lore)
+    _register_scene_commands(bot, ctx, admin_scene)
+    bot.tree.add_command(admin)
+    _register_context_command(bot, ctx)
+    _register_error_handler(bot)
