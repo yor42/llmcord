@@ -1,6 +1,6 @@
 # Dashboard performance baseline
 
-Recorded 2026-10-07 at commit `1270c09` (branch `bootstrap/engineering`), before any performance work. The numbers belong to finding **PERF-01** in `audit.md`.
+Recorded 2026-10-07 at commit `1270c09` (branch `bootstrap/engineering`), before any performance work. The numbers belong to finding **PERF-01** in the [hardening audit](history/audit-2026-10-07.md).
 
 ## How to reproduce
 

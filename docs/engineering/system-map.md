@@ -1,6 +1,6 @@
 # System map
 
-Snapshot at commit `1270c09`. This is engineer-facing; the user-facing overview is `docs/architecture.md`. Finding IDs refer to `audit.md`.
+Snapshot at commit `1270c09`. This is engineer-facing; the user-facing overview is `docs/architecture.md`. Finding IDs refer to the [hardening audit](history/audit-2026-10-07.md); current work items to [the backlog](backlog.md).
 
 ## Processes
 

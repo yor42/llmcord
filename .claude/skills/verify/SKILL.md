@@ -10,7 +10,8 @@ description: Run and interpret llmcord's verification suite (lint, repo hygiene,
 | --- | --- |
 | docs / `.claude/` only | `git diff --check`; parse settings JSON and agent/skill YAML; `claude plugin validate .claude/agents --strict` and `claude plugin validate .claude/skills --strict`; inspect scope/model routing |
 | bot, engine, store, models, prompts, world_info, cards, lorebooks | `scripts/verify.sh` |
-| web.py, auth.py, admin*.py, dashboard.py, scene_ui.py, lore_workspace.py, lore_drag.*, templates, tests/dashboard_server.py | `scripts/verify.sh --browser` |
+| web.py, auth.py, admin*.py, dashboard.py, scene_ui.py, lore_workspace.py, lore_drag.*, tests/dashboard_server.py, tests/test_dashboard_browser.py, a UI screenshot script | `scripts/verify.sh --browser` |
+| Discord reply wording only | `scripts/verify.sh` (slash-command tests pin the text) |
 | a performance claim | `scripts/verify.sh --bench` (compare with `docs/engineering/perf-baseline.md`, see the `dashboard-perf` skill) |
 
 Changes to other executable scripts or tests require the default suite; browser/perf fixtures require the corresponding additional level. Use `scripts/verify.sh --browser --bench` when both apply. A `.claude/` hook script change also needs its syntax check and a controlled fixture invocation; metadata validation alone is insufficient.
@@ -19,7 +20,7 @@ During orchestration, `verify-runner` owns the final full run and saves verbose 
 
 ## Read the results
 - The unittest summary looks like `OK (skipped=1, expected failures=N)`. `skipped=1` is the browser test in default mode. **N must equal the number of `test_known_defect_*` tests** (`grep -rc "def test_known_defect_" tests/`).
-- `unexpected successes` means a known defect was fixed: remove its `@unittest.expectedFailure` and update audit.md, or find out why it passes.
+- `unexpected successes` means a known defect was fixed: remove its `@unittest.expectedFailure` and mark the item done in `docs/engineering/backlog.md`, or find out why it passes.
 - Noise you can ignore: discord.py `DeprecationWarning: 'count' is passed as positional argument`, `StarletteDeprecationWarning ... httpx2`, and logged `ERROR:root:Scene failed ...` lines from failure-path tests.
 - Browser suite failure: look in `.test-artifacts/` (failure.png, server.log, browser-errors.json, state.json).
 

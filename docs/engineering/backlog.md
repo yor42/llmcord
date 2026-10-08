@@ -1,0 +1,55 @@
+# Maintenance and UI polish backlog
+
+**Mode since 2026-10-08:** maintenance and UI polish. The hardening rework (R1–R6) is closed; its audit, roadmap and decisions D1–D12 are in [history/](history/). This file replaces both: one list of small items, each done through the `orchestrate-change` skill.
+
+## Rules
+- **IDs:** `MNT-NN` for maintenance (correctness, reliability, structure, tooling, dependencies), `UI-NN` for dashboard and Discord-facing polish. Never renumber; mark an item **Done (commit)** and keep it until the next tidy. Old IDs (`BUG-01`, `SEC-02`, …) still mean what [the audit](history/audit-2026-10-07.md) says; a follow-up carried from them names its origin.
+- **Size:** one item = one small change, green on `scripts/verify.sh` at the level the `verify` skill requires. Anything bigger, any schema change, and any change to an invariant in `CLAUDE.md` needs the user's go-ahead first.
+- **UI items** follow [the UI guide](ui-guide.md) and the [glossary](../glossary.md), and carry before/after evidence (screenshot or exact reply text) in the report.
+- **Priority:** `now` (user asked or user-visible harm), `next`, `later`. The user picks what moves to `now`.
+- **New items:** add the problem, evidence (`path:line` or a test), and the smallest fix you can see. Mark guesses SUSPECTED.
+
+## Maintenance
+
+| ID | Item | Origin | Priority |
+| --- | --- | --- | --- |
+| MNT-01 | Decide whether store calls move to an executor. Needs slow-sqlite WARNING logs from the Pi (`llmcord_core.store`, ≥ 50 ms). | REL-01 | next (blocked on logs) |
+| MNT-02 | Bound the bot's per-channel caches (`channel_locks`, `webhook_locks`, `webhook_defaults`, `webhooks`, `checked_avatar_assets`); drop a cached webhook on 401 too, and only on Unknown Webhook (10015) for NotFound. | REL-04, R3 step 2 | later |
+| MNT-03 | The channel lock is released after delivery, but a turn still holds it across all its model calls; revisit only if long turns block channels in practice. | REL-02 | later |
+| MNT-04 | Avatar listings read every blob to hash it; a stored `image_hash` column (schema bump, needs approval) would remove that. | PERF-03 | later |
+| MNT-05 | `archive_character` writes with `with self.db`, not `write_admin()`, and has no revision check; `thread_casts` has no `guild_id` column (scope relies on character ownership). | SEC-06 | later |
+| MNT-06 | `add_personal`'s consent check and insert are two statements (a cross-process opt-out could race it by microseconds). Put both in one transaction. | ARCH-05 | next |
+| MNT-07 | `avatars.py` imports `auth.py` only for `DISCORD_API`, so the bot process loads FastAPI; move shared constants to a leaf module. `test_single_api_base` checks string identity and would miss a re-added equal literal. | ARCH-03 | later |
+| MNT-08 | Socket-auth handlers (`dashboard._install_socket_auth`) and `rejection_notice` are covered only by the browser suite; add offline tests, including the silent path for unbound clients. | ARCH-01 step 5c, PERF-01 step 5 | next |
+| MNT-09 | Not every `_run_scene` failure stage label is pinned (speaker selection, image description, saving scene input, preparing character prompt, webhook setup); `_stream_speaker`/`_record_reply` take many positional args. | ARCH-01 step 5b | later |
+| MNT-10 | `create_app` (137 lines) and `setup_panel` (100 lines) are the remaining long functions; `setup_panel` calls `eligible_characters`/`allowed_worlds` per channel and hub. Split only alongside other work there. | ARCH-01, PERF-05 | later |
+| MNT-11 | Test tidy: a few inline `Settings(...)` variants and two parallel channel/webhook fakes remain next to `tests/helpers.py`; `CompiledAdapter` mirrors only the Anthropic system-message split. | TOOL-01, ARCH-04 | later |
+| MNT-12 | Some test docstrings cite `docs/engineering/audit.md` / `roadmap.md` (now stubs). Point them at `history/…` and delete the stubs. | 2026-10-08 restructure | later |
+| MNT-13 | Production web server: consider `timeout_keep_alive` in `web_main.py` if Tailscale Serve reuses upstream connections longer than uvicorn's 5 s (the browser fixture hit this race; no production symptom seen). | R5 flake fix | later (SUSPECTED) |
+| MNT-14 | `protected_uploads` 401/413 responses lack the security headers (`BaseHTTPMiddleware` sits outside `SecurityHeaders`). | PERF-04 | later |
+| MNT-15 | Memory: a small `context_tokens` memory profile can fail at compile with the 6000-token default; a branch 200+ nodes past its last summary is summarized without the prior summary; `_history`'s inline summarization ignores the new limits. | BUG-03 | later |
+| MNT-16 | Error redaction keys off env-var name suffixes, not the configured `api_key_env` values; `PROVIDER_STAGES` matches stage label strings. | SEC-05, UX-07 | later |
+| MNT-17 | Dependency and CI upkeep: review Dependabot PRs, keep Python 3.12/3.13 and the arm64 container green. | standing | standing |
+
+## UI polish
+
+| ID | Item | Origin | Priority |
+| --- | --- | --- | --- |
+| UI-01 | Screenshot tooling: a script that starts the browser fixture (`tests/dashboard_server.py`) and saves each dashboard tab at desktop and phone width, so polish work has before/after evidence without hand-driving Playwright. | new | now |
+| UI-02 | First UI survey: walk every tab (Server setup, Characters, Lore, Imports, Prompt presets) and the member/admin slash-command replies; list concrete issues here as new `UI-NN` items with screenshots. | new | now (after UI-01) |
+| UI-03 | Threads still show as raw IDs in lore owner labels and selects (channels show `#name`). | UX-01 | next |
+| UI-04 | A burst of rejected live events shows one toast per event; deduplicate. | PERF-01 step 5 | next |
+| UI-05 | Cancelled confirmation dialogs stay in the DOM until the next panel refresh. | UX-05 | later |
+| UI-06 | An admin command used from a stale DM client says "Only server administrators…" instead of "use this in a server". | R4 step 2b | later |
+| UI-07 | `/context` output falls back to raw scope ids (`guild #…`, `channel #…`, `space #…`) and lists lore as bare `#id` (`discord_bot.py` `_register_context_command`). Use the glossary words and entry names. | UX-06 | next |
+| UI-08 | The `settings.footer` audit row has no on/off detail; dashboard actions that navigate with `?tab=` drop `owner=`. | R4 step 5, UX-01 | later |
+| UI-09 | Coverage for polish-sensitive flows: only the Save cast success toast is browser-tested; emotion-removal dialogs and the button-to-audit wiring (link/unlink/bind) are untested; the avatar `?v=` URLs are not asserted. | UX-01, UX-05, SEC-02 | next |
+| UI-10 | Time the Lore panel build and the character expand separately (character expand went 0.05 → 0.30 s at the end of R5, not profiled). | R5 stage end | later |
+
+## Decisions
+
+Decisions D1–D12 from the rework stay in force ([history/roadmap-r1-r6.md](history/roadmap-r1-r6.md#decisions-taken-2026-10-07)). New decisions continue the numbering here.
+
+| ID | Date | Decision | Applies to |
+| --- | --- | --- | --- |
+| D13 | 2026-10-08 | The project moves from hardening to maintenance and UI polish; work is tracked as `MNT-*`/`UI-*` items in this file. | all |

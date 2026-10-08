@@ -1,6 +1,6 @@
 ---
 name: orchestrate-change
-description: Required workflow for llmcord code changes. Routes bounded work to Haiku, behavioral implementation/tests to Sonnet, and difficult reasoning to Opus; verifies and reviews the final diff.
+description: Required workflow for llmcord code changes (maintenance and UI polish items). Routes bounded work to Haiku, behavioral and UI implementation/tests to Sonnet, and difficult reasoning to Opus; verifies and reviews the final diff.
 ---
 
 # Orchestrate a change
@@ -8,19 +8,19 @@ description: Required workflow for llmcord code changes. Routes bounded work to 
 The main session coordinates and does not edit `llmcord_core/`, entry points, scripts, or tests itself. Delegated workers execute their brief directly; they must not restart this workflow.
 
 ## 0. Establish scope and baseline
-- Work within the user's request or an approved roadmap phase. A direct request authorizes its scoped change; do not request roadmap approval again. Large rework outside that scope still needs approval.
+- Work within the user's request or a backlog item (`docs/engineering/backlog.md`, `MNT-NN`/`UI-NN`). A direct request authorizes its scoped change. Anything larger than one small item, any schema change, and any change to a `CLAUDE.md` invariant needs the user's go-ahead first. Work found along the way becomes a new backlog item, not scope creep.
 - Inspect `git status` and the existing diff. Preserve unrelated/pre-existing edits; record a starting snapshot and include new files. Never stash or reset the user's work to obtain a clean base.
 - For code changes, establish a passing `scripts/verify.sh` baseline once per unchanged starting state or approved batch. Record skips and expected failures. Use `verify-runner`; reuse that evidence until the base changes.
 - Read docs/config directly. For a simple lookup, search directly; for noisy bounded investigation, use `Explore`. Broad debugging or architecture belongs to Sonnet/Opus.
 
 ## 1. Write a brief (~10 lines)
 ```
-ID / title (or user request):
+Backlog ID / title (or user request):
 Goal (observable outcome):
 Files in scope / starting snapshot:
 Out of scope / behavior to preserve:
 Existing coverage / tests needed / known defects to fix:
-User-visible changes allowed:
+User-visible changes allowed (UI items: exact text/layout, evidence paths):
 Risk and reason:
 Agents / model choices and reason:
 Targeted checks / final level: default | --browser | --bench | both
@@ -33,7 +33,9 @@ Resolve necessary product decisions before dependent work; continue independent 
 | --- | --- |
 | Docs or Claude config only | Main session edits; metadata/diff validation via `verify` |
 | Exact low-risk replacement/format/syntax fix, covered behavior | `quick-editor` (Haiku) → final verification → `change-reviewer` (Sonnet) |
-| Behavior change or bug fix | `test-writer` when needed (Sonnet) → `implementer` (Sonnet) → final verification → `change-reviewer` (Sonnet) |
+| Behavior change, bug fix, refactor, dependency/tooling fix (`MNT-*`) | `test-writer` when needed (Sonnet) → `implementer` (Sonnet) → final verification → `change-reviewer` (Sonnet) |
+| Presentation-only UI polish (`UI-*`: layout, labels, wording, toasts, dialogs) | `ui-polisher` (Sonnet, before/after evidence) → `test-writer` for tests that select renamed text → `verify-runner` `--browser` (dashboard) → `change-reviewer` (Sonnet, UI checklist). Follow the `ui-polish` skill |
+| UI item that needs data, guard, audit or write-path changes | Split it: the data part goes the `MNT` route first, then the presentation part |
 | Auth/security, isolation, consent, migration, concurrency, or unresolved cross-module reasoning | Sonnet workers; Opus for the difficult reasoning/review, with a reason in the brief |
 
 - Every custom agent has a `model`; never set `inherit` or override all invocations to the parent's model. Leave the invocation's model unset to use the role default; supply an explicit override only for a justified escalation.
@@ -58,4 +60,4 @@ Give `change-reviewer` the brief, saved task diff, new-file inventory, pre-exist
 On **request changes**, send findings to the appropriate worker (test findings to `test-writer`). Reverify after fixes and resume the reviewer with the delta; at most two correction rounds before surfacing the unresolved issue to the user. Never report a partial review as approval.
 
 ## 6. Report
-State the change, files, user-visible behavior, verification evidence, reviewer verdict, and follow-ups. Record roles/models and escalation reasons. Update roadmap/audit status for the item when applicable. Commit only when requested.
+State the change, files, user-visible behavior, verification evidence, reviewer verdict, and follow-ups. Record roles/models and escalation reasons. Mark the backlog item **Done (commit)** and add any follow-ups as new `MNT-NN`/`UI-NN` items. For UI items include the before/after evidence. Commit after each finished item on its branch; push and offer the merge when the batch the user asked for is done.

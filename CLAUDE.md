@@ -4,8 +4,10 @@ Discord roleplay "skit" bot (characters speak through webhooks, director model p
 
 ## Working model: orchestrator + agents
 The main session **orchestrates; it does not edit application code directly.** For any change to `llmcord_core/`, entry points, scripts, or tests, follow the `orchestrate-change` skill:
-brief → `test-writer` if coverage is needed → `implementer` or `quick-editor` → `verify-runner` → `change-reviewer` → report.
-The main session may directly edit docs, `CLAUDE.md`, and `.claude/` config. Large rework needs explicit user approval of the roadmap first.
+brief → `test-writer` if coverage is needed → `implementer`, `ui-polisher` or `quick-editor` → `verify-runner` → `change-reviewer` → report.
+The main session may directly edit docs, `CLAUDE.md`, and `.claude/` config.
+
+**Current mode: maintenance and UI polish** (since 2026-10-08; the R1–R6 hardening rework is closed). Work comes from the user or `docs/engineering/backlog.md` (`MNT-NN`, `UI-NN`), one small item at a time. UI items also follow the `ui-polish` skill and `docs/engineering/ui-guide.md`. Anything larger than one item, a schema change, or a change to an invariant below needs the user's go-ahead first.
 
 Use Sonnet for routine coordination, implementation, tests, and review; Haiku for bounded exploration (`Explore`), exact mechanical edits (`quick-editor`), and verification summaries (`verify-runner`). Reserve Opus for difficult reasoning or review of security, isolation, consent, migration, or concurrency changes. Each project agent has an explicit model and turn limit. Follow the routing and escalation rules in `orchestrate-change`; do not override agents to match the parent model or start agent teams by default. A directly answerable lookup needs no agent. See `docs/engineering/claude-workflow.md` for the audit, provider/version caveats, and how to check actual model usage.
 
@@ -49,4 +51,4 @@ The bot reads DB state fresh each turn, so dashboard edits apply on the next tur
 - Don't delete "dead" code or legacy routes without grep + a characterization test. NiceGUI is the only admin write path; the legacy Jinja routes were retired in R6 (SEC-02).
 
 ## Engineering docs
-`docs/engineering/` — system map, audit (finding IDs like `BUG-01`, `PERF-01`, `SEC-01`), roadmap, baselines. Test docstrings reference these IDs. User docs live in `docs/`.
+`docs/engineering/` — `backlog.md` (current `MNT-*`/`UI-*` items and decisions from D13), `ui-guide.md` (dashboard and reply conventions), system map, perf baseline, Claude workflow. `history/` holds the closed hardening audit (finding IDs like `BUG-01`, `PERF-01`, `SEC-01` that test docstrings cite), the R1–R6 roadmap with decisions D1–D12, and the first verification baseline. User docs live in `docs/` (words: `docs/glossary.md`).

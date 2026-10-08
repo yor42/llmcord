@@ -6,7 +6,7 @@ Reviewed on 2026-10-08 against official Anthropic documentation. Scope: reposito
 
 | Finding | Evidence at the start | Refinement |
 | --- | --- | --- |
-| Parent model propagated into every custom role | Committed agents used `model: inherit`. Local edits already selected Sonnet for implementation/tests and Opus for review. | Keep Sonnet workers; make routine review Sonnet and request Opus for high-risk reasoning. All six project agents have explicit models. |
+| Parent model propagated into every custom role | Committed agents used `model: inherit`. Local edits already selected Sonnet for implementation/tests and Opus for review. | Keep Sonnet workers; make routine review Sonnet and request Opus for high-risk reasoning. All project agents have explicit models. |
 | Exploration could still spend Opus usage | No project Explore override existed. | Add bounded, read-only Haiku `Explore`. |
 | Small work had no cheaper editing route | Every application change used the same behavioral worker path. | Add Haiku `quick-editor` for exact mechanical changes with existing coverage; preserve the orchestrator's delegation boundary. |
 | Full verification was repeated | Test-writer ran all offline tests; implementer ran full verification; orchestrator reran it; reviewer could run it again. | Workers run targeted checks. Haiku `verify-runner` runs the required final suite; orchestrator inspects the log and diff. Retest after executable edits. |
@@ -16,12 +16,14 @@ Reviewed on 2026-10-08 against official Anthropic documentation. Scope: reposito
 | Verification guidance conflicted | Root required full checks for every change; verify skill required nothing for docs/config and suggested stashing for a base. | Validate metadata/diffs for workflow changes; preserve dirty work and use recorded or isolated baseline evidence. |
 | Known-defect handoff conflicted | Implementer allowed only decorator removal; test conventions also required name/docstring cleanup. | Permit the exact documented metadata transition without weakening assertions. |
 
+**2026-10-08 update:** with the move to maintenance and UI polish (backlog D13), a seventh agent, `ui-polisher` (Sonnet, 30 turns), handles presentation-only items with before/after evidence, and the `ui-polish` skill frames them. The reviewer gained a UI checklist item. The routing below is otherwise unchanged.
+
 ## Routing policy
 
 | Model | Repository use | Escalation |
 | --- | --- | --- |
 | Haiku, low effort | Explicit lookups/inventories; sanitized summaries; exact mechanical edits; verification execution and failure excerpts | Ambiguous matches, unclear failures, or behavior/design interpretation → Sonnet |
-| Sonnet, medium effort | Main coordination, behavioral tests, ordinary implementation, routine review | High-risk invariants or unresolved cross-module reasoning → Opus |
+| Sonnet, medium effort | Main coordination, behavioral and browser tests, ordinary implementation, UI polish (`ui-polisher`), routine review | High-risk invariants or unresolved cross-module reasoning → Opus |
 | Opus | Difficult architecture/debugging and review of security, isolation, consent, migrations, concurrency | Record the reason; reuse gathered evidence; return routine work to the default roles |
 
 These boundaries and turn limits are repository policy based on the code's risk areas. Anthropic's [cost guidance](https://code.claude.com/docs/en/costs#choose-the-right-model) recommends Sonnet for most coding, Opus for complex reasoning, and Haiku for simple subagent tasks. Delegation still consumes usage. Use ordinary tools for repetitive transformations and Haiku for exception summaries rather than starting an agent per file or query.

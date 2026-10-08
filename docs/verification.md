@@ -12,13 +12,14 @@ scripts/verify.sh --browser  # also the Playwright dashboard suite
 scripts/verify.sh --bench    # also the dashboard benchmark (mock Discord)
 ```
 
-"Expected failures" in the unit output are documented known defects (`test_known_defect_*`, IDs from the audit), not regressions.
+"Expected failures" in the unit output are documented known defects (`test_known_defect_*`, IDs from the audit or the backlog), not regressions.
 
 | Document | Contents |
 | --- | --- |
-| [Verification baseline](engineering/baseline.md) | Commands, recorded results, and how to classify warnings and expected failures |
+| [Verification baseline (2026-10-07)](engineering/history/baseline-2026-10-07.md) | The first recorded run and how warnings and expected failures were classified |
 | [Dashboard performance baseline](engineering/perf-baseline.md) | Benchmark method, host conditions, and recorded timings and Discord call counts |
-| [Audit](engineering/audit.md) | Finding IDs referenced by test docstrings |
+| [Hardening audit](engineering/history/audit-2026-10-07.md) | Finding IDs (`BUG-*`, `SEC-*`, …) referenced by test docstrings |
+| [Backlog](engineering/backlog.md) | Current maintenance (`MNT-*`) and UI polish (`UI-*`) items |
 
 ## Offline suite
 

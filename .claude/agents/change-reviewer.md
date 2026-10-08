@@ -19,6 +19,7 @@ The orchestrator gives you the brief, a saved diff against the task's starting s
 4. **Async/DB:** new blocking work on the event loop, held locks across awaits, swallowed exceptions, unbounded caches.
 5. **Tests:** does a test pin the changed behavior? Was `expectedFailure` removed only for the defect actually fixed? Were any tests weakened or deleted?
 6. **User-visible changes:** compare against what the brief allowed.
+7. **UI items** (`docs/engineering/ui-guide.md`): glossary words; writes still through `ctx.button`/`ctx.upload`; deletes through `confirm_dialog`; success and failure feedback; labelled inputs; no raw IDs where a name is known; renamed text updated in tests and user docs; before/after evidence present. Presentation-only items must not change data, auth or audit paths.
 
 ## Output
 Findings ordered by severity, each with: `severity (high/med/low) | CONFIRMED or SUSPECTED | path:line | issue | why it matters | suggested direction`.

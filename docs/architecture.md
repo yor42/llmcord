@@ -46,13 +46,14 @@ flowchart LR
 | [`llmcord_core/lore_workspace.py`](../llmcord_core/lore_workspace.py) | Dashboard lore lists, search, pagination, and selection actions. |
 | [`llmcord_core/lore_drag.py`](../llmcord_core/lore_drag.py), [`lore_drag.js`](../llmcord_core/lore_drag.js) | Drag-and-drop lore transfers using stable entry snapshots. |
 
-For engineering detail (process and sequence diagrams, shared state, known defects by ID, and the rework plan) see [`engineering/`](engineering/):
+For engineering detail (process and sequence diagrams, shared state, the maintenance backlog, UI conventions, and the closed hardening record) see [`engineering/`](engineering/):
 
 | Document | Contents |
 | --- | --- |
 | [System map](engineering/system-map.md) | Processes, component diagram, turn and dashboard-auth sequences, shared state, external dependencies |
-| [Audit](engineering/audit.md) | Findings (`BUG-*`, `PERF-*`, `SEC-*`, `REL-*`, `ARCH-*`, `UX-*`, `TOOL-*`) with evidence and confidence |
-| [Roadmap](engineering/roadmap.md) | Rework phases R1–R6 and open product decisions |
+| [Backlog](engineering/backlog.md) | Current maintenance (`MNT-*`) and UI polish (`UI-*`) items, decisions |
+| [UI guide](engineering/ui-guide.md) | Dashboard and Discord-text conventions for polish work |
+| [History](engineering/history/) | The closed R1–R6 hardening rework: audit findings (`BUG-*`, `PERF-*`, `SEC-*`, …), roadmap, decisions D1–D12 |
 
 ## Scene flow
 

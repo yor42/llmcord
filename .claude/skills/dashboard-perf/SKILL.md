@@ -24,8 +24,9 @@ description: Measure llmcord dashboard performance with the mocked-Discord Playw
 - Timings on a Pi vary by about ±15%. Claim a timing win only when it beats that margin on both runs.
 
 ## Interpret
-- The known dominant cost is PERF-01: every socket event, `ctx.run`, page load and avatar request re-runs `AuthService.guard`, which calls Discord `/users/@me/guilds`. These calls are serialized per token and wait out the rate limit.
+- Every socket event, `ctx.run`, page load and avatar request runs `AuthService.guard`. Since R2 (PERF-01) the guild list is cached per session for 300 s, so after a cold load these should cost 0 Discord calls. A non-zero `user_guild_checks` after cold load is a regression.
 - Under `ratelimited`, `settled_s` grows linearly with `user_guild_checks`.
+- UI polish can move cost: a panel built on tab click counts inside that scenario (see the "end of R5" notes in perf-baseline.md). Open timing items are in the backlog (UI-10).
 - Offline counters live in `tests/test_web_auth_boundaries.py`. If a change alters Discord call counts, update those assertions and perf-baseline.md in the same change.
 - To investigate a new scenario, add it to `run_profile` in `scripts/bench_dashboard.py` using `measure(name, action)`. Keep scenarios deterministic, and use only the fixture's mock Discord.
 

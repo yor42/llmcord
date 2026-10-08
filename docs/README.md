@@ -16,6 +16,8 @@ llmcord is a Discord character bot for casual group skits. Administrators arrang
 | [Admin console](admin-console.md) | Lore workspace, server prompt presets, imports, and emotion avatars. |
 | [Verification](verification.md) | Run offline checks and validate a private Discord channel. |
 | [GitHub CI and container releases](github-ci.md) | Enable automated checks, dependency updates, and versioned ARM64/AMD64 images. |
+| [Maintenance and UI backlog](engineering/backlog.md) | Current work items (`MNT-*`, `UI-*`) and decisions. |
+| [UI guide](engineering/ui-guide.md) | Conventions for dashboard and Discord-reply polish. |
 | [Claude Code workflow audit](engineering/claude-workflow.md) | Model routing, bounded delegation, verification ownership, and official sources. |
 
 The [repository README](../README.md) contains the project overview and setup summary. The files here describe the current implementation. They do not require a documentation generator; GitHub renders them directly.
