@@ -43,15 +43,15 @@ class AdminService:
         owners = []
         for row in self.store.list_spaces(guild_id):
             owners.append({'kind': 'space', 'id': row['id'], 'label': f"{row['kind'].title()}: {row['name']}"})
-        for row in self.store.all('SELECT * FROM characters WHERE guild_id=? ORDER BY name', (guild_id,)):
+        for row in self.store.list_characters(guild_id):
             owners.append({'kind': 'character', 'id': row['id'], 'label': 'Character: ' + row['name']})
-        for row in self.store.all('SELECT * FROM channels WHERE guild_id=? ORDER BY channel_id', (guild_id,)):
+        for row in self.store.list_channels(guild_id):
             owners.append({'kind': 'channel', 'id': row['channel_id'], 'label': f"Channel: {row['channel_id']}"})
         owners.append({'kind': 'guild', 'id': guild_id, 'label': 'Guild: Server-wide lore'})
         for row in self.store.list_lorebooks(guild_id):
             owners.append({'kind': 'book', 'id': row['id'], 'label': 'Book: ' + row['name']})
-        for row in self.store.all("SELECT DISTINCT scope_id FROM lore WHERE guild_id=? AND scope_kind='thread'", (guild_id,)):
-            owners.append({'kind': 'thread', 'id': row['scope_id'], 'label': f"Thread: {row['scope_id']}"})
+        for scope_id in self.store.thread_lore_scopes(guild_id):
+            owners.append({'kind': 'thread', 'id': scope_id, 'label': f"Thread: {scope_id}"})
         return owners
 
     def preview_prompt(self, guild_id, bundle, purpose, character_id, sample, sample_history, channel_id=None):

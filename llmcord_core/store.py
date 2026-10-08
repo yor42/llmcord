@@ -8,7 +8,7 @@ import threading
 from contextlib import closing
 from pathlib import Path
 from typing import Any
-from .admin_store import AdminStore
+from .admin_store import AdminStore, ConflictError
 
 
 SCHEMA = """
@@ -677,20 +677,36 @@ class Store(AdminStore):
                     (json.dumps([ident for ident in cast if ident != character_id]), row["thread_id"]))
 
     def update_character(self, guild_id: int, character_id: int, world_id: int,
-                         name: str, card: dict) -> None:
-        world = self.space_by_id(world_id)
-        if not world or world["guild_id"] != guild_id or world["kind"] != "world":
-            raise ValueError("Choose a home world in this server")
-        if not name.strip():
-            raise ValueError("Character name cannot be empty")
-        previous = self.character_by_id(character_id)
-        if not previous or previous["guild_id"] != guild_id:
-            raise ValueError("Character not found in this server")
-        moved = previous["world_id"] != world_id
-        with self.db:
+                         name: str, card: dict, expected_revision: int | None = None) -> None:
+        with self.write_admin():
+            world = self.space_by_id(world_id)
+            if not world or world["guild_id"] != guild_id or world["kind"] != "world":
+                raise ValueError("Choose a home world in this server")
+            if not name.strip():
+                raise ValueError("Character name cannot be empty")
+            previous = self.character_by_id(character_id)
+            if not previous or previous["guild_id"] != guild_id:
+                raise ValueError("Character not found in this server")
+            if expected_revision is not None and expected_revision != self.owner_revision(guild_id, 'character', character_id):
+                raise ConflictError('Character changed; reload before saving')
+            moved = previous["world_id"] != world_id
             self.db.execute("UPDATE characters SET world_id=?,name=?,card=? WHERE guild_id=? AND id=?",
                 (world_id, name.strip(), json.dumps(card), guild_id, character_id))
             self._prune_character_casts(guild_id, character_id)
             if moved:
                 self._remove_from_thread_casts(character_id)
             self.bump_owner(guild_id, 'character', character_id)
+
+    def list_characters(self, guild_id: int) -> list:
+        return self.all("SELECT * FROM characters WHERE guild_id=? ORDER BY name", (guild_id,))
+
+    def list_channels(self, guild_id: int) -> list:
+        return self.all("SELECT * FROM channels WHERE guild_id=? ORDER BY channel_id", (guild_id,))
+
+    def thread_lore_scopes(self, guild_id: int) -> list[int]:
+        return [int(r["scope_id"]) for r in self.all(
+            "SELECT DISTINCT scope_id FROM lore WHERE guild_id=? AND scope_kind='thread'", (guild_id,))]
+
+    def asset_channel_id(self, guild_id: int) -> int | None:
+        row = self.one("SELECT asset_channel_id FROM guild_settings WHERE guild_id=?", (guild_id,))
+        return int(row["asset_channel_id"]) if row and row["asset_channel_id"] is not None else None

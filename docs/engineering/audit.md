@@ -279,6 +279,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Direction:** extract along existing seams (command groups, scene stages, route groups) only when a roadmap phase already touches them.
 
 ### ARCH-02: Raw SQL and private store helpers in UI code
+- **Status:** Resolved in R5 step 1 for `dashboard.py` and `admin.py` (store methods with a revision check on the character save). Legacy `web.py` routes keep their raw SQL until R6 (SEC-02).
 - **Severity:** medium. **Confidence:** CONFIRMED. **Label:** fragile.
 - **Evidence:**
   - The dashboard character save reimplements `store.update_character` with a raw `UPDATE` and calls `store._prune_character_casts` and `store._remove_from_thread_casts` (`dashboard.py:325-340`, `:335-338`).

@@ -296,7 +296,7 @@ async def setup_panel(ctx):
             ui.navigate.reload()
         ctx.button('Bind channel', bind, 'channel.bind', then=bound)
     ui.label('Rebinding a channel keeps its ambient mode and removes cast members not available in the new space.').classes('text-amber-300')
-    for binding in store.all('SELECT * FROM channels WHERE guild_id=?', (gid,)):
+    for binding in store.list_channels(gid):
         with ui.card().classes('w-full channel-card'):
             ui.label(channel_names.get(binding['channel_id'], str(binding['channel_id']))).classes('text-lg font-bold')
             guideline_editor(ctx, 'channel', binding['channel_id'], 'Channel guidelines')
@@ -320,8 +320,8 @@ async def setup_panel(ctx):
     ctx.button('Save footer setting', save_footer, 'settings.footer')
     ui.separator()
     ui.label('Avatar asset channel').classes('text-xl font-bold')
-    setting = store.one('SELECT asset_channel_id FROM guild_settings WHERE guild_id=?', (gid,))
-    asset_channel = ui.select(channel_names, value=setting['asset_channel_id'] if setting and setting['asset_channel_id'] in channel_names else None, label='Private text channel')
+    current_asset = store.asset_channel_id(gid)
+    asset_channel = ui.select(channel_names, value=current_asset if current_asset in channel_names else None, label='Private text channel')
     async def configure():
         await ctx.service.avatars.configure(gid, asset_channel.value)
         return True
@@ -349,7 +349,7 @@ def characters_panel(ctx):
     ui.button('Create character', icon='add', on_click=new_character).set_enabled(bool(worlds))
     if not worlds:
         ui.label('Create a home world in Server setup first.')
-    rows = store.all('SELECT * FROM characters WHERE guild_id=? ORDER BY name', (gid,))
+    rows = store.list_characters(gid)
     for row in rows:
         with ui.expansion(row['name'] + (' · Archived' if row['archived'] else '')).classes('w-full border rounded-lg character-card'):
             card = json.loads(row['card'])
@@ -362,18 +362,8 @@ def characters_panel(ctx):
             def save(row=row, card=card, name=name, world=world, fields=fields, confirm=confirm, revision=revision):
                 if world.value != row['world_id'] and not confirm.value:
                     raise ValueError('Confirm the world move before saving')
-                with store.write_admin():
-                    if store.owner_revision(gid, 'character', row['id']) != revision:
-                        raise ValueError('Character changed; reload before saving')
-                    new = {**card, **{key: control.value or '' for key, control in fields.items()}, 'name': name.value}
-                    target = store.space_by_id(world.value)
-                    if not target or target['guild_id'] != gid or target['kind'] != 'world' or not name.value:
-                        raise ValueError('Choose a home world and name')
-                    store.db.execute('UPDATE characters SET card=?,name=?,world_id=? WHERE guild_id=? AND id=?', (json.dumps(new), name.value.strip(), world.value, gid, row['id']))
-                    store._prune_character_casts(gid, row['id'])
-                    if world.value != row['world_id']:
-                        store._remove_from_thread_casts(row['id'])
-                    store.bump_owner(gid, 'character', row['id'])
+                new = {**card, **{key: control.value or '' for key, control in fields.items()}, 'name': name.value}
+                store.update_character(gid, row['id'], world.value, name.value or '', new, expected_revision=revision)
                 return True
             ctx.button('Save character', save, 'character.edit', {'id': row['id']}, then=reload_characters)
             def archive(row=row):
@@ -607,7 +597,7 @@ def imports_panel(ctx):
     with ui.row().classes('items-end'):
         book_name = ui.input('Book name')
         target = ui.select(['guild', 'channel'], value='guild', label='Book scope')
-        channels = {r['channel_id']: str(r['channel_id']) for r in store.all('SELECT * FROM channels WHERE guild_id=?', (gid,))}
+        channels = {r['channel_id']: str(r['channel_id']) for r in store.list_channels(gid)}
         channel = ui.select(channels, label='Channel (for channel books)')
         ctx.button('Create book', lambda: store.create_lorebook(gid, book_name.value or '', target.value, channel.value or 0), 'book.create', then=lambda _: ui.navigate.reload())
     for book in store.list_lorebooks(gid):
@@ -789,9 +779,9 @@ def presets_panel(ctx):
     ctx.button('Export SillyTavern dialogue preset', st_export)
     ui.separator()
     ui.label('Assembled request preview').classes('text-xl font-bold')
-    chars = {r['id']: r['name'] for r in store.all('SELECT * FROM characters WHERE guild_id=?', (gid,))}
+    chars = {r['id']: r['name'] for r in store.list_characters(gid)}
     character = ui.select(chars, label='Sample character')
-    channel = ui.select({row['channel_id']: str(row['channel_id']) for row in store.all('SELECT channel_id FROM channels WHERE guild_id=?', (gid,))}, label='Sample channel (optional)')
+    channel = ui.select({row['channel_id']: str(row['channel_id']) for row in store.list_channels(gid)}, label='Sample channel (optional)')
     sample = ui.textarea('Sample input', value='Hello!').classes('w-full')
     history = ui.textarea('Sample history (one message per line)').classes('w-full')
     def preview():
