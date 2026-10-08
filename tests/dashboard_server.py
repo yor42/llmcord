@@ -75,6 +75,10 @@ def main():
     app.state.sessions['browser-ux-session'] = {'user': {'id': '4', 'username': 'Test admin'}, 'expires': time.time() + 3600,
         'token_expires': time.time() + 3600, 'csrf': 'browser-ux-csrf', 'access': 'test', 'refresh': 'test'}
 
+    # Its own session for the UI-29 account menu test, which signs out.
+    app.state.sessions['browser-account-session'] = {'user': {'id': '4', 'username': 'Test admin'}, 'expires': time.time() + 3600,
+        'token_expires': time.time() + 3600, 'csrf': 'browser-account-csrf', 'access': 'test', 'refresh': 'test'}
+
     # Count lore board renders (PERF-01/02): render_board loads each side through AdminStore.admin_entries_page,
     # counted here under the 'admin_entries' counter keys (one per side per render).
     counters = Counter()

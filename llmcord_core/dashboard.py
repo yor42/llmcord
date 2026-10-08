@@ -16,7 +16,7 @@ from http.cookies import SimpleCookie
 from fastapi import HTTPException, Request
 from fastapi.responses import PlainTextResponse
 
-from .auth import guild_icon_url, is_server_admin
+from .auth import guild_icon_url, is_server_admin, user_avatar_url
 from .avatars import MAX_AVATAR_BYTES, avatar_version, normalize_avatar
 from .cards import parse_card
 from .lorebooks import parse_lorebook
@@ -188,6 +188,17 @@ body.body--dark .q-tab-panels, body.body--dark .q-tab-panel {{ background: trans
 .ll-crumb-icon {{ flex: none; width: 24px; height: 24px; border-radius: 8px; object-fit: cover; }}
 .ll-crumb-tile {{ flex: none; width: 24px; height: 24px; border-radius: 8px; background: {THEME_TILE}; color: {THEME_TILE_TEXT}; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center; }}
 .ll-crumb-name {{ min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }}
+.ll-account {{ flex: none; color: #fff !important; padding: 4px 8px; border-radius: 20px; }}
+.ll-account .q-btn__content {{ flex-wrap: nowrap; gap: 8px; }}
+.ll-avatar {{ flex: none; width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }}
+.ll-avatar-tile {{ flex: none; width: 32px; height: 32px; border-radius: 50%; background: {THEME_TILE}; color: {THEME_TILE_TEXT}; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center; }}
+.ll-account-name {{ color: #fff; font-weight: 600; max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+@media (max-width: 600px) {{ .ll-account-name {{ display: none; }} }}
+.ll-menu.q-menu {{ background: {THEME_CARD}; color: #fff; min-width: 200px; }}
+.ll-menu-head {{ padding: 12px 16px; display: flex; flex-direction: column; gap: 2px; }}
+.ll-menu form {{ margin: 0; }}
+.ll-menu-item {{ display: block; width: 100%; padding: 10px 16px; border: 0; background: transparent; color: #fff; font: inherit; text-align: left; cursor: pointer; }}
+.ll-menu-item:hover, .ll-menu-item:focus-visible {{ background: {THEME_CARD_HOVER}; }}
 .q-card {{ border-radius: 12px; }}
 .q-btn, .q-tab {{ text-transform: none; }}
 .q-field--outlined .q-field__control {{ background: {THEME_BODY}; border-radius: 8px; }}
@@ -364,6 +375,11 @@ def _register_pages(app):
             return
         ui.context.client.llmcord_binding = (request.cookies['llmcord_session'], None)
         guilds = await app.state.auth.guilds(session)
+        with ui.header().classes('items-center justify-between no-wrap'):
+            with ui.element('div').classes('ll-crumb'):
+                crumb = ui.link('llmcord', '/')
+                crumb.props['aria-label'] = 'llmcord / Servers'
+            account_menu(session)
         with ui.column().classes('ll-servers gap-1'):
             ui.label('Your servers').classes('text-3xl font-bold')
             ui.label('Servers where you are an administrator.').classes('ll-muted')
@@ -380,7 +396,6 @@ def _register_pages(app):
                         else:
                             ui.label(server_initials(guild['name'])).classes('ll-server-tile').props('aria-hidden=true')
                         ui.label(str(guild['name'])).classes('ll-server-name')
-        signout(app, session)
 
     @ui.page('/guild/{guild_id}', response_timeout=30)
     async def guild(request: Request, guild_id: int):
@@ -405,7 +420,7 @@ def _register_pages(app):
                     else:
                         ui.label(server_initials(current.get('name'))).classes('ll-crumb-tile').props('aria-hidden=true')
                     ui.label(str(current.get('name', ''))).classes('ll-crumb-name')
-            ui.label(session['user']['username']).classes('ml-2')
+            account_menu(session)
         with ui.column().classes('ll-page'):
             ui.label('Server administration').classes('text-3xl font-bold')
             ui.label('Changes apply on the next bot turn. Prompt drafts require activation.').classes('ll-muted')
@@ -431,7 +446,6 @@ def _register_pages(app):
                 for tab in (setup, characters, lore, imports, prompts):
                     ctx.containers[tab.props['name']] = ui.tab_panel(tab)
             await ctx.build(selected_tab)
-        signout(app, session)
 
 
 def link_operation(store, guild_id, hub, world, enabled):
@@ -474,11 +488,28 @@ def timezone_detail(result):
     return {'old': result['old'], 'new': result['new']}
 
 
-def signout(app, session):
+def account_menu(session):
+    """Header account button (avatar plus name) opening a menu with the name and a Sign out item."""
     from nicegui import ui
-    # A normal POST retains the existing origin and CSRF checks.
     import html
-    ui.html('<form action="/logout" method="post"><input type="hidden" name="csrf" value="' + html.escape(session['csrf'], quote=True) + '"><button type="submit">Sign out</button></form>', sanitize=False)
+    user = session['user']
+    name = str(user.get('global_name') or user['username'])
+    with ui.button().props('flat no-caps aria-label="Account menu"').classes('ll-account'):
+        # user_avatar_url only returns a CDN URL built from a digit snowflake and a hex hash, so it is safe inside the quoted prop.
+        url = user_avatar_url(user, 64)
+        if url:
+            ui.element('img').classes('ll-avatar').props(f'src="{url}" alt=""')
+        else:
+            ui.label(server_initials(name)).classes('ll-avatar-tile').props('aria-hidden=true')
+        ui.label(name).classes('ll-account-name')
+        with ui.menu().classes('ll-menu'):
+            with ui.element('div').classes('ll-menu-head'):
+                ui.label(name).classes('font-semibold')
+                if str(user['username']) != name:
+                    ui.label('@' + str(user['username'])).classes('ll-muted text-sm')
+            ui.separator()
+            # A normal POST retains the existing origin and CSRF checks.
+            ui.html('<form action="/logout" method="post"><input type="hidden" name="csrf" value="' + html.escape(session['csrf'], quote=True) + '"><button type="submit" class="ll-menu-item">Sign out</button></form>', sanitize=False)
 
 
 async def setup_panel(ctx):

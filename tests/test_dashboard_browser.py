@@ -844,6 +844,40 @@ class DashboardBrowserTests(unittest.TestCase):
             context.request.post(self.url + '/_test/guild-name', data={'name': 'Test server'})
             context.close()
 
+    def test_account_menu_in_header_with_sign_out(self):
+        """UI-29: the header account button opens a menu with the display name and a CSRF-carrying Sign out form; the old bottom button is gone."""
+        from playwright.sync_api import expect
+        context = self.browser.new_context(ignore_https_errors=True, viewport={'width': 1400, 'height': 1000})
+        context.add_cookies([{'name': 'llmcord_session', 'value': 'browser-account-session', 'url': self.url,
+                              'secure': True, 'httpOnly': True, 'sameSite': 'Lax'}])
+        page = context.new_page()
+        errors = []
+        page.on('pageerror', lambda e: errors.append(e.stack or str(e)))
+        try:
+            page.goto(self.url + '/admin/')
+            expect(page.get_by_role('link', name='llmcord / Servers', exact=True)).to_be_visible()
+            expect(page.get_by_role('button', name='Account menu')).to_be_visible()
+            expect(page.get_by_text('Sign out')).to_have_count(0)
+            page.goto(self.url + '/admin/guild/1')
+            button = page.get_by_role('button', name='Account menu')
+            expect(button).to_be_visible()
+            button.click()
+            menu = page.locator('.ll-menu')
+            expect(menu.get_by_text('Test admin', exact=True)).to_be_visible()
+            sign_out = menu.get_by_role('button', name='Sign out')
+            expect(sign_out).to_be_visible()
+            form = menu.locator('form')
+            self.assertEqual(form.get_attribute('method'), 'post')
+            self.assertTrue(form.get_attribute('action').endswith('/logout'))
+            self.assertEqual(form.locator('input[name=csrf]').get_attribute('type'), 'hidden')
+            self.assertEqual(form.locator('input[name=csrf]').get_attribute('value'), 'browser-account-csrf')
+            sign_out.click()
+            page.wait_for_url(lambda url: not url.rstrip('/').endswith('/guild/1'))
+            expect(page.get_by_text('Sign in with Discord')).to_be_visible()
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
     def panel_reads(self, context):
         counters = context.request.get(self.url + '/_test/counters').json()
         return {name: counters.get('store:' + name, 0) for name in ('model_usage_summary', 'list_presets')}
