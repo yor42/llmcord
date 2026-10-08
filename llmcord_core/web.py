@@ -37,7 +37,7 @@ class SecurityHeaders:
         nonce = secrets.token_urlsafe(24) if admin else ""
         policy = "default-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"
         if admin:
-            policy += f"; script-src 'self' 'nonce-{nonce}' 'unsafe-eval'; img-src 'self' data: blob:; connect-src 'self' {self.connect}; font-src 'self' data:"
+            policy += f"; script-src 'self' 'nonce-{nonce}' 'unsafe-eval'; img-src 'self' data: blob: https://cdn.discordapp.com; connect-src 'self' {self.connect}; font-src 'self' data:"
         start, chunks, rewrite = None, [], False
 
         async def wrapped(message):

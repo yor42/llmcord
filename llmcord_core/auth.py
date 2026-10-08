@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import re
 import secrets
 import time
 
@@ -13,6 +14,44 @@ from fastapi import HTTPException
 DISCORD_API = 'https://discord.com/api/v10'
 ADMINISTRATOR = 1 << 3
 GUILD_CACHE_TTL = 300  # seconds a session's guild list is reused (roadmap D1)
+DISCORD_CDN = 'https://cdn.discordapp.com'
+IMAGE_SIZES = frozenset(1 << n for n in range(4, 13))
+_IMAGE_HASH = re.compile(r'(a_)?[0-9a-f]{32}')
+
+
+def _snowflake(value) -> str | None:
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return str(value)
+    if isinstance(value, str) and value.isascii() and value.isdigit():
+        return value
+    return None
+
+
+def _check_size(size) -> None:
+    if isinstance(size, bool) or not isinstance(size, int) or size not in IMAGE_SIZES:
+        raise ValueError(f'size must be a power of two from 16 to 4096, got {size!r}')
+
+
+def _image_hash(value) -> str | None:
+    return value if isinstance(value, str) and _IMAGE_HASH.fullmatch(value) else None
+
+
+def user_avatar_url(user, size: int = 64) -> str | None:
+    _check_size(size)
+    if not isinstance(user, dict) or (uid := _snowflake(user.get('id'))) is None:
+        return None
+    if avatar := _image_hash(user.get('avatar')):
+        return f'{DISCORD_CDN}/avatars/{uid}/{avatar}.png?size={size}'
+    return f'{DISCORD_CDN}/embed/avatars/{(int(uid) >> 22) % 6}.png'
+
+
+def guild_icon_url(guild, size: int = 64) -> str | None:
+    _check_size(size)
+    if not isinstance(guild, dict) or (gid := _snowflake(guild.get('id'))) is None:
+        return None
+    if icon := _image_hash(guild.get('icon')):
+        return f'{DISCORD_CDN}/icons/{gid}/{icon}.png?size={size}'
+    return None
 
 
 def token_key(token):

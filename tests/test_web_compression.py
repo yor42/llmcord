@@ -11,7 +11,7 @@ from helpers import discord_transport, install_session, shared_dashboard
 from llmcord_core.web import create_app
 
 BASE_POLICY = "default-src 'self'; style-src 'self' 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'"
-ADMIN_SUFFIX = ("; img-src 'self' data: blob:; connect-src 'self' wss://pi.test; font-src 'self' data:")
+ADMIN_SUFFIX = ("; img-src 'self' data: blob: https://cdn.discordapp.com; connect-src 'self' wss://pi.test; font-src 'self' data:")
 IMMUTABLE = "public, max-age=31536000, immutable, stale-while-revalidate=31536000"
 GZIP = {"accept-encoding": "gzip"}
 IDENTITY = {"accept-encoding": "identity"}
