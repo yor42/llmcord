@@ -1,6 +1,7 @@
 """Component-based private administration mounted under /admin."""
 from __future__ import annotations
 
+import contextlib
 import copy
 import functools
 import json
@@ -159,8 +160,15 @@ _THEME_CSS = f"""
 body.body--dark, body.body--dark .q-page, body.body--dark .q-layout {{ background: {THEME_BODY}; }}
 .q-header {{ background: {THEME_HEADER}; }}
 body.body--dark .q-card {{ background: {THEME_CARD}; }}
-body.body--dark .q-card .q-card {{ background: {THEME_NESTED}; }}
+body.body--dark .q-card .q-card, body.body--dark .q-card .q-expansion-item {{ background: {THEME_NESTED}; }}
+.ll-section {{ width: 100%; padding: 24px; gap: 16px; margin-bottom: 20px; align-items: flex-start; }}
+.ll-section-title {{ font-size: 20px; font-weight: 700; line-height: 1.3; }}
+.ll-form-row {{ width: 100%; display: flex; flex-flow: row wrap; align-items: flex-end; gap: 16px; }}
+.ll-form-row .q-field {{ flex: 0 1 16rem; min-width: min(16rem, 100%); }}
+.ll-section > .q-expansion-item {{ border: 1px solid {THEME_DIVIDER}; border-radius: 8px; }}
+@media (max-width: 600px) {{ .ll-section {{ padding: 16px; }} .ll-form-row .q-field {{ flex-basis: 100%; }} }}
 body.body--dark .q-tab-panels, body.body--dark .q-tab-panel {{ background: transparent; }}
+.ll-page .q-tab-panel {{ padding-left: 0; padding-right: 0; }}
 .ll-tabs {{ border-bottom: 1px solid {THEME_DIVIDER}; }}
 .ll-tabs .q-tab {{ color: {THEME_TEXT_MUTED}; }}
 .ll-tabs .q-tab--active {{ color: #fff; }}
@@ -175,7 +183,10 @@ body.body--dark .q-tab-panels, body.body--dark .q-tab-panel {{ background: trans
 .ll-crumb-name {{ min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }}
 .q-card {{ border-radius: 12px; }}
 .q-btn, .q-tab {{ text-transform: none; }}
-.q-field--outlined .q-field__control:before {{ border-color: {THEME_BORDER}; }}
+.q-field--outlined .q-field__control {{ background: {THEME_BODY}; border-radius: 8px; }}
+.q-field--outlined .q-field__control:before {{ border-color: {THEME_BORDER}; border-radius: 8px; }}
+.q-field--outlined .q-field__control:after {{ border-radius: 8px; }}
+.ll-tabs .q-tabs__arrow--left, .ll-tabs .q-tabs__arrow--right {{ color: {THEME_TEXT_MUTED}; }}
 .ll-muted {{ color: {THEME_TEXT_MUTED}; }}
 .ll-faint {{ color: {THEME_TEXT_FAINT}; }}
 .ll-signin-card {{ width: 100%; max-width: 420px; padding: 40px; margin: 80px auto 0; align-items: stretch; text-align: center; gap: 12px; }}
@@ -189,6 +200,15 @@ body.body--dark .q-tab-panels, body.body--dark .q-tab-panel {{ background: trans
 .ll-server-tile {{ flex: none; width: 56px; height: 56px; border-radius: 16px; background: {THEME_TILE}; color: {THEME_TILE_TEXT}; font-size: 20px; font-weight: 600; display: flex; align-items: center; justify-content: center; }}
 .ll-server-name {{ min-width: 0; overflow-wrap: anywhere; }}
 """
+
+
+@contextlib.contextmanager
+def section(title):
+    """A top-level settings card with a 20 px heading; reuse it for each tab section."""
+    from nicegui import ui
+    with ui.card().classes('ll-section w-full'):
+        ui.label(title).classes('ll-section-title')
+        yield
 
 
 def apply_theme():
@@ -206,6 +226,10 @@ def server_initials(name):
 def mount_dashboard(app):
     from nicegui import ui
 
+    # Outlined fields app-wide (UI-28); default_props is a dict update, so repeating it is harmless.
+    ui.input.default_props('outlined dense')
+    ui.select.default_props('outlined dense')
+    ui.textarea.default_props('outlined dense')
     _install_socket_auth(app)
     _install_upload_guard(app)
     _register_pages(app)
@@ -378,7 +402,7 @@ def _register_pages(app):
         with ui.column().classes('ll-page'):
             ui.label('Server administration').classes('text-3xl font-bold')
             ui.label('Changes apply on the next bot turn. Prompt drafts require activation.').classes('ll-muted')
-            with ui.tabs().classes('w-full ll-tabs').props('align=left') as tabs:
+            with ui.tabs().classes('w-full ll-tabs').props('align=left outside-arrows mobile-arrows') as tabs:
                 setup = ui.tab('setup', 'Server setup')
                 characters = ui.tab('characters', 'Characters')
                 lore = ui.tab('lore', 'Lore')
@@ -455,109 +479,103 @@ async def setup_panel(ctx):
     store, gid = ctx.store, ctx.guild_id
     spaces = {r['id']: r['name'] + ' (' + r['kind'] + ')' for r in ctx.snapshot.spaces}
     channel_names = ctx.channel_names
-    ui.label('Models and usage · last 24 hours').classes('text-xl font-bold')
-    models = ctx.service.model_config
-    grouped = {}
-    for role in ('dialogue', 'director', 'memory'):
-        ident = models.get(role, models.get('dialogue'))
-        if ident:
-            grouped.setdefault(ident, []).append(role)
-    rows = []
-    for ident, roles in grouped.items():
-        model = models.get('profiles', {}).get(ident, {}).get('model', '')
-        summary = store.model_usage_summary(gid, ident, model)
-        cost = f"${summary['cost_usd']:.6f}" + (f" + {summary['unpriced']} unpriced calls" if summary['unpriced'] else '')
-        rows.append({'profile': ident, 'model': model, 'roles': ', '.join(roles), 'input': summary['input_tokens'], 'output': summary['output_tokens'], 'cost': cost, 'unreported': summary['unreported']})
-    if rows:
-        ui.table(columns=[{'name': key, 'field': key, 'label': label, 'align': 'left'} for key, label in
-                          (('model', 'Model'), ('roles', 'Used for'), ('input', 'Input tokens'), ('output', 'Output tokens'), ('cost', 'Estimated USD'), ('unreported', 'Unreported calls'))], rows=rows, row_key='profile').classes('w-full')
-        ui.label('Tracked for this server, including internal model calls. Cost uses list rates or your configured rates; it is not a billing statement. Refresh to update totals.').classes('text-slate-400')
-    else:
-        ui.label('No model profiles are configured for the dashboard.')
-    ui.separator()
-    ui.label('Spaces').classes('text-xl font-bold')
-    for space in ctx.snapshot.spaces:
-        with ui.expansion(f"{space['name']} · {space['kind']}").classes('space-card w-full border rounded-lg'):
-            guideline_editor(ctx, 'space', space['id'], 'World guidelines' if space['kind'] == 'world' else 'Hub guidelines')
-            ui.button('Delete ' + space['kind'], icon='delete', color='negative', on_click=lambda space=space: delete_space_dialog(ctx, space))
-    with ui.row().classes('items-end'):
-        name = ui.input('Space name')
-        kind = ui.select(['world', 'hub'], value='world', label='Kind')
-        ctx.button('Create space', lambda: store.create_space(gid, name.value or '', kind.value), 'space.create', then=lambda _: ctx.refresh())
-    ui.separator()
-    ui.label('Hub links').classes('text-xl font-bold')
-    hubs, worlds = ctx.snapshot.hubs, ctx.snapshot.worlds
-    with ui.row().classes('items-end'):
-        hub = ui.select(hubs, label='Hub')
-        world = ui.select(worlds, label='World')
-        def link(enabled):
-            return link_operation(store, gid, hub.value, world.value, enabled)
-        def linked(result):
-            if result['pruned']:
-                ui.notify(f"Removed {result['pruned']} cast entries no longer available in the hub.")
-            return ctx.refresh()
-        ctx.button('Link', lambda: link(True), 'hub.link', link_detail, then=linked)
-        ctx.button('Unlink', lambda: link(False), 'hub.unlink', link_detail, then=linked)
-    for ident in hubs:
-        ui.label(hubs[ident] + ': ' + ', '.join(worlds.get(x, str(x)) for x in store.allowed_worlds(ident)))
-    ui.separator()
-    ui.label('Channels and casts').classes('text-xl font-bold')
-    with ui.row().classes('items-end'):
-        channel = ui.select(channel_names, label='Discord text channel')
-        space = ui.select(spaces, label='World or hub')
-        def bind():
-            if channel.value not in channel_names:
-                raise ValueError('Choose a text channel in this server')
-            return bind_operation(store, gid, channel.value, space.value)
-        def bound(result):
-            names = result['names']
-            if names:
-                shown = ', '.join(names[:5]) + (f' ...and {len(names) - 5} more' if len(names) > 5 else '')
-                ui.notify(f'Removed from the cast (not available there): {shown}.')
-            else:
-                ui.notify('Cast kept.')
-            return ctx.refresh()
-        ctx.button('Bind channel', bind, 'channel.bind', bind_detail, then=bound)
-    ui.label('Rebinding a channel keeps its ambient mode and removes cast members not available in the new space.').classes('text-amber-300')
-    for binding in ctx.snapshot.channels:
-        with ui.card().classes('w-full channel-card'):
-            ui.label(channel_names.get(binding['channel_id'], str(binding['channel_id']))).classes('text-lg font-bold')
-            guideline_editor(ctx, 'channel', binding['channel_id'], 'Channel guidelines')
-            options = {r['id']: r['name'] for r in store.eligible_characters(gid, binding['space_id'])}
-            cast = ui.select(options, value=json.loads(binding['default_cast']), multiple=True, label='Default cast (up to five)').classes('w-full')
-            def save_cast(binding=binding, cast=cast):
-                store.set_cast(binding['channel_id'], None, cast.value or [], default=True)
-                return True
-            ctx.button('Save cast', save_cast, 'cast.default', success='Cast saved')
-            ambient = ui.switch('Ambient participation', value=bool(binding['ambient']))
-            def save_ambient(binding=binding, ambient=ambient):
-                store.set_ambient(binding['channel_id'], ambient.value)
-                return True
-            ctx.button('Save ambient setting', save_ambient, 'channel.ambient', success='Ambient setting saved')
-    ui.separator()
-    ui.label('Reply footer').classes('text-xl font-bold')
-    footer = ui.switch('Show model and cost footer on replies', value=store.usage_footer_enabled(gid))
-    def save_footer():
-        store.set_usage_footer(gid, footer.value)
-        return True
-    ctx.button('Save footer setting', save_footer, 'settings.footer', success='Footer setting saved')
-    ui.separator()
-    ui.label('Timezone').classes('text-xl font-bold')
-    current = store.guild_timezone(gid)
-    timezone = ui.select(timezone_options(current), value=current or None,
-                         label='Server timezone', with_input=True, clearable=True).classes('w-full max-w-sm')
-    ui.label('Characters use this for members who have not chosen their own with /time set. Without it they use UTC.')
-    ctx.button('Save timezone', lambda: timezone_operation(store, gid, timezone.value), 'settings.timezone',
-               timezone_detail, success='Timezone saved')
-    ui.separator()
-    ui.label('Avatar asset channel').classes('text-xl font-bold')
-    current_asset = store.asset_channel_id(gid)
-    asset_channel = ui.select(channel_names, value=current_asset if current_asset in channel_names else None, label='Private text channel')
-    async def configure():
-        await ctx.service.avatars.configure(gid, asset_channel.value)
-        return True
-    ctx.button('Save asset channel', configure, 'avatar.channel', success='Asset channel saved')
-    ui.label('Deny View Channel to @everyone and allow the bot to upload images. Images become Discord CDN assets.')
+    with section('Models and usage · last 24 hours'):
+        models = ctx.service.model_config
+        grouped = {}
+        for role in ('dialogue', 'director', 'memory'):
+            ident = models.get(role, models.get('dialogue'))
+            if ident:
+                grouped.setdefault(ident, []).append(role)
+        rows = []
+        for ident, roles in grouped.items():
+            model = models.get('profiles', {}).get(ident, {}).get('model', '')
+            summary = store.model_usage_summary(gid, ident, model)
+            cost = f"${summary['cost_usd']:.6f}" + (f" + {summary['unpriced']} unpriced calls" if summary['unpriced'] else '')
+            rows.append({'profile': ident, 'model': model, 'roles': ', '.join(roles), 'input': summary['input_tokens'], 'output': summary['output_tokens'], 'cost': cost, 'unreported': summary['unreported']})
+        if rows:
+            ui.table(columns=[{'name': key, 'field': key, 'label': label, 'align': 'left'} for key, label in
+                              (('model', 'Model'), ('roles', 'Used for'), ('input', 'Input tokens'), ('output', 'Output tokens'), ('cost', 'Estimated USD'), ('unreported', 'Unreported calls'))], rows=rows, row_key='profile').classes('w-full')
+            ui.label('Tracked for this server, including internal model calls. Cost uses list rates or your configured rates; it is not a billing statement. Refresh to update totals.').classes('ll-muted')
+        else:
+            ui.label('No model profiles are configured for the dashboard.')
+    with section('Spaces'):
+        for space in ctx.snapshot.spaces:
+            with ui.expansion(f"{space['name']} · {space['kind']}").classes('space-card w-full rounded-lg'):
+                guideline_editor(ctx, 'space', space['id'], 'World guidelines' if space['kind'] == 'world' else 'Hub guidelines')
+                ui.button('Delete ' + space['kind'], icon='delete', color='negative', on_click=lambda space=space: delete_space_dialog(ctx, space))
+        with ui.element('div').classes('ll-form-row'):
+            name = ui.input('Space name')
+            kind = ui.select(['world', 'hub'], value='world', label='Kind')
+            ctx.button('Create space', lambda: store.create_space(gid, name.value or '', kind.value), 'space.create', then=lambda _: ctx.refresh())
+    with section('Hub links'):
+        hubs, worlds = ctx.snapshot.hubs, ctx.snapshot.worlds
+        with ui.element('div').classes('ll-form-row'):
+            hub = ui.select(hubs, label='Hub')
+            world = ui.select(worlds, label='World')
+            def link(enabled):
+                return link_operation(store, gid, hub.value, world.value, enabled)
+            def linked(result):
+                if result['pruned']:
+                    ui.notify(f"Removed {result['pruned']} cast entries no longer available in the hub.")
+                return ctx.refresh()
+            ctx.button('Link', lambda: link(True), 'hub.link', link_detail, then=linked)
+            ctx.button('Unlink', lambda: link(False), 'hub.unlink', link_detail, then=linked).props('outline')
+        for ident in hubs:
+            ui.label(hubs[ident] + ': ' + ', '.join(worlds.get(x, str(x)) for x in store.allowed_worlds(ident)))
+    with section('Channels and casts'):
+        with ui.element('div').classes('ll-form-row'):
+            channel = ui.select(channel_names, label='Discord text channel')
+            space = ui.select(spaces, label='World or hub')
+            def bind():
+                if channel.value not in channel_names:
+                    raise ValueError('Choose a text channel in this server')
+                return bind_operation(store, gid, channel.value, space.value)
+            def bound(result):
+                names = result['names']
+                if names:
+                    shown = ', '.join(names[:5]) + (f' ...and {len(names) - 5} more' if len(names) > 5 else '')
+                    ui.notify(f'Removed from the cast (not available there): {shown}.')
+                else:
+                    ui.notify('Cast kept.')
+                return ctx.refresh()
+            ctx.button('Bind channel', bind, 'channel.bind', bind_detail, then=bound)
+        ui.label('Rebinding a channel keeps its ambient mode and removes cast members not available in the new space.').classes('ll-muted')
+        for binding in ctx.snapshot.channels:
+            with ui.card().classes('w-full channel-card'):
+                ui.label(channel_names.get(binding['channel_id'], str(binding['channel_id']))).classes('text-lg font-bold')
+                guideline_editor(ctx, 'channel', binding['channel_id'], 'Channel guidelines')
+                options = {r['id']: r['name'] for r in store.eligible_characters(gid, binding['space_id'])}
+                cast = ui.select(options, value=json.loads(binding['default_cast']), multiple=True, label='Default cast (up to five)').classes('w-full')
+                def save_cast(binding=binding, cast=cast):
+                    store.set_cast(binding['channel_id'], None, cast.value or [], default=True)
+                    return True
+                ctx.button('Save cast', save_cast, 'cast.default', success='Cast saved')
+                ambient = ui.switch('Ambient participation', value=bool(binding['ambient']))
+                def save_ambient(binding=binding, ambient=ambient):
+                    store.set_ambient(binding['channel_id'], ambient.value)
+                    return True
+                ctx.button('Save ambient setting', save_ambient, 'channel.ambient', success='Ambient setting saved')
+    with section('Reply footer'):
+        footer = ui.switch('Show model and cost footer on replies', value=store.usage_footer_enabled(gid))
+        def save_footer():
+            store.set_usage_footer(gid, footer.value)
+            return True
+        ctx.button('Save footer setting', save_footer, 'settings.footer', success='Footer setting saved')
+    with section('Timezone'):
+        current = store.guild_timezone(gid)
+        timezone = ui.select(timezone_options(current), value=current or None,
+                             label='Server timezone', with_input=True, clearable=True).classes('w-full max-w-sm')
+        ui.label('Characters use this for members who have not chosen their own with /time set. Without it they use UTC.').classes('ll-muted')
+        ctx.button('Save timezone', lambda: timezone_operation(store, gid, timezone.value), 'settings.timezone',
+                   timezone_detail, success='Timezone saved')
+    with section('Avatar asset channel'):
+        current_asset = store.asset_channel_id(gid)
+        asset_channel = ui.select(channel_names, value=current_asset if current_asset in channel_names else None, label='Private text channel')
+        async def configure():
+            await ctx.service.avatars.configure(gid, asset_channel.value)
+            return True
+        ctx.button('Save asset channel', configure, 'avatar.channel', success='Asset channel saved')
+        ui.label('Deny View Channel to @everyone and allow the bot to upload images. Images become Discord CDN assets.').classes('ll-muted')
 
 
 def characters_panel(ctx):
