@@ -35,7 +35,7 @@
 
 | ID | Item | Origin | Priority |
 | --- | --- | --- | --- |
-| UI-01 | Screenshot tooling: a script that starts the browser fixture (`tests/dashboard_server.py`) and saves each dashboard tab at desktop and phone width, so polish work has before/after evidence without hand-driving Playwright. | new | now |
+| UI-01 | Screenshot tooling: `scripts/screenshot_dashboard.py` starts the browser fixture and saves each tab at desktop and phone width (full page and first screen) with a manifest. | new | **Done** (2026-10-08) |
 | UI-02 | First UI survey: walk every tab (Server setup, Characters, Lore, Imports, Prompt presets) and the member/admin slash-command replies; list concrete issues here as new `UI-NN` items with screenshots. | new | now (after UI-01) |
 | UI-03 | Threads still show as raw IDs in lore owner labels and selects (channels show `#name`). | UX-01 | next |
 | UI-04 | A burst of rejected live events shows one toast per event; deduplicate. | PERF-01 step 5 | next |
@@ -45,6 +45,9 @@
 | UI-08 | The `settings.footer` audit row has no on/off detail; dashboard actions that navigate with `?tab=` drop `owner=`. | R4 step 5, UX-01 | later |
 | UI-09 | Coverage for polish-sensitive flows: only the Save cast success toast is browser-tested; emotion-removal dialogs and the button-to-audit wiring (link/unlink/bind) are untested; the avatar `?v=` URLs are not asserted. | UX-01, UX-05, SEC-02 | next |
 | UI-10 | Time the Lore panel build and the character expand separately (character expand went 0.05 → 0.30 s at the end of R5, not profiled). | R5 stage end | later |
+| UI-11 | Phone width (390 px): the tab bar shows four tabs and Quasar's scroll arrow is drawn over the fourth label ("›MI…"); Prompt presets is off-screen with no hint. Consider shorter labels or a wrapped/stacked tab bar on narrow screens. Evidence: `scripts/screenshot_dashboard.py --viewport phone`, any `*-phone-top.png`. | UI-01 run | next |
+| UI-12 | Lore and Prompt presets are very tall (page heights 10.7k / 17.3k CSS px on desktop, 15.4k / 16.8k on phone, with the fixture's 75-entry lorebook and the default preset). Look at collapsing, paging or sticky controls in the UI-02 survey. | UI-01 run | next (survey) |
+| UI-13 | One run logged `SecurityError: Failed to read the 'cssRules' property from 'CSSStyleSheet'` from `nicegui.js` on Prompt presets at phone width; not reproduced in two later runs. | UI-01 run | later (SUSPECTED, intermittent) |
 
 ## Features
 

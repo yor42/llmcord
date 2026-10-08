@@ -17,7 +17,7 @@ UI items run through `orchestrate-change`; this skill adds what is specific to t
 Use the `orchestrate-change` brief plus: the target text/layout, the tests that select it, which user docs may be edited, and where to save screenshots (under `$CLAUDE_JOB_DIR/tmp` or another path outside the repo).
 
 ## 3. Evidence
-- Dashboard: before and after screenshots at 1400 × 1000 and about 390 px wide. Use the screenshot script from UI-01 once it exists. Until then the worker drives the browser fixture the way `tests/test_dashboard_browser.py` does: start `python -m tests.dashboard_server` with `LLMCORD_TEST_PORT`, `LLMCORD_TEST_KEY`, `LLMCORD_TEST_CERT` (a throwaway `trustme` pair in a temp dir, as `setUpClass` does), add the `llmcord_session=browser-test-session` cookie, open `/admin/guild/1?tab=<name>`, and stop it with `POST /_test/stop`. It uses mock Discord and an in-memory DB only.
+- Dashboard: before and after screenshots at 1400 × 1000 and about 390 px wide. Run `.venv/bin/python scripts/screenshot_dashboard.py --out <dir> [--tab NAME] [--viewport desktop|phone]` before and after (separate out dirs). It starts the browser fixture (mock Discord, in-memory DB), saves `<tab>-<viewport>.png` (full page) and `<tab>-<viewport>-top.png` (first screen; use this for tall tabs like Lore and Prompt presets), and writes `manifest.json` with page height, horizontal scroll and page JS errors. A state the script cannot reach (an expanded character, an open dialog) needs the worker to drive the fixture the way `tests/test_dashboard_browser.py` does.
 - Discord: exact before/after strings.
 - Look at the screenshots yourself (Read the PNGs) before accepting; check spacing, wrapping at phone width, truncated labels, and that nothing else on the page moved.
 

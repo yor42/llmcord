@@ -10,7 +10,8 @@ description: Run and interpret llmcord's verification suite (lint, repo hygiene,
 | --- | --- |
 | docs / `.claude/` only | `git diff --check`; parse settings JSON and agent/skill YAML; `claude plugin validate .claude/agents --strict` and `claude plugin validate .claude/skills --strict`; inspect scope/model routing |
 | bot, engine, store, models, prompts, world_info, cards, lorebooks | `scripts/verify.sh` |
-| web.py, auth.py, admin*.py, dashboard.py, scene_ui.py, lore_workspace.py, lore_drag.*, tests/dashboard_server.py, tests/test_dashboard_browser.py, a UI screenshot script | `scripts/verify.sh --browser` |
+| web.py, auth.py, admin*.py, dashboard.py, scene_ui.py, lore_workspace.py, lore_drag.*, tests/dashboard_server.py, tests/test_dashboard_browser.py | `scripts/verify.sh --browser` |
+| scripts/screenshot_dashboard.py | `scripts/verify.sh` plus one full run of the script (all tabs load, rc 0) |
 | Discord reply wording only | `scripts/verify.sh` (slash-command tests pin the text) |
 | a performance claim | `scripts/verify.sh --bench` (compare with `docs/engineering/perf-baseline.md`, see the `dashboard-perf` skill) |
 

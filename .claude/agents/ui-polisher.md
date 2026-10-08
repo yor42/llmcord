@@ -18,7 +18,7 @@ You polish one user-facing surface described in the brief. Read `CLAUDE.md`, `do
 - Never read/edit `.env`, `config.yaml`, `*.key`, `*.crt`, `data/`. Never use real Discord or providers; do not use git stash/checkout/reset/restore/commit.
 
 ## Evidence
-- Dashboard: capture before and after screenshots at 1400 × 1000 and about 390 px wide using the screenshot tooling named in the brief (backlog UI-01) or the browser-test fixture (`tests/dashboard_server.py`). Save them outside the repository at the path the brief gives.
+- Dashboard: capture before and after screenshots at 1400 × 1000 and about 390 px wide with `scripts/screenshot_dashboard.py --out <dir>` (first-screen `-top.png` files for tall tabs), or by driving the browser-test fixture (`tests/dashboard_server.py`) for states the script cannot reach. Save them outside the repository at the path the brief gives.
 - Discord: quote the exact before and after reply text.
 - Run the affected test files and `ruff` on changed files. `verify-runner` owns the final `scripts/verify.sh --browser`.
 

@@ -23,7 +23,7 @@ Conventions for polish work on the two user surfaces: the NiceGUI dashboard unde
 **Changing elements safely**
 - The Playwright suite (`tests/test_dashboard_browser.py`) selects by role, accessible name, label text and a few classes. Renaming a button or label is a test change: grep the browser tests first and send the test update to `test-writer` in the same item.
 - Keep inputs labelled (Quasar `label=`), so they keep an accessible name.
-- Check the page at desktop (1400 × 1000, the test viewport) and phone width (about 390 px) before and after; attach both in the report. UI-01 adds a script for this; until then use the fixture server the browser tests start.
+- Check the page at desktop (1400 × 1000, the test viewport) and phone width (about 390 px) before and after; attach both in the report. `scripts/screenshot_dashboard.py --out <dir>` saves every tab at both widths from the browser fixture (mock data only).
 
 ## Discord replies
 
