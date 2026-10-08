@@ -16,15 +16,16 @@ def snapshot(entry):
 def render_lore_workspace(ctx, entry_editor, on_import=None, on_entry_import=None):
     owners = ctx.snapshot.owners
     options = {f"{owner['kind']}:{owner['id']}": owner['label'] for owner in owners}
-    ui.label('Lore workspace').classes('text-xl font-bold')
-    if on_import:
-        ui.button('Import lorebook', icon='upload_file', on_click=on_import)
-        ui.label('Import JSON directly into either owner below, or manage reusable named lorebooks in Imports.').classes('text-slate-400')
-    ui.label('Drag entries onto either navy drop area, or select entries to move or delete together. Higher insertion orders appear later in each prompt position.')
-    if not owners:
-        ui.label('Create a world or import a character first.')
-        return
-    _LoreWorkspace(ctx, options, entry_editor, on_entry_import).build()
+    from .dashboard import section
+    with section('Lore workspace'):
+        if on_import:
+            ui.button('Import lorebook', icon='upload_file', on_click=on_import).props('outline')
+            ui.label('Import JSON directly into either owner below, or manage reusable named lorebooks in Imports.').classes('ll-muted')
+        ui.label('Drag entries onto either drop area, or select entries to move or delete together. Higher insertion orders appear later in each prompt position.').classes('ll-muted')
+        if not owners:
+            ui.label('Create a world or import a character first.').classes('ll-muted')
+            return
+        _LoreWorkspace(ctx, options, entry_editor, on_entry_import).build()
 
 
 class _LoreWorkspace:
@@ -42,12 +43,12 @@ class _LoreWorkspace:
         ctx, options = self.ctx, self.options
         self.root = ui.column().classes('w-full lore-workspace')
         with self.root:
-            with ui.row().classes('w-full items-end'):
+            with ui.element('div').classes('ll-form-row'):
                 initial_owner = getattr(ctx, 'lore_owner', None)
-                self.left = ui.select(options, value=initial_owner if initial_owner in options else next(iter(options)), label='Left owner', with_input=True).classes('flex-1')
-                self.right = ui.select(options, value=list(options)[-1], label='Right owner', with_input=True).classes('flex-1')
-                self.query = ui.input('Search content and keywords').props('debounce=300').classes('flex-1')
-            toolbar = ui.row().classes('w-full items-center')
+                self.left = ui.select(options, value=initial_owner if initial_owner in options else next(iter(options)), label='Left owner', with_input=True)
+                self.right = ui.select(options, value=list(options)[-1], label='Right owner', with_input=True)
+                self.query = ui.input('Search content and keywords').props('debounce=300')
+            toolbar = ui.element('div').classes('ll-form-row').style('align-items: center')
             self.editor = ui.column().classes('w-full')
             board = ui.row().classes('w-full items-stretch flex-nowrap overflow-auto')
         self._build_toolbar(toolbar)
@@ -65,14 +66,14 @@ class _LoreWorkspace:
     def _build_toolbar(self, toolbar):
         selected, bulk_buttons = self.selected, self.bulk_buttons
         with toolbar:
-            self.counter = ui.label('0 selected')
+            self.counter = ui.label('0 selected').classes('ll-muted')
             bulk_buttons.append(ui.button('Move selected left', icon='arrow_back',
-                                          on_click=lambda: self.move(list(selected.values()), self.left)))
+                                          on_click=lambda: self.move(list(selected.values()), self.left)).props('outline'))
             bulk_buttons.append(ui.button('Move selected right', icon='arrow_forward',
-                                          on_click=lambda: self.move(list(selected.values()), self.right)))
+                                          on_click=lambda: self.move(list(selected.values()), self.right)).props('outline'))
             bulk_buttons.append(ui.button('Delete selected', icon='delete', color='negative',
                                           on_click=lambda: self.confirm_delete(list(selected.values()))))
-            ui.button('Clear selection', on_click=lambda: self.select(list(selected.values()), False))
+            ui.button('Clear selection', on_click=lambda: self.select(list(selected.values()), False)).props('flat')
             self.update_selection()
 
     async def mutate(self, entries, action, target=None):
@@ -118,18 +119,18 @@ class _LoreWorkspace:
         if not entries:
             return
         count = len(entries)
-        with ui.dialog() as dialog, ui.card():
-            ui.label(f"Delete {count} lore {'entry' if count == 1 else 'entries'}?").classes('text-xl')
+        with ui.dialog() as dialog, ui.card().classes('gap-3'):
+            ui.label(f"Delete {count} lore {'entry' if count == 1 else 'entries'}?").classes('text-xl font-bold')
             for entry in entries[:5]:
                 row = ctx.store.entry_by_key(ctx.guild_id, entry['entry_key'])
                 if row:
                     owner = self.options.get(f"{row['owner_kind']}:{row['owner_id']}", row['owner_kind'])
-                    ui.label(f"{owner}: {row['content'][:100] or '(empty entry)'}")
+                    ui.label(f"{owner}: {row['content'][:100] or '(empty entry)'}").classes('ll-muted')
             if count > 5:
-                ui.label(f'And {count - 5} more selected entries.')
-            ui.label('This also keeps your deletion choice for future reimports.')
-            with ui.row():
-                ui.button('Cancel', on_click=dialog.close)
+                ui.label(f'And {count - 5} more selected entries.').classes('ll-muted')
+            ui.label('This also keeps your deletion choice for future reimports.').classes('ll-muted')
+            with ui.element('div').classes('ll-form-row justify-end'):
+                ui.button('Cancel', on_click=dialog.close).props('flat')
                 async def apply():
                     dialog.close()
                     await self.mutate(entries, 'lore.delete')
@@ -178,7 +179,7 @@ class _LoreWorkspace:
         kind, ident = control.value.split(':', 1)
         ident = int(ident)
         with ui.column().classes(f'flex-1 min-w-80 lore-panel lore-panel-{side}'):
-            ui.label(options[control.value]).classes('text-lg font-bold owner-heading')
+            ui.label(options[control.value]).classes('ll-subtitle owner-heading')
             page_key = (side, control.value)
             page_number = max(1, pages.get(page_key, 1))
             visible, total = ctx.store.admin_entries_page(ctx.guild_id, kind, ident, query.value, 50, (page_number - 1) * 50)
@@ -186,21 +187,21 @@ class _LoreWorkspace:
             if page_number > last_page:
                 page_number = last_page
                 visible, total = ctx.store.admin_entries_page(ctx.guild_id, kind, ident, query.value, 50, (page_number - 1) * 50)
-            ui.label(f'{total} entries · page {page_number}').classes('owner-heading text-slate-400')
+            ui.label(f'{total} entries · page {page_number}').classes('owner-heading ll-muted')
             if total > 50:
-                pagination = ui.select(list(range(1, last_page + 1)), value=page_number, label='Page').classes('owner-heading')
+                pagination = ui.select(list(range(1, last_page + 1)), value=page_number, label='Page').classes('owner-heading w-32')
                 async def page_changed(event, page_key=page_key):
                     async with self.operation_lock:
                         if await ctx.run(lambda: True):
                             pages[page_key] = event.value
                             render_board.refresh()
                 pagination.on_value_change(page_changed)
-            with ui.row().classes('owner-heading'):
-                ui.button('Select page', on_click=lambda visible=visible: self.select(visible, True))
-                ui.button('Clear page', on_click=lambda visible=visible: self.select(visible, False))
+            with ui.row().classes('owner-heading gap-2'):
+                ui.button('Select page', on_click=lambda visible=visible: self.select(visible, True)).props('outline size=sm')
+                ui.button('Clear page', on_click=lambda visible=visible: self.select(visible, False)).props('flat size=sm')
             # Only cards are children of the Sortable container. Headings,
             # pagination and action controls stay outside its drop area.
-            with ui.column().classes(f'w-full min-h-48 bg-slate-900 rounded-lg p-4 lore-drop-zone lore-drop-{side}') as container:
+            with ui.column().classes(f'w-full min-h-48 p-4 ll-drop lore-drop-zone lore-drop-{side}') as container:
                 container._props.update({'data-owner-kind': kind, 'data-owner-id': str(ident)})
                 containers.append(container)
                 for entry in visible:
@@ -209,16 +210,16 @@ class _LoreWorkspace:
 
     def _render_entry(self, entry, side, control, opposite):
         ctx = self.ctx
-        with ui.card().classes('w-full lore-entry') as tile:
+        with ui.card().classes('w-full lore-entry ll-entry') as tile:
             tile._props.update({'data-entry-key': entry['entry_key'], 'data-revision': str(entry['revision'])})
-            with ui.row().classes('items-center'):
+            with ui.row().classes('items-center no-wrap gap-2'):
                 checkbox = ui.checkbox('Select entry', value=entry['entry_key'] in self.selected,
                     on_change=lambda event, entry=entry: self.select([entry], event.value)).props('dense')
                 self.checkboxes.setdefault(entry['entry_key'], []).append(checkbox)
                 ui.icon('drag_indicator').classes('drag-handle cursor-grab')
-                ui.label(' · '.join(entry['rule']['keys']) or 'No keywords').classes('font-bold')
-            ui.label(entry['content'][:220])
-            ui.label(f"Priority {entry['rule']['order']} · {'Enabled' if entry['rule']['enabled'] else 'Disabled'}")
+                ui.label(' · '.join(entry['rule']['keys']) or 'No keywords').classes('font-bold min-w-0').style('overflow-wrap: anywhere')
+            ui.label(entry['content'][:220]).classes('ll-muted text-sm').style('overflow-wrap: anywhere')
+            ui.label(f"Priority {entry['rule']['order']} · {'Enabled' if entry['rule']['enabled'] else 'Disabled'}").classes('ll-faint text-xs')
             async def edit(entry=entry):
                 fresh = await ctx.run(lambda: ctx.store.entry_by_key(ctx.guild_id, entry['entry_key']))
                 if fresh:
@@ -226,12 +227,12 @@ class _LoreWorkspace:
                     with self.editor:
                         self.entry_editor(ctx, fresh, self.options, self.render_board.refresh)
             with ui.row().classes('items-center flex-wrap gap-2'):
-                ui.button('Edit / transfer', on_click=edit)
+                ui.button('Edit / transfer', on_click=edit).props('size=sm')
                 ui.button('Move right' if side == 'left' else 'Move left',
                     icon='arrow_forward' if side == 'left' else 'arrow_back',
-                    on_click=lambda entry=entry, opposite=opposite: self.move([snapshot(entry)], opposite)).set_enabled(control.value != opposite.value)
+                    on_click=lambda entry=entry, opposite=opposite: self.move([snapshot(entry)], opposite)).props('outline size=sm').set_enabled(control.value != opposite.value)
                 ui.button('Delete', icon='delete', color='negative',
-                          on_click=lambda entry=entry: self.confirm_delete([snapshot(entry)]))
+                          on_click=lambda entry=entry: self.confirm_delete([snapshot(entry)])).props('size=sm')
 
     def _render_panel_actions(self, kind, ident):
         ctx, render_board = self.ctx, self.render_board
@@ -240,16 +241,16 @@ class _LoreWorkspace:
                 self.editor.clear()
                 with self.editor:
                     self.entry_editor(ctx, {'owner_kind': kind, 'owner_id': ident, 'content': '', 'rule': normalize_entry('new', {}).rule, 'pinned': False}, self.options, render_board.refresh)
-        with ui.row().classes('owner-heading'):
+        with ui.row().classes('owner-heading gap-2'):
             ui.button('New entry', on_click=add)
             def download(kind=kind, ident=ident):
                 import json
                 ui.download.content(json.dumps(ctx.store.export_lore(ctx.guild_id, kind, ident), ensure_ascii=False, indent=2), 'lorebook.json')
                 return True
-            ctx.button('Export owner', download)
+            ctx.button('Export owner', download).props('outline')
             if self.on_entry_import:
                 def imported(refs):
                     self.selected.clear()
                     self.update_selection()
                     render_board.refresh()
-                ui.button('Import JSON entries', icon='upload_file', on_click=lambda kind=kind, ident=ident: self.on_entry_import(kind, ident, imported))
+                ui.button('Import JSON entries', icon='upload_file', on_click=lambda kind=kind, ident=ident: self.on_entry_import(kind, ident, imported)).props('outline')

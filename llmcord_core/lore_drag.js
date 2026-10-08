@@ -61,7 +61,7 @@ export default {
           onEnd: event => {
             const entry = event.item.dataset;
             // Native Sortable can leave evt.to at the source for drops on a
-            // padded edge. Accept the whole visible navy area at the drop point.
+            // padded edge. Accept the whole visible drop area at the drop point.
             const pointedList = this.point ? this.listIds.map(id => document.getElementById(id)).find(element => {
               if (!element) return false;
               const box = element.getBoundingClientRect();

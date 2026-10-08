@@ -169,6 +169,8 @@ body.body--dark .q-card .q-card, body.body--dark .q-card .q-expansion-item {{ ba
 .ll-stack {{ width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; gap: 16px; padding: 4px 0 8px; }}
 .ll-stack .q-uploader {{ max-width: min(20rem, 100%); }}
 .ll-subtitle {{ font-size: 16px; font-weight: 700; line-height: 1.3; }}
+.ll-drop.nicegui-column {{ background: {THEME_BODY}; border: 1px dashed {THEME_BORDER}; border-radius: 8px; gap: 8px; }}
+.ll-entry.q-card {{ padding: 8px 12px; gap: 4px; border: 1px solid {THEME_DIVIDER}; border-radius: 8px; box-shadow: none; }}
 @media (max-width: 600px) {{ .ll-section {{ padding: 16px; }} .ll-form-row .q-field {{ flex-basis: 100%; }} }}
 body.body--dark .q-tab-panels, body.body--dark .q-tab-panel {{ background: transparent; }}
 .ll-page .q-tab-panel {{ padding-left: 0; padding-right: 0; }}
@@ -728,24 +730,24 @@ def lore_panel(ctx, on_import=None):
 
 def entry_editor(ctx, entry, owners, refresh):
     from nicegui import ui
-    with ui.card().classes('w-full') as panel:
-        ui.label('Edit lore' if entry.get('ref') else 'Create lore').classes('text-xl font-bold')
+    with ui.card().classes('w-full ll-stack').style('padding: 16px') as panel:
+        ui.label('Edit lore' if entry.get('ref') else 'Create lore').classes('ll-subtitle')
         text = ui.textarea('Content', value=entry['content']).classes('w-full')
         rule = copy.deepcopy(entry['rule'])
         controls = {}
         for key in ('keys', 'secondary_keys'):
             controls[key] = ui.input(key.replace('_', ' ').title(), value=pretty(rule[key])).props('hint="JSON string array; preserves commas inside regex"').classes('w-full')
-        controls['order'] = ui.number('Priority / insertion order (higher values appear later)', value=rule['order'], precision=0)
-        with ui.row():
+        controls['order'] = ui.number('Priority / insertion order (higher values appear later)', value=rule['order'], precision=0).props('outlined dense')
+        with ui.row().classes('gap-4'):
             controls['enabled'] = ui.checkbox('Enabled', value=rule['enabled'])
             controls['constant'] = ui.checkbox('Always active', value=rule['constant'])
             pinned = ui.checkbox('Pinned', value=entry['pinned'])
-        with ui.expansion('Advanced activation and placement rules').classes('w-full'):
+        with ui.expansion('Advanced activation and placement rules').classes('w-full ll-subpanel'), ui.element('div').classes('ll-stack px-4'):
             for key, value in rule.items():
                 if key in controls or key == 'unsupported':
                     continue
                 if key == 'original':
-                    with ui.expansion('Preserved import fields / unsupported feature remapping').classes('w-full'):
+                    with ui.expansion('Preserved import fields / unsupported feature remapping').classes('w-full ll-subpanel'):
                         controls[key] = ui.textarea('Original fields (JSON)', value=pretty(value)).classes('w-full')
                 elif key == 'regex_enabled':
                     controls[key] = ui.select({'auto': 'Detect /pattern/flags automatically', 'regex': 'Regex patterns', 'literal': 'Literal keywords'},
@@ -753,7 +755,7 @@ def entry_editor(ctx, entry, owners, refresh):
                 elif type(value) is bool:
                     controls[key] = ui.checkbox(key.replace('_', ' ').title(), value=value)
                 elif type(value) is int:
-                    controls[key] = ui.number(key.replace('_', ' ').title(), value=value, precision=0)
+                    controls[key] = ui.number(key.replace('_', ' ').title(), value=value, precision=0).props('outlined dense')
                 elif key == 'role':
                     controls[key] = ui.select(['system', 'user', 'assistant'], value=value, label='Message role')
                 elif key == 'position':
@@ -779,7 +781,6 @@ def entry_editor(ctx, entry, owners, refresh):
         def saved(_):
             panel.delete()
             refresh()
-        ctx.button('Save lore', save, 'lore.edit', then=saved)
         if entry.get('ref'):
             destination = ui.select(owners, label='Destination', with_input=True).classes('w-full')
             def transfer(copy):
@@ -787,14 +788,17 @@ def entry_editor(ctx, entry, owners, refresh):
                     raise ValueError('Choose a destination')
                 kind, ident = destination.value.split(':', 1)
                 return ctx.store.transfer_entry(ctx.guild_id, entry['ref'], kind, int(ident), entry['revision'], copy=copy)
-            ctx.button('Move', lambda: transfer(False), 'lore.move', then=saved)
-            ctx.button('Copy', lambda: transfer(True), 'lore.copy', then=saved)
             def delete():
                 ctx.store.delete_entry(ctx.guild_id, entry['ref'], entry['revision'])
                 return True
-            ui.button('Delete', color='negative', on_click=lambda: confirm_dialog(
-                ctx, 'Delete this lore entry?', ['This also keeps your deletion choice for future reimports.'],
-                'Delete entry', delete, 'lore.delete', then=saved))
+        with ui.element('div').classes('ll-form-row'):
+            ctx.button('Save lore', save, 'lore.edit', then=saved)
+            if entry.get('ref'):
+                ctx.button('Move', lambda: transfer(False), 'lore.move', then=saved).props('outline')
+                ctx.button('Copy', lambda: transfer(True), 'lore.copy', then=saved).props('outline')
+                ui.button('Delete', color='negative', on_click=lambda: confirm_dialog(
+                    ctx, 'Delete this lore entry?', ['This also keeps your deletion choice for future reimports.'],
+                    'Delete entry', delete, 'lore.delete', then=saved))
 
 
 def import_changes(changes):
