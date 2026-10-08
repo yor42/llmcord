@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import inspect
 import json
+import time
 from pathlib import Path
 
 from .avatars import AvatarPublisher
 from .config import prompt_provider
 from .models import TurnMessage
-from .prompts import compile_prompt
+from .prompts import compile_prompt, time_values
 
 
 class AdminService:
@@ -74,6 +75,7 @@ class AdminService:
             'mesExamples': card.get('mes_example', ''), 'mesExamplesRaw': card.get('mes_example', ''),
             'card_instructions': card.get('system_prompt', ''), 'card_post_history': card.get('post_history_instructions', ''),
             'location': 'Sample world', 'summary': ''}
+        values.update(time_values((int(time.time() * 1000) - 1420070400000) << 22, self.store.resolve_timezone(guild_id, None)[0]))
         if purpose == 'dialogue':
             if channel_id:
                 self.store.validate_owner(guild_id, 'channel', channel_id)

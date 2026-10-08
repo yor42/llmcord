@@ -9,7 +9,7 @@ from .lore import estimate_tokens, lore_scopes
 from .world_info import evaluate
 from .models import DIRECTOR_SCHEMA, MEMORY_SCHEMA, ImageInput, ModelGateway, TurnMessage
 from .store import Store
-from .prompts import compile_prompt
+from .prompts import compile_prompt, time_values
 from .errors import error_detail
 from .identity import speaker_context, user_line
 
@@ -234,6 +234,8 @@ class Engine:
             'speaker_identity': self.identities(scene, self.store.ancestors(scene.user_message_id))}
         guidelines = scene.guidelines if scene.guidelines is not None else self.store.scene_guidelines(scene.guild_id, scene.space_id, scene.parent_channel_id or scene.channel_id)
         values.update({key: row['content'] for key, row in guidelines.items()})
+        zone, _ = self.store.resolve_timezone(scene.guild_id, scene.user_id)
+        values.update(time_values(scene.user_message_id, zone))
         for position in ('before_char', 'after_char', 'before_examples', 'after_examples'):
             values['lore_' + position] = lore_text([item for item in lore if item.position == position])
         if not history:
