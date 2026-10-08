@@ -431,8 +431,8 @@ def static_avatar_editor(ctx, character):
 def avatar_editor(ctx, character_id, slot):
     from nicegui import ui
     with ui.expansion(slot['label']).classes('w-full'):
-        if slot['image']:
-            ui.image(ctx.app.state.base_url + f"/guild/{ctx.guild_id}/characters/{character_id}/avatars/{slot['slot_key']}?v={avatar_version(slot['image'])}").classes('w-24 h-24')
+        if slot['has_image']:
+            ui.image(ctx.app.state.base_url + f"/guild/{ctx.guild_id}/characters/{character_id}/avatars/{slot['slot_key']}?v={slot['image_version']}").classes('w-24 h-24')
         ui.label('Stable key: ' + slot['slot_key'])
         label = ui.input('Label', value=slot['label'])
         description = ui.input('When to use this emotion', value=slot['description'])
@@ -448,7 +448,7 @@ def avatar_editor(ctx, character_id, slot):
         async def publish():
             return await ctx.service.avatars.publish(ctx.guild_id, character_id, slot['slot_key'], repair=True)
         ctx.button('Publish / repair image', publish, 'avatar.publish', {'character': character_id, 'slot': slot['slot_key']})
-        if slot['image']:
+        if slot['has_image']:
             def remove_image():
                 ctx.store.clear_avatar_image(ctx.guild_id, character_id, slot['slot_key'], slot['revision'])
                 return True

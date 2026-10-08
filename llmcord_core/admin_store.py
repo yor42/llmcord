@@ -717,9 +717,22 @@ class AdminStore:
 
     def avatar_slots(self, guild_id, character_id):
         self.validate_owner(guild_id, 'character', character_id)
-        stored = {r['slot_key']: dict(r) for r in self.all('SELECT * FROM avatar_slots WHERE character_id=?', (character_id,))}
-        stored.setdefault('neutral', {'character_id': character_id, 'slot_key': 'neutral', 'label': 'Neutral', 'description': '', 'image': None, 'revision': 0})
+        stored = {r['slot_key']: self._slot_meta(dict(r), keep_image=False) for r in self.all('SELECT * FROM avatar_slots WHERE character_id=?', (character_id,))}
+        stored.setdefault('neutral', self._slot_meta(self._neutral_slot(character_id), keep_image=False))
         return list(stored.values())
+
+    @staticmethod
+    def _neutral_slot(character_id):
+        return {'character_id': character_id, 'slot_key': 'neutral', 'label': 'Neutral', 'description': '', 'image': None, 'revision': 0}
+
+    @staticmethod
+    def _slot_meta(row, keep_image):
+        import hashlib
+        image = row['image']
+        digest = hashlib.sha256(image).hexdigest() if image else None
+        if not keep_image:
+            del row['image']
+        return {**row, 'has_image': bool(image), 'image_hash': digest, 'image_version': digest[:12] if digest else None}
 
     def save_static_avatar(self, guild_id, character_id, image, expected_revision):
         from .avatars import normalize_avatar
@@ -732,10 +745,22 @@ class AdminStore:
             self.bump_owner(guild_id, 'character', character_id)
 
     def avatar_slot(self, guild_id, character_id, key):
-        row = next((r for r in self.avatar_slots(guild_id, character_id) if r['slot_key'] == key), None)
-        if not row:
-            raise ValueError('Avatar slot not found')
-        return row
+        self.validate_owner(guild_id, 'character', character_id)
+        row = self.one('SELECT * FROM avatar_slots WHERE character_id=? AND slot_key=?', (character_id, key))
+        if row:
+            return self._slot_meta(dict(row), keep_image=True)
+        if key == 'neutral':
+            return self._slot_meta(self._neutral_slot(character_id), keep_image=True)
+        raise ValueError('Avatar slot not found')
+
+    def _slot_revision(self, guild_id, character_id, key):
+        self.validate_owner(guild_id, 'character', character_id)
+        row = self.one('SELECT revision FROM avatar_slots WHERE character_id=? AND slot_key=?', (character_id, key))
+        if row:
+            return row['revision']
+        if key == 'neutral':
+            return 0
+        raise ValueError('Avatar slot not found')
 
     def save_avatar(self, guild_id, character_id, key, label, description, image=None, expected_revision=None):
         import re
@@ -743,7 +768,7 @@ class AdminStore:
         if not re.fullmatch(r'[a-z0-9_-]{1,40}', key) or not label.strip() or len(label) > 80 or len(description) > 500:
             raise ValueError('Use a stable lowercase key, a label up to 80 characters, and a description up to 500 characters')
         with self.write_admin():
-            current = next((r for r in self.avatar_slots(guild_id, character_id) if r['slot_key'] == key), None)
+            current = self.one('SELECT image,revision FROM avatar_slots WHERE character_id=? AND slot_key=?', (character_id, key)) or ({'image': None, 'revision': 0} if key == 'neutral' else None)
             if current and expected_revision is not None and current['revision'] != expected_revision:
                 raise ConflictError('Avatar slot changed; reload')
             blob = image if image is not None else current['image'] if current else None
@@ -753,8 +778,7 @@ class AdminStore:
 
     def clear_avatar_image(self, guild_id, character_id, key, expected_revision):
         with self.write_admin():
-            row = self.avatar_slot(guild_id, character_id, key)
-            if row['revision'] != expected_revision:
+            if self._slot_revision(guild_id, character_id, key) != expected_revision:
                 raise ConflictError('Avatar slot changed; reload')
             self.db.execute('UPDATE avatar_slots SET image=NULL,revision=revision+1 WHERE character_id=? AND slot_key=?', (character_id, key))
             self.bump_owner(guild_id, 'character', character_id)
@@ -763,24 +787,24 @@ class AdminStore:
         if key == 'neutral':
             raise ValueError('The neutral slot is required')
         with self.write_admin():
-            row = self.avatar_slot(guild_id, character_id, key)
-            if row['revision'] != expected_revision:
+            if self._slot_revision(guild_id, character_id, key) != expected_revision:
                 raise ConflictError('Avatar slot changed; reload')
             self.db.execute('DELETE FROM avatar_slots WHERE character_id=? AND slot_key=?', (character_id, key))
             self.bump_owner(guild_id, 'character', character_id)
 
-    def avatar_asset(self, guild_id, character_id, key):
-        import hashlib
-        slot = self.avatar_slot(guild_id, character_id, key)
-        if not slot['image']:
+    def avatar_asset(self, guild_id, character_id, key, image_hash=None):
+        # With an explicit image_hash the caller must already have validated the owner (the query is still guild-filtered).
+        if image_hash is None:
+            image_hash = self.avatar_slot(guild_id, character_id, key)['image_hash']
+        if not image_hash:
             return None
         return self.one('SELECT * FROM avatar_assets WHERE guild_id=? AND character_id=? AND slot_key=? AND image_hash=? ORDER BY id DESC LIMIT 1',
-            (guild_id, character_id, key, hashlib.sha256(slot['image']).hexdigest()))
+            (guild_id, character_id, key, image_hash))
 
     def usable_avatars(self, guild_id, character_id):
         result = []
         for row in self.avatar_slots(guild_id, character_id):
-            asset = self.avatar_asset(guild_id, character_id, row['slot_key'])
+            asset = self.avatar_asset(guild_id, character_id, row['slot_key'], row['image_hash'] or '')
             if row['slot_key'] == 'neutral' or asset:
                 result.append({**row, 'asset_id': asset['id'] if asset else None, 'url': asset['url'] if asset else None})
         return result

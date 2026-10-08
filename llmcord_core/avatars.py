@@ -125,8 +125,8 @@ class AvatarPublisher:
         settings = self.store.one('SELECT asset_channel_id FROM guild_settings WHERE guild_id=?', (guild_id,))
         if not settings or not settings['asset_channel_id']:
             raise ValueError('Choose an avatar asset channel first')
-        image_hash = hashlib.sha256(slot['image']).hexdigest()
-        asset = self.store.avatar_asset(guild_id, character_id, slot_key)
+        image_hash = slot['image_hash']
+        asset = self.store.avatar_asset(guild_id, character_id, slot_key, image_hash)
         if asset and asset['image_hash'] == image_hash and not repair:
             return asset['url']
         channel_id = settings['asset_channel_id']

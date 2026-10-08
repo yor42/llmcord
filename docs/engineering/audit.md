@@ -96,6 +96,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Direction:** one query per owner kind, with `LIMIT/OFFSET` and a `LIKE` (or FTS5) filter in SQL.
 
 ### PERF-03: Avatar slot reads load every blob
+- **Status:** Mostly resolved in R5 step 3: the per-image route and slot writes use keyed single-row queries; listings return no blobs and read the slot table once (was ~9 reads per `usable_avatars` call). Listings still read blobs to hash them; a stored hash needs a schema change.
 - **Severity:** low. **Confidence:** CONFIRMED. **Label:** fragile.
 - **Evidence:**
   - `avatar_slots` runs `SELECT *`, which includes the `image` BLOBs (`admin_store.py:674-678`).
