@@ -888,3 +888,39 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertFalse(errors, (errors, getattr(page, 'network', [])))
         finally:
             context.close()
+
+    CLIPPED_SELECT_LABELS_JS = """() => [...document.querySelectorAll('.q-select')].flatMap(select => {
+        const label = select.querySelector('.q-field__label');
+        if (!label || !label.getClientRects().length) return [];
+        if (select.classList.contains('q-field--float')) return [];
+        return [{text: label.textContent.trim(), scrollWidth: label.scrollWidth, clientWidth: label.clientWidth,
+                 selectWidth: select.getBoundingClientRect().width}];
+    })"""
+
+    maxDiff = None
+
+    def test_empty_select_labels_are_not_clipped(self):
+        """UX-01: an empty dropdown on any guild tab shows its whole floating label (no ellipsis truncation)."""
+        context, page, errors = self.ux_page('/admin/guild/1')
+        clipped = {}
+        measured = 0
+        try:
+            anchors = {'Server setup': page.get_by_label('Space name', exact=True),
+                       'Characters': page.get_by_role('button', name='Create character', exact=True),
+                       'Lore': page.get_by_role('button', name='Import lorebook', exact=True),
+                       'Imports': page.get_by_label('Channel (for channel books)', exact=True),
+                       'Prompt presets': page.get_by_label('Sample channel (optional)', exact=True)}
+            for tab, anchor in anchors.items():
+                page.get_by_role('tab', name=tab, exact=True).click()
+                anchor.wait_for(timeout=5000)  # panels build lazily on first selection
+                page.wait_for_function('() => document.querySelectorAll(".q-tab-panel").length === 1', timeout=5000)
+                page.wait_for_timeout(100)
+                labels = page.evaluate(self.CLIPPED_SELECT_LABELS_JS)
+                measured += len(labels)
+                clipped[tab] = [(item['text'], item['scrollWidth'], item['clientWidth'])
+                                for item in labels if item['scrollWidth'] > item['clientWidth']]
+            self.assertGreater(measured, 5)
+            self.assertEqual({tab: items for tab, items in clipped.items() if items}, {})
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()

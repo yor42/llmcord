@@ -275,6 +275,7 @@ def mount_dashboard(app):
             selected_tab = 'setup'
         await ctx.load_channel_names()  # must precede any ctx.snapshot access: it bakes channel names into owner labels
         ui.add_css('.lore-drop-zone:empty::before { content: "Drop entries here"; color: #94a3b8; pointer-events: none; }')
+        ui.add_css('.q-select:not(.owner-heading) { min-width: min(16rem, 100%); }')
         async def changed(event):
             ctx.set_url(tab=event.value)
             await ctx.build(event.value)
