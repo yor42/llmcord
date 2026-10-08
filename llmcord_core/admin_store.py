@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import uuid
 import time
+from zoneinfo import ZoneInfo
 from contextlib import contextmanager
 
 from .lorebooks import normalize_entry, parse_lorebook
@@ -55,8 +56,21 @@ CREATE TABLE IF NOT EXISTS prompt_revisions (
 );
 CREATE TABLE IF NOT EXISTS guild_settings (
  guild_id INTEGER PRIMARY KEY, preset_id INTEGER, preset_revision INTEGER,
- asset_channel_id INTEGER, usage_footer INTEGER NOT NULL DEFAULT 1
+ asset_channel_id INTEGER, usage_footer INTEGER NOT NULL DEFAULT 1,
+ timezone TEXT NOT NULL DEFAULT '', turn_log_enabled INTEGER NOT NULL DEFAULT 0, turn_log_days INTEGER NOT NULL DEFAULT 14
 );
+CREATE TABLE IF NOT EXISTS user_timezones (
+ guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, timezone TEXT NOT NULL, updated_at REAL NOT NULL,
+ PRIMARY KEY(guild_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS turn_log (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, channel_id INTEGER, message_id INTEGER,
+ stage TEXT NOT NULL DEFAULT '', profile TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '',
+ status TEXT NOT NULL DEFAULT '', reference_id TEXT NOT NULL DEFAULT '', error_detail TEXT NOT NULL DEFAULT '',
+ request_text TEXT NOT NULL DEFAULT '', response_text TEXT NOT NULL DEFAULT '',
+ input_tokens INTEGER, output_tokens INTEGER, created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS turn_log_guild_time ON turn_log(guild_id, created_at);
 CREATE TABLE IF NOT EXISTS avatar_slots (
  character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
  slot_key TEXT NOT NULL, label TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
@@ -86,6 +100,16 @@ def entry_match(ident, content, rule_json, keys_json, constant, enabled, order, 
         return int(needle in (content + ' ' + ' '.join(rule['keys'])).casefold())
     except (ValueError, TypeError):
         return 0
+
+
+def valid_timezone(name):
+    try:
+        if not isinstance(name, str) or not name or name != name.strip() or '\x00' in name:
+            raise ValueError
+        ZoneInfo(name)
+    except Exception:
+        raise ValueError(f'Unknown timezone {name!r}; use an IANA name such as "Asia/Seoul".') from None
+    return name
 
 
 class ConflictError(ValueError):
@@ -218,7 +242,7 @@ class AdminStore:
             'lore': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0'},
             'lorebook_entries': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0', 'pinned': 'INTEGER NOT NULL DEFAULT 0', 'source_message_id': 'INTEGER', 'promoted_from': 'INTEGER'},
             'characters': {'avatar_manual': 'INTEGER NOT NULL DEFAULT 0'},
-            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1'},
+            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14'},
         }.items():
             columns = {row[1] for row in self.db.execute(f'PRAGMA table_info({table})')}
             for name, spec in additions.items():
@@ -703,6 +727,37 @@ class AdminStore:
     def set_usage_footer(self, guild_id, enabled):
         with self.write_admin():
             self.db.execute('INSERT INTO guild_settings(guild_id,usage_footer) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET usage_footer=excluded.usage_footer', (guild_id, int(bool(enabled))))
+
+    def guild_timezone(self, guild_id):
+        row = self.one('SELECT timezone FROM guild_settings WHERE guild_id=?', (guild_id,))
+        return row['timezone'] if row else ''
+
+    def set_guild_timezone(self, guild_id, name):
+        name = valid_timezone(name) if name else ''
+        with self.write_admin():
+            self.db.execute('INSERT INTO guild_settings(guild_id,timezone) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET timezone=excluded.timezone', (guild_id, name))
+
+    def user_timezone(self, guild_id, user_id):
+        row = self.one('SELECT timezone FROM user_timezones WHERE guild_id=? AND user_id=?', (guild_id, user_id))
+        return row['timezone'] if row else ''
+
+    def set_user_timezone(self, guild_id, user_id, name):
+        name = valid_timezone(name)
+        with self.write_admin():
+            self.db.execute('INSERT INTO user_timezones(guild_id,user_id,timezone,updated_at) VALUES(?,?,?,?) ON CONFLICT(guild_id,user_id) DO UPDATE SET timezone=excluded.timezone,updated_at=excluded.updated_at', (guild_id, user_id, name, time.time()))
+
+    def clear_user_timezone(self, guild_id, user_id):
+        with self.write_admin():
+            return self.db.execute('DELETE FROM user_timezones WHERE guild_id=? AND user_id=?', (guild_id, user_id)).rowcount > 0
+
+    def resolve_timezone(self, guild_id, user_id):
+        for source, name in (('member', self.user_timezone(guild_id, user_id)), ('server', self.guild_timezone(guild_id))):
+            try:
+                if name:
+                    return valid_timezone(name), source
+            except ValueError:
+                pass
+        return 'UTC', 'default'
 
     def active_preset(self, guild_id):
         row = self.one('SELECT * FROM guild_settings WHERE guild_id=?', (guild_id,))

@@ -10,3 +10,4 @@ python-multipart==0.0.32
 httpx==0.28.1
 mini-racer==0.14.1
 nicegui==3.17.1
+tzdata==2026.5
