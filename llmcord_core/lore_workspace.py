@@ -148,15 +148,16 @@ def render_lore_workspace(ctx, entry_editor, on_import=None, on_entry_import=Non
             ident = int(ident)
             with ui.column().classes(f'flex-1 min-w-80 lore-panel lore-panel-{side}'):
                 ui.label(options[control.value]).classes('text-lg font-bold owner-heading')
-                entries = ctx.store.admin_entries(ctx.guild_id, kind, ident)
-                if query.value:
-                    entries = [entry for entry in entries if query.value.casefold() in (entry['content'] + ' ' + ' '.join(entry['rule']['keys'])).casefold()]
                 page_key = (side, control.value)
-                page_number = min(pages.get(page_key, 1), max(1, (len(entries) + 49) // 50))
-                visible = entries[(page_number - 1) * 50:page_number * 50]
-                ui.label(f'{len(entries)} entries · page {page_number}').classes('owner-heading text-slate-400')
-                if len(entries) > 50:
-                    pagination = ui.select(list(range(1, (len(entries) + 49) // 50 + 1)), value=page_number, label='Page').classes('owner-heading')
+                page_number = max(1, pages.get(page_key, 1))
+                visible, total = ctx.store.admin_entries_page(ctx.guild_id, kind, ident, query.value, 50, (page_number - 1) * 50)
+                last_page = max(1, (total + 49) // 50)
+                if page_number > last_page:
+                    page_number = last_page
+                    visible, total = ctx.store.admin_entries_page(ctx.guild_id, kind, ident, query.value, 50, (page_number - 1) * 50)
+                ui.label(f'{total} entries · page {page_number}').classes('owner-heading text-slate-400')
+                if total > 50:
+                    pagination = ui.select(list(range(1, last_page + 1)), value=page_number, label='Page').classes('owner-heading')
                     async def page_changed(event, page_key=page_key):
                         async with operation_lock:
                             if await ctx.run(lambda: True):

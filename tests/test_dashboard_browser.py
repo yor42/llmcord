@@ -604,7 +604,7 @@ class DashboardBrowserTests(unittest.TestCase):
     def test_lore_search_is_debounced(self):
         """PERF-01 (fixed): typing in the lore search box re-renders the board once, after typing pauses, not per keystroke.
 
-        The board loads each side through ``AdminStore.admin_entries``, so one render is two counted calls.
+        The board loads each side through ``AdminStore.admin_entries_page`` (counted under the ``admin_entries`` keys), so one render is two counted calls.
         Ten keystrokes 30 ms apart arrive well inside a ~300 ms debounce window, so a debounced search
         renders once at the end. The bound allows two renders (four calls) for one scheduling hiccup
         mid-burst; before the fix every keystroke rendered (about ten renders, twenty calls).
@@ -657,8 +657,8 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertEqual(page.locator('.lore-drop-right .lore-entry').count(), 0)
             self.assertFalse(errors, errors)
 
-            # Debounce: at most two board renders (two admin_entries calls each) for the whole burst.
-            self.assertLessEqual(renders, 4, f'admin_entries called {renders} times while typing 10 characters')
+            # Debounce: at most two board renders (two admin_entries_page calls each) for the whole burst.
+            self.assertLessEqual(renders, 4, f'admin_entries_page called {renders} times while typing 10 characters')
         finally:
             self.page = original_page
             context.close()

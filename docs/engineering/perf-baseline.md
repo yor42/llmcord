@@ -126,3 +126,23 @@ Reading:
 - Save cast settled: 2.36 s → 0.55–0.60 s (rate limited).
 - Cold load (rate limited): 3.9 s → 2.0 s settled.
 - The Characters tab and Expand one character moved in opposite directions (tab ~0.07 → ~0.55, expand ~0.55 → ~0.05). Their sum is about the same, so the render work seems to have shifted from the expand step to the tab switch; this was not investigated. The latency run 2 tab value (1.36 s) is a single outlier; the other three runs are 0.54–0.56 s.
+
+## 2026-10-08: R5 step 2 (PERF-02, lore paging in SQL)
+
+One `scripts/verify.sh --bench` run on `rework/r5-dashboard-data` before the single-pass follow-up (same host and seed). Every scenario is within ±0.05 s of the end-of-R2 runs: lore search 1.49 / 1.49 (latency) and 1.51 / 1.51 (rate limited), 0 checks. The bench seeds 500 entries, and at that size the 300 ms debounce and page render dominate. The end-to-end bench therefore cannot show this change.
+
+The store-level micro-benchmark used a throwaway script with no repo code changes and an in-memory `Store`. It measured one character owner and a 50-entry page, with the mean of 5 calls, in ms. "Before" is `cec5002`, which loaded every entry through `admin_entries` (N+1) and then filtered and sliced in Python. "After" is `admin_entries_page`.
+
+| Entries | Query | Before | After |
+| --- | --- | --- | --- |
+| 500 | none | 15.3 | 1.8 |
+| 500 | hit (`key12`) | 15.6 | 6.1 |
+| 500 | no match | 15.5 | 11.6 |
+| 5000 | none | 173.9 | 6.5 |
+| 5000 | hit (`key12`) | 173.4 | 62.5 |
+| 5000 | no match | 178.2 | 61.0 |
+
+Reading:
+- An unfiltered page no longer grows with book size beyond one indexed COUNT.
+- A filtered page is still linear, because the casefold match runs as a Python SQL function on every row of the owner. It runs once per row, since the count comes from a window function in the same query.
+- FTS5 would make filtered search sub-linear, but its tokenization would change the substring semantics. It is not needed at current sizes.

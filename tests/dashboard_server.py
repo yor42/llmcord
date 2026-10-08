@@ -64,15 +64,16 @@ def main():
     app.state.sessions['browser-reject-session'] = {'user': {'id': '4', 'username': 'Test admin'}, 'expires': time.time() + 3600,
         'token_expires': time.time() + 3600, 'csrf': 'browser-reject-csrf', 'access': 'test', 'refresh': 'test'}
 
-    # Count lore board renders (PERF-01): render_board loads each side through AdminStore.admin_entries.
+    # Count lore board renders (PERF-01/02): render_board loads each side through AdminStore.admin_entries_page,
+    # counted here under the 'admin_entries' counter keys (one per side per render).
     counters = Counter()
     admin_store = app.state.admin.store
-    original_admin_entries = admin_store.admin_entries
-    def counting_admin_entries(guild_id, kind, owner_id):
+    original_admin_entries_page = admin_store.admin_entries_page
+    def counting_admin_entries_page(guild_id, kind, owner_id, *args, **kwargs):
         counters['admin_entries'] += 1
         counters[f'admin_entries:{kind}:{owner_id}'] += 1
-        return original_admin_entries(guild_id, kind, owner_id)
-    admin_store.admin_entries = counting_admin_entries
+        return original_admin_entries_page(guild_id, kind, owner_id, *args, **kwargs)
+    admin_store.admin_entries_page = counting_admin_entries_page
 
     @app.get('/_test/state')
     async def snapshot():

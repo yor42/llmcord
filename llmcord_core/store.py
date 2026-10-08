@@ -8,7 +8,7 @@ import threading
 from contextlib import closing
 from pathlib import Path
 from typing import Any
-from .admin_store import AdminStore, ConflictError
+from .admin_store import AdminStore, ConflictError, entry_match
 
 
 SCHEMA = """
@@ -180,6 +180,7 @@ class Store(AdminStore):
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path, check_same_thread=False, factory=TimedConnection)
         self.db.row_factory = sqlite3.Row
+        self.db.create_function("llmcord_entry_match", 8, entry_match, deterministic=True)
         self.db.execute("PRAGMA foreign_keys=ON")
         self.db.execute("PRAGMA busy_timeout=5000")
         self.db.execute("PRAGMA journal_mode=WAL")

@@ -71,6 +71,23 @@ CREATE TABLE IF NOT EXISTS avatar_assets (
 """
 
 
+def entry_rule(ident, row):
+    rule = json.loads(row['rule_json'])
+    if not rule:
+        rule = normalize_entry(str(ident), {'keys': json.loads(row['keys_json']), 'constant': bool(row['constant']), 'enabled': bool(row['enabled']), 'order': row['insertion_order']}).rule
+    return rule
+
+
+def entry_match(ident, content, rule_json, keys_json, constant, enabled, order, needle):
+    if needle in content.casefold():
+        return 1
+    try:
+        rule = entry_rule(ident, {'rule_json': rule_json, 'keys_json': keys_json, 'constant': constant, 'enabled': enabled, 'insertion_order': order})
+        return int(needle in (content + ' ' + ' '.join(rule['keys'])).casefold())
+    except (ValueError, TypeError):
+        return 0
+
+
 class ConflictError(ValueError):
     """An optimistic revision or unresolved import conflict rejected a write."""
 
@@ -297,9 +314,10 @@ class AdminStore:
             row = None
         if not row:
             raise ValueError('Lore entry not found')
-        rule = json.loads(row['rule_json'])
-        if not rule:
-            rule = normalize_entry(str(ident), {'keys': json.loads(row['keys_json']), 'constant': bool(row['constant']), 'enabled': bool(row['enabled']), 'order': row['insertion_order']}).rule
+        return self._entry_dict(kind, ref, ident, row)
+
+    def _entry_dict(self, kind, ref, ident, row):
+        rule = entry_rule(ident, row)
         return {'ref': ref, 'id': ident, 'table': {'lore': 'lore', 'guild-lore': 'guild_lore_entries', 'book-entry': 'lorebook_entries'}[kind],
                 'entry_key': row['entry_key'] or f'lore:{ident}', 'revision': row['revision'],
                 'owner_kind': row['scope_kind'] if kind != 'book-entry' else 'book',
@@ -318,15 +336,32 @@ class AdminStore:
         row = self.one('SELECT e.id FROM lorebook_entries e JOIN lorebooks b ON b.id=e.book_id WHERE b.guild_id=? AND e.entry_key=?', (guild_id, key))
         return self.admin_entry(guild_id, f"book-entry:{row['id']}") if row else None
 
+    def _entry_query(self, guild_id, kind, owner_id):
+        if kind == 'book':
+            return 'book-entry', 'FROM lorebook_entries e JOIN lorebooks b ON b.id=e.book_id WHERE b.guild_id=? AND e.book_id=?', (guild_id, owner_id), 'e.id', 'e.*'
+        if kind == 'guild':
+            return 'guild-lore', 'FROM guild_lore_entries WHERE guild_id=?', (guild_id,), 'insertion_order,id', '*'
+        return 'lore', 'FROM lore WHERE guild_id=? AND scope_kind=? AND scope_id=?', (guild_id, kind, owner_id), 'insertion_order,id', '*'
+
     def admin_entries(self, guild_id, kind, owner_id):
         self.validate_owner(guild_id, kind, owner_id)
-        if kind == 'book':
-            refs = [f"book-entry:{r['id']}" for r in self.lorebook_entries(owner_id)]
-        elif kind == 'guild':
-            refs = [f"guild-lore:{r['id']}" for r in self.all('SELECT id FROM guild_lore_entries WHERE guild_id=? ORDER BY insertion_order,id', (guild_id,))]
+        prefix, where, params, order, cols = self._entry_query(guild_id, kind, owner_id)
+        return [self._entry_dict(prefix, f"{prefix}:{r['id']}", r['id'], r) for r in self.all(f'SELECT {cols} {where} ORDER BY {order}', params)]
+
+    def admin_entries_page(self, guild_id, kind, owner_id, query='', limit=50, offset=0):
+        self.validate_owner(guild_id, kind, owner_id)
+        prefix, where, params, order, cols = self._entry_query(guild_id, kind, owner_id)
+        col = (lambda c: f'e.{c}' if c in ('id', 'content', 'rule_json') else 'NULL') if kind == 'book' else (lambda c: c)
+        if query:
+            where += f" AND llmcord_entry_match({col('id')},{col('content')},{col('rule_json')},{col('keys_json')},{col('constant')},{col('enabled')},{col('insertion_order')},?)"
+            params = params + (query.casefold(),)
+        if query:
+            rows = self.all(f'SELECT {cols},COUNT(*) OVER () AS llmcord_total {where} ORDER BY {order} LIMIT ? OFFSET ?', params + (limit, offset))
+            total = rows[0]['llmcord_total'] if rows else 0 if offset <= 0 else self.one(f'SELECT COUNT(*) AS n {where}', params)['n']
         else:
-            refs = [f"lore:{r['id']}" for r in self.all('SELECT id FROM lore WHERE guild_id=? AND scope_kind=? AND scope_id=? ORDER BY insertion_order,id', (guild_id, kind, owner_id))]
-        return [self.admin_entry(guild_id, ref) for ref in refs]
+            total = self.one(f'SELECT COUNT(*) AS n {where}', params)['n']
+            rows = self.all(f'SELECT {cols} {where} ORDER BY {order} LIMIT ? OFFSET ?', params + (limit, offset))
+        return [self._entry_dict(prefix, f"{prefix}:{r['id']}", r['id'], r) for r in rows], total
 
     def insert_admin_entry(self, guild_id, kind, owner_id, content, rule, pinned=False, key=None, source_id=None, promoted_from=None):
         key = key or 'entry:' + uuid.uuid4().hex
