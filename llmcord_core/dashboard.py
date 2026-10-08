@@ -165,7 +165,10 @@ body.body--dark .q-card .q-card, body.body--dark .q-card .q-expansion-item {{ ba
 .ll-section-title {{ font-size: 20px; font-weight: 700; line-height: 1.3; }}
 .ll-form-row {{ width: 100%; display: flex; flex-flow: row wrap; align-items: flex-end; gap: 16px; }}
 .ll-form-row .q-field {{ flex: 0 1 16rem; min-width: min(16rem, 100%); }}
-.ll-section > .q-expansion-item {{ border: 1px solid {THEME_DIVIDER}; border-radius: 8px; }}
+.ll-section > .q-expansion-item, .ll-subpanel {{ border: 1px solid {THEME_DIVIDER}; border-radius: 8px; }}
+.ll-stack {{ width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; gap: 16px; padding: 4px 0 8px; }}
+.ll-stack .q-uploader {{ max-width: min(20rem, 100%); }}
+.ll-subtitle {{ font-size: 16px; font-weight: 700; line-height: 1.3; }}
 @media (max-width: 600px) {{ .ll-section {{ padding: 16px; }} .ll-form-row .q-field {{ flex-basis: 100%; }} }}
 body.body--dark .q-tab-panels, body.body--dark .q-tab-panel {{ background: transparent; }}
 .ll-page .q-tab-panel {{ padding-left: 0; padding-right: 0; }}
@@ -585,23 +588,34 @@ def characters_panel(ctx):
     def new_character():
         with ui.dialog() as dialog, ui.card().classes('w-full max-w-lg'):
             ui.label('Create character').classes('text-xl font-bold')
-            ui.label('Start with an empty card, then add a description, personality, and dialogue examples.')
+            ui.label('Start with an empty card, then add a description, personality, and dialogue examples.').classes('ll-muted')
             name = ui.input('Character name').classes('w-full')
             world = ui.select(worlds, value=next(iter(worlds), None), label='Home world').classes('w-full')
-            with ui.row():
-                ui.button('Cancel', on_click=dialog.close)
+            with ui.element('div').classes('ll-form-row justify-end'):
+                ui.button('Cancel', on_click=dialog.close).props('flat')
                 ctx.button('Create', lambda: store.create_character(gid, world.value, name.value or ''),
                            'character.create', then=lambda _: ctx.refresh('characters'))
         dialog.open()
-    ui.button('Create character', icon='add', on_click=new_character).set_enabled(bool(worlds))
-    if not worlds:
-        ui.label('Create a home world in Server setup first.')
     rows = ctx.snapshot.characters
-    for row in rows:
-        with ui.expansion(row['name'] + (' · Archived' if row['archived'] else '')).classes('w-full border rounded-lg character-card'):
+    with section('Characters'):
+        ui.button('Create character', icon='add', on_click=new_character).set_enabled(bool(worlds))
+        if not worlds:
+            ui.label('Create a home world in Server setup first.').classes('ll-muted')
+        for row in rows:
+            character_card(ctx, row, worlds)
+        if not rows:
+            ui.label('Create an empty character here or import a character card in Imports to get started.').classes('ll-muted')
+
+
+def character_card(ctx, row, worlds):
+    from nicegui import ui
+    store, gid = ctx.store, ctx.guild_id
+    with ui.expansion(row['name'] + (' · Archived' if row['archived'] else '')).classes('w-full character-card'):
+        with ui.element('div').classes('ll-stack'):
             card = json.loads(row['card'])
-            name = ui.input('Name', value=row['name'])
-            world = ui.select(worlds, value=row['world_id'], label='Home world')
+            with ui.element('div').classes('ll-form-row'):
+                name = ui.input('Name', value=row['name'])
+                world = ui.select(worlds, value=row['world_id'], label='Home world')
             fields = {field: ui.textarea(label, value=card.get(field, '')).classes('w-full') for field, label in
                 [('description', 'Description'), ('personality', 'Personality'), ('scenario', 'Scenario'), ('first_mes', 'Opening line'), ('mes_example', 'Example dialogue'), ('system_prompt', 'Card instructions'), ('post_history_instructions', 'Card post-history instructions')]}
             confirm = ui.checkbox('Confirm moving worlds; ineligible casts will be cleared')
@@ -612,24 +626,25 @@ def characters_panel(ctx):
                 new = {**card, **{key: control.value or '' for key, control in fields.items()}, 'name': name.value}
                 store.update_character(gid, row['id'], world.value, name.value or '', new, expected_revision=revision)
                 return True
-            ctx.button('Save character', save, 'character.edit', {'id': row['id']}, then=lambda _: ctx.refresh('characters'))
-            def archive(row=row):
-                store.archive_character(gid, row['id'], not row['archived'])
-                return True
-            ctx.button('Restore' if row['archived'] else 'Archive', archive, 'character.archive', {'id': row['id']}, then=lambda _: ctx.refresh('characters'))
-            def confirm_delete(row=row, revision=revision):
-                confirm_dialog(ctx, f"Delete {row['name']}?",
-                               ['Permanently delete this character, its lore, memories, and saved avatars, and remove it from all casts. Past Discord messages remain.',
-                                'This cannot be undone. Use Archive if you may want to restore the character later.'],
-                               'Delete permanently', lambda: store.delete_character(gid, row['id'], revision),
-                               'character.delete', {'id': row['id']}, then=lambda _: ctx.refresh('characters'))
-            ui.button('Delete character', icon='delete', color='negative', on_click=confirm_delete)
+            with ui.element('div').classes('ll-form-row'):
+                ctx.button('Save character', save, 'character.edit', {'id': row['id']}, then=lambda _: ctx.refresh('characters'))
+                def archive(row=row):
+                    store.archive_character(gid, row['id'], not row['archived'])
+                    return True
+                ctx.button('Restore' if row['archived'] else 'Archive', archive, 'character.archive', {'id': row['id']}, then=lambda _: ctx.refresh('characters')).props('outline')
+                def confirm_delete(row=row, revision=revision):
+                    confirm_dialog(ctx, f"Delete {row['name']}?",
+                                   ['Permanently delete this character, its lore, memories, and saved avatars, and remove it from all casts. Past Discord messages remain.',
+                                    'This cannot be undone. Use Archive if you may want to restore the character later.'],
+                                   'Delete permanently', lambda: store.delete_character(gid, row['id'], revision),
+                                   'character.delete', {'id': row['id']}, then=lambda _: ctx.refresh('characters'))
+                ui.button('Delete character', icon='delete', color='negative', on_click=confirm_delete)
             static_avatar_editor(ctx, row)
-            ui.label('Emotion avatars').classes('text-xl font-bold')
-            ui.label('The selected emotion image is used first. If unavailable, the fallback static avatar is used.')
+            ui.label('Emotion avatars').classes('ll-subtitle')
+            ui.label('The selected emotion image is used first. If unavailable, the fallback static avatar is used.').classes('ll-muted')
             for slot in store.avatar_slots(gid, row['id']):
                 avatar_editor(ctx, row['id'], slot)
-            with ui.row().classes('items-end'):
+            with ui.element('div').classes('ll-form-row'):
                 key = ui.input('New emotion key').props('hint="lowercase letters, digits, underscores, hyphens"')
                 label = ui.input('Emotion label')
                 def add_slot(row=row, key=key, label=label):
@@ -638,70 +653,71 @@ def characters_panel(ctx):
                     store.save_avatar(gid, row['id'], key.value or '', label.value or '', '')
                     return True
                 ctx.button('Add emotion', add_slot, 'avatar.slot.create', then=lambda _: ctx.refresh())
-    if not rows:
-        ui.label('Create an empty character here or import a character card in Imports to get started.')
 
 
 def static_avatar_editor(ctx, character):
     from nicegui import ui
-    with ui.expansion('Fallback static avatar').classes('w-full fallback-avatar'):
+    with ui.expansion('Fallback static avatar').classes('w-full fallback-avatar ll-subpanel'), ui.element('div').classes('ll-stack'):
         if character['avatar']:
-            ui.image(ctx.app.state.base_url + f"/guild/{ctx.guild_id}/characters/{character['id']}/avatar?v={avatar_version(character['avatar'])}").classes('w-24 h-24')
+            ui.image(ctx.app.state.base_url + f"/guild/{ctx.guild_id}/characters/{character['id']}/avatar?v={avatar_version(character['avatar'])}").classes('w-24 h-24 rounded-lg')
         else:
-            ui.label('No static fallback set. Import a card portrait or upload one here.')
-        ui.label('Used when the selected emotion has no usable image. No asset channel or publication is needed.')
+            ui.label('No static fallback set. Import a card portrait or upload one here.').classes('ll-muted')
+        ui.label('Used when the selected emotion has no usable image. No asset channel or publication is needed.').classes('ll-muted')
         revision = ctx.store.owner_revision(ctx.guild_id, 'character', character['id'])
         def reload(_):
             return ctx.refresh('characters')
         async def upload(event):
             ctx.store.save_static_avatar(ctx.guild_id, character['id'], normalize_avatar(await event.file.read()), revision)
             return True
-        ctx.upload(upload, 'Upload fallback avatar', 'avatar.fallback.edit', {'character': character['id']}, then=reload, success='Fallback avatar saved')
-        if character['avatar']:
-            def remove():
-                ctx.store.save_static_avatar(ctx.guild_id, character['id'], None, revision)
-                return True
-            ui.button('Remove fallback avatar', icon='delete', color='negative', on_click=lambda: confirm_dialog(
-                ctx, 'Remove fallback avatar?', ['The character falls back to emotion images only. Emotion images stay.'],
-                'Remove fallback avatar', remove, 'avatar.fallback.delete', {'character': character['id']}, then=reload))
+        with ui.element('div').classes('ll-form-row'):
+            ctx.upload(upload, 'Upload fallback avatar', 'avatar.fallback.edit', {'character': character['id']}, then=reload, success='Fallback avatar saved')
+            if character['avatar']:
+                def remove():
+                    ctx.store.save_static_avatar(ctx.guild_id, character['id'], None, revision)
+                    return True
+                ui.button('Remove fallback avatar', icon='delete', color='negative', on_click=lambda: confirm_dialog(
+                    ctx, 'Remove fallback avatar?', ['The character falls back to emotion images only. Emotion images stay.'],
+                    'Remove fallback avatar', remove, 'avatar.fallback.delete', {'character': character['id']}, then=reload))
 
 
 def avatar_editor(ctx, character_id, slot):
     from nicegui import ui
-    with ui.expansion(slot['label']).classes('w-full'):
+    with ui.expansion(slot['label']).classes('w-full ll-subpanel'), ui.element('div').classes('ll-stack'):
         if slot['has_image']:
-            ui.image(ctx.app.state.base_url + f"/guild/{ctx.guild_id}/characters/{character_id}/avatars/{slot['slot_key']}?v={slot['image_version']}").classes('w-24 h-24')
-        ui.label('Stable key: ' + slot['slot_key'])
-        label = ui.input('Label', value=slot['label'])
-        description = ui.input('When to use this emotion', value=slot['description'])
+            ui.image(ctx.app.state.base_url + f"/guild/{ctx.guild_id}/characters/{character_id}/avatars/{slot['slot_key']}?v={slot['image_version']}").classes('w-24 h-24 rounded-lg')
+        ui.label('Stable key: ' + slot['slot_key']).classes('ll-muted')
+        with ui.element('div').classes('ll-form-row'):
+            label = ui.input('Label', value=slot['label'])
+            description = ui.input('When to use this emotion', value=slot['description'])
         async def upload(event):
             image = normalize_avatar(await event.file.read())
             ctx.store.save_avatar(ctx.guild_id, character_id, slot['slot_key'], label.value or '', description.value or '', image, slot['revision'])
             return True
         ctx.upload(upload, 'Upload avatar image', 'avatar.slot.edit', {'character': character_id, 'slot': slot['slot_key']},
                    then=lambda _: ctx.refresh(), success='Emotion image saved')
-        def save():
-            ctx.store.save_avatar(ctx.guild_id, character_id, slot['slot_key'], label.value or '', description.value or '', None, slot['revision'])
-            return True
-        ctx.button('Save emotion', save, 'avatar.slot.edit', {'character': character_id, 'slot': slot['slot_key']}, then=lambda _: ctx.refresh())
-        async def publish():
-            return await ctx.service.avatars.publish(ctx.guild_id, character_id, slot['slot_key'], repair=True)
-        ctx.button('Publish / repair image', publish, 'avatar.publish', {'character': character_id, 'slot': slot['slot_key']}, success='Image published')
-        if slot['has_image']:
-            def remove_image():
-                ctx.store.clear_avatar_image(ctx.guild_id, character_id, slot['slot_key'], slot['revision'])
+        with ui.element('div').classes('ll-form-row'):
+            def save():
+                ctx.store.save_avatar(ctx.guild_id, character_id, slot['slot_key'], label.value or '', description.value or '', None, slot['revision'])
                 return True
-            ui.button('Remove emotion image', icon='delete', color='negative', on_click=lambda: confirm_dialog(
-                ctx, f"Remove the image from {slot['label']}?", ['The emotion and its label stay; only the image is removed.'],
-                'Remove emotion image', remove_image, 'avatar.image.delete', {'character': character_id, 'slot': slot['slot_key']},
-                then=lambda _: ctx.refresh('characters')))
-        if slot['slot_key'] != 'neutral':
-            def delete():
-                ctx.store.delete_avatar(ctx.guild_id, character_id, slot['slot_key'], slot['revision'])
-                return True
-            ui.button('Remove emotion', icon='delete', color='negative', on_click=lambda: confirm_dialog(
-                ctx, f"Remove emotion {slot['label']}?", ['This removes the emotion and its image. The neutral emotion and the fallback avatar stay.'],
-                'Remove emotion', delete, 'avatar.slot.delete', then=lambda _: ctx.refresh()))
+            ctx.button('Save emotion', save, 'avatar.slot.edit', {'character': character_id, 'slot': slot['slot_key']}, then=lambda _: ctx.refresh())
+            async def publish():
+                return await ctx.service.avatars.publish(ctx.guild_id, character_id, slot['slot_key'], repair=True)
+            ctx.button('Publish / repair image', publish, 'avatar.publish', {'character': character_id, 'slot': slot['slot_key']}, success='Image published').props('outline')
+            if slot['has_image']:
+                def remove_image():
+                    ctx.store.clear_avatar_image(ctx.guild_id, character_id, slot['slot_key'], slot['revision'])
+                    return True
+                ui.button('Remove emotion image', icon='delete', color='negative', on_click=lambda: confirm_dialog(
+                    ctx, f"Remove the image from {slot['label']}?", ['The emotion and its label stay; only the image is removed.'],
+                    'Remove emotion image', remove_image, 'avatar.image.delete', {'character': character_id, 'slot': slot['slot_key']},
+                    then=lambda _: ctx.refresh('characters')))
+            if slot['slot_key'] != 'neutral':
+                def delete():
+                    ctx.store.delete_avatar(ctx.guild_id, character_id, slot['slot_key'], slot['revision'])
+                    return True
+                ui.button('Remove emotion', icon='delete', color='negative', on_click=lambda: confirm_dialog(
+                    ctx, f"Remove emotion {slot['label']}?", ['This removes the emotion and its image. The neutral emotion and the fallback avatar stay.'],
+                    'Remove emotion', delete, 'avatar.slot.delete', then=lambda _: ctx.refresh()))
 
 
 def lore_panel(ctx, on_import=None):
