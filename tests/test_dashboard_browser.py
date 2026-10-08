@@ -759,6 +759,25 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def test_server_timezone_select_saves_with_toast_and_audit(self):
+        """FEAT-04: Server setup has a searchable 'Server timezone' select; Save timezone stores it, toasts, and audits old/new."""
+        context, page, errors = self.ux_page('/admin/guild/1')
+        try:
+            page.get_by_role('tab', name='Server setup', exact=True).click()
+            select = page.get_by_label('Server timezone', exact=True)
+            select.wait_for(timeout=5000)
+            select.click()
+            select.fill('Asia/Seoul')
+            page.get_by_role('option', name='Asia/Seoul', exact=True).click()
+            page.get_by_role('button', name='Save timezone', exact=True).click()
+            page.get_by_text('Timezone saved', exact=True).wait_for(timeout=5000)
+            self.wait_for(lambda: self.state()['guild_timezone'] == 'Asia/Seoul')
+            rows = [r for r in self.state()['audit'] if r['action'] == 'settings.timezone']
+            self.assertEqual([json.loads(r['detail_json']) for r in rows], [{'old': '', 'new': 'Asia/Seoul'}])
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
     def test_channel_selects_show_names_not_ids(self):
         """UX-01: lore owner, imports channel and presets sample-channel selects show '#scene', not '100'."""
         context, page, errors = self.ux_page('/admin/guild/1')

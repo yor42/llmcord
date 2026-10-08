@@ -111,6 +111,7 @@ def main():
             'books': [dict(r) for r in store.all('SELECT * FROM lorebook_entries')],
             'presets': [dict(r) for r in store.list_presets(1)], 'active': store.active_preset(1)['id'],
             'active_bundle': store.active_preset(1)['bundle'], 'assets': [dict(r) for r in store.all('SELECT * FROM avatar_assets')],
+            'guild_timezone': store.guild_timezone(1), 'audit': [dict(r) for r in store.all('SELECT * FROM admin_audit ORDER BY id')],
             'slots': [{'character_id': r['character_id'], 'slot_key': r['slot_key'], 'label': r['label'], 'has_image': bool(r['image'])} for r in store.all('SELECT * FROM avatar_slots')]}
 
     @app.get('/_test/uploads')

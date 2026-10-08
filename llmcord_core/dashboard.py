@@ -7,6 +7,7 @@ import json
 import sqlite3
 import inspect
 import types
+import zoneinfo
 import httpx
 from urllib.parse import parse_qs
 from http.cookies import SimpleCookie
@@ -335,6 +336,27 @@ def bind_detail(result):
     return {'channel': result['channel'], 'space': result['space'], 'dropped': result['dropped']}
 
 
+_TIMEZONE_OPTIONS: list[str] = []
+
+
+def timezone_options(current):
+    if not _TIMEZONE_OPTIONS:
+        _TIMEZONE_OPTIONS.extend(sorted(zoneinfo.available_timezones()))
+    if isinstance(current, str) and current and current not in _TIMEZONE_OPTIONS:
+        return sorted([*_TIMEZONE_OPTIONS, current])
+    return list(_TIMEZONE_OPTIONS)
+
+
+def timezone_operation(store, guild_id, name):
+    old = store.guild_timezone(guild_id)
+    store.set_guild_timezone(guild_id, name or '')
+    return {'old': old, 'new': name or ''}
+
+
+def timezone_detail(result):
+    return {'old': result['old'], 'new': result['new']}
+
+
 def signout(app, session):
     from nicegui import ui
     # A normal POST retains the existing origin and CSRF checks.
@@ -433,6 +455,14 @@ async def setup_panel(ctx):
         store.set_usage_footer(gid, footer.value)
         return True
     ctx.button('Save footer setting', save_footer, 'settings.footer', success='Footer setting saved')
+    ui.separator()
+    ui.label('Timezone').classes('text-xl font-bold')
+    current = store.guild_timezone(gid)
+    timezone = ui.select(timezone_options(current), value=current or None,
+                         label='Server timezone', with_input=True, clearable=True).classes('w-full max-w-sm')
+    ui.label('Characters use this for members who have not chosen their own with /time set. Without it they use UTC.')
+    ctx.button('Save timezone', lambda: timezone_operation(store, gid, timezone.value), 'settings.timezone',
+               timezone_detail, success='Timezone saved')
     ui.separator()
     ui.label('Avatar asset channel').classes('text-xl font-bold')
     current_asset = store.asset_channel_id(gid)
