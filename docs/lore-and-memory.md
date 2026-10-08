@@ -6,9 +6,9 @@ Each response starts with the character card and the history of the selected con
 
 | Location | Eligible shared lore |
 | --- | --- |
-| World channel | Character book, home-world lore, guild books enabled for that world, and current channel lore or channel book. |
-| Hub channel | Character book, **that character's** home-world lore and enabled books, hub lore and enabled books, and current channel lore or channel book. |
-| Thread | The parent channel's scopes plus thread-local lore and its own branch history. |
+| World channel | Character book, home-world lore, server lorebooks enabled for that world, and current channel lore or channel lorebook. |
+| Hub channel | Character book, **that character's** home-world lore and enabled books, hub lore and enabled lorebooks, and current channel lore or channel lorebook. |
+| Thread | The parent channel's scopes plus thread lore and its own branch history. |
 
 Another guest's world lore is not included merely because both guests are in the hub. Character encounters are keyed to character and space. Opted-in personal facts are keyed to person and character, so a bond with that character can follow it between its home world and a linked hub. Ordinary hub events stay in hub-scoped encounter or local scene memory.
 
@@ -32,7 +32,7 @@ The dashboard accepts JSON files up to 8 MiB and 2,000 entries in either of thes
 }
 ```
 
-It also accepts an object whose `entries` value is an array. Entry IDs are stable sync keys. A book created as **guild** lore must be explicitly enabled for chosen worlds and/or hubs. A book created as **channel** lore belongs to one bound channel and its threads. Channel books do not need space links.
+It also accepts an object whose `entries` value is an array. Entry IDs are stable sync keys. A **server lorebook** must be explicitly enabled for chosen worlds and/or hubs. A **channel lorebook** belongs to one bound channel and its threads and needs no world or hub links.
 
 Use **Preview sync** before applying an import. The preview labels each entry as added, updated, removed, unchanged, or conflicted. A conflict means an imported entry changed in the file after its local copy was edited. Choose **Keep local edit** or **Use imported entry** for each conflict; applying without a choice is rejected. Handwritten world, hub, channel, and thread lore is stored separately and is never deleted by a lorebook sync. An import preview expires after 15 minutes, and a changed book revision requires another preview.
 

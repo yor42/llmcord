@@ -19,7 +19,7 @@ ADMIN_BIT = str(discord.Permissions(administrator=True).value)  # "8"
 
 # D11: admin subgroup -> subcommands.
 ADMIN_SURFACE = {
-    "space": {"create", "bind", "allow_world", "disallow_world"},
+    "space": {"create", "bind", "link_world", "unlink_world"},
     "character": {"import"},
     "cast": {"default"},
     "ambient": {"on", "off"},
@@ -45,8 +45,8 @@ MEMBER_PATHS = {group if names is None else f"{group} {name}"
 ADMIN_OPTIONS = {
     "admin space create": ["kind", "name"],
     "admin space bind": ["channel", "space"],
-    "admin space allow_world": ["hub", "world"],
-    "admin space disallow_world": ["hub", "world"],
+    "admin space link_world": ["hub", "world"],
+    "admin space unlink_world": ["hub", "world"],
     "admin character import": ["world", "attachment"],
     "admin cast default": ["characters"],
     "admin ambient on": [],

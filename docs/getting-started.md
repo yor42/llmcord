@@ -49,7 +49,7 @@ Create three Discord text channels such as `#world-a`, `#world-b`, and `#hub`. A
 
 1. Run `/admin space create` three times: worlds `A` and `B`, then hub `Hub`.
 2. Run `/admin space bind` in any channel, choosing each Discord channel and its matching space.
-3. Run `/admin space allow_world` twice to link `A` and `B` to `Hub`.
+3. Run `/admin space link_world` twice to link `A` and `B` to `Hub`.
 4. Import a V2/V3 card with `/admin character import`, choosing its home world. The [example cards](../examples/cards) are small JSON samples.
 5. Use `/admin cast default` in each channel to choose its default cast. The `characters` option takes comma-separated names; the maximum cast size is five.
 6. Mention the bot or reply to a character line in a bound channel. Use `/context` after a response to inspect the saved lore and memory references.

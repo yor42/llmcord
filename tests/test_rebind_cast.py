@@ -8,7 +8,7 @@ Target behavior:
   space, and says the cast was kept when nothing was dropped.
 - ``Store.unlink_world`` prunes now-ineligible characters from ``default_cast`` and ``active_cast`` of every channel
   bound to that hub in the same guild and returns the number of pruned entries (one per id removed from one cast
-  list). ``/admin space disallow_world`` mentions that number. Other spaces and other guilds are untouched.
+  list). ``/admin space unlink_world`` mentions that number. Other spaces and other guilds are untouched.
 - The legacy web routes (``/guild/{id}/bindings``, ``/guild/{id}/links``) go through the same store calls.
 
 Out of scope (gap): thread casts (``thread_casts`` has no parent column), pinned below as a characterization.
@@ -241,27 +241,27 @@ class SlashRebindTests(World, unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.casts(100), ([self.alice], [self.bob, self.alice]), reply)
         self.assertIn("kept", reply.lower())
 
-    async def test_disallow_world_prunes_and_reports_count(self):
-        """UX-03: ``/admin space disallow_world Plaza Harbor`` prunes Alice from Plaza channels and the reply mentions
+    async def test_unlink_world_prunes_and_reports_count(self):
+        """UX-03: ``/admin space unlink_world Plaza Harbor`` prunes Alice from Plaza channels and the reply mentions
         the 3 removed entries (currently Alice stays and the reply has no count)."""
         self.store.bind_channel(1, 200, self.plaza)
         self.store.bind_channel(1, 201, self.plaza)
         self.set_casts(200, [self.alice, self.carol], [self.carol, self.alice])
         self.set_casts(201, [], [self.alice])
         interaction = FakeInteraction(admin=True)
-        await invoke(self.bot, "admin space disallow_world", interaction, "Plaza", "Harbor")
+        await invoke(self.bot, "admin space unlink_world", interaction, "Plaza", "Harbor")
         reply = interaction.replies[0]
         self.assertEqual(self.store.allowed_worlds(self.plaza), {self.forest}, reply)
         self.assertEqual(self.casts(200), ([self.carol], [self.carol]), reply)
         self.assertEqual(self.casts(201), ([], []), reply)
         self.assertRegex(reply, r"\b3\b")
 
-    async def test_cast_add_works_after_disallow_world(self):
+    async def test_cast_add_works_after_unlink_world(self):
         """UX-03: after Harbor is unlinked from Plaza, ``/cast add Dave`` in a Plaza channel succeeds. Currently the
         stale Alice stays in the active cast, so ``set_cast`` rejects the whole new cast as ineligible."""
         self.store.bind_channel(1, 200, self.plaza)
         self.store.set_cast(200, None, [self.alice, self.carol])
-        await invoke(self.bot, "admin space disallow_world", FakeInteraction(admin=True), "Plaza", "Harbor")
+        await invoke(self.bot, "admin space unlink_world", FakeInteraction(admin=True), "Plaza", "Harbor")
         interaction = FakeInteraction(channel_id=200)
         await invoke(self.bot, "cast add", interaction, "Dave")
         self.assertEqual(self.store.get_cast(200), [self.carol, self.dave], interaction.replies)

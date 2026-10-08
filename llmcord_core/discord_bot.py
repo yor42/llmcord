@@ -561,7 +561,7 @@ def register_commands(bot: SkitBot) -> None:
     async def space_list(interaction: discord.Interaction):
         require_guild(interaction)
         rows = bot.store.list_spaces(interaction.guild_id)
-        text = "\n".join(f"#{row['id']} {row['kind']}: {row['name']}" for row in rows) or "No spaces yet."
+        text = "\n".join(f"#{row['id']} {row['kind']}: {row['name']}" for row in rows) or "No worlds or hubs yet."
         await interaction.response.send_message(text[:1900], ephemeral=True)
 
     @admin_space.command(name="bind", description="Bind a text channel to a world or hub")
@@ -584,19 +584,19 @@ def register_commands(bot: SkitBot) -> None:
             message = f"Bound {channel.mention} to {target}."
         await interaction.response.send_message(message[:1900], ephemeral=True)
 
-    @admin_space.command(name="allow_world", description="Allow a world's characters in a hub")
+    @admin_space.command(name="link_world", description="Link a world to a hub so its characters can appear there")
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.autocomplete(hub=space_choices("hub"), world=space_choices("world"))
-    async def space_allow(interaction: discord.Interaction, hub: str, world: str):
+    async def space_link(interaction: discord.Interaction, hub: str, world: str):
         require_guild(interaction)
         hub_row, world_row = guild_space(interaction, hub, "hub"), guild_space(interaction, world, "world")
         bot.store.link_world(interaction.guild_id, hub_row["id"], world_row["id"])
-        await interaction.response.send_message(f"{world_row['name']} is now available in {hub_row['name']}.", ephemeral=True)
+        await interaction.response.send_message(f"Linked {world_row['name']} to {hub_row['name']}.", ephemeral=True)
 
-    @admin_space.command(name="disallow_world", description="Remove a world's characters from a hub")
+    @admin_space.command(name="unlink_world", description="Unlink a world from a hub and drop its characters from that hub's channel casts")
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.autocomplete(hub=space_choices("hub"), world=space_choices("world"))
-    async def space_disallow(interaction: discord.Interaction, hub: str, world: str):
+    async def space_unlink(interaction: discord.Interaction, hub: str, world: str):
         require_guild(interaction)
         hub_row, world_row = guild_space(interaction, hub, "hub"), guild_space(interaction, world, "world")
         pruned = bot.store.unlink_world(interaction.guild_id, hub_row["id"], world_row["id"])
@@ -784,14 +784,16 @@ def register_commands(bot: SkitBot) -> None:
 
     lore = app_commands.Group(name="lore", description="Show the lore available here")
 
-    @admin_lore.command(name="add", description="Add a local or space lore entry")
+    @admin_lore.command(name="add", description="Add lore to this channel (or thread) or to its world or hub")
     @app_commands.checks.has_permissions(administrator=True)
-    async def lore_add(interaction: discord.Interaction, content: str, keys: str = "", scope: Literal["local", "space"] = "local"):
+    async def lore_add(interaction: discord.Interaction, content: str, keys: str = "", scope: Literal["channel", "space"] = "channel"):
         _, binding = await binding_for(interaction)
-        scope_kind, scope_id = local_scope(interaction) if scope == "local" else ("space", binding["space_id"])
+        scope_kind, scope_id = local_scope(interaction) if scope == "channel" else ("space", binding["space_id"])
         parsed = [key.strip() for key in keys.split(",") if key.strip()]
+        home = bot.store.space_by_id(binding["space_id"]) if scope == "space" else None
+        label = home["kind"] if home else "channel" if scope == "channel" else "space"
         ident = bot.store.add_lore(interaction.guild_id, scope_kind, scope_id, content, parsed, constant=not parsed, pinned=not parsed)
-        await interaction.response.send_message(f"Added {scope} lore #{ident}.", ephemeral=True)
+        await interaction.response.send_message(f"Added {label} lore #{ident}.", ephemeral=True)
 
     @lore.command(name="list", description="Show the lore available in this location")
     async def lore_list(interaction: discord.Interaction):
@@ -799,10 +801,12 @@ def register_commands(bot: SkitBot) -> None:
         scopes = [("space", binding["space_id"]), ("channel", binding["channel_id"])]
         if isinstance(interaction.channel, discord.Thread):
             scopes.append(("thread", interaction.channel.id))
+        home = bot.store.space_by_id(binding["space_id"])
+        names = {"space": home["kind"] if home else "space"}
         lines = []
         for kind, ident in scopes:
-            lines.extend(f"#{row['id']} [{kind}] {row['content'][:100]}" for row in bot.store.list_lore(interaction.guild_id, kind, ident))
-        await interaction.response.send_message("\n".join(lines)[:1900] or "No local or space lore yet.", ephemeral=True)
+            lines.extend(f"#{row['id']} [{names.get(kind, kind)}] {row['content'][:100]}" for row in bot.store.list_lore(interaction.guild_id, kind, ident))
+        await interaction.response.send_message("\n".join(lines)[:1900] or "No lore for this channel or its world or hub yet.", ephemeral=True)
 
     @admin_lore.command(name="pin", description="Pin a lore entry")
     @app_commands.checks.has_permissions(administrator=True)
@@ -897,7 +901,7 @@ def register_commands(bot: SkitBot) -> None:
                 character = bot.store.character_by_id(item["scope_id"])
                 scope = f"character {character['name']}" if character else f"character #{item['scope_id']}"
             elif scope == "lorebook":
-                scope = f"book {item.get('book_name', item['scope_id'])}"
+                scope = f"lorebook {item.get('book_name', item['scope_id'])}"
             else:
                 scope = f"{scope} #{item['scope_id']}"
             lore_lines.append(f"#{item['id']} ({scope}, {item['reason']})")

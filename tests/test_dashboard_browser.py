@@ -255,9 +255,7 @@ class DashboardBrowserTests(unittest.TestCase):
         portrait = BytesIO()
         Image.new('RGB', (50, 50), 'green').save(portrait, 'PNG')
         fallback.locator('input[type=file]').set_input_files({'name': 'fallback.png', 'mimeType': 'image/png', 'buffer': portrait.getvalue()})
-        page.get_by_text('Fallback image ready; save it to keep it', exact=True).wait_for()
-        fallback.locator('.q-uploader__file--img').wait_for()
-        fallback.get_by_role('button', name='Save fallback avatar', exact=True).click()
+        page.get_by_text('Fallback avatar saved', exact=True).wait_for()
         self.wait_for(lambda: next(row for row in self.state()['characters'] if row['id'] == blank['id'])['has_static_avatar'])
         self.assertFalse(self.state()['assets'])
         self.assertFalse(any(slot['has_image'] for slot in self.state()['slots'] if slot['character_id'] == blank['id']))
@@ -269,6 +267,7 @@ class DashboardBrowserTests(unittest.TestCase):
         character.get_by_text('Browser blank', exact=True).click()
         character.get_by_text('Fallback static avatar', exact=True).click()
         fallback.get_by_role('button', name='Remove fallback avatar', exact=True).click()
+        dialog.get_by_role('button', name='Remove fallback avatar', exact=True).click()
         self.wait_for(lambda: not next(row for row in self.state()['characters'] if row['id'] == blank['id'])['has_static_avatar'])
         character.get_by_text('Browser blank', exact=True).click()
         character.get_by_role('button', name='Delete character', exact=True).click()
@@ -283,20 +282,20 @@ class DashboardBrowserTests(unittest.TestCase):
 
         books_before = len(self.state()['lorebooks'])
         page.get_by_role('tab', name='Imports', exact=True).click()
-        page.get_by_label('Book name', exact=True).fill('Browser empty book')
-        page.get_by_role('button', name='Create book', exact=True).click()
+        page.get_by_label('Lorebook name', exact=True).fill('Browser empty book')
+        page.get_by_role('button', name='Create lorebook', exact=True).click()
         page.get_by_role('tab', name='Imports', exact=True).click()
-        empty = page.locator('.q-expansion-item').filter(has=page.get_by_text('Browser empty book · guild', exact=True)).first
-        empty.get_by_text('Browser empty book · guild', exact=True).click()
-        empty.get_by_role('button', name='Delete book', exact=True).click()
+        empty = page.locator('.q-expansion-item').filter(has=page.get_by_text('Browser empty book · server', exact=True)).first
+        empty.get_by_text('Browser empty book · server', exact=True).click()
+        empty.get_by_role('button', name='Delete lorebook', exact=True).click()
         dialog.get_by_text('Delete lorebook Browser empty book?', exact=True).wait_for()
         dialog.get_by_role('button', name='Cancel', exact=True).click()
         self.assertTrue(any(row['name'] == 'Browser empty book' for row in self.state()['lorebooks']))
-        empty.get_by_role('button', name='Delete book', exact=True).click()
+        empty.get_by_role('button', name='Delete lorebook', exact=True).click()
         dialog.get_by_role('button', name='Delete lorebook', exact=True).click()
         self.wait_for(lambda: not any(row['name'] == 'Browser empty book' for row in self.state()['lorebooks']))
         page.get_by_label('Destination owner', exact=True).click()
-        page.get_by_role('option', name='Guild: Server-wide lore', exact=True).click()
+        page.get_by_role('option', name='Server: Server-wide lore', exact=True).click()
         page.get_by_role('button', name='Import entries into selected owner', exact=True).click()
         data = json.dumps({'type': 'risu', 'ver': 1, 'data': [{'key': '', 'content': 'Direct guild fact', 'alwaysActive': True, 'insertorder': 37}]}).encode()
         dialog.locator('input[type=file]').set_input_files({'name': 'guild.json', 'mimeType': 'application/json', 'buffer': data})
@@ -450,8 +449,7 @@ class DashboardBrowserTests(unittest.TestCase):
         image = BytesIO()
         Image.new('RGB', (50, 50), 'red').save(image, 'PNG')
         happy.locator('input[type=file]').set_input_files({'name': 'joy.png', 'mimeType': 'image/png', 'buffer': image.getvalue()})
-        page.get_by_text('Image ready; save the slot to keep it', exact=True).wait_for()
-        happy.get_by_role('button', name='Save slot', exact=True).click()
+        page.get_by_text('Emotion image saved', exact=True).wait_for()
         self.wait_for(lambda: any(s['label'] == 'Joy' for s in self.state()['slots']))
         page.get_by_role('tab', name='Characters', exact=True).click()
         character = page.locator('.q-expansion-item').filter(has=page.get_by_text('Imported via browser', exact=True)).first
@@ -477,13 +475,13 @@ class DashboardBrowserTests(unittest.TestCase):
         # Reach and exercise named-book import from the Lore workspace.
         page.get_by_role('tab', name='Lore', exact=True).click()
         page.get_by_role('button', name='Import lorebook', exact=True).click()
-        page.get_by_label('Book name', exact=True).fill('Browser import')
-        page.get_by_role('button', name='Create book', exact=True).click()
+        page.get_by_label('Lorebook name', exact=True).fill('Browser import')
+        page.get_by_role('button', name='Create lorebook', exact=True).click()
         self.wait_for(lambda: any(r['name'] == 'Browser import' for r in self.state()['lorebooks']))
         page.get_by_role('tab', name='Lore', exact=True).click()
         page.get_by_role('button', name='Import lorebook', exact=True).click()
-        book = page.locator('.q-expansion-item').filter(has=page.get_by_text('Browser import · guild', exact=True)).first
-        book.get_by_text('Browser import · guild', exact=True).click()
+        book = page.locator('.q-expansion-item').filter(has=page.get_by_text('Browser import · server', exact=True)).first
+        book.get_by_text('Browser import · server', exact=True).click()
         content = json.dumps({'entries': {'1': {'key': ['moon'], 'content': 'Imported lorebook entry', 'enabled': True}}}).encode()
         book.locator('input[type=file]').set_input_files({'name': 'lorebook.json', 'mimeType': 'application/json', 'buffer': content})
         book.get_by_role('button', name='Apply lorebook sync', exact=True).wait_for()
@@ -494,14 +492,14 @@ class DashboardBrowserTests(unittest.TestCase):
         self.wait_for(lambda: any(row['content'] == 'Imported lorebook entry' for row in self.state()['books']))
         page.get_by_role('tab', name='Lore', exact=True).click()
         page.get_by_role('button', name='Import lorebook', exact=True).click()
-        book = page.locator('.q-expansion-item').filter(has=page.get_by_text('Browser import · guild', exact=True)).first
-        book.get_by_text('Browser import · guild', exact=True).click()
+        book = page.locator('.q-expansion-item').filter(has=page.get_by_text('Browser import · server', exact=True)).first
+        book.get_by_text('Browser import · server', exact=True).click()
         book.get_by_role('button', name='Enable in World', exact=True).click()
         book.get_by_role('button', name='Enable in World', exact=True).wait_for(state='hidden')  # panel rebuilt in place, expansion collapsed
         page.get_by_role('tab', name='Lore', exact=True).click()
         page.get_by_role('button', name='Import lorebook', exact=True).click()
-        book = page.locator('.q-expansion-item').filter(has=page.get_by_text('Browser import · guild', exact=True)).first
-        book.get_by_text('Browser import · guild', exact=True).click()
+        book = page.locator('.q-expansion-item').filter(has=page.get_by_text('Browser import · server', exact=True)).first
+        book.get_by_text('Browser import · server', exact=True).click()
         book.get_by_role('button', name='Disable in World', exact=True).wait_for()
 
         risu = json.dumps({'type': 'risu', 'ver': 1, 'data': [
@@ -693,7 +691,7 @@ class DashboardBrowserTests(unittest.TestCase):
             # Building the Imports panel takes a fresh snapshot (one more read each) and one lorebook_links per guild book.
             self.assertGreaterEqual(guild_books, 1)
             page.get_by_role('tab', name='Imports', exact=True).click()
-            page.get_by_label('Book name', exact=True).wait_for()
+            page.get_by_label('Lorebook name', exact=True).wait_for()
             page.wait_for_timeout(300)
             counters = context.request.get(self.url + '/_test/counters').json()
             self.assertEqual(counters.get('store:lorebook_links', 0), guild_books, counters)
@@ -772,7 +770,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertEqual(page.get_by_role('option', name='Channel: 100', exact=True).count(), 0)
             page.keyboard.press('Escape')
             page.get_by_role('tab', name='Imports', exact=True).click()
-            page.get_by_label('Channel (for channel books)', exact=True).click()
+            page.get_by_label('Channel (channel lorebooks only)', exact=True).click()
             page.get_by_role('option', name='#scene', exact=True).wait_for()
             self.assertEqual(page.get_by_role('option', name='100', exact=True).count(), 0)
             page.keyboard.press('Escape')
@@ -880,11 +878,101 @@ class DashboardBrowserTests(unittest.TestCase):
         context, page, errors = self.ux_page('/admin/guild/1?tab=lore')
         try:
             page.get_by_role('button', name='Import lorebook', exact=True).wait_for()
-            self.assertEqual(page.get_by_label('Channel (for channel books)', exact=True).count(), 0)
+            self.assertEqual(page.get_by_label('Channel (channel lorebooks only)', exact=True).count(), 0)
             page.get_by_role('button', name='Import lorebook', exact=True).click()
-            page.get_by_label('Channel (for channel books)', exact=True).wait_for(timeout=5000)
+            page.get_by_label('Channel (channel lorebooks only)', exact=True).wait_for(timeout=5000)
             self.assertTrue(self.tab_selected(page, 'Imports'))
             page.wait_for_url('**tab=imports*')
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_imports_lorebook_edit_entries_opens_lore_on_that_book(self):
+        """UX-05: a lorebook's 'Edit entries in Lore' button switches to the Lore tab with that lorebook as the shown owner."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=imports')
+        try:
+            book = next(row for row in self.state()['lorebooks'] if row['name'] == 'Test book')
+            expansion = page.locator('.q-expansion-item').filter(has=page.get_by_text('Test book · channel', exact=True)).first
+            expansion.get_by_text('Test book · channel', exact=True).click()
+            expansion.get_by_role('button', name='Edit entries in Lore', exact=True).click()
+            page.get_by_label('Left owner', exact=True).wait_for(timeout=5000)
+            self.assertTrue(self.tab_selected(page, 'Lore'))
+            page.wait_for_function(
+                "([kind, ident]) => { const left = document.querySelector('.lore-drop-left'); "
+                "return left && left.dataset.ownerKind === kind && left.dataset.ownerId === ident; }",
+                arg=['book', str(book['id'])], timeout=5000)
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_fallback_avatar_upload_saves_without_another_click(self):
+        """UX-05: choosing a fallback avatar file saves it at once (notice 'Fallback avatar saved'); no Save button remains."""
+        from io import BytesIO
+        from PIL import Image
+        context, page, errors = self.ux_page('/admin/guild/1?tab=characters')
+        try:
+            alice = next(row for row in self.state()['characters'] if row['name'] == 'Alice')
+            character = page.locator('.character-card').filter(has=page.get_by_text('Alice', exact=True)).first
+            character.get_by_text('Alice', exact=True).first.click()
+            character.get_by_text('Fallback static avatar', exact=True).click()
+            fallback = character.locator('.fallback-avatar')
+            self.assertEqual(fallback.get_by_role('button', name='Save fallback avatar', exact=True).count(), 0)
+            portrait = BytesIO()
+            Image.new('RGB', (50, 50), 'blue').save(portrait, 'PNG')
+            fallback.locator('input[type=file]').set_input_files({'name': 'fallback.png', 'mimeType': 'image/png', 'buffer': portrait.getvalue()})
+            page.get_by_text('Fallback avatar saved', exact=True).wait_for(timeout=5000)
+            self.wait_for(lambda: next(row for row in self.state()['characters'] if row['id'] == alice['id'])['has_static_avatar'])
+            # The characters tab was refreshed, so the saved image is rendered.
+            character = page.locator('.character-card').filter(has=page.get_by_text('Alice', exact=True)).first
+            character.get_by_text('Alice', exact=True).first.click()
+            character.get_by_text('Fallback static avatar', exact=True).click()
+            character.locator('.fallback-avatar img').first.wait_for(timeout=5000)
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_delete_preset_asks_for_confirmation(self):
+        """UX-05: 'Delete preset' opens a dialog; Cancel keeps the preset and the red confirm button deletes it."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=prompts')
+        try:
+            page.get_by_label('Preset name', exact=True).fill('Doomed preset')
+            page.get_by_role('button', name='Save as new preset', exact=True).click()
+            self.wait_for(lambda: any(r['name'] == 'Doomed preset' for r in self.state()['presets']))
+            page.get_by_role('button', name='Delete preset', exact=True).click()
+            dialog = page.get_by_role('dialog')
+            dialog.get_by_text('Delete preset Doomed preset?', exact=True).wait_for(timeout=5000)
+            dialog.get_by_role('button', name='Cancel', exact=True).click()
+            dialog.wait_for(state='hidden')
+            self.assertTrue(any(r['name'] == 'Doomed preset' for r in self.state()['presets']))
+            page.get_by_role('button', name='Delete preset', exact=True).click()
+            dialog.get_by_role('button', name='Delete preset', exact=True).click()
+            self.wait_for(lambda: not any(r['name'] == 'Doomed preset' for r in self.state()['presets']))
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_lore_entry_delete_goes_through_the_dialog(self):
+        """UX-05: deleting a lore entry from its editor opens a confirmation dialog (no checkbox); Cancel keeps it."""
+        import re
+        context, page, errors = self.ux_page('/admin/guild/1?tab=lore')
+        try:
+            page.get_by_role('button', name='New entry', exact=True).first.wait_for(timeout=5000)
+            page.get_by_role('button', name='New entry', exact=True).first.click()
+            page.get_by_label('Content', exact=True).fill('Doomed lore entry')
+            page.get_by_role('button', name='Save lore', exact=True).click()
+            self.wait_for(lambda: any(r['content'] == 'Doomed lore entry' for r in self.state()['lore']))
+            page.locator('.lore-entry').filter(has_text='Doomed lore entry').get_by_role('button', name='Edit / transfer', exact=True).click()
+            self.assertEqual(page.get_by_text('Confirm deleting this entry', exact=True).count(), 0)
+            editor = page.locator('.q-card').filter(has=page.get_by_text('Edit lore', exact=True)).last
+            editor.get_by_role('button', name='Delete', exact=True).click()
+            dialog = page.get_by_role('dialog')
+            dialog.get_by_role('button', name='Cancel', exact=True).wait_for(timeout=5000)
+            dialog.get_by_role('button', name='Cancel', exact=True).click()
+            dialog.wait_for(state='hidden')
+            self.assertTrue(any(r['content'] == 'Doomed lore entry' for r in self.state()['lore']))
+            editor.get_by_role('button', name='Delete', exact=True).click()
+            dialog.get_by_role('button', name=re.compile('^Delete')).click()
+            self.wait_for(lambda: not any(r['content'] == 'Doomed lore entry' for r in self.state()['lore']))
             self.assertFalse(errors, (errors, getattr(page, 'network', [])))
         finally:
             context.close()
@@ -908,7 +996,7 @@ class DashboardBrowserTests(unittest.TestCase):
             anchors = {'Server setup': page.get_by_label('Space name', exact=True),
                        'Characters': page.get_by_role('button', name='Create character', exact=True),
                        'Lore': page.get_by_role('button', name='Import lorebook', exact=True),
-                       'Imports': page.get_by_label('Channel (for channel books)', exact=True),
+                       'Imports': page.get_by_label('Channel (channel lorebooks only)', exact=True),
                        'Prompt presets': page.get_by_label('Sample channel (optional)', exact=True)}
             for tab, anchor in anchors.items():
                 page.get_by_role('tab', name=tab, exact=True).click()

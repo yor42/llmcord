@@ -18,7 +18,7 @@ from .avatars import MAX_AVATAR_BYTES, avatar_version, normalize_avatar
 from .cards import parse_card
 from .lorebooks import parse_lorebook
 from .prompts import PURPOSES, SOURCES, block, compatibility, default_bundle, export_preset, parse_preset
-from .scene_ui import delete_book_dialog, delete_space_dialog, direct_import_dialog, guideline_editor
+from .scene_ui import confirm_dialog, delete_book_dialog, delete_space_dialog, direct_import_dialog, guideline_editor
 
 
 class LiveContext:
@@ -115,11 +115,19 @@ class LiveContext:
                     await followup
         return ui.button(text, on_click=clicked, **kwargs)
 
-    def upload(self, handler, label):
+    def upload(self, handler, label, action=None, detail=None, then=None, success=None):
         from nicegui import ui
         async def uploaded(event):
             # Upload endpoint also validates session binding and CSRF before reading the body.
-            await self.run(lambda: handler(event))
+            ok, result = await self._attempt(lambda: handler(event), action, detail)
+            if not ok:
+                return
+            if success:
+                ui.notify(success, type='positive')
+            if then:
+                followup = then(result)
+                if inspect.isawaitable(followup):
+                    await followup
         control = ui.upload(label=label, on_upload=uploaded, auto_upload=True, max_file_size=MAX_AVATAR_BYTES, max_files=1)
         control._props['headers'] = [{'name': 'X-CSRF-Token', 'value': self.csrf}]
         return control
@@ -442,15 +450,11 @@ def characters_panel(ctx):
                 return True
             ctx.button('Restore' if row['archived'] else 'Archive', archive, 'character.archive', {'id': row['id']}, then=lambda _: ctx.refresh('characters'))
             def confirm_delete(row=row, revision=revision):
-                with ui.dialog() as dialog, ui.card().classes('w-full max-w-lg'):
-                    ui.label(f"Delete {row['name']}?").classes('text-xl font-bold')
-                    ui.label('Permanently delete this character, its lore, memories, and saved avatars, and remove it from all casts. Past Discord messages remain.')
-                    ui.label('This cannot be undone. Use Archive if you may want to restore the character later.')
-                    with ui.row():
-                        ui.button('Cancel', on_click=dialog.close)
-                        ctx.button('Delete permanently', lambda: store.delete_character(gid, row['id'], revision),
-                                   'character.delete', {'id': row['id']}, then=lambda _: ctx.refresh('characters'), color='negative')
-                dialog.open()
+                confirm_dialog(ctx, f"Delete {row['name']}?",
+                               ['Permanently delete this character, its lore, memories, and saved avatars, and remove it from all casts. Past Discord messages remain.',
+                                'This cannot be undone. Use Archive if you may want to restore the character later.'],
+                               'Delete permanently', lambda: store.delete_character(gid, row['id'], revision),
+                               'character.delete', {'id': row['id']}, then=lambda _: ctx.refresh('characters'))
             ui.button('Delete character', icon='delete', color='negative', on_click=confirm_delete)
             static_avatar_editor(ctx, row)
             ui.label('Emotion avatars').classes('text-xl font-bold')
@@ -458,11 +462,11 @@ def characters_panel(ctx):
             for slot in store.avatar_slots(gid, row['id']):
                 avatar_editor(ctx, row['id'], slot)
             with ui.row().classes('items-end'):
-                key = ui.input('New stable slot key').props('hint="lowercase letters, digits, underscores, hyphens"')
+                key = ui.input('New emotion key').props('hint="lowercase letters, digits, underscores, hyphens"')
                 label = ui.input('Emotion label')
                 def add_slot(row=row, key=key, label=label):
                     if any(s['slot_key'] == key.value for s in store.avatar_slots(gid, row['id'])):
-                        raise ValueError('That emotion key already exists; edit its slot instead')
+                        raise ValueError('That emotion key already exists; edit that emotion instead')
                     store.save_avatar(gid, row['id'], key.value or '', label.value or '', '')
                     return True
                 ctx.button('Add emotion', add_slot, 'avatar.slot.create', then=lambda _: ctx.refresh())
@@ -478,25 +482,20 @@ def static_avatar_editor(ctx, character):
         else:
             ui.label('No static fallback set. Import a card portrait or upload one here.')
         ui.label('Used when the selected emotion has no usable image. No asset channel or publication is needed.')
-        state = {'image': None}
         revision = ctx.store.owner_revision(ctx.guild_id, 'character', character['id'])
-        async def upload(event):
-            state['image'] = normalize_avatar(await event.file.read())
-            ui.notify('Fallback image ready; save it to keep it')
-        ctx.upload(upload, 'Upload fallback avatar')
-        def save():
-            if state['image'] is None:
-                raise ValueError('Upload a fallback image before saving')
-            ctx.store.save_static_avatar(ctx.guild_id, character['id'], state['image'], revision)
-            return True
         def reload(_):
             return ctx.refresh('characters')
-        ctx.button('Save fallback avatar', save, 'avatar.fallback.edit', {'character': character['id']}, then=reload)
+        async def upload(event):
+            ctx.store.save_static_avatar(ctx.guild_id, character['id'], normalize_avatar(await event.file.read()), revision)
+            return True
+        ctx.upload(upload, 'Upload fallback avatar', 'avatar.fallback.edit', {'character': character['id']}, then=reload, success='Fallback avatar saved')
         if character['avatar']:
             def remove():
                 ctx.store.save_static_avatar(ctx.guild_id, character['id'], None, revision)
                 return True
-            ctx.button('Remove fallback avatar', remove, 'avatar.fallback.delete', {'character': character['id']}, then=reload)
+            ui.button('Remove fallback avatar', icon='delete', color='negative', on_click=lambda: confirm_dialog(
+                ctx, 'Remove fallback avatar?', ['The character falls back to emotion images only. Emotion images stay.'],
+                'Remove fallback avatar', remove, 'avatar.fallback.delete', {'character': character['id']}, then=reload))
 
 
 def avatar_editor(ctx, character_id, slot):
@@ -507,15 +506,16 @@ def avatar_editor(ctx, character_id, slot):
         ui.label('Stable key: ' + slot['slot_key'])
         label = ui.input('Label', value=slot['label'])
         description = ui.input('When to use this emotion', value=slot['description'])
-        state = {'image': None}
         async def upload(event):
-            state['image'] = normalize_avatar(await event.file.read())
-            ui.notify('Image ready; save the slot to keep it')
-        ctx.upload(upload, 'Upload avatar image')
-        def save():
-            ctx.store.save_avatar(ctx.guild_id, character_id, slot['slot_key'], label.value or '', description.value or '', state['image'], slot['revision'])
+            image = normalize_avatar(await event.file.read())
+            ctx.store.save_avatar(ctx.guild_id, character_id, slot['slot_key'], label.value or '', description.value or '', image, slot['revision'])
             return True
-        ctx.button('Save slot', save, 'avatar.slot.edit', {'character': character_id, 'slot': slot['slot_key']}, then=lambda _: ctx.refresh())
+        ctx.upload(upload, 'Upload avatar image', 'avatar.slot.edit', {'character': character_id, 'slot': slot['slot_key']},
+                   then=lambda _: ctx.refresh(), success='Emotion image saved')
+        def save():
+            ctx.store.save_avatar(ctx.guild_id, character_id, slot['slot_key'], label.value or '', description.value or '', None, slot['revision'])
+            return True
+        ctx.button('Save emotion', save, 'avatar.slot.edit', {'character': character_id, 'slot': slot['slot_key']}, then=lambda _: ctx.refresh())
         async def publish():
             return await ctx.service.avatars.publish(ctx.guild_id, character_id, slot['slot_key'], repair=True)
         ctx.button('Publish / repair image', publish, 'avatar.publish', {'character': character_id, 'slot': slot['slot_key']}, success='Image published')
@@ -523,12 +523,17 @@ def avatar_editor(ctx, character_id, slot):
             def remove_image():
                 ctx.store.clear_avatar_image(ctx.guild_id, character_id, slot['slot_key'], slot['revision'])
                 return True
-            ctx.button('Remove emotion image', remove_image, 'avatar.image.delete', {'character': character_id, 'slot': slot['slot_key']}, then=lambda _: ctx.refresh('characters'))
+            ui.button('Remove emotion image', icon='delete', color='negative', on_click=lambda: confirm_dialog(
+                ctx, f"Remove the image from {slot['label']}?", ['The emotion and its label stay; only the image is removed.'],
+                'Remove emotion image', remove_image, 'avatar.image.delete', {'character': character_id, 'slot': slot['slot_key']},
+                then=lambda _: ctx.refresh('characters')))
         if slot['slot_key'] != 'neutral':
             def delete():
                 ctx.store.delete_avatar(ctx.guild_id, character_id, slot['slot_key'], slot['revision'])
                 return True
-            ctx.button('Remove emotion', delete, 'avatar.slot.delete', then=lambda _: ctx.refresh())
+            ui.button('Remove emotion', icon='delete', color='negative', on_click=lambda: confirm_dialog(
+                ctx, f"Remove emotion {slot['label']}?", ['This removes the emotion and its image. The neutral emotion and the fallback avatar stay.'],
+                'Remove emotion', delete, 'avatar.slot.delete', then=lambda _: ctx.refresh()))
 
 
 def lore_panel(ctx, on_import=None):
@@ -600,13 +605,12 @@ def entry_editor(ctx, entry, owners, refresh):
                 return ctx.store.transfer_entry(ctx.guild_id, entry['ref'], kind, int(ident), entry['revision'], copy=copy)
             ctx.button('Move', lambda: transfer(False), 'lore.move', then=saved)
             ctx.button('Copy', lambda: transfer(True), 'lore.copy', then=saved)
-            confirm = ui.checkbox('Confirm deleting this entry')
             def delete():
-                if not confirm.value:
-                    raise ValueError('Confirm deletion')
                 ctx.store.delete_entry(ctx.guild_id, entry['ref'], entry['revision'])
                 return True
-            ctx.button('Delete', delete, 'lore.delete', then=saved, color='negative')
+            ui.button('Delete', color='negative', on_click=lambda: confirm_dialog(
+                ctx, 'Delete this lore entry?', ['This also keeps your deletion choice for future reimports.'],
+                'Delete entry', delete, 'lore.delete', then=saved))
 
 
 def import_changes(changes):
@@ -619,7 +623,7 @@ def import_changes(changes):
             for warning in change.get('warnings', []):
                 ui.label(warning).classes('text-amber-300')
             if change['status'] == 'conflict':
-                resolutions[change['uid']] = ui.select({'keep': 'Keep local decision', 'import': 'Use imported entry'}, label='Resolve conflict')
+                resolutions[change['uid']] = ui.select({'keep': 'Keep current entry', 'import': 'Use imported entry'}, label='Resolve conflict')
     return resolutions
 
 
@@ -666,14 +670,15 @@ def imports_panel(ctx):
     ui.separator()
     ui.label('Named lorebooks').classes('text-xl font-bold')
     with ui.row().classes('items-end'):
-        book_name = ui.input('Book name')
-        target = ui.select(['guild', 'channel'], value='guild', label='Book scope')
+        book_name = ui.input('Lorebook name')
+        target = ui.select({'guild': 'Server lorebook', 'channel': 'Channel lorebook'}, value='guild', label='Lorebook scope')
         channels = {r['channel_id']: ctx.channel_names.get(r['channel_id'], str(r['channel_id'])) for r in ctx.snapshot.channels}
-        channel = ui.select(channels, label='Channel (for channel books)')
-        ctx.button('Create book', lambda: store.create_lorebook(gid, book_name.value or '', target.value, channel.value or 0), 'book.create', then=lambda _: ctx.refresh())
+        channel = ui.select(channels, label='Channel (channel lorebooks only)').style('min-width: 20rem; max-width: 100%')
+        ctx.button('Create lorebook', lambda: store.create_lorebook(gid, book_name.value or '', target.value, channel.value or 0), 'book.create', then=lambda _: ctx.refresh())
     for book in ctx.snapshot.lorebooks:
-        with ui.expansion(book['name'] + ' · ' + book['target_kind']).classes('w-full'):
-            ui.button('Delete book', icon='delete', color='negative', on_click=lambda book=book: delete_book_dialog(ctx, book))
+        with ui.expansion(book['name'] + ' · ' + ('server' if book['target_kind'] == 'guild' else book['target_kind'])).classes('w-full'):
+            ui.button('Edit entries in Lore', icon='edit', on_click=lambda book=book: ctx.refresh('lore', owner=f"book:{book['id']}"))
+            ui.button('Delete lorebook', icon='delete', color='negative', on_click=lambda book=book: delete_book_dialog(ctx, book))
             if book['target_kind'] == 'guild':
                 linked_spaces = store.lorebook_links(book['id'])
                 for space in ctx.snapshot.spaces:
@@ -810,11 +815,17 @@ def presets_panel(ctx):
             return True
         ctx.button('Activate saved revision', activate, 'preset.activate', then=lambda _: ctx.refresh())
         def delete():
-            if not state['id']:
-                raise ValueError('The built-in default cannot be deleted')
             store.delete_preset(gid, state['id'])
             return True
-        ctx.button('Delete preset', delete, 'preset.delete', then=lambda _: ctx.refresh(), color='negative')
+        def ask_delete():
+            if not state['id']:
+                ui.notify('The built-in default cannot be deleted', type='negative', timeout=8000)
+                return
+            current = next((r for r in store.list_presets(gid) if r['id'] == state['id']), None)
+            confirm_dialog(ctx, f"Delete preset {current['name'] if current else state['id']}?",
+                           ['This permanently deletes the preset. The active preset cannot be deleted; activate another one first.'],
+                           'Delete preset', delete, 'preset.delete', then=lambda _: ctx.refresh())
+        ui.button('Delete preset', icon='delete', color='negative', on_click=ask_delete)
     ui.separator()
     ui.label('Import preset').classes('text-xl font-bold')
     order_area = ui.column().classes('w-full')

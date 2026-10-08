@@ -12,7 +12,7 @@ Guidelines are managed instructions included after preset/card instructions, ind
 
 **Delete world** or **Delete hub** shows a confirmation. First move/delete home characters, including archived characters, and rebind any channels elsewhere. Deletion removes owned lore, guidelines, encounters, and hub/book links; shared lorebooks, entries moved elsewhere, and past messages remain. **Delete book** in Imports removes a named lorebook, including empty books, its remaining entries, and its world/hub links after confirmation. Deleted world/book IDs are not reused.
 
-**Characters** edits card fields, including main and post-history instructions, moves home worlds with confirmation, and archives or restores characters. Card instructions are added to the selected guild prompt structure. Post-history instructions are placed after conversation history when the provider permits it.
+**Characters** edits card fields, including main and post-history instructions, moves home worlds with confirmation, and archives or restores characters. Card instructions are added to the server's selected prompt structure. Post-history instructions are placed after conversation history when the provider permits it.
 
 Choose **Create character**, enter a name and home world, and choose **Create** to start with empty card fields and the default emotion slots. Create a world in Server setup first if none exists. Names must be unique within the server.
 
@@ -20,9 +20,9 @@ Choose **Create character**, enter a name and home world, and choose **Create** 
 
 ## Lore workspace
 
-Choose an owner on each side of **Lore**: character, channel, world/hub, named book, or an existing thread-local lore owner. Search filters content and keywords; lists show 50 entries per page.
+Choose an owner on each side of **Lore**: character, channel, world/hub, lorebook, or an existing thread lore owner. Search filters content and keywords; lists show 50 entries per page.
 
-**Guild: Server-wide lore** is also available and applies to eligible characters throughout that server. Use **Import JSON entries** under either owner list to preview a SillyTavern or RisuAI file and add entries directly to that owner. The **Direct lore entry import** section in Imports provides the same flow. These imports create independent entries without creating a named book, replacing existing entries, or removing entries absent from the file. Identical content/rules/pin state are skipped, including duplicates within one upload. Unsupported imported features stay preserved and inactive. A changed destination requires a fresh preview. Named lorebooks retain their separate synchronization workflow.
+**Server: Server-wide lore** is also available and applies to eligible characters throughout that server. Use **Import JSON entries** under either owner list to preview a SillyTavern or RisuAI file and add entries directly to that owner. The **Direct lore entry import** section in Imports provides the same flow. These imports create independent entries without creating a lorebook, replacing existing entries, or removing entries absent from the file. Identical content/rules/pin state are skipped, including duplicates within one upload. Unsupported imported features stay preserved and inactive. A changed destination requires a fresh preview. Named lorebooks retain their separate synchronization workflow.
 
 Drag an entry by its handle onto the other navy drop area, including its padding or an empty list. The workspace shows **Saving lore changes…** and waits for that move to finish before accepting another drag. Lists update after the saved change, and the destination opens the page containing the moved entries. Drops within the same owner do not change insertion priority.
 
@@ -38,7 +38,7 @@ Owner exports retain imported source IDs and include a `llmcord_pinned` field fo
 
 ## Imports
 
-The **Import lorebook** button in **Lore** opens **Imports**. Under **Named lorebooks**, enter a book name, choose guild or channel scope, and click **Create book**. Expand the book, choose **Upload JSON lorebook for preview**, resolve any conflicts, and click **Apply lorebook sync**. Enable guild books in the desired worlds or hubs; channel books apply to their bound channel and threads.
+The **Import lorebook** button in **Lore** opens **Imports**. Under **Named lorebooks**, enter a lorebook name, choose **Server lorebook** or **Channel lorebook**, and click **Create lorebook**. Expand the lorebook, choose **Upload JSON lorebook for preview**, resolve any conflicts, and click **Apply lorebook sync**. Enable server lorebooks in the desired worlds or hubs; channel lorebooks apply to their bound channel and threads. **Edit entries in Lore** opens the lorebook's entries in the **Lore** workspace.
 
 **Imports** previews V2/V3 JSON/PNG character cards and standalone lorebook JSON. Lorebooks accept entry arrays, SillyTavern `entries` objects/arrays, and RisuAI version-1 exports (`type: risu`, `ver: 1`, `data: [...]`). The preview identifies the format. Select a home world or destination book before uploading. Review changes and resolve every conflict before applying. Previews expire after 15 minutes; a changed owner revision requires another preview.
 
@@ -46,11 +46,11 @@ RisuAI primary/secondary keywords, selective matching, insertion order (includin
 
 RisuAI entry IDs are used when present. Exports without IDs use array indices for reimport matching, so keep their entry order stable when syncing into an existing book. The original export wrapper is retained with the book.
 
-Reimports preserve manual additions. An imported entry that was edited, moved, or deleted requires a decision if its source changes. Keeping the local decision does not recreate it in its previous owner. Character text and manually uploaded default avatars also have conflict choices. Moving a character's home world can prune ineligible casts.
+Reimports preserve manual additions. An imported entry that was edited, moved, or deleted requires a decision if its source changes. Keeping the current entry does not recreate it in its previous owner. Character text and manually uploaded default avatars also have conflict choices. Moving a character's home world can prune ineligible casts.
 
 For older databases, known embedded-card entries are tracked conservatively. Unmatched legacy lore remains independent, and uncertain card-text changes require a choice.
 
-## Guild prompt presets
+## Server prompt presets
 
 Each server has its own preset library and active revision. The built-in default is read-only: edit it and choose **Save draft** to create a copy. Other presets can be renamed by changing their name and saving, duplicated with **Save as new preset**, or deleted once inactive.
 
@@ -86,9 +86,9 @@ In **Server setup**, select a private text channel for avatar assets. Explicitly
 
 Each character starts with neutral, happy, sad, angry, surprised, and embarrassed slots. Labels and descriptions are editable; additional slots use stable lowercase keys. Neutral is required but its image is optional. Other slots may be removed. Emotion images are separate from the static fallback.
 
-In **Characters → Fallback static avatar**, upload an image and choose **Save fallback avatar**. Imported card portraits automatically serve as static fallbacks. This avatar is used when the selected emotion has no usable image, including characters with no emotion images. No asset channel or separate publication is needed for the fallback. **Remove fallback avatar** clears it; **Remove emotion image** clears an image without deleting its emotion slot.
+In **Characters → Fallback static avatar**, upload an image; it is saved as soon as the upload finishes. Imported card portraits automatically serve as static fallbacks. This avatar is used when the selected emotion has no usable image, including characters with no emotion images. No asset channel or separate publication is needed for the fallback. **Remove fallback avatar** clears it; **Remove emotion image** clears an image without deleting its emotion slot. Both ask for confirmation, as do **Remove emotion**, **Delete preset**, and every other delete.
 
-Upload static PNG, JPEG, or WebP images up to 8 MiB and 16 megapixels. Images are normalized to PNG thumbnails no larger than 256 pixels. Save a slot, then choose **Publish / repair image**. Only published usable slots are offered to the model, alongside neutral. Replacing an image retains older published assets for historical messages.
+Upload static PNG, JPEG, or WebP images up to 8 MiB and 16 megapixels. Images are normalized to PNG thumbnails no larger than 256 pixels. Uploading an emotion image saves it (with the emotion's current label and description); **Save emotion** saves label and description edits. Then choose **Publish / repair image**. Only published usable slots are offered to the model, alongside neutral. Replacing an image retains older published assets for historical messages.
 
 The dialogue model selects one emotion before visible text streams. The bot chooses the avatar before creating its placeholder, and continuation chunks use the same avatar. Headers are removed from saved dialogue, summaries, and extraction inputs. Unknown/malformed headers select neutral; a missing or unavailable emotion image uses the static fallback. With neither image configured, Discord shows the webhook's default icon. Assets are checked on first use after a bot restart; repair deleted assets from the console. Response traces identify whether the avatar came from an emotion image, the static fallback, or Discord's default.
 

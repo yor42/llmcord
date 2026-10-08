@@ -52,9 +52,9 @@ class AdminService:
             owners.append({'kind': 'character', 'id': row['id'], 'label': 'Character: ' + row['name']})
         for row in channels:
             owners.append({'kind': 'channel', 'id': row['channel_id'], 'label': f"Channel: {(channel_names or {}).get(row['channel_id'], row['channel_id'])}"})
-        owners.append({'kind': 'guild', 'id': guild_id, 'label': 'Guild: Server-wide lore'})
+        owners.append({'kind': 'guild', 'id': guild_id, 'label': 'Server: Server-wide lore'})
         for row in lorebooks:
-            owners.append({'kind': 'book', 'id': row['id'], 'label': 'Book: ' + row['name']})
+            owners.append({'kind': 'book', 'id': row['id'], 'label': 'Lorebook: ' + row['name']})
         for scope_id in thread_scopes:
             owners.append({'kind': 'thread', 'id': scope_id, 'label': f"Thread: {scope_id}"})
         return owners

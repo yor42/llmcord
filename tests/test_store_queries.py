@@ -200,8 +200,8 @@ class OwnersTests(unittest.TestCase):
             self.assertEqual(by("character"), [(store.alice, "Character: Alice"), (store.bob, "Character: Bob"),
                                                (store.carol, "Character: Carol")])
             self.assertEqual(by("channel"), [(100, "Channel: 100"), (300, "Channel: 300")])
-            self.assertEqual(by("guild"), [(1, "Guild: Server-wide lore")])
-            self.assertEqual(by("book"), [(book, "Book: Tales")])
+            self.assertEqual(by("guild"), [(1, "Server: Server-wide lore")])
+            self.assertEqual(by("book"), [(book, "Lorebook: Tales")])
             self.assertEqual(by("thread"), [(900, "Thread: 900")])
             kinds = [o["kind"] for o in owners]
             self.assertEqual(kinds, sorted(kinds, key=["space", "character", "channel", "guild", "book", "thread"].index))

@@ -50,10 +50,10 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 | ARCH-04 | Production-dead code and test-double fallbacks | low | CONFIRMED | unconventional |
 | ARCH-05 | Scene deletion and expiry leave derived memory | medium | SUSPECTED | incorrect |
 | UX-01 | Missing success feedback; wrong tab after reload; raw IDs — **Resolved (R5 step 5)** | medium | CONFIRMED | incorrect |
-| UX-02 | Inconsistent terminology | medium | CONFIRMED | preference |
+| UX-02 | Inconsistent terminology — **Resolved (R5 step 8)** | medium | CONFIRMED | preference |
 | UX-03 | Rebinding a channel silently resets cast and ambient | medium | CONFIRMED (test) | incorrect |
 | UX-04 | Inconsistent name matching across commands | low | CONFIRMED (test) | incorrect |
-| UX-05 | Lorebook and avatar flows split across tabs and steps | low | CONFIRMED | preference |
+| UX-05 | Lorebook and avatar flows split across tabs and steps — **Resolved (R5 step 8)** | low | CONFIRMED | preference |
 | UX-06 | Admin commands visible to all; inconsistent option names | low | CONFIRMED | preference |
 | UX-07 | Raw and ambiguous error text | medium | CONFIRMED (test) | incorrect |
 | UX-08 | Public cost footer and public "no character" message | low | CONFIRMED | preference |
@@ -328,6 +328,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Direction:** a standard success notify in `LiveContext.run`, the full tab map, and channel names from the guild channel fetch.
 
 ### UX-02: Inconsistent terminology
+- **Status:** resolved in R5 step 8: `docs/glossary.md` (D8) defines the user-facing words; `/admin space allow_world|disallow_world` became `link_world|unlink_world` (no alias), `/admin lore add scope:local` became `scope:channel`, and dashboard/bot text says server and lorebook instead of guild and book. Code names, DB values and the legacy Jinja templates (R6) are unchanged.
 - **Severity:** medium. **Confidence:** CONFIRMED. **Label:** preference.
 - **Evidence:**
   - The UI mixes guild/server/space/world/hub/owner/book.
@@ -348,6 +349,7 @@ Each finding has an ID that tests reference in their docstrings (`BUG-01: ...`, 
 - **Direction:** one resolver, with autocomplete.
 
 ### UX-05: Lorebook and avatar flows split across tabs and steps
+- **Status:** resolved in R5 step 8: each lorebook in Imports has **Edit entries in Lore**; fallback and emotion images save on upload; every delete or remove uses one confirmation dialog (`scene_ui.confirm_dialog`), including preset delete and emotion removal, which had none.
 - **Severity:** low. **Confidence:** CONFIRMED. **Label:** preference.
 - **Evidence:**
   - Books are created under Imports but edited under Lore.

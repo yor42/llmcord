@@ -1,6 +1,8 @@
 """World/channel guidelines, owner deletion, and additive lore imports."""
 from __future__ import annotations
 
+import inspect
+
 from nicegui import ui
 
 from .lorebooks import parse_lorebook
@@ -15,23 +17,37 @@ def guideline_editor(ctx, kind, owner_id, label):
                'guidelines.edit', {'kind': kind, 'id': owner_id}, then=lambda _: ctx.refresh())
 
 
+def confirm_dialog(ctx, title, lines, button_label, operation, action, detail=None, then=None, enabled=True):
+    """One shape for destructive confirmations: bold title, explanation lines, Cancel and a red confirm button."""
+    with ui.dialog() as dialog, ui.card().classes('w-full max-w-lg'):
+        ui.label(title).classes('text-xl font-bold')
+        for line in lines:
+            ui.label(line)
+        async def done(result):
+            dialog.close()
+            if then:
+                followup = then(result)
+                if inspect.isawaitable(followup):
+                    await followup
+        with ui.row():
+            ui.button('Cancel', on_click=dialog.close)
+            ctx.button(button_label, operation, action, detail, then=done, color='negative').set_enabled(enabled)
+    dialog.open()
+
+
 async def delete_space_dialog(ctx, space):
     impact = await ctx.run(lambda: ctx.store.space_delete_impact(ctx.guild_id, space['id']))
     if impact is None:
         return
-    with ui.dialog() as dialog, ui.card().classes('w-full max-w-lg'):
-        ui.label(f"Delete {space['kind']} {space['name']}?").classes('text-xl font-bold')
-        ui.label(f"This removes its guidelines, {impact['entries']} owned lore entries, encounters, and hub/lorebook links. Lorebooks and past messages remain.")
-        if impact['characters']:
-            ui.label('Move or delete these home characters first: ' + ', '.join(impact['characters']))
-        if impact['channels']:
-            ui.label(f"Rebind its {len(impact['channels'])} Discord channel(s) to another world or hub first.")
-        with ui.row():
-            ui.button('Cancel', on_click=dialog.close)
-            ctx.button('Delete ' + space['kind'],
-                       lambda: ctx.store.delete_space(ctx.guild_id, space['id'], impact['revision']),
-                       'space.delete', {'id': space['id']}, then=lambda _: ctx.refresh(), color='negative').set_enabled(not impact['characters'] and not impact['channels'])
-    dialog.open()
+    lines = [f"This removes its guidelines, {impact['entries']} owned lore entries, encounters, and hub/lorebook links. Lorebooks and past messages remain."]
+    if impact['characters']:
+        lines.append('Move or delete these home characters first: ' + ', '.join(impact['characters']))
+    if impact['channels']:
+        lines.append(f"Rebind its {len(impact['channels'])} Discord channel(s) to another world or hub first.")
+    confirm_dialog(ctx, f"Delete {space['kind']} {space['name']}?", lines, 'Delete ' + space['kind'],
+                   lambda: ctx.store.delete_space(ctx.guild_id, space['id'], impact['revision']),
+                   'space.delete', {'id': space['id']}, then=lambda _: ctx.refresh(),
+                   enabled=not impact['characters'] and not impact['channels'])
 
 
 async def delete_book_dialog(ctx, book):
@@ -42,14 +58,10 @@ async def delete_book_dialog(ctx, book):
     if result is None:
         return
     count, revision = result
-    with ui.dialog() as dialog, ui.card().classes('w-full max-w-lg'):
-        ui.label(f"Delete lorebook {book['name']}?").classes('text-xl font-bold')
-        ui.label(f'This deletes the book, its {count} remaining entries, and its world/hub links. Entries moved to another owner remain.')
-        with ui.row():
-            ui.button('Cancel', on_click=dialog.close)
-            ctx.button('Delete lorebook', lambda: ctx.store.delete_lorebook(ctx.guild_id, book['id'], revision),
-                       'book.delete', {'id': book['id']}, then=lambda _: ctx.refresh('imports'), color='negative')
-    dialog.open()
+    confirm_dialog(ctx, f"Delete lorebook {book['name']}?",
+                   [f'This deletes the lorebook, its {count} remaining entries, and its world/hub links. Entries moved to another owner remain.'],
+                   'Delete lorebook', lambda: ctx.store.delete_lorebook(ctx.guild_id, book['id'], revision),
+                   'book.delete', {'id': book['id']}, then=lambda _: ctx.refresh('imports'))
 
 
 def direct_import_dialog(ctx, kind, owner_id, on_saved=None):
@@ -58,7 +70,7 @@ def direct_import_dialog(ctx, kind, owner_id, on_saved=None):
         raise ValueError('Choose an owner in this server')
     with ui.dialog() as dialog, ui.card().classes('w-full max-w-4xl'):
         ui.label('Import entries into ' + owner['label']).classes('text-xl font-bold')
-        ui.label('Adds entries directly to this owner. Existing lore stays in place; identical entries are skipped. No new book is created.')
+        ui.label('Adds entries directly to this owner. Existing lore stays in place; identical entries are skipped. No new lorebook is created.')
         area = ui.column().classes('w-full')
         async def uploaded(event):
             imported = parse_lorebook(await event.file.read())

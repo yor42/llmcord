@@ -40,9 +40,9 @@ Commands marked **Admin** live under `/admin` and require Discord server adminis
 | Command | Who | Effect |
 | --- | --- | --- |
 | `/admin space create` | Admin | Create a named world or hub. |
-| `/space list` | Member | List spaces. |
-| `/admin space bind` | Admin | Bind a text channel to a space; rebinding keeps its ambient setting and drops cast members not available in the new space. |
-| `/admin space allow_world`, `/admin space disallow_world` | Admin | Add or remove a world from a hub's guest list; removing it also drops that world's characters from the hub's channel casts. |
+| `/space list` | Member | List the server's worlds and hubs. |
+| `/admin space bind` | Admin | Bind a text channel to a world or hub; rebinding keeps its ambient setting and drops cast members not available in the new world or hub. |
+| `/admin space link_world`, `/admin space unlink_world` | Admin | Link a world to a hub so its characters can appear there, or unlink it; unlinking also drops that world's characters from the hub's channel casts. |
 | `/admin character import` | Admin | Import a V2/V3 JSON or PNG card into a home world. |
 | `/character list`, `/character info` | Member | List eligible characters or inspect one character's home world. |
 | `/cast set`, `/cast add`, `/cast remove`, `/cast show` | Member | Manage or view the active cast for the channel or thread. |
@@ -50,8 +50,8 @@ Commands marked **Admin** live under `/admin` and require Discord server adminis
 | `/summon` | Member | Invite one eligible character with a prompt, without changing the cast. |
 | `/admin ambient on`, `/admin ambient off` | Admin | Toggle ambient participation in the current bound channel. |
 | `/ambient status` | Member | Show the ambient setting. |
-| `/admin lore add`, `/admin lore edit`, `/admin lore pin`, `/admin lore promote`, `/admin lore delete` | Admin | Manage shared lore and explicit scope promotion. |
-| `/lore list` | Member | Show lore in the current space and local channel or thread. |
+| `/admin lore add`, `/admin lore edit`, `/admin lore pin`, `/admin lore promote`, `/admin lore delete` | Admin | Manage shared lore. `add` takes `scope:channel` (this channel, or this thread inside a thread) or `scope:space` (the bound world or hub); `promote` copies an entry to another owner. |
+| `/lore list` | Member | Show the lore of this channel or thread and its world or hub. |
 | `/memory opt_in`, `/memory opt_out`, `/memory list`, `/memory forget` | Member | Control that member's own personal memories. |
 | `/scene reset` | Member | Start fresh context on the next invitation. |
 | `/admin scene delete` | Admin | Delete a stored message and everything after it in its branch, by message ID. Earlier messages and other branches stay; Discord messages are not deleted. |
@@ -69,6 +69,6 @@ From a server page, an admin can create spaces, link worlds to hubs, bind channe
 
 For a card, select its home world and upload a V2/V3 `.json` or `.png` file. The preview shows its name, description, personality, scenario, opening line, lore-entry count, and PNG avatar when present. Saving an existing name requires a replacement confirmation. Reimports preview local conflicts and preserve manual additions and avatars unless explicitly replaced. Editing the home world can remove the character from casts where it is no longer eligible. Archived characters are not eligible for scenes.
 
-The dashboard edits the main text fields of an imported card. Use the Lore workspace to edit its embedded character entries. For named guild and channel lorebooks, use the [import workflow](lore-and-memory.md#importing-sillytavern-lorebooks).
+The dashboard edits the main text fields of an imported card. Use the Lore workspace to edit its embedded character entries. For server and channel lorebooks, use the [import workflow](lore-and-memory.md#importing-sillytavern-lorebooks).
 
 See [Admin console](admin-console.md) for the NiceGUI workspace, rule transfers, emotion avatars, and per-server prompt presets.

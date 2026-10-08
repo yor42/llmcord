@@ -3,7 +3,7 @@ The ``/admin`` group surface (R4 step 2b, D11) is pinned in tests/test_admin_com
 """
 import unittest
 
-from helpers import FakeInteraction, FakeThread, command, invoke, make_settings, reference_ids
+from helpers import FakeInteraction, FakeThread, command, invoke, leaf_commands, make_settings, reference_ids
 
 from llmcord_core.discord_bot import SkitBot
 
@@ -167,6 +167,42 @@ class GuildChannelAndThreadTests(unittest.IsolatedAsyncioTestCase):
         interaction = FakeInteraction(admin=True, channel=FakeThread(101, parent_id=100))
         await invoke(self.bot, "admin lore add", interaction, "The thread is foggy")
         self.assertEqual([row["content"] for row in self.store.list_lore(1, "thread", 101)], ["The thread is foggy"])
+
+    async def test_admin_lore_add_scope_channel_in_a_channel_is_channel_lore(self):
+        """UX-02: ``scope:channel`` (the default) in a plain channel adds channel lore and says so."""
+        interaction = FakeInteraction(admin=True)
+        await invoke(self.bot, "admin lore add", interaction, "The channel is quiet", scope="channel")
+        self.assertEqual([row["content"] for row in self.store.list_lore(1, "channel", 100)], ["The channel is quiet"])
+        self.assertEqual(self.store.list_lore(1, "thread", 100), [])
+        self.assertRegex(interaction.replies[0], r"^Added channel lore #\d+\.$")
+
+    async def test_admin_lore_add_scope_channel_in_a_thread_is_thread_lore(self):
+        """UX-02: ``scope:channel`` run inside a thread owns the lore by the thread, not its parent channel."""
+        interaction = FakeInteraction(admin=True, channel=FakeThread(101, parent_id=100))
+        await invoke(self.bot, "admin lore add", interaction, "Fog in the thread", scope="channel")
+        self.assertEqual([row["content"] for row in self.store.list_lore(1, "thread", 101)], ["Fog in the thread"])
+        self.assertEqual(self.store.list_lore(1, "channel", 100), [])
+        self.assertRegex(interaction.replies[0], r"^Added channel lore #\d+\.$")
+
+    async def test_admin_lore_add_scope_space_is_owned_by_the_bound_world(self):
+        """UX-02: ``scope:space`` adds lore to the channel's bound world and the reply names it a world."""
+        interaction = FakeInteraction(admin=True)
+        await invoke(self.bot, "admin lore add", interaction, "Harbor lore", scope="space")
+        self.assertEqual([row["content"] for row in self.store.list_lore(1, "space", self.world)], ["Harbor lore"])
+        self.assertEqual(self.store.list_lore(1, "channel", 100), [])
+        self.assertRegex(interaction.replies[0], r"^Added world lore #\d+\.$")
+
+    async def test_admin_lore_add_scope_choices_are_channel_and_space(self):
+        """UX-02: the synced ``scope`` option offers exactly ``channel`` and ``space`` (no ``local``)."""
+        scope = command(self.bot, "admin lore add").to_dict(self.bot.tree)["options"]
+        scope = next(option for option in scope if option["name"] == "scope")
+        self.assertEqual([choice["value"] for choice in scope["choices"]], ["channel", "space"])
+
+    def test_link_world_commands_replace_allow_world_commands(self):
+        """UX-02: the command tree has ``/admin space link_world`` and ``unlink_world`` and no allow/disallow names."""
+        paths = set(leaf_commands(self.bot))
+        self.assertTrue({"admin space link_world", "admin space unlink_world"} <= paths)
+        self.assertFalse({"admin space allow_world", "admin space disallow_world"} & paths)
 
     async def test_admin_permission_check_still_runs_in_guild(self):
         """The runtime ``has_permissions(administrator=True)`` check stays alongside the guild-only flag and the

@@ -6,7 +6,7 @@ Target behavior:
   case-insensitive matches and no exact one is refused with a message listing the candidates; no match says
   "No character named X". Cast commands and ``/summon`` resolve among the characters eligible in the bound space,
   ``/character info`` across the guild. Another guild's characters never resolve.
-- One space resolver (``/admin space bind|allow_world|disallow_world``, ``/admin character import``,
+- One space resolver (``/admin space bind|link_world|unlink_world``, ``/admin character import``,
   ``/admin lore promote``) with the same rule, plus a kind check (hub / world) with a clear message.
 - Autocomplete on every character and space option: at most 25 ``app_commands.Choice`` items, case-insensitive
   substring filter, guild-scoped (cast/summon: eligible characters; hub/world options: that kind), empty in a DM or,
@@ -39,8 +39,8 @@ OPTIONS = {
     "admin cast default": ["characters"],
     "admin space bind": ["channel", "space"],
     "admin lore promote": ["lore_id", "destination", "space"],
-    "admin space allow_world": ["hub", "world"],
-    "admin space disallow_world": ["hub", "world"],
+    "admin space link_world": ["hub", "world"],
+    "admin space unlink_world": ["hub", "world"],
     "admin character import": ["world", "attachment"],
     "admin space create": ["kind", "name"],
 }
@@ -53,8 +53,8 @@ CHARACTER_OPTIONS = {("cast set", "characters"): "eligible", ("cast add", "chara
                      ("cast remove", "character"): "eligible", ("admin cast default", "characters"): "eligible",
                      ("summon", "character"): "eligible", ("character info", "character"): "guild"}
 SPACE_OPTIONS = {("admin space bind", "space"): None, ("admin lore promote", "space"): None,
-                 ("admin space allow_world", "hub"): "hub", ("admin space allow_world", "world"): "world",
-                 ("admin space disallow_world", "hub"): "hub", ("admin space disallow_world", "world"): "world",
+                 ("admin space link_world", "hub"): "hub", ("admin space link_world", "world"): "world",
+                 ("admin space unlink_world", "hub"): "hub", ("admin space unlink_world", "world"): "world",
                  ("admin character import", "world"): "world"}
 
 
@@ -286,7 +286,7 @@ class SpaceResolutionTests(BotCase):
     async def link(self, path, hub, world):
         """Run allow/disallow (disallow starts from Plaza<->Harbor linked); return (links after, reply)."""
         self.store.execute("DELETE FROM hub_worlds")
-        if path.endswith("disallow_world"):
+        if path.endswith("unlink_world"):
             self.store.link_world(1, self.plaza, self.harbor)
         reply = await self.run_command(path, hub, world)
         return self.links(), reply
@@ -299,11 +299,12 @@ class SpaceResolutionTests(BotCase):
             with self.subTest(path=path):
                 acted, reply = await self.resolve(path, text)
                 self.assertEqual(acted, expected, reply)
-        with self.subTest(path="admin space allow_world"):
-            links, reply = await self.link("admin space allow_world", " plaza ", "HARBOR")
+        with self.subTest(path="admin space link_world"):
+            links, reply = await self.link("admin space link_world", " plaza ", "HARBOR")
             self.assertEqual(links, {("Plaza", "Harbor")}, reply)
-        with self.subTest(path="admin space disallow_world"):
-            links, reply = await self.link("admin space disallow_world", "PLAZA", " harbor ")
+            self.assertEqual(reply, "Linked Harbor to Plaza.")
+        with self.subTest(path="admin space unlink_world"):
+            links, reply = await self.link("admin space unlink_world", "PLAZA", " harbor ")
             self.assertEqual(links, set(), reply)
 
     async def test_exact_space_match_wins(self):
@@ -329,10 +330,10 @@ class SpaceResolutionTests(BotCase):
                 self.assertIsNone(acted, reply)
                 for candidate in candidates:
                     self.assertIn(candidate, reply)
-        for path in ("admin space allow_world", "admin space disallow_world"):
+        for path in ("admin space link_world", "admin space unlink_world"):
             for hub, world, candidates in [("plaza", "Harbor", ("Plaza", "PLAZA")), ("Plaza", "harbor", ("Harbor", "HARBOR"))]:
                 with self.subTest(path=path, hub=hub, world=world):
-                    expected = {("Plaza", "Harbor")} if path.endswith("disallow_world") else set()
+                    expected = {("Plaza", "Harbor")} if path.endswith("unlink_world") else set()
                     links, reply = await self.link(path, hub, world)
                     self.assertEqual(links, expected, reply)
                     for candidate in candidates:
@@ -346,23 +347,23 @@ class SpaceResolutionTests(BotCase):
                 acted, reply = await self.resolve(path, "Nowhere")
                 self.assertIsNone(acted, reply)
                 self.assertIn("Nowhere", reply)
-        for path in ("admin space allow_world", "admin space disallow_world"):
+        for path in ("admin space link_world", "admin space unlink_world"):
             for hub, world in [("Nowhere", "Harbor"), ("Plaza", "Nowhere")]:
                 with self.subTest(path=path, hub=hub, world=world):
-                    expected = {("Plaza", "Harbor")} if path.endswith("disallow_world") else set()
+                    expected = {("Plaza", "Harbor")} if path.endswith("unlink_world") else set()
                     links, reply = await self.link(path, hub, world)
                     self.assertEqual(links, expected, reply)
                     self.assertIn("Nowhere", reply)
 
     async def test_wrong_kind_gets_a_clear_message(self):
         """UX-04: a world given as the hub, or a hub given as the world, is refused with a message naming the space and
-        the expected kind, and nothing changes (previously allow_world said "Choose a hub and world in this server",
-        disallow_world reports success without checking kinds, import says "Choose an existing world")."""
+        the expected kind, and nothing changes (previously link_world said "Choose a hub and world in this server",
+        unlink_world reports success without checking kinds, import says "Choose an existing world")."""
         cases = [("Harbor", "Harbor", "Harbor", "hub"), ("Plaza", "Plaza", "Plaza", "world"), ("Other", "Plaza", "Other", "hub")]
-        for path in ("admin space allow_world", "admin space disallow_world"):
+        for path in ("admin space link_world", "admin space unlink_world"):
             for hub, world, named, kind in cases:
                 with self.subTest(path=path, hub=hub, world=world):
-                    expected = {("Plaza", "Harbor")} if path.endswith("disallow_world") else set()
+                    expected = {("Plaza", "Harbor")} if path.endswith("unlink_world") else set()
                     links, reply = await self.link(path, hub, world)
                     self.assertEqual(links, expected, reply)
                     self.assertIn(named, reply)
@@ -391,10 +392,10 @@ class SpaceResolutionTests(BotCase):
             with self.subTest(path=path):
                 acted, reply = await self.resolve(path, "Faraway")
                 self.assertIsNone(acted, reply)
-        for path in ("admin space allow_world", "admin space disallow_world"):
+        for path in ("admin space link_world", "admin space unlink_world"):
             for hub, world in [("Plaza", "Faraway"), ("Far Plaza", "Harbor")]:
                 with self.subTest(path=path, hub=hub, world=world):
-                    expected = {("Plaza", "Harbor")} if path.endswith("disallow_world") else set()
+                    expected = {("Plaza", "Harbor")} if path.endswith("unlink_world") else set()
                     links, reply = await self.link(path, hub, world)
                     self.assertEqual(links, expected, reply)
 
@@ -562,3 +563,22 @@ class OptionNameTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ListReplyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_empty_space_and_lore_lists_and_lore_kind_labels(self):
+        """UX-02: empty ``/space list`` and ``/lore list`` replies, and ``/lore list`` labels the space row world/hub."""
+        bot = SkitBot(make_settings())
+        self.addCleanup(bot.store.close)
+        interaction = FakeInteraction(channel=FakeTextChannel(100), admin=True)
+        await invoke(bot, "space list", interaction)
+        self.assertEqual(interaction.replies[0], "No worlds or hubs yet.")
+        world = bot.store.create_space(1, "Harbor", "world")
+        bot.store.bind_channel(1, 100, world)
+        interaction = FakeInteraction(channel=FakeTextChannel(100), admin=True)
+        await invoke(bot, "lore list", interaction)
+        self.assertEqual(interaction.replies[0], "No lore for this channel or its world or hub yet.")
+        bot.store.add_lore(1, "space", world, "Tides", [], constant=True, pinned=True)
+        interaction = FakeInteraction(channel=FakeTextChannel(100), admin=True)
+        await invoke(bot, "lore list", interaction)
+        self.assertIn("[world] Tides", interaction.replies[0])
