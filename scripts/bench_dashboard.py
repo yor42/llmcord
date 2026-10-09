@@ -109,10 +109,14 @@ def run_profile(name: str, seed: str) -> list[dict]:
                     page.wait_for_load_state('networkidle')
                 measure('expand one character', expand_character)
 
-                def lore_search():
+                def lore_panel_build():
                     page.get_by_role('tab', name='Lore').click()
+                    page.get_by_label('Search content and keywords').first.wait_for(timeout=60000)
+                    page.wait_for_load_state('networkidle')
+                measure('open Lore tab (panel build)', lore_panel_build)
+
+                def lore_search():
                     box = page.get_by_label('Search content and keywords').first
-                    box.wait_for(timeout=60000)
                     box.press_sequentially('lighthouse', delay=80)
                     page.wait_for_load_state('networkidle')
                 measure('type 10 chars in lore search', lore_search)

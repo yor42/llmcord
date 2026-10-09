@@ -182,3 +182,27 @@ Reading:
 Note (after the end-of-R5 runs): the fixture's uvicorn keep-alive went from 5 s to 120 s to fix a browser-test flake. The bench uses the same fixture, so later runs reuse connections longer than the runs above. Expect a small difference at most; re-run before comparing a later perf claim against these numbers.
 
 Note (UI-15, 2026-10-09): the "Click Save cast" scenario no longer exists; Server setup saves through the save bar. `scripts/bench_dashboard.py` now runs **Save channel settings** (open the first channel card, toggle Ambient participation, click **Save changes**, wait for the "Channel settings saved" toast). It measured 1.24 s ready and settled in both profiles, but it includes the card-open round trip and a different write. It is not comparable with the Save cast rows above; use it as the new baseline for this step. Same run: cold load 1.44 s, Characters tab 0.41 / 0.38 s settled, expand one character 0.42 / 0.38 s, lore search 1.88 s (log not kept in the repo).
+
+## 2026-10-09: UI-10 (Lore panel build timed on its own; character expand profiled)
+
+`scripts/bench_dashboard.py` now has an "open Lore tab (panel build)" scenario, and "type 10 chars in lore search" starts from the open panel. One `scripts/verify.sh --bench` run, same host and seed (`10,500`). Times are ready / settled, in seconds.
+
+| Scenario | `latency` | `ratelimited` |
+| --- | --- | --- |
+| Guild page cold load | 1.45 / 1.45 | 1.44 / 1.44 |
+| Switch to Characters tab | 0.08 / 0.42 | 0.06 / 0.38 |
+| Expand one character | 0.42 / 0.42 | 0.38 / 0.38 |
+| Open Lore tab (panel build) | 0.98 / 0.98 | 0.98 / 0.98 |
+| Type 10 chars in lore search | 0.91 / 0.92 | 0.95 / 0.96 |
+| Save channel settings | 1.25 / 1.25 | 1.27 / 1.28 |
+
+Reading:
+- The panel build plus the search (about 1.9 s) matches the old combined lore-search figure (1.7–1.9 s).
+- Character expand is not server work.
+  - Over 4 clicks, cProfile measured 13 ms of server CPU, about 1 ms per event (guard 0.1–0.2 ms, emit 0.4 ms).
+  - The server sends its 440-byte update within 1 ms of the event. The browser receives it 155–175 ms later, with or without mock Discord latency. The cause of that gap is unknown.
+  - In the browser, script time is 1–2 ms and layout/style 8–17 ms. The rest is the 300 ms Quasar expand animation, which Playwright waits out before it treats the element as stable.
+- Part of the expand figure is bench overhead:
+  - Resolving the `filter(has_text=…)` locator the first time costs 0.2–0.3 s.
+  - A click right after another click waits for the previous animation.
+  - Whether the 0.06 → 0.31 s change at the end of R5 comes from the dashboard or from Playwright is still open. See UI-48.
