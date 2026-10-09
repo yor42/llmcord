@@ -49,9 +49,9 @@ class _LoreWorkspace:
                 self.left = ui.select(options, value=initial_owner if initial_owner in options else next(iter(options)), label='Left owner', with_input=True)
                 self.right = ui.select(options, value=list(options)[-1], label='Right owner', with_input=True)
                 self.query = ui.input('Search content and keywords').props('debounce=300')
-            toolbar = ui.element('div').classes('ll-form-row').style('align-items: center')
+            toolbar = ui.element('div').classes('ll-form-row ll-bulk').style('align-items: center')
             self.editor = ui.column().classes('w-full')
-            board = ui.row().classes('w-full items-stretch flex-nowrap overflow-auto')
+            board = ui.row().classes('w-full items-stretch flex-nowrap overflow-auto lore-board')
         self._build_toolbar(toolbar)
         self.drag = LoreDrag(self.root.html_id, self.moved)
         with board:
@@ -179,7 +179,7 @@ class _LoreWorkspace:
         render_board = self.render_board
         kind, ident = control.value.split(':', 1)
         ident = int(ident)
-        with ui.column().classes(f'flex-1 min-w-80 lore-panel lore-panel-{side}'):
+        with ui.column().classes(f'flex-1 lore-panel lore-panel-{side}'):
             ui.label(options[control.value]).classes('ll-subtitle owner-heading')
             page_key = (side, control.value)
             page_number = max(1, pages.get(page_key, 1))

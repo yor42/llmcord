@@ -224,6 +224,9 @@ body.body--dark .q-card .q-card, body.body--dark .q-card .q-expansion-item {{ ba
 .ll-pill {{ padding: 1px 8px; border-radius: 999px; border: 1px solid {THEME_DIVIDER}; font-size: 12px; white-space: nowrap; color: {THEME_TEXT_MUTED}; }}
 .ll-pill-off {{ color: {THEME_NEGATIVE}; border-color: {THEME_NEGATIVE}; }}
 @media (max-width: 600px) {{ .ll-entry-text {{ flex-basis: calc(100% - 4.5rem); }} .ll-entry-actions {{ margin-left: auto; }} }}
+.lore-panel {{ min-width: min(20rem, 100%); }}
+@media (max-width: 600px) {{ .lore-board {{ flex-direction: column; overflow: visible; }} .lore-board > .lore-panel {{ flex: 0 0 auto; width: 100%; }}
+.ll-bulk > .q-btn {{ flex: 1 1 calc(50% - 8px); }} .ll-bulk > .ll-muted {{ flex-basis: 100%; }} }}
 .ll-savebar {{ position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 2000; box-sizing: border-box; width: calc(100% - 32px); max-width: 960px; display: flex; flex-flow: row wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 12px 16px; background: {THEME_HEADER}; color: {THEME_TILE_TEXT}; border: 1px solid {THEME_DIVIDER}; border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }}
 .ll-savebar.hidden {{ display: none; }}
 body:has(.ll-savebar:not(.hidden)) .ll-page {{ padding-bottom: 120px; }}
