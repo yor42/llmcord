@@ -1392,7 +1392,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.keyboard.press('Enter')
             field.wait_for(timeout=5000)
             expect(toggle).to_have_attribute('aria-expanded', 'true')
-            expect(first.get_by_role('button', name=re.compile(r'system\s+\u00b7\s+relative'))).to_have_class(re.compile('prompt-toggle'))
+            expect(first.get_by_role('button', name=re.compile(r'System\s+\u00b7\s+Relative'))).to_have_class(re.compile('prompt-toggle'))
             name = first.get_by_label('Block name', exact=True)
             name.fill('Renamed block')
             expect(toggle).to_contain_text('Renamed block')
@@ -1431,6 +1431,45 @@ class DashboardBrowserTests(unittest.TestCase):
             self.open_more_item(page, added, added_name, 'Remove block')
             expect(cards).to_have_count(count)
             bar.wait_for(timeout=5000)
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_prompt_selects_show_labels_and_export_leave_out_works(self):
+        """UI-24: block Placement shows a readable label (stored value unchanged) and Export's "Leave out blocks" select drops the chosen block from the SillyTavern JSON."""
+        from playwright.sync_api import expect
+        context, page, errors = self.ux_page('/admin/guild/1?tab=prompts')
+        try:
+            cards = page.locator('.prompt-block')
+            cards.first.wait_for(timeout=5000)
+            first = cards.first
+            first.locator('.prompt-toggle').click()
+            expect(first.get_by_label('Placement', exact=True)).to_have_value('Relative to the prompt')
+            expect(first.get_by_label('Role', exact=True)).to_have_value('System')
+
+            def export():
+                with page.expect_download() as download:
+                    page.get_by_role('button', name='Export SillyTavern dialogue preset', exact=True).click()
+                return json.loads(Path(download.value.path()).read_text(encoding='utf-8'))
+
+            nonportable = ['location', 'opening', 'card_instructions', 'lore_before_examples', 'lore_after_examples', 'lore_in_chat',
+                           'personal', 'encounters', 'summary', 'preceding', 'recent', 'card_post_history']
+            select = page.get_by_label('Leave out blocks', exact=True)
+
+            def leave_out(*ids):
+                select.click()
+                for ident in ids:
+                    page.get_by_role('option').filter(has_text=f'({ident})').click()
+                page.keyboard.press('Escape')
+
+            leave_out(*nonportable)
+            full = export()
+            names = [p['name'] for p in full['prompts']]
+            self.assertIn('Character Voice', names)
+            leave_out('character_voice')
+            left_out = export()
+            self.assertNotIn('Character Voice', [p['name'] for p in left_out['prompts']])
+            self.assertEqual(len(left_out['prompts']), len(names) - 1)
             self.assertFalse(errors, (errors, getattr(page, 'network', [])))
         finally:
             context.close()

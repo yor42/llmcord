@@ -23,7 +23,7 @@ from .avatars import MAX_AVATAR_BYTES, avatar_version, normalize_avatar
 from .cards import parse_card
 from .icons import icon_css, lucide, lucide_button, more_menu
 from .lorebooks import parse_lorebook
-from .prompts import PURPOSES, SOURCES, block, compatibility, default_bundle, export_preset, parse_preset
+from .prompts import PURPOSES, SOURCES, block, compatibility, default_bundle, ST_MARKERS, export_preset, parse_preset, purpose_blocks
 from .savebar import SaveBar
 from .scene_ui import confirm_dialog, delete_book_dialog, delete_space_dialog, direct_import_dialog, guideline_editor
 
@@ -1324,6 +1324,23 @@ def _span(text=''):
     return TextElement(tag='span', text=text)
 
 
+PROMPT_ROLE_LABELS = {'system': 'System', 'user': 'User', 'assistant': 'Assistant'}
+PROMPT_PLACEMENT_LABELS = {'relative': 'Relative to the prompt', 'in_chat': 'In chat at depth'}
+PROMPT_PLACEMENT_SHORT = {'relative': 'Relative', 'in_chat': 'In chat'}
+PROMPT_SOURCE_LABELS = {
+    'text': 'Custom text', 'history': 'Chat history', 'payload': 'Request payload', 'location': 'Location', 'description': 'Character description',
+    'personality': 'Character personality', 'scenario': 'Scenario', 'opening': 'Opening message', 'examples': 'Example dialogue',
+    'card_instructions': 'Card instructions', 'card_post_history': 'Card post-history instructions',
+    'lore_before_char': 'Lore before character', 'lore_after_char': 'Lore after character', 'lore_before_examples': 'Lore before examples',
+    'lore_after_examples': 'Lore after examples', 'lore_in_chat': 'Lore in chat', 'personal': 'Personal facts', 'encounters': 'Encounters',
+    'summary': 'Scene summary', 'preceding': 'Preceding messages', 'recent': 'Recent messages'}
+
+
+def _prompt_options(labels, *current):
+    """``{code: label}`` for a select; codes not in ``labels`` (imported presets) stay selectable under their raw code."""
+    return {**labels, **{c: c for c in current if c not in labels}}
+
+
 def _preset_editor(ctx, state, purpose, collect):
     from nicegui import ui
 
@@ -1352,9 +1369,9 @@ def _preset_editor(ctx, state, purpose, collect):
                             # phrasing content only (a <button> cannot hold divs); trailing spaces keep the accessible name readable
                             _span().classes('ll-block-name').bind_text_from(b, 'name', backward=lambda v: (v or 'Untitled block') + ' ')
                             with ui.element('span').classes('ll-block-meta'):
-                                _span().bind_text_from(b, 'role')
+                                _span().bind_text_from(b, 'role', backward=lambda v: PROMPT_ROLE_LABELS.get(v, v))
                                 _span(' \u00b7 ')
-                                _span().bind_text_from(b, 'placement', backward=lambda v: f'{v} ')
+                                _span().bind_text_from(b, 'placement', backward=lambda v: f'{PROMPT_PLACEMENT_SHORT.get(v, v)} ')
                             _span('Disabled').classes('ll-pill ll-pill-off').bind_visibility_from(b, 'enabled', backward=lambda v: not v)
                             lucide('chevron-down', '1.25em').classes('ll-icon-solo ll-block-caret')
                         async def remove(b=b, key=key):
@@ -1387,12 +1404,12 @@ def _preset_editor(ctx, state, purpose, collect):
                             name_input.on_value_change(rename)
                             tracked(ui.switch('Enabled')).bind_value(b, 'enabled')
                         ui.label('Stable ID: ' + b['id']).classes('ll-muted')
-                        sources = list(dict.fromkeys(sorted(SOURCES) + [b['source']]))
+                        sources = _prompt_options({k: PROMPT_SOURCE_LABELS.get(k, k) for k in sorted(SOURCES, key=lambda k: PROMPT_SOURCE_LABELS.get(k, k))}, b['source'])
                         tracked(ui.select(sources, label='Context source')).bind_value(b, 'source').classes('w-full')
                         tracked(ui.textarea('Prompt text / template')).bind_value(b, 'content').classes('w-full').props('rows=6')
                         with ui.element('div').classes('ll-form-row'):
-                            tracked(ui.select(['system', 'user', 'assistant'], label='Role')).bind_value(b, 'role')
-                            tracked(ui.select(['relative', 'in_chat'], label='Placement')).bind_value(b, 'placement')
+                            tracked(ui.select(_prompt_options(PROMPT_ROLE_LABELS, b['role']), label='Role')).bind_value(b, 'role')
+                            tracked(ui.select(_prompt_options(PROMPT_PLACEMENT_LABELS, b['placement']), label='Placement')).bind_value(b, 'placement')
                             tracked(ui.number('Depth', precision=0)).bind_value(b, 'depth', backward=lambda v: int(v or 0))
                             tracked(ui.number('Injection order', precision=0)).bind_value(b, 'order', backward=lambda v: int(v or 0))
                             tracked(ui.number('Trimming priority', precision=0)).bind_value(b, 'priority', backward=lambda v: int(v or 0))
@@ -1459,9 +1476,21 @@ def _preset_export(ctx, collect):
             return True
         with ui.element('div').classes('ll-form-row'):
             _read_button(ctx, 'Export full native bundle', native_export).props('outline')
-        omit = ui.input('Explicitly omit nonportable block IDs (JSON array)', value='[]').classes('w-full')
+        def block_options():
+            try:
+                portable = set(ST_MARKERS.values())  # the check export_preset uses
+                return {b['id']: f"{b['name'] or 'Untitled block'} ({b['id']})"
+                        + ('' if b['source'] == 'text' or b['source'] in portable or b['source'].startswith('unsupported:') else ' \u2014 not portable')
+                        for b in purpose_blocks(collect(), 'dialogue')}
+            except ValueError:
+                return {}
+        omit = ui.select(block_options(), multiple=True, value=[], label='Leave out blocks').props('use-chips').classes('w-full')
+        omit.tooltip('SillyTavern cannot represent some blocks; choose them here to export without them.')
+        def refresh_options():
+            omit.set_options(block_options(), value=[v for v in omit.value if v in block_options()])
+        omit.on('popup-show', refresh_options)
         def st_export():
-            ui.download.content(pretty(export_preset(collect(), sillytavern=True, omit=json.loads(omit.value))), 'sillytavern-preset.json', 'application/json')
+            ui.download.content(pretty(export_preset(collect(), sillytavern=True, omit=list(omit.value))), 'sillytavern-preset.json', 'application/json')
             return True
         with ui.element('div').classes('ll-form-row'):
             _read_button(ctx, 'Export SillyTavern dialogue preset', st_export).props('outline')
