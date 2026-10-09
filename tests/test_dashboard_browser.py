@@ -902,7 +902,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertEqual(models['second-model'][2:], ['2', '7,000', '900', '$0.01', '1'])
             self.assertEqual(models['fixture-model'][1], 'dialogue, director, memory')
             channels = {row[0]: row[1] for row in self.usage_table(page, 1)}
-            self.assertEqual(channels, {'#scene': '4', 'Deleted channel': '1', 'Unknown (before this update)': '2'})
+            self.assertEqual(channels, {'#scene': '4', 'Deleted channel (ID …777)': '1', 'Unknown (before this update)': '2'})
             features = {row[0]: row[1] for row in self.usage_table(page, 2)}
             self.assertEqual(features, {'Replies': '1', 'Ambient turns': '1', 'Summons': '1', 'Memory updates': '1', 'Catch-ups': '1', 'Unknown (before this update)': '2'})
             self.assertEqual(page.get_by_text('other-guild-model').count(), 0)
@@ -966,7 +966,7 @@ class DashboardBrowserTests(unittest.TestCase):
         try:
             self.assertEqual(self.log_rows(page).count(), 50)
             self.assertIn('summon · dialogue', self.log_rows(page).first.inner_text())
-            self.assertIn('Deleted channel', self.log_rows(page).first.inner_text())
+            self.assertIn('Deleted channel (ID …777)', self.log_rows(page).first.inner_text())
             self.assertIn('12 in / 34 out', self.log_rows(page).first.inner_text())
             self.assertRegex(self.log_rows(page).nth(2).inner_text(), r'\d{4}-\d\d-\d\d \d\d:\d\d · #scene · reply · dialogue')
             page.get_by_text('Entries are kept for', exact=False).wait_for()
@@ -994,7 +994,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.get_by_label('Reference ID', exact=True).press('Enter')
             self.wait_for(lambda: self.log_rows(page).count() == 50)
             page.get_by_label('Channel', exact=True).click()
-            page.get_by_role('option', name='Deleted channel', exact=True).click()
+            page.get_by_role('option', name='Deleted channel (ID …777)', exact=True).click()
             self.wait_for(lambda: self.log_rows(page).count() == 1)
             self.assertFalse(errors, (errors, getattr(page, 'network', [])))
         finally:
@@ -1032,6 +1032,8 @@ class DashboardBrowserTests(unittest.TestCase):
 
     def test_server_turn_log_settings_persist(self):
         """D22 step 4: the Keep a turn log switch and retention save together as one settings.turn_log audit row."""
+        settings_rows = lambda: [r for r in self.state()['audit'] if r['action'] == 'settings.turn_log']
+        earlier_rows = len(settings_rows())  # the MNT-28 retention test also saves this setting
         context, page, errors = self.ux_page('/admin/guild/1')
         try:
             page.get_by_role('tab', name='Server setup', exact=True).click()
@@ -1044,11 +1046,143 @@ class DashboardBrowserTests(unittest.TestCase):
             page.get_by_role('region', name='Unsaved changes').get_by_role('button', name='Save changes', exact=True).click()
             page.get_by_text('Server settings saved', exact=True).wait_for(timeout=5000)
             self.wait_for(lambda: self.state()['turn_log'] == {'enabled': True, 'days': 30})
-            rows = [r for r in self.state()['audit'] if r['action'] == 'settings.turn_log']
+            rows = settings_rows()[earlier_rows:]
             self.assertEqual([json.loads(r['detail_json']) for r in rows], [{'enabled': True, 'days': 30}])
             self.assertFalse(errors, (errors, getattr(page, 'network', [])))
         finally:
             context.close()
+
+    def post_hook(self, path, payload=None, **params):
+        response = self.context.request.post(self.url + path, data=payload, params=params or None)
+        self.assertEqual(response.status, 200, path)
+
+    def set_turn_log(self, enabled, days):
+        self.post_hook('/_test/turn-log-settings', {'enabled': enabled, 'days': days})
+
+    def test_turn_log_off_with_earlier_entries_says_so(self):
+        """Characterization (MNT-28): with the turn log switched off but entries still kept, the Log lists them and notes that logging is off."""
+        before = self.state()['turn_log']
+        self.set_turn_log(False, 14)
+        try:
+            context, page, errors = self.open_log()
+            try:
+                page.get_by_text('Logging is off; showing earlier entries.', exact=True).wait_for(timeout=5000)
+                self.assertEqual(self.log_rows(page).count(), 50)
+                self.assertEqual(page.get_by_text('The turn log is off.', exact=False).count(), 0)
+                self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            finally:
+                context.close()
+        finally:
+            self.set_turn_log(before['enabled'], before['days'])
+
+    def test_deleted_channels_get_distinct_labels(self):
+        """MNT-28: two deleted channels are told apart by the last 4 digits of their ID in the Log's Channel filter and the By channel table; an unknown channel keeps its own label."""
+        ids = (900000001234, 900000005678)
+        for channel in ids:
+            self.post_hook('/_test/monitoring-channel', {'channel_id': channel, 'present': True})
+        try:
+            context, page, errors = self.open_log()
+            try:
+                page.get_by_text('By channel', exact=True).wait_for(timeout=5000)
+                wanted = {'Deleted channel (ID \u20261234)', 'Deleted channel (ID \u20265678)'}
+                channels = [row[0] for row in self.usage_table(page, 1)]
+                self.assertLessEqual(wanted, set(channels), channels)
+                self.assertIn('Unknown (before this update)', channels)
+                page.get_by_label('Channel', exact=True).click()
+                page.get_by_role('option').first.wait_for()
+                options = page.get_by_role('option').all_inner_texts()
+                self.assertLessEqual(wanted, set(options), options)
+                page.keyboard.press('Escape')
+            finally:
+                context.close()
+        finally:
+            for channel in ids:
+                self.post_hook('/_test/monitoring-channel', {'channel_id': channel, 'present': False})
+
+    def test_monitoring_notes_follow_a_retention_change_without_reload(self):
+        """MNT-28: after saving a new 'Keep usage and log for' value, opening Monitoring in the same page shows the new retention notes and period list."""
+        before = self.state()['turn_log']
+        self.set_turn_log(False, 14)
+        try:
+            context, page, errors = self.ux_page('/admin/guild/1?tab=monitoring')
+            try:
+                page.get_by_text('Usage is kept for 14 days (Server settings).', exact=True).wait_for(timeout=5000)
+                page.get_by_role('tab', name='Server setup', exact=True).click()
+                page.get_by_label('Keep usage and log for', exact=True).click()
+                page.get_by_role('option', name='7 days', exact=True).click()
+                page.get_by_role('region', name='Unsaved changes').get_by_role('button', name='Save changes', exact=True).click()
+                page.get_by_text('Server settings saved', exact=True).wait_for(timeout=5000)
+                self.wait_for(lambda: self.state()['turn_log']['days'] == 7)
+                page.get_by_role('tab', name='Monitoring', exact=True).click()
+                page.get_by_text('Personal facts are hidden and API keys removed.', exact=False).wait_for(timeout=5000)
+                self.assertEqual(page.get_by_text('Usage is kept for 7 days (Server settings).', exact=True).count(), 1)
+                self.assertEqual(page.get_by_text('Entries are kept for 7 days (Server settings).', exact=False).count(), 1)
+                page.get_by_label('Period', exact=True).click()
+                page.get_by_role('option').first.wait_for()
+                self.assertEqual(page.get_by_role('option').count(), 2)
+                page.keyboard.press('Escape')
+            finally:
+                context.close()
+        finally:
+            self.set_turn_log(before['enabled'], before['days'])
+
+    def test_channel_logging_after_page_build_joins_the_filter(self):
+        """MNT-28: a channel that first logs after the page was built shows up in the Log's Channel filter once the list is reloaded, without a page reload."""
+        context, page, errors = self.open_log()
+        try:
+            channel = page.get_by_label('Channel', exact=True)
+            channel.click()
+            page.get_by_role('option', name='All channels', exact=True).wait_for()
+            self.assertEqual(page.get_by_role('option', name='#assets', exact=True).count(), 0)
+            page.keyboard.press('Escape')
+            self.post_hook('/_test/monitoring-channel', {'channel_id': 200, 'present': True})
+            page.get_by_role('switch', name='Errors only').click()
+            self.wait_for(lambda: self.log_rows(page).count() == 1)
+            page.get_by_role('switch', name='Errors only').click()
+            self.wait_for(lambda: self.log_rows(page).count() == 50)
+            channel.click()
+            page.get_by_role('option', name='All channels', exact=True).wait_for()
+            self.assertEqual(page.get_by_role('option', name='#assets', exact=True).count(), 1)
+            page.keyboard.press('Escape')
+        finally:
+            context.close()
+            self.post_hook('/_test/monitoring-channel', {'channel_id': 200, 'present': False})
+
+    def test_retention_saved_from_the_monitoring_tab_rebuilds_it(self):
+        """MNT-28: editing retention on Server setup, switching to Monitoring and saving from there leaves Monitoring showing the new notes, not blank."""
+        before = self.state()['turn_log']
+        self.set_turn_log(False, 14)
+        try:
+            context, page, errors = self.ux_page('/admin/guild/1?tab=monitoring')
+            try:
+                page.get_by_text('Usage is kept for 14 days (Server settings).', exact=True).wait_for(timeout=5000)
+                page.get_by_role('tab', name='Server setup', exact=True).click()
+                page.get_by_label('Keep usage and log for', exact=True).click()
+                page.get_by_role('option', name='7 days', exact=True).click()
+                page.get_by_role('tab', name='Monitoring', exact=True).click()
+                page.get_by_role('region', name='Unsaved changes').get_by_role('button', name='Save changes', exact=True).click()
+                page.get_by_text('Server settings saved', exact=True).wait_for(timeout=5000)
+                page.get_by_text('Usage is kept for 7 days (Server settings).', exact=True).wait_for(timeout=5000)
+                self.assertEqual(page.get_by_text('Entries are kept for 7 days (Server settings).', exact=False).count(), 1)
+            finally:
+                context.close()
+        finally:
+            self.set_turn_log(before['enabled'], before['days'])
+
+    def test_failed_filter_read_restores_the_controls(self):
+        """MNT-28: when the read for a changed filter fails, the filter controls go back to the applied values so they agree with the list."""
+        from playwright.sync_api import expect
+        context, page, errors = self.open_log()
+        try:
+            switch = page.get_by_role('switch', name='Errors only')
+            self.post_hook('/_test/fail-turn-log-page', n=1)
+            switch.click()
+            page.get_by_text('Fixture turn log read failure', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.log_rows(page).count(), 50)  # the list still shows the earlier filter
+            expect(switch).to_have_attribute('aria-checked', 'false', timeout=2000)
+        finally:
+            context.close()
+            self.post_hook('/_test/fail-turn-log-page', n=0)
 
     def test_channel_card_is_one_save_bar_editor(self):
         """UI-15 / MNT-26: a collapsed channel card saves guidelines and ambient as one edit with one audit row each, can be saved again without a conflict, and Reset restores."""
@@ -1926,36 +2060,38 @@ class DashboardBrowserTests(unittest.TestCase):
             names = lambda: {r['name'] for r in self.state()['presets']}
             name.fill('UI41 copy source')
             self.open_more_item(page, page, 'preset', 'Save as new preset')
-            self.wait_for(lambda: 'UI41 copy source' in names())
-            bar.wait_for(state='hidden')
+            self.wait_for(lambda: 'UI41 copy source' in names(), self.SLOW_SERVER_POLLS)
+            bar.wait_for(state='hidden', timeout=30000)
             self.open_more_item(page, page, 'preset', 'Save as new preset')
-            self.wait_for(lambda: 'UI41 copy source copy' in names())
-            self.assertEqual(name.input_value(), 'UI41 copy source copy')
-            bar.wait_for(state='hidden')
+            self.wait_for(lambda: 'UI41 copy source copy' in names(), self.SLOW_SERVER_POLLS)
+            # The row is saved before the page has re-rendered: wait for the field, not just the database.
+            self.wait_for(lambda: name.input_value() == 'UI41 copy source copy', self.SLOW_SERVER_POLLS)
+            bar.wait_for(state='hidden', timeout=30000)
             name.fill('UI41 copy source')
             self.open_more_item(page, page, 'preset', 'Save as new preset')
-            self.wait_for(lambda: 'UI41 copy source copy 2' in names())
-            self.assertEqual(name.input_value(), 'UI41 copy source copy 2')
-            self.assertIn('UI41 copy source copy 2', library.input_value())
+            self.wait_for(lambda: 'UI41 copy source copy 2' in names(), self.SLOW_SERVER_POLLS)
+            self.wait_for(lambda: name.input_value() == 'UI41 copy source copy 2', self.SLOW_SERVER_POLLS)
+            self.wait_for(lambda: 'UI41 copy source copy 2' in library.input_value(), self.SLOW_SERVER_POLLS)
+            bar.wait_for(state='hidden', timeout=30000)
 
             self.open_more_item(page, page, 'preset', 'Activate saved revision')
             subtitle = page.locator('.ll-subtitle').filter(has_text='Active preset:').first
-            self.wait_for(lambda: bool(self.state()['active']))
-            self.wait_for(lambda: 'UI41 copy source copy 2 · draft 1' in subtitle.inner_text())
+            self.wait_for(lambda: bool(self.state()['active']), self.SLOW_SERVER_POLLS)
+            self.wait_for(lambda: 'UI41 copy source copy 2 · draft 1' in subtitle.inner_text(), self.SLOW_SERVER_POLLS)
             name.fill('UI41 renamed active')
             bar.get_by_role('button', name='Save draft', exact=True).click()
-            self.wait_for(lambda: 'UI41 renamed active' in names())
-            self.wait_for(lambda: 'UI41 renamed active · draft 2' in subtitle.inner_text())
+            self.wait_for(lambda: 'UI41 renamed active' in names(), self.SLOW_SERVER_POLLS)
+            self.wait_for(lambda: 'UI41 renamed active · draft 2' in subtitle.inner_text(), self.SLOW_SERVER_POLLS)
 
             page.locator('input[type=file]').first.set_input_files(self.preset_file('Saved import marker'))
-            self.wait_for(lambda: library.input_value() == 'Imported (not saved)')
-            self.wait_for(lambda: name.input_value() == 'Imported preset')
-            bar.wait_for(timeout=5000)
+            self.wait_for(lambda: library.input_value() == 'Imported (not saved)', self.SLOW_SERVER_POLLS)
+            self.wait_for(lambda: name.input_value() == 'Imported preset', self.SLOW_SERVER_POLLS)
+            bar.wait_for(timeout=30000)
             name.fill('UI41 saved import')
             bar.get_by_role('button', name='Save draft', exact=True).click()
-            self.wait_for(lambda: 'UI41 saved import' in names())
-            bar.wait_for(state='hidden')
-            self.wait_for(lambda: library.input_value() == 'UI41 saved import · draft 1')
+            self.wait_for(lambda: 'UI41 saved import' in names(), self.SLOW_SERVER_POLLS)
+            bar.wait_for(state='hidden', timeout=30000)
+            self.wait_for(lambda: library.input_value() == 'UI41 saved import · draft 1', self.SLOW_SERVER_POLLS)
             self.assertFalse(errors, (errors, getattr(page, 'network', [])))
         finally:
             context.close()

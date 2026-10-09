@@ -135,6 +135,16 @@ def main():
                  'usage_report', 'list_presets'):  # the last two are panel-specific (Server setup / Prompt presets): R5 step 6
         count_store_method(name)
 
+    # MNT-28: lets a test make the next turn log list read fail (/_test/fail-turn-log-page).
+    turn_log_hooks = {'fail': 0}
+    original_turn_log_page = store.turn_log_page
+    def failing_turn_log_page(*args, **kwargs):
+        if turn_log_hooks['fail']:
+            turn_log_hooks['fail'] -= 1
+            raise ValueError('Fixture turn log read failure')
+        return original_turn_log_page(*args, **kwargs)
+    store.turn_log_page = failing_turn_log_page
+
     @app.get('/_test/state')
     async def snapshot():
         return {'spaces': [dict(r) for r in originals['list_spaces'](1)],
@@ -309,6 +319,35 @@ def main():
         # Another operator saves behind the open page's back (stale revision test).
         current = store.budget_settings()
         store.save_budget(current['soft_cap_usd'], current['hard_cap_usd'], current['reset_day'], bool(current['channel_notice']), current['revision'])
+        return {'ok': True}
+
+    @app.post('/_test/turn-log-settings')
+    async def turn_log_settings(request: Request):
+        # Set guild 1's turn log switch and retention directly (MNT-28 tests restore the original values when done).
+        value = await request.json()
+        store.set_turn_log(1, bool(value['enabled']), int(value['days']))
+        return {'ok': True}
+
+    @app.post('/_test/monitoring-channel')
+    async def monitoring_channel(request: Request):
+        # MNT-28: add or remove one usage row and one log row for `channel_id` in guild 1 (a channel Discord does not know,
+        # unless it is 200), so a test can make a channel appear after the page was built, then clean up.
+        value = await request.json()
+        channel = int(value['channel_id'])
+        if value.get('present', True):
+            at = time.time() - 60
+            store.db.execute("INSERT INTO model_usage(guild_id,profile,model,role,input_tokens,output_tokens,cached_tokens,reasoning_tokens,cost_usd,cost_basis,created_at,channel_id,feature) VALUES(1,'fixture','fixture-model','dialogue',10,5,0,0,0.0001,'configured',?,?,'reply')", (at, channel))
+            store.db.execute(log_sql, (1, channel, None, 'reply · dialogue', 'fixture', 'fixture-model', 'ok', '', '', 'MNT28 request', 'MNT28 reply', 10, 5, at))
+        else:
+            store.db.execute('DELETE FROM model_usage WHERE guild_id = 1 AND channel_id = ?', (channel,))
+            store.db.execute('DELETE FROM turn_log WHERE guild_id = 1 AND channel_id = ?', (channel,))
+        store.db.commit()
+        return {'ok': True}
+
+    @app.post('/_test/fail-turn-log-page')
+    async def fail_turn_log_page(n: int = 1):
+        # MNT-28: the next `n` turn log list reads raise ValueError (the dashboard shows it as an error toast).
+        turn_log_hooks['fail'] = n
         return {'ok': True}
 
     @app.post('/_test/stop')

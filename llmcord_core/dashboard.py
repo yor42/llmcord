@@ -868,10 +868,8 @@ async def turn_log_section(ctx, channel_label):
     zone_name = store.guild_timezone(gid)
     with section('Log'):
         ui.label('Personal facts are hidden and API keys removed. Entries are kept for ' + ('the current month' if days == 0 else f'{days} days') + ' (Server settings).').classes('ll-muted')
-        known = await ctx.run(lambda: store.turn_log_channels(gid)) or []
-        options = {None: 'All channels', **{c: channel_label(c) for c in known}}
         with ui.element('div').classes('ll-form-row ll-field-row'):
-            channel = ui.select(options, value=None, label='Channel')
+            channel = ui.select({None: 'All channels'}, value=None, label='Channel')
             errors_only = ui.switch('Errors only')
             reference = ui.input('Reference ID')
         off_note = ui.label('Logging is off; showing earlier entries.').classes('ll-muted')
@@ -879,7 +877,7 @@ async def turn_log_section(ctx, channel_label):
         body = ui.column().classes('w-full gap-2')
         more = ui.button('Load more', on_click=lambda: load(False)).props('outline')
         more.set_visibility(False)
-        state = {'last': None, 'applied': None, 'gen': 0, 'busy': False}
+        state = {'last': None, 'applied': None, 'gen': 0, 'busy': False, 'shown': None, 'shown_last': None}
 
         def filters():
             return {'channel_id': channel.value, 'errors_only': bool(errors_only.value), 'reference_id': normalize_reference(reference.value) or None}
@@ -935,13 +933,22 @@ async def turn_log_section(ctx, channel_label):
             state['busy'] = True
             more.disable()
             try:
-                page = await ctx.run(lambda: (store.turn_log_page(gid, **chosen, before_id=before, limit=TURN_LOG_PAGE), store.turn_log_settings(gid)['enabled']))
+                page = await ctx.run(lambda: (store.turn_log_page(gid, **chosen, before_id=before, limit=TURN_LOG_PAGE), store.turn_log_settings(gid)['enabled'],
+                                              store.turn_log_channels(gid) if reset else None))
                 if generation != state['gen']:
                     return  # a newer filter was applied while this read ran
                 if page is None:
+                    if reset:  # keep the controls and the list in agreement: put the controls back without another read
+                        # restore what the list shows; the handlers that follow see filters() == applied and read nothing
+                        restored = state['shown'] or {'channel_id': None, 'errors_only': False, 'reference_id': None}
+                        state['applied'], state['last'] = restored, state['shown_last']
+                        channel.value, errors_only.value, reference.value = restored['channel_id'], restored['errors_only'], restored['reference_id'] or ''
                     return
-                entries, enabled = page
+                entries, enabled, known = page
                 if reset:
+                    keep = [channel.value] if channel.value is not None and channel.value not in known else []
+                    channel.set_options({None: 'All channels', **{c: channel_label(c) for c in [*known, *keep]}}, value=channel.value)
+                    state['shown'] = chosen
                     body.clear()
                     off_note.set_visibility(not enabled and bool(entries))
                 with body:
@@ -953,6 +960,8 @@ async def turn_log_section(ctx, channel_label):
                                  else 'The turn log is off. Turn it on in Server settings to record model calls.').classes('ll-muted')
                 if entries:
                     state['last'] = entries[-1]['id']
+                if reset:
+                    state['shown_last'] = state['last']
                 more.set_visibility(len(entries) >= TURN_LOG_PAGE)
             finally:
                 if generation == state['gen']:
@@ -984,7 +993,11 @@ async def monitoring_panel(ctx):
     def channel_label(cid):
         if cid is None:
             return USAGE_UNKNOWN
-        return ctx.channel_names.get(cid) or thread_names.get(cid) or 'Deleted channel'
+        name = ctx.channel_names.get(cid) or thread_names.get(cid)
+        if name:
+            return name
+        digits = str(cid)
+        return f"Deleted channel (ID …{digits[-4:]})"
     def money(row):
         return format_usd(row['cost_usd'])
     with section('Usage'):
@@ -1098,11 +1111,18 @@ async def setup_panel(ctx):
             return True
         def save_turn_log():
             store.set_turn_log(gid, bool(log_switch.value), int(log_days.value))
+            if 'monitoring' in ctx.built:  # rebuild on next show so its retention notes and periods follow
+                ctx.containers['monitoring'].clear()
+                ctx.built.discard('monitoring')
             return True
         async def configure():
             await ctx.service.avatars.configure(gid, asset_channel.value)
             return True
-        ctx.savebar.track('Server settings', {}, parts=[
+        async def show_monitoring(_):
+            # same in-flight caveat as refresh(): a Monitoring build still awaiting its reads when this save lands could double-fill
+            if ctx.selector.value == 'monitoring':
+                await ctx.build('monitoring')
+        ctx.savebar.track('Server settings', {}, then=show_monitoring, parts=[
             {'controls': {footer: store.usage_footer_enabled(gid)}, 'operation': save_footer, 'action': 'settings.footer',
              'detail': lambda _: {'enabled': bool(footer.value)}},
             {'controls': {catchup: store.catchup_anywhere(gid)}, 'operation': save_catchup, 'action': 'settings.catchup',

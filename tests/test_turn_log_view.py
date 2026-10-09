@@ -6,7 +6,7 @@ from llmcord_core.dashboard import normalize_reference, turn_log_row
 
 class TurnLogViewTests(unittest.TestCase):
     def test_normalize_reference(self):
-        """FEAT-07: a pasted reference ID loses whitespace and a leading 'ref ' or '#'."""
+        """FEAT-07: the 6-hex reference token is extracted from pasted text (e.g. '(ref 06F1EE)') and lowercased; otherwise the trimmed text is lowercased."""
         for raw, expected in ((' 06f1ee ', '06f1ee'), ('06f1ee', '06f1ee'), ('(ref 06F1EE)', '06f1ee'), ('[ref 06f1ee]', '06f1ee'), ('ref: 06f1ee.', '06f1ee'), ('#06f1ee', '06f1ee'), (' [Nope] ', 'nope'), (None, ''), ('', '')):
             self.assertEqual(normalize_reference(raw), expected, raw)
 
