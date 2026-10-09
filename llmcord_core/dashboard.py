@@ -127,11 +127,13 @@ class LiveContext:
             ui.notify(message, type='negative', timeout=8000)
             return False, None
 
-    def button(self, text, operation, action=None, detail=None, then=None, success=None, **kwargs):
+    def button(self, text, operation, action=None, detail=None, then=None, success=None, prepare=None, **kwargs):
         from nicegui import ui
         async def clicked():
             if self.savebar and self.savebar.refuse():
                 return
+            if prepare:
+                await prepare()
             ok, result = await self._attempt(operation, action, detail)
             if not ok:
                 return
@@ -918,9 +920,22 @@ def entry_editor(ctx, entry, owners, refresh):
         text = ui.textarea('Content', value=entry['content']).classes('w-full')
         rule = copy.deepcopy(entry['rule'])
         controls = {}
-        for key in ('keys', 'secondary_keys'):
-            controls[key] = ui.input(key.replace('_', ' ').title(), value=pretty(rule[key])).props('hint="JSON string array; preserves commas inside regex"').classes('w-full')
-        controls['order'] = ui.number('Priority / insertion order (higher values appear later)', value=rule['order'], precision=0).props('outlined dense')
+        for key, label in (('keys', 'Keys'), ('secondary_keys', 'Secondary keys')):
+            controls[key] = ui.input_chips(label, value=[str(item) for item in rule.get(key) or []], new_value_mode='add-unique') \
+                .props('outlined dense hint="Press Enter after each key"').classes('w-full')
+            # Typed text that was never confirmed with Enter becomes a chip when the field loses focus.
+            # Quasar clears its input before it emits blur, so the pending text is tracked from input-value.
+            element_id = controls[key].id
+            controls[key].on('input-value', js_handler=f"""(value) => {{
+                window.llPendingKeys = window.llPendingKeys || {{}};
+                window.llPendingKeys[{element_id}] = value || '';
+            }}""")
+            controls[key].on('blur', js_handler=f"""() => {{
+                const text = ((window.llPendingKeys || {{}})[{element_id}] || '').trim();
+                if (window.llPendingKeys) window.llPendingKeys[{element_id}] = '';
+                if (text) getElement({element_id}).add(text, true);
+            }}""")
+        controls['order'] = ui.number('Order', value=rule['order'], precision=0).props('outlined dense hint="Higher values appear later"')
         with ui.row().classes('gap-4'):
             controls['enabled'] = ui.checkbox('Enabled', value=rule['enabled'])
             controls['constant'] = ui.checkbox('Always active', value=rule['constant'])
@@ -951,6 +966,8 @@ def entry_editor(ctx, entry, owners, refresh):
             for key, control in controls.items():
                 if key == 'regex_enabled':
                     rule[key] = {'auto': None, 'regex': True, 'literal': False}[control.value]
+                elif key in ('keys', 'secondary_keys'):
+                    rule[key] = list(control.value or [])
                 elif key == 'original' or key == 'scan_depth' or isinstance(rule.get(key), list):
                     rule[key] = json.loads(control.value or ('null' if key == 'scan_depth' else '{}'))
                 elif type(rule.get(key)) is int:
@@ -958,6 +975,21 @@ def entry_editor(ctx, entry, owners, refresh):
                 else:
                     rule[key] = control.value
             return rule
+        async def flush_pending_keys():
+            # Blur can lose the race with a click on Save, so take any typed-but-unconfirmed key text now.
+            from nicegui import ui as nicegui_ui
+            ids = {key: controls[key].id for key in ('keys', 'secondary_keys')}
+            try:
+                pending = await nicegui_ui.run_javascript(
+                    'const p = window.llPendingKeys || {}; const out = {};'
+                    f'for (const [name, id] of Object.entries({json.dumps(ids)})) {{ out[name] = String(p[id] || ""); p[id] = ""; }}'
+                    'return out;', timeout=3.0)
+            except (TimeoutError, RuntimeError):
+                return
+            for key, text in (pending or {}).items():
+                text = text.strip()
+                if key in controls and text and text not in controls[key].value:
+                    controls[key].value = [*controls[key].value, text]
         def save():
             ref = ctx.store.save_entry(ctx.guild_id, entry['owner_kind'], entry['owner_id'], text.value or '', collect(), pinned.value, entry.get('ref'), entry.get('revision'))
             return ref
@@ -975,7 +1007,7 @@ def entry_editor(ctx, entry, owners, refresh):
                 ctx.store.delete_entry(ctx.guild_id, entry['ref'], entry['revision'])
                 return True
         with ui.element('div').classes('ll-form-row'):
-            ctx.button('Save lore', save, 'lore.edit', then=saved)
+            ctx.button('Save lore', save, 'lore.edit', then=saved, prepare=flush_pending_keys)
             if entry.get('ref'):
                 ctx.button('Move', lambda: transfer(False), 'lore.move', then=saved).props('outline')
                 ctx.button('Copy', lambda: transfer(True), 'lore.copy', then=saved).props('outline')

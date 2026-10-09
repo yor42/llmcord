@@ -1285,6 +1285,60 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def test_lore_editor_keys_are_chips(self):
+        """UI-21: Keys / Secondary keys are chip inputs; a key containing a comma stays ONE key, old keys survive an edit."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=lore')
+        try:
+            def add_chip(label, text):
+                field = page.get_by_label(label, exact=True)
+                field.fill(text)
+                field.press('Enter')
+            page.get_by_role('button', name='New entry', exact=True).first.wait_for(timeout=5000)
+            page.get_by_role('button', name='New entry', exact=True).first.click()
+            page.get_by_label('Content', exact=True).fill('Chip lore entry')
+            add_chip('Keys', 'old key')
+            page.get_by_role('button', name='Save lore', exact=True).click()
+            self.wait_for(lambda: any(r['content'] == 'Chip lore entry' for r in self.state()['lore']))
+            row = page.locator('.lore-entry').filter(has_text='Chip lore entry')
+            row.get_by_role('button', name='Edit entry', exact=True).click()
+            editor = page.locator('.q-card').filter(has=page.get_by_text('Edit lore', exact=True)).last
+            editor.locator('.q-chip').filter(has_text='old key').wait_for(timeout=5000)
+            add_chip('Keys', '/a,b/')
+            add_chip('Secondary keys', 'second')
+            page.get_by_role('button', name='Save lore', exact=True).click()
+
+            def entry():
+                return next((r for r in self.state()['lore'] if r['content'] == 'Chip lore entry'), None)
+            self.wait_for(lambda: entry() and '/a,b/' in json.loads(entry()['keys_json']))
+            self.assertEqual(json.loads(entry()['keys_json']), ['old key', '/a,b/'])
+            page.get_by_text('Edit lore', exact=True).wait_for(state='detached', timeout=5000)
+            row = page.locator('.lore-entry').filter(has_text='Chip lore entry')
+            row.get_by_role('button', name='Edit entry', exact=True).click()
+            editor = page.locator('.q-card').filter(has=page.get_by_text('Edit lore', exact=True)).last
+            for chip in ('old key', '/a,b/', 'second'):
+                editor.locator('.q-chip').filter(has_text=chip).wait_for(timeout=5000)
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_lore_editor_commits_pending_key_text_on_save(self):
+        """UI-21: key text typed without Enter is committed as a chip when Save lore is clicked directly (no duplicates)."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=lore')
+        try:
+            page.get_by_role('button', name='New entry', exact=True).first.wait_for(timeout=5000)
+            page.get_by_role('button', name='New entry', exact=True).first.click()
+            page.get_by_label('Content', exact=True).fill('Pending chip entry')
+            page.get_by_label('Keys', exact=True).fill('pending')
+            page.get_by_label('Secondary keys', exact=True).fill('/x,y/')
+            page.get_by_role('button', name='Save lore', exact=True).click()
+            self.wait_for(lambda: any(r['content'] == 'Pending chip entry' for r in self.state()['lore']))
+            row = next(r for r in self.state()['lore'] if r['content'] == 'Pending chip entry')
+            self.assertEqual(json.loads(row['keys_json']), ['pending'])
+            self.assertEqual(json.loads(row['rule_json'])['secondary_keys'], ['/x,y/'])
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
     CLIPPED_SELECT_LABELS_JS = """() => [...document.querySelectorAll('.q-select')].flatMap(select => {
         const label = select.querySelector('.q-field__label');
         if (!label || !label.getClientRects().length) return [];
