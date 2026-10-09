@@ -484,9 +484,7 @@ def _register_pages(app):
         ui.context.client.llmcord_binding = (request.cookies['llmcord_session'], None)
         guilds = await app.state.auth.guilds(session)
         with ui.header().classes('items-center justify-between no-wrap'):
-            with ui.element('div').classes('ll-crumb'):
-                crumb = ui.link('llmcord', '/')
-                crumb.props['aria-label'] = 'llmcord / Servers'
+            header_crumb()
             account_menu(session)
         with ui.column().classes('ll-servers gap-1'):
             ui.label('Your servers').classes('text-3xl font-bold')
@@ -516,18 +514,7 @@ def _register_pages(app):
         except HTTPException:
             current = None
         with ui.header().classes('items-center justify-between no-wrap'):
-            with ui.element('div').classes('ll-crumb'):
-                crumb = ui.link('llmcord', '/')
-                crumb.props['aria-label'] = 'llmcord / Servers'
-                if current:
-                    ui.label('/').classes('ll-crumb-sep').props('aria-hidden=true')
-                    # guild_icon_url only returns a CDN URL built from a digit snowflake and a hex hash, so it is safe inside the quoted prop.
-                    icon = guild_icon_url(current, 128)
-                    if icon:
-                        ui.element('img').classes('ll-crumb-icon').props(f'src="{icon}" alt=""')
-                    else:
-                        ui.label(server_initials(current.get('name'))).classes('ll-crumb-tile').props('aria-hidden=true')
-                    ui.label(str(current.get('name', ''))).classes('ll-crumb-name')
+            header_crumb(current)
             account_menu(session)
         with ui.column().classes('ll-page'):
             ui.label('Server administration').classes('text-3xl font-bold')
@@ -598,6 +585,23 @@ def timezone_detail(result):
     return {'old': result['old'], 'new': result['new']}
 
 
+def header_crumb(current=None):
+    """Header crumb: the llmcord link, plus the current server's icon (or initials tile) and name when given."""
+    from nicegui import ui
+    with ui.element('div').classes('ll-crumb'):
+        crumb = ui.link('llmcord', '/')
+        crumb.props['aria-label'] = 'llmcord / Servers'
+        if current:
+            ui.label('/').classes('ll-crumb-sep').props('aria-hidden=true')
+            # guild_icon_url only returns a CDN URL built from a digit snowflake and a hex hash, so it is safe inside the quoted prop.
+            icon = guild_icon_url(current, 128)
+            if icon:
+                ui.element('img').classes('ll-crumb-icon').props(f'src="{icon}" alt=""')
+            else:
+                ui.label(server_initials(current.get('name'))).classes('ll-crumb-tile').props('aria-hidden=true')
+            ui.label(str(current.get('name', ''))).classes('ll-crumb-name')
+
+
 def account_menu(session):
     """Header account button (avatar plus name) opening a menu with the name and a Sign out item."""
     from nicegui import ui
@@ -612,7 +616,8 @@ def account_menu(session):
         else:
             ui.label(server_initials(name)).classes('ll-avatar-tile').props('aria-hidden=true')
         ui.label(name).classes('ll-account-name')
-        with ui.menu().classes('ll-menu'):
+        # The button is centred in the header with about 16 px below it; the 20 px offset puts the menu 4 px under the header's bottom edge.
+        with ui.menu().props('anchor="bottom right" self="top right" :offset="[0, 20]"').classes('ll-menu'):
             with ui.element('div').classes('ll-menu-head'):
                 ui.label(name).classes('font-semibold')
                 if str(user['username']) != name:

@@ -1006,6 +1006,39 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def test_account_menu_profile_lines_avatar_and_position(self):
+        """UI-37: global_name and @username lines, the avatar image src, and the menu opening below the header at both widths."""
+        from playwright.sync_api import expect
+        for width, height in ((1280, 900), (390, 800)):
+            context = self.browser.new_context(ignore_https_errors=True, viewport={'width': width, 'height': height})
+            context.add_cookies([{'name': 'llmcord_session', 'value': 'browser-profile-session', 'url': self.url,
+                                  'secure': True, 'httpOnly': True, 'sameSite': 'Lax'}])
+            page = context.new_page()
+            page.route('https://cdn.discordapp.com/**', lambda route: route.abort())  # fake data: never fetch the CDN
+            errors = []
+            self.watch(page, errors)
+            try:
+                page.goto(self.url + '/admin/')
+                button = page.get_by_role('button', name='Account menu')
+                expect(button).to_be_visible()
+                src = button.locator('img.ll-avatar').get_attribute('src')
+                self.assertEqual(src, 'https://cdn.discordapp.com/avatars/5/' + 'a' * 32 + '.png?size=64')
+                self.assertEqual(button.locator('.ll-avatar-tile').count(), 0)
+                button.click()
+                menu = page.locator('.ll-menu')
+                expect(menu.get_by_text('Moon Display', exact=True)).to_be_visible()
+                expect(menu.get_by_text('@moonuser', exact=True)).to_be_visible()
+                page.wait_for_timeout(300)
+                header = page.locator('header').bounding_box()
+                box = menu.bounding_box()
+                self.assertGreaterEqual(box['y'], header['y'] + header['height'], (width, header, box))
+                self.assertGreaterEqual(box['x'], 0, box)
+                self.assertLessEqual(box['x'] + box['width'], width, box)
+                self.assertLessEqual(box['y'] + box['height'], height, box)
+                self.assertFalse(errors, errors)
+            finally:
+                context.close()
+
     def panel_reads(self, context):
         counters = context.request.get(self.url + '/_test/counters').json()
         return {name: counters.get('store:' + name, 0) for name in ('model_usage_summary', 'list_presets')}
