@@ -330,6 +330,7 @@ def mount_dashboard(app):
     ui.input.default_props('outlined dense')
     ui.select.default_props('outlined dense')
     ui.textarea.default_props('outlined dense')
+    ui.number.default_props('outlined dense')
     _install_socket_auth(app)
     _install_upload_guard(app)
     _register_pages(app)
@@ -935,7 +936,7 @@ def entry_editor(ctx, entry, owners, refresh):
                 if (window.llPendingKeys) window.llPendingKeys[{element_id}] = '';
                 if (text) getElement({element_id}).add(text, true);
             }}""")
-        controls['order'] = ui.number('Order', value=rule['order'], precision=0).props('outlined dense hint="Higher values appear later"')
+        controls['order'] = ui.number('Order', value=rule['order'], precision=0).props('hint="Higher values appear later"')
         with ui.row().classes('gap-4'):
             controls['enabled'] = ui.checkbox('Enabled', value=rule['enabled'])
             controls['constant'] = ui.checkbox('Always active', value=rule['constant'])
@@ -953,7 +954,7 @@ def entry_editor(ctx, entry, owners, refresh):
                 elif type(value) is bool:
                     controls[key] = ui.checkbox(key.replace('_', ' ').title(), value=value)
                 elif type(value) is int:
-                    controls[key] = ui.number(key.replace('_', ' ').title(), value=value, precision=0).props('outlined dense')
+                    controls[key] = ui.number(key.replace('_', ' ').title(), value=value, precision=0)
                 elif key == 'role':
                     controls[key] = ui.select(['system', 'user', 'assistant'], value=value, label='Message role')
                 elif key == 'position':
@@ -1389,9 +1390,9 @@ def _preset_editor(ctx, state, purpose, collect):
                         with ui.element('div').classes('ll-form-row'):
                             tracked(ui.select(['system', 'user', 'assistant'], label='Role')).bind_value(b, 'role')
                             tracked(ui.select(['relative', 'in_chat'], label='Placement')).bind_value(b, 'placement')
-                            tracked(ui.number('Depth', precision=0)).bind_value(b, 'depth', backward=lambda v: int(v or 0)).props('outlined dense')
-                            tracked(ui.number('Injection order', precision=0)).bind_value(b, 'order', backward=lambda v: int(v or 0)).props('outlined dense')
-                            tracked(ui.number('Trimming priority', precision=0)).bind_value(b, 'priority', backward=lambda v: int(v or 0)).props('outlined dense')
+                            tracked(ui.number('Depth', precision=0)).bind_value(b, 'depth', backward=lambda v: int(v or 0))
+                            tracked(ui.number('Injection order', precision=0)).bind_value(b, 'order', backward=lambda v: int(v or 0))
+                            tracked(ui.number('Trimming priority', precision=0)).bind_value(b, 'priority', backward=lambda v: int(v or 0))
                         tracked(ui.select({'': 'Exact placement', 'top_system': 'Move to top-level system instructions', 'user': 'Convert late system block to user instructions'}, label='System instruction placement')).bind_value(b, 'adaptation').classes('w-full')
                         with ui.expansion('Preserved import fields and compatibility remapping').classes('w-full ll-subpanel'), ui.element('div').classes('ll-stack'):
                             raw = tracked(ui.textarea('Original prompt fields (JSON)', value=pretty(b['raw']))).classes('w-full').props('rows=6')
