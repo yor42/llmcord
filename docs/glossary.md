@@ -23,6 +23,9 @@ These are the words the Discord commands, the admin dashboard and these docs use
 | **Scene** | One conversation thread of saved lines. Replying to an earlier line starts a **branch** from it. | | `nodes`, `root_id`, `parent_id` |
 | **Personal fact** | Something a member said about themselves, kept only after `/memory opt_in`. | | `memories` |
 | **Operator** | Someone who runs the bot itself and manages bot-wide settings on the dashboard's **Bot settings** page. Listed in `LLMCORD_OPERATOR_IDS`; separate from server admins. | "owner", "maintainer" | `operator_ids`, `guard_operator` |
+| **Model profile** | A named provider, model and settings (for example `openai/main`). Defined in `config.yaml`; operators can add or override profiles on **Bot settings → Backend**. | "backend" for one profile, "model config" | `ModelProfile`, `model_profiles` |
+| **Role** (model) | Which profile a kind of call uses: **Dialogue** (character lines, image descriptions), **Director** (who speaks) or **Memory** (summaries, facts, catch-ups). | "slot" | `dialogue`/`director`/`memory`, `model_roles` |
+| **Backend** | The Bot settings tab where operators manage model profiles and roles. | | `backend_panel`, `backend.py` |
 | **Spending cap** | A bot-wide limit on estimated model cost per period. The **soft cap** warns operators; the **hard cap** pauses new character replies until the reset day. | "budget" in user text | `bot_settings`, `budget.py` |
 | **Catch-up** | A private summary of what a member missed in one channel or thread (`/catchup`). Not a scene turn: it uses its own instruction, not the character prompt, and saves nothing. | "recap" (the scene summary memory keeps) | `catchup.py`, `catchup_anywhere` |
 | **Monitoring** | The dashboard tab with a server's model usage (chart and breakdowns) and its turn log. | "stats" | `monitoring_panel`, `usage_report` |

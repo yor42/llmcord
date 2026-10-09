@@ -69,12 +69,14 @@ Members can use `/cast set`, `/cast add`, and `/cast remove` to adjust the activ
 | `models.memory` | Profile used for summaries and structured fact extraction. |
 | `models.profiles.<name>.provider` | `openai`, `anthropic`, or `compatible`. |
 | `models.profiles.<name>.model` | Provider-specific model ID. |
-| `models.profiles.<name>.context_tokens` | Approximate context window used for prompt budgeting. |
+| `models.profiles.<name>.context_tokens` | Approximate context window used for prompt budgeting; a whole number of at least 1. |
 | `models.profiles.<name>.supports_images` | Enables bounded image attachments for dialogue. |
 | `models.profiles.<name>.api_key_env` | Environment variable holding a cloud provider key. |
-| `models.profiles.<name>.base_url` | OpenAI-compatible endpoint URL, or an optional OpenAI API override. |
+| `models.profiles.<name>.base_url` | OpenAI-compatible endpoint URL, or an optional OpenAI API override. Ignored for `anthropic` profiles. |
 | `models.profiles.<name>.timeout_seconds` | Seconds a model request may wait for data (first token or next chunk) before failing; a stream that keeps sending is not cut off. Default `120`; raise it for slow local models, where prompt processing before the first token counts. |
 | `models.profiles.<name>.max_retries` | Automatic retries after a failed or timed-out request; default `1` (`0` disables; consider `0` for slow local models so a slow request is not repeated). |
+
+Operators can also edit profiles and roles on the dashboard (**Bot settings → Backend**, see the [admin console guide](admin-console.md)); a dashboard profile with the same name overrides the one here, and `config.yaml` stays the fallback.
 
 The `limits` block controls input/output token budgets, image count and attachment size, speaker count, nearby-message count and time window, and ambient cooldown. Use [config-example.yaml](../config-example.yaml) for the exact keys and defaults. `max_speakers` cannot exceed three.
 

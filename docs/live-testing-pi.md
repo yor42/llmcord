@@ -29,6 +29,7 @@ Edit `.env` privately on the Pi and set:
 | `WEB_BASE_URL` | Exact Tailscale HTTPS origin, including a non-default port if used |
 | `LLMCORD_DATABASE_PATH` | `data/llmcord.sqlite3` for all processes |
 | `LLMCORD_OPERATOR_IDS` | Optional. Comma-separated Discord user IDs of the bot's operators, who manage bot-wide settings (separate from server admins). Empty or unset means no operators. A malformed entry stops both the bot and the dashboard at startup; changes apply after both restart |
+| `LLMCORD_KEY_HOSTS` | Optional. Extra hosts a dashboard-edited model profile may send a key to, as `NAME_API_KEY=host[:port]\|https://host2,OTHER_API_KEY=http://lan-host:8000`; a bare host means HTTPS. Built in: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GOOGLE_API_KEY` to their providers. A malformed value stops the bot at startup; set it for both the bot and the dashboard |
 
 The bot can run with the first three variables alone. Dashboard OAuth additionally needs the client ID, secret, and HTTPS origin. The bot's environment database path overrides YAML, preventing the bot and dashboard from using different databases. The guild ID controls command registration; Discord channel permissions control who can interact with the bot.
 

@@ -14,7 +14,7 @@ Use Sonnet for routine coordination, implementation, tests, and review; Haiku fo
 ## Processes (no IPC — they share one SQLite file)
 - `llmcord.py` → `discord_bot.SkitBot`: events, slash commands (`register_commands`), webhooks, daily cleanup task.
 - `web_main.py` → `web.create_app`: OAuth, avatar images, mounts NiceGUI (`dashboard.mount_dashboard`).
-- `migrate.py` → `Store(path)`: creates/upgrades schema (`PRAGMA user_version`, currently 8; backs up before upgrading).
+- `migrate.py` → `Store(path)`: creates/upgrades schema (`PRAGMA user_version`, currently 9; backs up before upgrading).
 The bot reads DB state fresh each turn, so dashboard edits apply on the next turn.
 
 ## Module map (`llmcord_core/`)
@@ -22,7 +22,7 @@ The bot reads DB state fresh each turn, so dashboard edits apply on the next tur
 | --- | --- |
 | Discord routing, commands, delivery | `discord_bot.py`, `identity.py`, `usage.py` |
 | Turn engine (director, prompt, memory) | `engine.py`, `prompts.py`, `world_info.py`, `lore.py` |
-| Model providers | `models.py`, `config.py`, `errors.py` |
+| Model providers | `models.py`, `config.py` (profile validation, key pins), `backend.py` (dashboard profiles merged over `config.yaml`, per-turn snapshot), `errors.py` |
 | Persistence | `store.py` (scene/lore/core), `admin_store.py` (presets, lore identities, avatars, revisions) |
 | Dashboard | `web.py`, `auth.py`, `admin.py`, `dashboard.py`, `scene_ui.py`, `lore_workspace.py`, `lore_drag.{py,js}` |
 | Imports/assets | `cards.py`, `lorebooks.py`, `avatars.py` |
@@ -41,6 +41,7 @@ The bot reads DB state fresh each turn, so dashboard edits apply on the next tur
 - **Consent:** personal facts are stored only after `/memory opt_in`; opt-out deletes them.
 - **Branches:** prompts follow `ancestors(parent_id)`; later sibling nodes are never visible to a rewind.
 - **Preset snapshot:** a scene captures one preset revision before its first model call; all speakers in that turn use it.
+- **Model snapshot and key pins:** a turn resolves model profiles once (`BackendResolver.pin`), and the memory work it starts uses the same snapshot. A dashboard profile's `${NAME}_API_KEY` is sent only to a host pinned for that key (`check_key_pin`, at save and again before every call); key values are never stored, shown, audited or logged.
 - **Admin writes:** use `store.write_admin()` + revision checks (`ConflictError`), never blind overwrite.
 - **Schema:** bump `user_version` with a backup-before-upgrade migration; never edit existing migrations destructively.
 
