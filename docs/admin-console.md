@@ -52,7 +52,7 @@ For older databases, known embedded-card entries are tracked conservatively. Unm
 
 ## Server prompt presets
 
-Each server has its own preset library and active revision. The built-in default is read-only: edit it and choose **Save draft** to create a copy. Other presets can be renamed by changing their name and saving, duplicated with **Save as new preset**, or deleted once inactive.
+Each server has its own preset library and active revision. The built-in default is read-only: edit it and choose **Save draft** in the bar that appears at the bottom to create a copy. Choosing a preset in **Preset library** loads it (save or reset your edits first; changing preset while there are unsaved edits is refused). Other presets can be renamed by changing their name and saving, duplicated with **Save as new preset**, or deleted once inactive; those actions, and **Activate saved revision**, are in the ⋯ menu of the **Preset library** heading. Preview and export keep working on unsaved edits. An imported bundle opens as an unsaved preview: **Save draft** stores it as a new preset, and **Reset** returns to the preset you had open.
 
 Each bundle contains separate configurations for dialogue, director selection, memory extraction, summaries, and image descriptions. Purposes missing from an imported native bundle inherit the built-in defaults.
 
@@ -62,7 +62,7 @@ For a stronger individual voice, add contrasting dialogue examples to the charac
 
 Blocks support ordering, enabling, custom text, context markers, roles, and dialogue-history injection depth/order. Trimming priority is separate from display order. Required input markers, structured-output schemas, and the emotion-header contract remain present. Eligibility, consent, world-lore isolation, and branch visibility are enforced before the renderer receives data.
 
-**Save draft** creates an immutable revision. **Activate saved revision** applies that revision to the next scene turn. A turn captures its preset once: every speaker, image description, summary, and memory call in that turn keeps that revision. Changing providers later can require a new compatibility mapping before the preset will render successfully.
+**Save draft** (in the unsaved-changes bar, next to **Reset**) creates an immutable revision. **Activate saved revision** applies that revision to the next scene turn. A turn captures its preset once: every speaker, image description, summary, and memory call in that turn keeps that revision. Changing providers later can require a new compatibility mapping before the preset will render successfully.
 
 Use **Assembled request preview** with a sample character, input, and history. It shows roles, expanded text, token estimates, omissions, and provider adaptations without calling a model. It does not read members' stored personal memories.
 

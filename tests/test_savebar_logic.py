@@ -92,6 +92,18 @@ class SaveBarLogicTests(unittest.TestCase):
         bar.retrack(second, {late: 'x'})
         self.assertTrue(late.disabled)
 
+    def test_retrack_keeps_one_handler_on_kept_controls(self):
+        bar, kept, extra = make(), Control('a'), Control('a')
+        editor = bar.track('P', {kept: 'a'}, save=None)
+        bar.retrack(editor, {kept: 'a', extra: 'a'})
+        bar.retrack(editor, {kept: 'a', extra: 'a'})
+        self.assertEqual(len(kept.handlers), 1)
+        self.assertEqual(len(extra.handlers), 1)
+        checks = []
+        bar.check = checks.append
+        kept.set_value('b')
+        self.assertEqual(checks, [editor])
+
     def test_save_label_follows_active_editor(self):
         bar, field = make(), Control('a')
         bar.track('P', {field: 'a'}, save=None, save_label='Save draft')

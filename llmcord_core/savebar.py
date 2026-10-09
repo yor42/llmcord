@@ -44,9 +44,11 @@ class SaveBar:
 
     def retrack(self, editor, controls):
         """Replace an editor's tracked controls (after a re-render); the old ones stop reporting. Call check(editor) after. The old controls must already be gone from the page: they stop being tracked, so settle() will not re-enable them."""
+        previous = [tracked for tracked, _ in editor.controls]
         editor.controls = list(controls.items())
         for control, _ in editor.controls:
-            control.on_value_change(lambda _event, editor=editor, control=control: self._changed(editor, control))
+            if not any(control is old for old in previous):
+                control.on_value_change(lambda _event, editor=editor, control=control: self._changed(editor, control))
             if self.active is not None and self.active is not editor:
                 control.disable()
 
