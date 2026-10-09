@@ -9,7 +9,7 @@ from llmcord_core.discord_bot import SkitBot
 
 # Discord InteractionContextType values (https://discord.com/developers/docs/interactions/application-commands).
 GUILD, BOT_DM, PRIVATE_CHANNEL = 0, 1, 2
-EXPECTED_TOP_LEVEL = {"space", "character", "cast", "ambient", "summon", "memory", "lore", "scene", "context"}
+EXPECTED_TOP_LEVEL = {"space", "character", "cast", "ambient", "summon", "catchup", "memory", "lore", "scene", "context"}
 
 
 def dm_interaction(**kwargs) -> FakeInteraction:

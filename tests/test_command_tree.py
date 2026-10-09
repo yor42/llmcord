@@ -187,6 +187,16 @@ EXPECTED_COMMANDS = {
         False,
     ),
     "cast show": ("Show this channel or thread's active cast", (), 0, "None", False),
+    "catchup": (
+        "Privately summarize what you missed in this channel",
+        (
+            ("focus", "string", False, "What to emphasize, such as what concerns you", False, ()),
+            ("hours", "integer", False, "Look back this many hours instead", False, ()),
+        ),
+        0,
+        "None",
+        False,
+    ),
     "character info": (
         "Show a character's home world",
         (("character", "string", True, "…", True, ()),),

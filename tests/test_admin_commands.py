@@ -33,6 +33,7 @@ MEMBER_SURFACE = {
     "cast": {"set", "add", "remove", "show"},
     "ambient": {"status"},
     "summon": None,
+    "catchup": None,
     "memory": {"opt_in", "opt_out", "list", "forget"},
     "time": {"set", "show", "clear"},
     "lore": {"list"},
@@ -84,9 +85,9 @@ class AdminSurfaceTests(unittest.TestCase):
         self.bot.store.close()
 
     def test_surface_table_matches_d11(self):
-        """Guard for the tests below: the expected tables have the 14 admin and 18 member (plus the admin-only /context) commands D11 lists."""
+        """Guard for the tests below: the expected tables have the 14 admin and 19 member (plus the admin-only /context) commands D11 lists."""
         self.assertEqual(len(ADMIN_PATHS), 14)
-        self.assertEqual(len(MEMBER_PATHS), 18)
+        self.assertEqual(len(MEMBER_PATHS), 19)
         self.assertEqual(set(ADMIN_OPTIONS), ADMIN_PATHS)
 
     def test_admin_group_holds_exactly_the_admin_subcommands(self):

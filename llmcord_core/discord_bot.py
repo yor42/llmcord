@@ -17,11 +17,11 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from . import budget
+from . import budget, catchup
 from .cards import parse_card
 from .config import Settings
 from .engine import Engine, SceneContext
-from .models import ImageInput, ModelGateway
+from .models import ImageInput, ModelGateway, TurnMessage
 from .prompts import time_values
 from .names import resolve, resolve_space, suggest
 from .store import Store
@@ -79,6 +79,7 @@ class SkitBot(commands.Bot):
                                   budget_gate=self._budget_check)
         self.engine = Engine(self.store, self.models, settings)
         self.channel_locks: dict[int, asyncio.Lock] = {}
+        self.catchup_used: dict[tuple[int, int, int], float] = {}
         self.webhook_locks = {}
         self.webhooks = {}
         self.webhook_defaults = {}
@@ -565,6 +566,9 @@ class _SceneProgress:
 
 
 USE_IN_SERVER_CHANNEL = "Use this command in a server channel."
+CATCHUP_COOLDOWN_SECONDS = 300
+CATCHUP_NOT_HERE = ("/catchup works only in character channels on this server. "
+                    "A server admin can allow it in other channels under Server settings in the dashboard.")
 
 
 def _command_context(bot: SkitBot) -> SimpleNamespace:
@@ -825,8 +829,8 @@ def _money(amount: float) -> str:
     return f"${amount:,.2f}"
 
 
-def _hard_cap_notice(state) -> str:
-    return ("Character replies are paused: this bot reached its spending limit for this period. "
+def _hard_cap_notice(state, subject: str = "Character replies") -> str:
+    return (f"{subject} are paused: this bot reached its spending limit for this period. "
             f"They resume on {state.resets_on.isoformat()} (UTC), or sooner if an operator raises the limit.")
 
 
@@ -875,6 +879,65 @@ def _register_summon_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
                              if (member := interaction.guild.get_member(int(ident))) and not member.bot])
         async with bot.channel_locks.setdefault(interaction.channel.id, asyncio.Lock()):
             await bot.run_scene(scene, interaction.channel, interaction)
+
+
+def _register_catchup_command(bot: SkitBot) -> None:
+    @bot.tree.command(name="catchup", description="Privately summarize what you missed in this channel")
+    @app_commands.describe(focus="What to emphasize, such as what concerns you", hours="Look back this many hours instead")
+    async def catchup_command(interaction: discord.Interaction, focus: app_commands.Range[str, 1, 300] | None = None,
+                              hours: app_commands.Range[int, 1, 72] | None = None):
+        if not interaction.guild_id or not interaction.channel:
+            raise ValueError(USE_IN_SERVER_CHANNEL)
+        guild_id, channel, user = interaction.guild_id, interaction.channel, interaction.user
+
+        async def reply(text):
+            send = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
+            await send(catchup.fit(text), ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+
+        if not interaction.permissions.read_message_history:
+            return await reply("You can't read this channel's message history, so I can't summarize it.")
+        if not bot.location(channel)[1] and not bot.store.catchup_anywhere(guild_id):
+            return await reply(CATCHUP_NOT_HERE)
+        state = bot._budget_check()
+        if state and state.hard_reached:
+            return await reply(_hard_cap_notice(state, "Catch-ups"))
+        key = (guild_id, channel.id, user.id)
+        now_mono = time.monotonic()
+        wait = bot.catchup_used.get(key, 0.0) + CATCHUP_COOLDOWN_SECONDS - now_mono
+        if wait > 0:
+            minutes = -(-int(wait) // 60) or 1
+            return await reply(f"You can use /catchup here again in {minutes} minute{'s' if minutes != 1 else ''}.")
+        bot.catchup_used = {k: v for k, v in bot.catchup_used.items() if now_mono - v < CATCHUP_COOLDOWN_SECONDS}
+        bot.catchup_used[key] = now_mono  # claimed before any await so a concurrent call is refused
+        attempted = False
+        try:
+            await interaction.response.defer(ephemeral=True, thinking=True)
+            try:
+                lines = await catchup.collect(channel.history(limit=catchup.SCAN_LIMIT), user.id,
+                                              catchup.cutoff(interaction.created_at, hours), until_own=hours is None)
+            except discord.Forbidden:
+                return await reply("I can't read this channel's message history.")
+            if not lines:
+                return await reply(catchup.nothing_new(hours))
+            facts = ([row["content"] for row in bot.store.personal(guild_id, user.id)[-catchup.MAX_FACTS:]]
+                     if bot.store.has_consent(guild_id, user.id) else [])
+            message = catchup.user_message(user.display_name, catchup.transcript(lines), focus, facts, hours)
+            attempted = True
+            try:
+                with capture_usage(guild_id):
+                    text = await bot.models.text('memory', catchup.SYSTEM, [TurnMessage('user', message)],
+                                                 max_tokens=catchup.MAX_OUTPUT_TOKENS)
+            except budget.BudgetExceeded as error:
+                attempted = False
+                return await reply(_hard_cap_notice(error.state, "Catch-ups"))
+            except Exception as error:
+                ref = reference_id()
+                logging.error('Catchup failed [ref %s]: %s\n%s', ref, error_detail(error), error_stack(error))
+                return await reply(f"Could not write the catch-up: {user_detail(error)[:300]} (ref {ref})")
+        finally:
+            if not attempted:
+                bot.catchup_used.pop(key, None)
+        await reply(text.strip() or "The model returned nothing. Try again later.")
 
 
 def _register_memory_commands(bot: SkitBot, ctx: SimpleNamespace) -> None:
@@ -1227,6 +1290,7 @@ def register_commands(bot: SkitBot) -> None:
     _register_cast_commands(bot, ctx, admin_cast)
     _register_ambient_commands(bot, ctx, admin_ambient)
     _register_summon_command(bot, ctx)
+    _register_catchup_command(bot)
     _register_memory_commands(bot, ctx)
     _register_time_commands(bot, ctx)
     _register_lore_commands(bot, ctx, admin_lore)
