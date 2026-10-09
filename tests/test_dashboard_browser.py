@@ -1824,6 +1824,56 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def test_lore_editor_tab_away_then_save_keeps_key_text(self):
+        """UI-45: key text left with Tab (blur) and then Save is stored once, trimmed."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=lore')
+        try:
+            page.get_by_role('button', name='New entry', exact=True).first.wait_for(timeout=5000)
+            page.get_by_role('button', name='New entry', exact=True).first.click()
+            page.get_by_label('Content', exact=True).fill('Tab away entry')
+            page.get_by_label('Keys', exact=True).fill('  tabbed  ')
+            page.get_by_label('Keys', exact=True).press('Tab')
+            page.get_by_role('button', name='Save lore', exact=True).click()
+            self.wait_for(lambda: any(r['content'] == 'Tab away entry' for r in self.state()['lore']))
+            row = next(r for r in self.state()['lore'] if r['content'] == 'Tab away entry')
+            self.assertEqual(json.loads(row['keys_json']), ['tabbed'])
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_lore_editor_failed_save_after_flush_keeps_chips(self):
+        """UI-45: a save that fails after pending key text was flushed keeps the chip and clears the typed text."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=lore')
+        try:
+            page.get_by_role('button', name='New entry', exact=True).first.wait_for(timeout=5000)
+            page.get_by_role('button', name='New entry', exact=True).first.click()
+            page.get_by_label('Content', exact=True).fill('Failed flush entry')
+            page.get_by_text('Advanced activation and placement rules', exact=True).click()
+            page.get_by_label('Scan depth (JSON, null for default)', exact=True).fill('{bad')
+            page.get_by_label('Keys', exact=True).fill('kept')
+            page.get_by_role('button', name='Save lore', exact=True).click()
+            editor = page.locator('.q-card').filter(has=page.get_by_text('Create lore', exact=True)).last
+            editor.locator('.q-chip').filter(has_text='kept').wait_for(timeout=5000)
+            page.wait_for_timeout(500)
+            self.assertEqual(page.get_by_label('Keys', exact=True).input_value(), '')
+            self.assertFalse(any(r['content'] == 'Failed flush entry' for r in self.state()['lore']))
+            self.assertEqual(editor.locator('.q-chip').filter(has_text='kept').count(), 1)
+        finally:
+            context.close()
+
+    def test_lore_editor_checkboxes_share_one_row_on_phones(self):
+        """UI-45: at 390 px Enabled, Always active and Pinned stay on one row without horizontal scroll."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=lore')
+        try:
+            page.set_viewport_size({'width': 390, 'height': 844})
+            page.get_by_role('button', name='New entry', exact=True).first.wait_for(timeout=5000)
+            page.get_by_role('button', name='New entry', exact=True).first.click()
+            tops = [page.get_by_role('checkbox', name=name, exact=True).bounding_box()['y'] for name in ('Enabled', 'Always active', 'Pinned')]
+            self.assertEqual(len({round(top) for top in tops}), 1, tops)
+            self.assertFalse(page.evaluate('() => document.documentElement.scrollWidth > innerWidth'))
+        finally:
+            context.close()
+
     CLIPPED_SELECT_LABELS_JS = """() => [...document.querySelectorAll('.q-select')].flatMap(select => {
         const label = select.querySelector('.q-field__label');
         if (!label || !label.getClientRects().length) return [];

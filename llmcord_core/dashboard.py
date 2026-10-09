@@ -5,6 +5,7 @@ import contextlib
 import copy
 import functools
 import json
+import logging
 import math
 import sqlite3
 import time
@@ -139,7 +140,12 @@ class LiveContext:
             if self.savebar and self.savebar.refuse():
                 return
             if prepare:
-                await prepare()
+                try:
+                    await prepare()
+                except Exception:
+                    logging.exception('Form check before saving failed')
+                    ui.notify('Could not check the form before saving. Try again', type='negative', timeout=8000)
+                    return
             ok, result = await self._attempt(operation, action, detail)
             if not ok:
                 return
@@ -931,6 +937,24 @@ def lore_panel(ctx, on_import=None):
                           on_entry_import=lambda kind, ident, refresh: direct_import_dialog(ctx, kind, ident, refresh))
 
 
+RULE_LABELS = {
+    'selective': 'Selective', 'selective_logic': 'Secondary key logic', 'case_sensitive': 'Case sensitive',
+    'whole_words': 'Whole words only', 'depth': 'Depth', 'scan_depth': 'Scan depth (JSON, null for default)',
+    'probability': 'Probability (%)', 'use_probability': 'Use probability', 'group': 'Groups (JSON list)',
+    'group_weight': 'Group weight', 'group_override': 'Group override', 'use_group_scoring': 'Use group scoring',
+    'exclude_recursion': 'Exclude from recursion', 'prevent_recursion': 'Prevent recursion',
+    'delay_until_recursion': 'Delay until recursion', 'recursion_level': 'Recursion level',
+    'sticky': 'Sticky turns', 'cooldown': 'Cooldown turns', 'delay': 'Delay turns',
+    'character_filter_names': 'Character filter names (JSON list)', 'character_filter_tags': 'Character filter tags (JSON list)',
+    'character_filter_exclude': 'Exclude filtered characters', 'match_character_description': 'Match character description',
+    'match_character_personality': 'Match character personality', 'match_scenario': 'Match scenario',
+}
+
+
+def rule_label(key):
+    return RULE_LABELS.get(key) or key.replace('_', ' ').capitalize()
+
+
 def entry_editor(ctx, entry, owners, refresh):
     from nicegui import ui
     with ui.card().classes('w-full ll-stack').style('padding: 16px') as panel:
@@ -954,7 +978,7 @@ def entry_editor(ctx, entry, owners, refresh):
                 if (text) getElement({element_id}).add(text, true);
             }}""")
         controls['order'] = ui.number('Order', value=rule['order'], precision=0).props('hint="Higher values appear later"')
-        with ui.row().classes('gap-4'):
+        with ui.row().classes('gap-x-3 gap-y-0 no-wrap'):
             controls['enabled'] = ui.checkbox('Enabled', value=rule['enabled'])
             controls['constant'] = ui.checkbox('Always active', value=rule['constant'])
             pinned = ui.checkbox('Pinned', value=entry['pinned'])
@@ -969,15 +993,15 @@ def entry_editor(ctx, entry, owners, refresh):
                     controls[key] = ui.select({'auto': 'Detect /pattern/flags automatically', 'regex': 'Regex patterns', 'literal': 'Literal keywords'},
                         value='auto' if value is None else 'regex' if value else 'literal', label='Keyword matching')
                 elif type(value) is bool:
-                    controls[key] = ui.checkbox(key.replace('_', ' ').title(), value=value)
+                    controls[key] = ui.checkbox(rule_label(key), value=value)
                 elif type(value) is int:
-                    controls[key] = ui.number(key.replace('_', ' ').title(), value=value, precision=0)
+                    controls[key] = ui.number(rule_label(key), value=value, precision=0)
                 elif key == 'role':
                     controls[key] = ui.select(_prompt_options(PROMPT_ROLE_LABELS, value), value=value, label='Message role')
                 elif key == 'position':
                     controls[key] = ui.select(_prompt_options(LORE_PLACEMENT_LABELS, value), value=value, label='Placement')
                 elif key == 'scan_depth' or isinstance(value, list):
-                    controls[key] = ui.input(key.replace('_', ' ').title(), value=pretty(value))
+                    controls[key] = ui.input(rule_label(key), value=pretty(value))
             for warning in rule.get('unsupported', []):
                 ui.label(warning).classes('text-amber-300')
         def collect():
@@ -985,7 +1009,7 @@ def entry_editor(ctx, entry, owners, refresh):
                 if key == 'regex_enabled':
                     rule[key] = {'auto': None, 'regex': True, 'literal': False}[control.value]
                 elif key in ('keys', 'secondary_keys'):
-                    rule[key] = list(control.value or [])
+                    rule[key] = [item.strip() for item in control.value or [] if isinstance(item, str) and item.strip()]
                 elif key == 'original' or key == 'scan_depth' or isinstance(rule.get(key), list):
                     rule[key] = json.loads(control.value or ('null' if key == 'scan_depth' else '{}'))
                 elif type(rule.get(key)) is int:
@@ -1000,12 +1024,13 @@ def entry_editor(ctx, entry, owners, refresh):
             try:
                 pending = await nicegui_ui.run_javascript(
                     'const p = window.llPendingKeys || {}; const out = {};'
-                    f'for (const [name, id] of Object.entries({json.dumps(ids)})) {{ out[name] = String(p[id] || ""); p[id] = ""; }}'
+                    f'for (const [name, id] of Object.entries({json.dumps(ids)})) {{ out[name] = String(p[id] || ""); p[id] = ""; '
+                    'try { getElement(id).$refs.qRef.updateInputValue("", true); } catch (e) {} }'
                     'return out;', timeout=3.0)
             except (TimeoutError, RuntimeError):
                 return
-            for key, text in (pending or {}).items():
-                text = text.strip()
+            for key, text in (pending if isinstance(pending, dict) else {}).items():
+                text = text.strip() if isinstance(text, str) else ''
                 if key in controls and text and text not in controls[key].value:
                     controls[key].value = [*controls[key].value, text]
         def save():
