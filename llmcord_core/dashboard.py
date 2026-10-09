@@ -5,6 +5,7 @@ import contextlib
 import copy
 import functools
 import json
+import math
 import sqlite3
 import inspect
 import types
@@ -181,6 +182,8 @@ body.body--dark .q-card .q-card, body.body--dark .q-card .q-expansion-item {{ ba
 .ll-form-row .ll-wide {{ flex-basis: 22rem; }}
 .ll-form-row.ll-field-row {{ align-items: center; }}
 .ll-section > .q-expansion-item, .ll-subpanel {{ border: 1px solid {THEME_DIVIDER}; border-radius: 8px; }}
+.ll-usage .q-table__grid-content {{ gap: 8px; }}
+.ll-usage .q-table__grid-item-card {{ background: {THEME_NESTED}; border: 1px solid {THEME_DIVIDER}; border-radius: 8px; box-shadow: none; }}
 .ll-stack {{ width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; gap: 16px; padding: 4px 0 8px; }}
 .ll-stack .q-uploader {{ max-width: min(20rem, 100%); }}
 .q-uploader:not(:has(.q-uploader__file)) .q-uploader__subtitle {{ display: none; }}
@@ -561,6 +564,19 @@ def account_menu(session):
             ui.html('<form action="/logout" method="post"><input type="hidden" name="csrf" value="' + html.escape(session['csrf'], quote=True) + '"><button type="submit" class="ll-menu-item">Sign out</button></form>', sanitize=False)
 
 
+def format_usd(value):
+    """Dashboard cost: $0.00, two decimals from a cent up, else up to four decimals trimmed (<$0.0001 below that)."""
+    value = float(value or 0)
+    if not math.isfinite(value) or value <= 0:
+        return '$0.00'
+    if value >= 0.01:
+        return f'${value:,.2f}'
+    text = f'{value:.4f}'.rstrip('0')
+    if text == '0.':
+        return '<$0.0001'
+    return '$' + text
+
+
 async def setup_panel(ctx):
     from nicegui import ui
     store, gid = ctx.store, ctx.guild_id
@@ -577,11 +593,11 @@ async def setup_panel(ctx):
         for ident, roles in grouped.items():
             model = models.get('profiles', {}).get(ident, {}).get('model', '')
             summary = store.model_usage_summary(gid, ident, model)
-            cost = f"${summary['cost_usd']:.6f}" + (f" + {summary['unpriced']} unpriced calls" if summary['unpriced'] else '')
-            rows.append({'profile': ident, 'model': model, 'roles': ', '.join(roles), 'input': summary['input_tokens'], 'output': summary['output_tokens'], 'cost': cost, 'unreported': summary['unreported']})
+            cost = format_usd(summary['cost_usd']) + (f" + {summary['unpriced']} unpriced calls" if summary['unpriced'] else '')
+            rows.append({'profile': ident, 'model': model, 'roles': ', '.join(roles), 'input': f"{summary['input_tokens']:,}", 'output': f"{summary['output_tokens']:,}", 'cost': cost, 'unreported': summary['unreported']})
         if rows:
             ui.table(columns=[{'name': key, 'field': key, 'label': label, 'align': 'left'} for key, label in
-                              (('model', 'Model'), ('roles', 'Used for'), ('input', 'Input tokens'), ('output', 'Output tokens'), ('cost', 'Estimated USD'), ('unreported', 'Unreported calls'))], rows=rows, row_key='profile').classes('w-full')
+                              (('model', 'Model'), ('roles', 'Used for'), ('input', 'Input tokens'), ('output', 'Output tokens'), ('cost', 'Estimated USD'), ('unreported', 'Unreported calls'))], rows=rows, row_key='profile').classes('w-full ll-usage').props(':grid="Quasar.Screen.lt.sm" hide-pagination')
             ui.label('Tracked for this server, including internal model calls. Cost uses list rates or your configured rates; it is not a billing statement. Refresh to update totals.').classes('ll-muted')
         else:
             ui.label('No model profiles are configured for the dashboard.')
