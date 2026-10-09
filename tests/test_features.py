@@ -325,9 +325,9 @@ class PromptTests(unittest.TestCase):
             'prompts': [{'identifier': 'worldInfoBefore', 'marker': True}, {'identifier': 'scenario', 'marker': True}, {'identifier': 'chatHistory', 'marker': True}],
             'prompt_order': [{'identifier': name, 'enabled': True} for name in ('worldInfoBefore', 'scenario', 'chatHistory')]}
         bundle, _ = parse_preset(json.dumps(raw).encode())
-        request = compile_prompt(bundle, 'dialogue', {'lore_before_char': '{{user}} literal', 'scenario': 'Tea shop', 'card_instructions': 'CARD', 'card_post_history': 'POST'}, [TurnMessage('user', 'INPUT')], 'compatible', 4000)
+        request = compile_prompt(bundle, 'dialogue', {'lore_before_char': '{{user}} and {{bogus}} literal', 'user': 'Bo', 'scenario': 'Tea shop', 'card_instructions': 'CARD', 'card_post_history': 'POST'}, [TurnMessage('user', 'INPUT')], 'compatible', 4000)
         texts = [m.text for m in request.messages]
-        self.assertIn('Lore: {{user}} literal', texts)
+        self.assertIn('Lore: Bo and {{bogus}} literal', texts)  # FEAT-14: known macros expand in lore, unknown stay
         self.assertIn('Scene: Tea shop', texts)
         self.assertLess(texts.index('CARD'), texts.index('INPUT'))
         self.assertGreater(texts.index('POST'), texts.index('INPUT'))

@@ -197,6 +197,15 @@ def substitute(text, values):
     return re.sub(r'\{\{(.*?)\}\}', lambda match: str(values.get(match[1], '')), text, flags=re.S)
 
 
+# summary, personal, encounters, preceding etc. are chat-derived and deliberately stay verbatim.
+EXPANDING_SOURCES = frozenset({'description', 'personality', 'scenario', 'opening', 'examples', 'card_instructions', 'card_post_history',
+                               'lore_before_char', 'lore_after_char', 'lore_before_examples', 'lore_after_examples'})
+
+
+def expand_known(text, values):
+    return re.sub(r'\{\{((?:(?!\{\{).)*?)\}\}', lambda m: str(values.get(m[1], '')) if m[1] in MACROS else m[0], text, flags=re.S)
+
+
 def compile_prompt(bundle, purpose, values, history, provider, budget, *, contract='', images=None, protected_history_index=None, lore_injections=()):
     problems = compatibility(bundle, {purpose: provider})
     problems = [p for p in problems if p.startswith(purpose + '/') or p.startswith('Disable')]
@@ -217,12 +226,16 @@ def compile_prompt(bundle, purpose, values, history, provider, budget, *, contra
         if source == 'lore_in_chat':
             for item in lore_injections:
                 injection = {**b, 'placement': 'in_chat', 'depth': item.depth, 'order': item.rule.get('order', 100), 'role': item.role}
-                injected.append((injection, [b['id'], TurnMessage(item.role, f'World Info [{item.entry_key}]: {item.content}'), b['priority'], False, None, item.entry_key, None]))
+                injected.append((injection, [b['id'], TurnMessage(item.role, f'World Info [{item.entry_key}]: {expand_known(item.content, values)}'), b['priority'], False, None, item.entry_key, None]))
             continue
         text = substitute(b['content'], values) if source == 'text' else str(values.get(source, ''))
+        if source in EXPANDING_SOURCES:
+            text = expand_known(text, values)
         if source != 'text' and b['content']:
-            # Expand the template first, then insert the source verbatim. Source
-            # text cannot introduce a second macro expansion pass.
+            # Expand the template first, then insert the source. Card and lore
+            # sources (EXPANDING_SOURCES, in-chat lore) were already expanded once
+            # above, known macros only; all other sources stay verbatim, and
+            # inserted text is never rescanned.
             text = substitute(b['content'], values).replace('{0}', text)
         if not text.strip() and not (source == 'payload' and images):
             continue
