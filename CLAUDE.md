@@ -14,7 +14,7 @@ Use Sonnet for routine coordination, implementation, tests, and review; Haiku fo
 ## Processes (no IPC — they share one SQLite file)
 - `llmcord.py` → `discord_bot.SkitBot`: events, slash commands (`register_commands`), webhooks, daily cleanup task.
 - `web_main.py` → `web.create_app`: OAuth, avatar images, mounts NiceGUI (`dashboard.mount_dashboard`).
-- `migrate.py` → `Store(path)`: creates/upgrades schema (`PRAGMA user_version`, currently 6; backs up before upgrading).
+- `migrate.py` → `Store(path)`: creates/upgrades schema (`PRAGMA user_version`, currently 7; backs up before upgrading).
 The bot reads DB state fresh each turn, so dashboard edits apply on the next turn.
 
 ## Module map (`llmcord_core/`)

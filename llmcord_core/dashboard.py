@@ -830,6 +830,8 @@ async def setup_panel(ctx):
             channel_card(ctx, binding, channel_names, spaces)
     with section('Server settings'):
         footer = ui.switch('Show model and cost footer on replies', value=store.usage_footer_enabled(gid))
+        catchup = ui.switch('Allow /catchup in channels without characters', value=store.catchup_anywhere(gid))
+        ui.label('Members can then get a private summary of any channel they can read. Its messages are sent to the summary model.').classes('ll-muted')
         current = store.guild_timezone(gid)
         with ui.element('div').classes('ll-form-row ll-field-row'):
             timezone = ui.select(timezone_options(current), value=current or None,
@@ -843,12 +845,17 @@ async def setup_panel(ctx):
         def save_footer():
             store.set_usage_footer(gid, footer.value)
             return True
+        def save_catchup():
+            store.set_catchup_anywhere(gid, catchup.value)
+            return True
         async def configure():
             await ctx.service.avatars.configure(gid, asset_channel.value)
             return True
         ctx.savebar.track('Server settings', {}, parts=[
             {'controls': {footer: store.usage_footer_enabled(gid)}, 'operation': save_footer, 'action': 'settings.footer',
              'detail': lambda _: {'enabled': bool(footer.value)}},
+            {'controls': {catchup: store.catchup_anywhere(gid)}, 'operation': save_catchup, 'action': 'settings.catchup',
+             'detail': lambda _: {'enabled': bool(catchup.value)}},
             {'controls': {timezone: current or None}, 'operation': lambda: timezone_operation(store, gid, timezone.value),
              'action': 'settings.timezone', 'detail': timezone_detail},
             {'controls': {asset_channel: saved_asset}, 'operation': configure, 'action': 'avatar.channel'}],

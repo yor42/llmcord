@@ -75,7 +75,8 @@ CREATE TABLE IF NOT EXISTS prompt_revisions (
 CREATE TABLE IF NOT EXISTS guild_settings (
  guild_id INTEGER PRIMARY KEY, preset_id INTEGER, preset_revision INTEGER,
  asset_channel_id INTEGER, usage_footer INTEGER NOT NULL DEFAULT 1,
- timezone TEXT NOT NULL DEFAULT '', turn_log_enabled INTEGER NOT NULL DEFAULT 0, turn_log_days INTEGER NOT NULL DEFAULT 14
+ timezone TEXT NOT NULL DEFAULT '', turn_log_enabled INTEGER NOT NULL DEFAULT 0, turn_log_days INTEGER NOT NULL DEFAULT 14,
+ catchup_anywhere INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS user_timezones (
  guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, timezone TEXT NOT NULL, updated_at REAL NOT NULL,
@@ -294,7 +295,7 @@ class AdminStore:
             'lore': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0'},
             'lorebook_entries': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0', 'pinned': 'INTEGER NOT NULL DEFAULT 0', 'source_message_id': 'INTEGER', 'promoted_from': 'INTEGER'},
             'characters': {'avatar_manual': 'INTEGER NOT NULL DEFAULT 0'},
-            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14'},
+            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0'},
         }.items():
             columns = {row[1] for row in self.db.execute(f'PRAGMA table_info({table})')}
             for name, spec in additions.items():
@@ -785,6 +786,14 @@ class AdminStore:
     def set_usage_footer(self, guild_id, enabled):
         with self.write_admin():
             self.db.execute('INSERT INTO guild_settings(guild_id,usage_footer) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET usage_footer=excluded.usage_footer', (guild_id, int(bool(enabled))))
+
+    def catchup_anywhere(self, guild_id):
+        row = self.one('SELECT catchup_anywhere FROM guild_settings WHERE guild_id=?', (guild_id,))
+        return bool(row['catchup_anywhere']) if row else False
+
+    def set_catchup_anywhere(self, guild_id, enabled):
+        with self.write_admin():
+            self.db.execute('INSERT INTO guild_settings(guild_id,catchup_anywhere) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET catchup_anywhere=excluded.catchup_anywhere', (guild_id, int(bool(enabled))))
 
     def guild_timezone(self, guild_id):
         row = self.one('SELECT timezone FROM guild_settings WHERE guild_id=?', (guild_id,))

@@ -867,6 +867,24 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def test_server_catchup_switch_persists(self):
+        """FEAT-15: toggling 'Allow /catchup in channels without characters' and saving persists it and audits settings.catchup."""
+        context, page, errors = self.ux_page('/admin/guild/1')
+        try:
+            page.get_by_role('tab', name='Server setup', exact=True).click()
+            switch = page.get_by_role('switch', name='Allow /catchup in channels without characters')
+            switch.wait_for(timeout=5000)
+            self.assertEqual(switch.get_attribute('aria-checked'), 'false')
+            switch.click()
+            page.get_by_role('region', name='Unsaved changes').get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Server settings saved', exact=True).wait_for(timeout=5000)
+            self.wait_for(lambda: self.state()['catchup_anywhere'] is True)
+            rows = [r for r in self.state()['audit'] if r['action'] == 'settings.catchup']
+            self.assertEqual([json.loads(r['detail_json']) for r in rows], [{'enabled': True}])
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
     def test_channel_card_is_one_save_bar_editor(self):
         """UI-15 / MNT-26: a collapsed channel card saves guidelines and ambient as one edit with one audit row each, can be saved again without a conflict, and Reset restores."""
         context, page, errors = self.ux_page('/admin/guild/1')

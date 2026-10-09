@@ -75,7 +75,7 @@ cp -a data ../llmcord-data-backup
 docker compose up --build -d
 ```
 
-The example keeps the manual backup outside the Git repository; use a new destination name for each backup. The migration service runs before the other services. When it encounters an existing database below the current schema version, it also writes a dated `*.pre-v3-*` … `*.pre-v6-*.sqlite3` backup beside the database before changing the schema. From schema 6 on, upgrade the bot and the dashboard together: an older process that keeps running against an upgraded file still records usage but not the daily spend totals the spending caps read, and an older version refuses to open the file after a restart. Keep your own backup as well. If you change `LLMCORD_DATABASE_PATH` or `database_path`, update both together before restarting.
+The example keeps the manual backup outside the Git repository; use a new destination name for each backup. The migration service runs before the other services. When it encounters an existing database below the current schema version, it also writes a dated `*.pre-v3-*` … `*.pre-v7-*.sqlite3` backup beside the database before changing the schema. From schema 6 on, upgrade the bot and the dashboard together: an older process that keeps running against an upgraded file still records usage but not the daily spend totals the spending caps read, and an older version refuses to open the file after a restart. Keep your own backup as well. If you change `LLMCORD_DATABASE_PATH` or `database_path`, update both together before restarting.
 
 ## Common problems
 
