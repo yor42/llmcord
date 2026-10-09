@@ -248,6 +248,11 @@ body.body--dark .q-tab-panels, body.body--dark .q-tab-panel {{ background: trans
 .q-field--outlined .q-field__control:before {{ border-color: {THEME_BORDER}; border-radius: 8px; }}
 .q-field--outlined .q-field__control:after {{ border-radius: 8px; }}
 .ll-tabs .q-tabs__arrow--left, .ll-tabs .q-tabs__arrow--right {{ color: {THEME_TEXT_MUTED}; }}
+@media (max-width: 599px) {{
+.ll-tabs .q-tabs__arrow, .ll-tabs .q-tabs__arrow--faded {{ display: none; }}
+.ll-tabs .q-tabs__content {{ flex-wrap: wrap; overflow: visible; }}
+.ll-tabs .q-tab {{ flex: 0 0 auto; padding: 0 12px; min-height: 40px; }}
+}}
 .ll-muted {{ color: {THEME_TEXT_MUTED}; }}
 .ll-faint {{ color: {THEME_TEXT_FAINT}; }}
 .ll-signin-card {{ width: 100%; max-width: 420px; padding: 40px; margin: 80px auto 0; align-items: stretch; text-align: center; gap: 12px; }}
