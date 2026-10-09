@@ -202,7 +202,7 @@ class OwnersTests(unittest.TestCase):
             self.assertEqual(by("channel"), [(100, "Channel: 100"), (300, "Channel: 300")])
             self.assertEqual(by("guild"), [(1, "Server: Server-wide lore")])
             self.assertEqual(by("book"), [(book, "Lorebook: Tales")])
-            self.assertEqual(by("thread"), [(900, "Thread: 900")])
+            self.assertEqual(by("thread"), [(900, "Archived thread …900")])
             kinds = [o["kind"] for o in owners]
             self.assertEqual(kinds, sorted(kinds, key=["space", "character", "channel", "guild", "book", "thread"].index))
         finally:
@@ -233,6 +233,28 @@ class OwnersFromRowsTests(unittest.TestCase):
                     store.list_lorebooks(1), store.thread_lore_scopes(1))
             self.assertEqual(admin.owners_from(1, *rows), admin.owners(1))
             self.assertTrue(any(o["kind"] == "book" for o in admin.owners(1)))
+        finally:
+            store.close()
+
+
+class OwnersThreadNamesTests(unittest.TestCase):
+    def test_thread_owner_labels(self):
+        """UI-03: active threads label as 'Thread #name'; unknown/archived ones as 'Archived thread …NNNN'."""
+        transport, _ = discord_transport(admin_guilds=[1])
+        app = create_app(":memory:", "https://pi.test", "client", "secret", "bot",
+                         httpx.AsyncClient(transport=transport), enable_dashboard=False,
+                         config_path="tests/nonexistent-config.yaml")
+        store = app.state.store
+        try:
+            seed(store)
+            store.add_lore(1, "thread", 123456789, "a")
+            store.add_lore(1, "thread", 987654321, "b")
+            admin = app.state.admin
+            names = {123456789: "#side-quest", 555: "#other-guild-thread"}
+            labels = lambda owners: [o["label"] for o in owners if o["kind"] == "thread"]  # noqa: E731
+            self.assertEqual(labels(admin.owners(1, thread_names=names)),
+                             ["Thread #side-quest", "Archived thread …4321"])
+            self.assertEqual(labels(admin.owners(1)), ["Archived thread …6789", "Archived thread …4321"])
         finally:
             store.close()
 

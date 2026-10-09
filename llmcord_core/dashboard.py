@@ -36,7 +36,7 @@ class LiveContext:
         self.service = app.state.admin
         self.store = self.service.store
         self.lore_owner = request.query_params.get('owner')
-        self.channel_names = {}
+        self.channel_names, self.thread_names, self.thread_scopes = {}, {}, None
         self.selector, self.containers, self.builders, self.built = None, {}, {}, set()
         self.savebar = None
 
@@ -51,16 +51,28 @@ class LiveContext:
         self.channel_names = {int(c['id']): '#' + c['name'] for c in channels if c['type'] == 0}
         return self.channel_names
 
+    async def load_thread_names(self):
+        # UI-03: one extra fetch, only when the guild has thread lore scopes; a failure leaves the mapping empty.
+        self.thread_scopes = self.store.thread_lore_scopes(self.guild_id)  # snapshot reuses this single read
+        if not self.thread_scopes:
+            return self.thread_names
+        try:
+            threads = await self.run(lambda: self.service.avatars.active_threads(self.guild_id)) or []
+        except httpx.HTTPError:
+            threads = []
+        self.thread_names = {int(t['id']): '#' + t['name'] for t in threads}
+        return self.thread_names
+
     @functools.cached_property
     def snapshot(self):
         # Render-time lookups for one page build; callbacks must use live store reads.
         store, gid = self.store, self.guild_id
         spaces, characters, channels = store.list_spaces(gid), store.list_characters(gid), store.list_channels(gid)
-        lorebooks, scopes = store.list_lorebooks(gid), store.thread_lore_scopes(gid)
+        lorebooks, scopes = store.list_lorebooks(gid), self.thread_scopes if self.thread_scopes is not None else store.thread_lore_scopes(gid)
         return types.SimpleNamespace(spaces=spaces, characters=characters, channels=channels, lorebooks=lorebooks,
             worlds={r['id']: r['name'] for r in spaces if r['kind'] == 'world'},
             hubs={r['id']: r['name'] for r in spaces if r['kind'] == 'hub'},
-            owners=self.service.owners_from(gid, spaces, characters, channels, lorebooks, scopes, self.channel_names))
+            owners=self.service.owners_from(gid, spaces, characters, channels, lorebooks, scopes, self.channel_names, self.thread_names))
 
     def set_url(self, **params):
         sets = ''.join(f'u.searchParams.set({json.dumps(k)}, {json.dumps(v)});' for k, v in params.items())
@@ -506,6 +518,7 @@ def _register_pages(app):
             if selected_tab not in ('setup', 'characters', 'lore', 'imports', 'prompts'):
                 selected_tab = 'setup'
             await ctx.load_channel_names()  # must precede any ctx.snapshot access: it bakes channel names into owner labels
+            await ctx.load_thread_names()
             ui.add_css('.lore-drop-zone:empty::before { content: "Drop entries here"; color: #94a3b8; pointer-events: none; }')
             ui.add_css('.q-select:not(.owner-heading) { min-width: min(16rem, 100%); }')
             async def changed(event):

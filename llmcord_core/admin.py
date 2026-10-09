@@ -42,12 +42,18 @@ class AdminService:
             self.store.audit(guild_id, int(session['user']['id']), action, detail or {})
         return result
 
-    def owners(self, guild_id, channel_names=None):
+    def owners(self, guild_id, channel_names=None, thread_names=None):
         store = self.store
         return self.owners_from(guild_id, store.list_spaces(guild_id), store.list_characters(guild_id), store.list_channels(guild_id),
-            store.list_lorebooks(guild_id), store.thread_lore_scopes(guild_id), channel_names)
+            store.list_lorebooks(guild_id), store.thread_lore_scopes(guild_id), channel_names, thread_names)
 
-    def owners_from(self, guild_id, spaces, characters, channels, lorebooks, thread_scopes, channel_names=None):
+    @staticmethod
+    def thread_label(scope_id, thread_names=None):
+        # UI-03: active threads show as "Thread #name"; others (archived/deleted/unknown) keep a distinguishing id tail.
+        name = (thread_names or {}).get(scope_id)
+        return f"Thread {name}" if name else f"Archived thread …{str(scope_id)[-4:]}"
+
+    def owners_from(self, guild_id, spaces, characters, channels, lorebooks, thread_scopes, channel_names=None, thread_names=None):
         owners = []
         for row in spaces:
             owners.append({'kind': 'space', 'id': row['id'], 'label': f"{row['kind'].title()}: {row['name']}"})
@@ -59,7 +65,7 @@ class AdminService:
         for row in lorebooks:
             owners.append({'kind': 'book', 'id': row['id'], 'label': 'Lorebook: ' + row['name']})
         for scope_id in thread_scopes:
-            owners.append({'kind': 'thread', 'id': scope_id, 'label': f"Thread: {scope_id}"})
+            owners.append({'kind': 'thread', 'id': scope_id, 'label': self.thread_label(scope_id, thread_names)})
         return owners
 
     def preview_prompt(self, guild_id, bundle, purpose, character_id, sample, sample_history, channel_id=None):

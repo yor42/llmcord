@@ -110,6 +110,12 @@ class AvatarPublisher:
             raise ValueError('Discord channels are unavailable')
         return result.json()
 
+    async def active_threads(self, guild_id):
+        result = await self.http.get(f'{DISCORD_API}/guilds/{guild_id}/threads/active', headers={'Authorization': 'Bot ' + self.bot_token})
+        if result.status_code != 200:
+            raise ValueError('Discord threads are unavailable')
+        return result.json().get('threads', [])
+
     async def configure(self, guild_id, channel_id):
         channels = await self.channels(guild_id)
         channel = next((c for c in channels if int(c['id']) == channel_id and c['type'] == 0), None)

@@ -99,5 +99,42 @@ class ChannelNamesTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(notes, [])
 
 
+class ThreadNamesTests(unittest.IsolatedAsyncioTestCase):
+    async def load(self, scopes, active_threads):
+        """Return (thread_names, fetch count) after load_thread_names over fake store scopes and avatars."""
+        service = FakeService(None)
+        async def run(ident, guild_id, operation, action=None, detail=None):
+            return operation()
+        service.run = run
+        service.store = SimpleNamespace(thread_lore_scopes=lambda guild_id: scopes)
+        fetches = []
+        def fetch(guild_id):
+            fetches.append(guild_id)
+            return active_threads(guild_id)
+        service.avatars = SimpleNamespace(active_threads=fetch)
+        ctx = LiveContext(SimpleNamespace(state=SimpleNamespace(admin=service)), SimpleNamespace(cookies={}, query_params={}), 1, {'csrf': 'x'})
+        with mock.patch('nicegui.ui.notify'):
+            return await ctx.load_thread_names(), fetches
+
+    async def test_no_scopes_makes_no_fetch(self):
+        """UI-03: a guild without thread lore scopes never calls Discord for threads."""
+        names, fetches = await self.load([], lambda guild_id: [{'id': '5', 'name': 'x'}])
+        self.assertEqual((names, fetches), ({}, []))
+
+    async def test_scopes_fetch_once_and_map_names(self):
+        """UI-03: thread scopes trigger one fetch; names map by int id with a # prefix."""
+        names, fetches = await self.load([5], lambda guild_id: [{'id': '5', 'name': 'x'}])
+        self.assertEqual((names, fetches), ({5: '#x'}, [1]))
+
+    async def test_failure_leaves_names_empty(self):
+        """UI-03: a failed thread fetch (transport or rejected) leaves the mapping empty."""
+        def down(guild_id):
+            raise httpx.ConnectError('down')
+        self.assertEqual((await self.load([5], down))[0], {})
+        def rejected(guild_id):
+            raise ValueError('Discord threads are unavailable')
+        self.assertEqual((await self.load([5], rejected))[0], {})
+
+
 if __name__ == '__main__':
     unittest.main()
