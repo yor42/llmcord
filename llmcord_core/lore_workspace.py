@@ -5,7 +5,7 @@ import asyncio
 
 from nicegui import ui
 
-from .icons import lucide, lucide_button
+from .icons import lucide, lucide_button, more_menu
 from .lore_drag import LoreDrag
 from .lorebooks import normalize_entry
 
@@ -211,29 +211,41 @@ class _LoreWorkspace:
 
     def _render_entry(self, entry, side, control, opposite):
         ctx = self.ctx
+        rule = entry['rule']
+        title = ' · '.join(rule['keys']) or 'No keywords'
+        first_line = (entry['content'].strip().splitlines() or [''])[0][:220]
         with ui.card().classes('w-full lore-entry ll-entry') as tile:
             tile._props.update({'data-entry-key': entry['entry_key'], 'data-revision': str(entry['revision'])})
-            with ui.row().classes('items-center no-wrap gap-2'):
-                checkbox = ui.checkbox('Select entry', value=entry['entry_key'] in self.selected,
-                    on_change=lambda event, entry=entry: self.select([entry], event.value)).props('dense')
-                self.checkboxes.setdefault(entry['entry_key'], []).append(checkbox)
-                lucide('grip-vertical', '1.25em').classes('drag-handle cursor-grab ll-icon-solo')
-                ui.label(' · '.join(entry['rule']['keys']) or 'No keywords').classes('font-bold min-w-0').style('overflow-wrap: anywhere')
-            ui.label(entry['content'][:220]).classes('ll-muted text-sm').style('overflow-wrap: anywhere')
-            ui.label(f"Priority {entry['rule']['order']} · {'Enabled' if entry['rule']['enabled'] else 'Disabled'}").classes('ll-faint text-xs')
-            async def edit(entry=entry):
-                fresh = await ctx.run(lambda: ctx.store.entry_by_key(ctx.guild_id, entry['entry_key']))
-                if fresh:
-                    self.editor.clear()
-                    with self.editor:
-                        self.entry_editor(ctx, fresh, self.options, self.render_board.refresh)
-            with ui.row().classes('items-center flex-wrap gap-2'):
-                ui.button('Edit / transfer', on_click=edit).props('size=sm')
-                lucide_button('Move right' if side == 'left' else 'Move left',
-                    'arrow-right' if side == 'left' else 'arrow-left',
-                    on_click=lambda entry=entry, opposite=opposite: self.move([snapshot(entry)], opposite)).props('outline size=sm').set_enabled(control.value != opposite.value)
-                lucide_button('Delete', 'trash-2', color='negative',
-                          on_click=lambda entry=entry: self.confirm_delete([snapshot(entry)])).props('size=sm')
+            checkbox = ui.checkbox('', value=entry['entry_key'] in self.selected,
+                on_change=lambda event, entry=entry: self.select([entry], event.value)).props('dense')
+            checkbox.props['aria-label'] = 'Select entry'  # not string-parsed: keeps the accessible name
+            self.checkboxes.setdefault(entry['entry_key'], []).append(checkbox)
+            lucide('grip-vertical', '1.25em').classes('drag-handle cursor-grab ll-icon-solo')
+            with ui.element('div').classes('ll-entry-text') as text:
+                text._props['title'] = f'{title}\n{entry["content"][:500]}'
+                ui.label(title).classes('font-bold')
+                ui.label(first_line).classes('ll-muted ml-2')
+            with ui.row().classes('items-center no-wrap gap-2 ll-entry-actions'):
+                ui.label(f"Priority {rule['order']}").classes('ll-pill')
+                if not rule['enabled']:
+                    ui.label('Disabled').classes('ll-pill ll-pill-off')
+                async def edit(entry=entry):
+                    fresh = await ctx.run(lambda: ctx.store.entry_by_key(ctx.guild_id, entry['entry_key']))
+                    if fresh:
+                        self.editor.clear()
+                        with self.editor:
+                            self.entry_editor(ctx, fresh, self.options, self.render_board.refresh)
+                edit_button = ui.button(on_click=edit).props('flat round dense text-color=white')
+                edit_button.props['aria-label'] = 'Edit entry'
+                with edit_button:
+                    lucide('pencil', '1.2em').classes('ll-icon-solo')
+                    ui.tooltip('Edit or transfer')
+                with more_menu('entry'):
+                    move = ui.menu_item('Move right' if side == 'left' else 'Move left',
+                        on_click=lambda entry=entry, opposite=opposite: self.move([snapshot(entry)], opposite)).props('role=menuitem')
+                    move.set_enabled(control.value != opposite.value)
+                    ui.separator()
+                    ui.menu_item('Delete', on_click=lambda entry=entry: self.confirm_delete([snapshot(entry)])).classes('text-negative').props('role=menuitem')
 
     def _render_panel_actions(self, kind, ident):
         ctx, render_board = self.ctx, self.render_board

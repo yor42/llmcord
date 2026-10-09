@@ -185,7 +185,13 @@ body.body--dark .q-card .q-card, body.body--dark .q-card .q-expansion-item {{ ba
 .ll-result.q-card {{ padding: 16px; box-shadow: none; border: 1px solid {THEME_DIVIDER}; border-radius: 8px; }}
 .ll-subtitle {{ font-size: 16px; font-weight: 700; line-height: 1.3; }}
 .ll-drop.nicegui-column {{ background: {THEME_BODY}; border: 1px dashed {THEME_BORDER}; border-radius: 8px; gap: 8px; }}
-.ll-entry.q-card {{ padding: 8px 12px; gap: 4px; border: 1px solid {THEME_DIVIDER}; border-radius: 8px; box-shadow: none; }}
+.ll-entry.q-card {{ padding: 4px 12px; gap: 8px; flex-direction: row; flex-wrap: wrap; align-items: center; border: 1px solid {THEME_DIVIDER}; border-radius: 8px; box-shadow: none; }}
+.ll-entry-text {{ flex: 1 1 12rem; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }}
+.ll-entry-text > .q-field, .ll-entry-text > div {{ display: inline; }}
+.ll-entry-actions {{ flex: 0 0 auto; }}
+.ll-pill {{ padding: 1px 8px; border-radius: 999px; border: 1px solid {THEME_DIVIDER}; font-size: 12px; white-space: nowrap; color: {THEME_TEXT_MUTED}; }}
+.ll-pill-off {{ color: {THEME_NEGATIVE}; border-color: {THEME_NEGATIVE}; }}
+@media (max-width: 600px) {{ .ll-entry-text {{ flex-basis: calc(100% - 4.5rem); }} .ll-entry-actions {{ margin-left: auto; }} }}
 .ll-savebar {{ position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 2000; box-sizing: border-box; width: calc(100% - 32px); max-width: 960px; display: flex; flex-flow: row wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 12px 16px; background: {THEME_HEADER}; color: {THEME_TILE_TEXT}; border: 1px solid {THEME_DIVIDER}; border-radius: 12px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }}
 .ll-savebar.hidden {{ display: none; }}
 body:has(.ll-savebar:not(.hidden)) .ll-page {{ padding-bottom: 120px; }}
