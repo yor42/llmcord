@@ -53,6 +53,18 @@ class IconVendoringTests(unittest.TestCase):
             self.assertTrue(url.startswith('data:image/svg+xml,'),
                           f'Icon CSS URL does not use data:image/svg+xml scheme: {url}')
 
+    def test_data_url_has_no_characters_that_break_the_css_url(self):
+        """The data URL sits inside url("..."): raw quotes, angle brackets, # and parentheses must be percent-encoded."""
+        for name in icons.available():
+            payload = icons._data_url(name).split(',', 1)[1]
+            for char in '"<>#()':
+                self.assertNotIn(char, payload, f'{name}: raw {char!r} in data URL')
+
+    def test_small_button_and_forced_colors_rules(self):
+        css = icons.icon_css()
+        self.assertIn('@media (forced-colors: active)', css)
+        self.assertIn('font-size: 10px', css)
+
     def test_data_url_rejects_invalid_names(self):
         """icons._data_url raises KeyError for invalid icon names."""
         with self.assertRaises(KeyError) as error:

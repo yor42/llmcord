@@ -69,11 +69,11 @@ class _LoreWorkspace:
         with toolbar:
             self.counter = ui.label('0 selected').classes('ll-muted')
             bulk_buttons.append(lucide_button('Move selected left', 'arrow-left',
-                                          on_click=lambda: self.move(list(selected.values()), self.left)).props('outline'))
+                                             on_click=lambda: self.move(list(selected.values()), self.left)).props('outline'))
             bulk_buttons.append(lucide_button('Move selected right', 'arrow-right',
-                                          on_click=lambda: self.move(list(selected.values()), self.right)).props('outline'))
+                                             on_click=lambda: self.move(list(selected.values()), self.right)).props('outline'))
             bulk_buttons.append(lucide_button('Delete selected', 'trash-2', color='negative',
-                                          on_click=lambda: self.confirm_delete(list(selected.values()))))
+                                             on_click=lambda: self.confirm_delete(list(selected.values()))))
             ui.button('Clear selection', on_click=lambda: self.select(list(selected.values()), False)).props('flat')
             self.update_selection()
 

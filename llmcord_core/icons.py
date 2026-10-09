@@ -13,6 +13,7 @@ from urllib.parse import quote
 
 ICON_DIR = Path(__file__).with_name('icons') / 'lucide'
 BUTTON_SIZE = '1.715em'  # same as Quasar's button icons
+SMALL_BUTTON_SIZE = '1.3em'  # icons in size=xs/sm buttons
 
 
 @lru_cache(maxsize=None)
@@ -34,7 +35,13 @@ def icon_css() -> str:
     rules = ['.ll-icon { display: inline-block; flex: none; width: %s; height: %s; background-color: currentColor; order: -1;'
              ' margin-right: 8px; vertical-align: middle; -webkit-mask: var(--ll-mask) center / contain no-repeat; mask: var(--ll-mask) center / contain no-repeat; }'
              % (BUTTON_SIZE, BUTTON_SIZE),
-             '.ll-icon-solo { order: 0; margin-right: 0; }']
+             '.ll-icon-solo { order: 0; margin-right: 0; }',
+             # Quasar puts size=xs/sm on the button as an inline font-size (8px/10px); the default icon is sized for
+             # normal buttons and looks large there, so shrink only icons without an explicit size.
+             '.q-btn[style*="font-size: 8px"] .ll-icon:not([style]), .q-btn[style*="font-size: 10px"] .ll-icon:not([style])'
+             ' { width: %s; height: %s; margin-right: 6px; }' % (SMALL_BUTTON_SIZE, SMALL_BUTTON_SIZE),
+             # Windows high contrast: a mask filled with currentColor can be forced to a background colour; keep it text-coloured.
+             '@media (forced-colors: active) { .ll-icon { background-color: CanvasText; forced-color-adjust: none; } }']
     rules += [f'.ll-i-{name} {{ --ll-mask: url("{_data_url(name)}"); }}' for name in available()]
     return '\n'.join(rules)
 
