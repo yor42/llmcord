@@ -985,6 +985,7 @@ def avatar_editor(ctx, character_id, slot):
 
 def lore_panel(ctx, on_import=None):
     from .lore_workspace import render_lore_workspace
+    MacroHighlight()
     render_lore_workspace(ctx, entry_editor, on_import=on_import,
                           on_entry_import=lambda kind, ident, refresh: direct_import_dialog(ctx, kind, ident, refresh))
 
@@ -1011,7 +1012,7 @@ def entry_editor(ctx, entry, owners, refresh):
     from nicegui import ui
     with ui.card().classes('w-full ll-stack').style('padding: 16px') as panel:
         ui.label('Edit lore' if entry.get('ref') else 'Create lore').classes('ll-subtitle')
-        text = ui.textarea('Content', value=entry['content']).classes('w-full')
+        text = ui.textarea('Content', value=entry['content']).classes('w-full ll-macro')
         rule = copy.deepcopy(entry['rule'])
         controls = {}
         for key, label in (('keys', 'Keys'), ('secondary_keys', 'Secondary keys')):

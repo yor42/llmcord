@@ -1481,6 +1481,54 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def test_ui31_lore_content_highlights_known_and_unknown_macros(self):
+        """UI-31 step 2: the lore Content field is mirrored with known and unknown {{macros}}; closed editors have no mirror."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=lore')
+        try:
+            page.get_by_role('button', name='New entry', exact=True).first.wait_for(timeout=5000)
+            self.assertEqual(page.locator('.mh-mirror').count(), 0)
+            page.get_by_role('button', name='New entry', exact=True).first.click()
+            editor = page.locator('.q-card').filter(has=page.get_by_text('Create lore', exact=True)).last
+            field = editor.get_by_label('Content', exact=True)
+            field.fill('{{char}} meets {{user}} {{bogus}}')
+            mirror = page.locator('.mh-mirror')
+            mirror.wait_for(timeout=5000)
+            page.wait_for_function("() => document.querySelectorAll('.mh-mirror .mh-known').length === 2")
+            self.assertEqual(mirror.count(), 1)
+            self.assertEqual(mirror.locator('.mh-known').all_inner_texts(), ['{{char}}', '{{user}}'])
+            self.assertEqual(mirror.locator('.mh-unknown').all_inner_texts(), ['{{bogus}}'])
+            self.assertEqual(mirror.text_content(), field.input_value())
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_ui31_both_panels_on_one_page_attach_each_lore_textarea_once(self):
+        """UI-31 step 2: after visiting Prompt presets then Lore (two MacroHighlight instances), a lore editor has exactly one mirror, also when reopened."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=prompts')
+        try:
+            console = []
+            page.on('console', lambda m: console.append(m.text) if m.type == 'error' else None)
+            page.locator('.prompt-toggle').first.wait_for()
+            page.get_by_role('tab', name='Lore', exact=True).click()
+            page.get_by_role('button', name='New entry', exact=True).first.click()
+            editor = page.locator('.q-card').filter(has=page.get_by_text('Create lore', exact=True)).last
+            editor.get_by_label('Content', exact=True).fill('Dual {{char}} {{user}} {{bogus}}')
+            page.wait_for_function("() => document.querySelectorAll('.mh-mirror .mh-known').length === 2")
+            self.assertEqual(page.locator('.mh-mirror').count(), 1)
+            self.assertEqual(page.locator('.mh-mirror .mh-unknown').all_inner_texts(), ['{{bogus}}'])
+            page.get_by_role('button', name='Save lore', exact=True).click()
+            page.get_by_text('Create lore', exact=True).wait_for(state='detached', timeout=5000)
+            row = page.locator('.lore-entry').filter(has_text='Dual')
+            row.get_by_role('button', name='Edit entry', exact=True).click()
+            page.get_by_text('Edit lore', exact=True).wait_for(timeout=5000)
+            page.get_by_label('Content', exact=True).scroll_into_view_if_needed()  # attach is lazy: an editor below the fold waits until it is visible
+            page.wait_for_function("() => document.querySelectorAll('.mh-mirror .mh-known').length === 2")
+            self.assertEqual(page.locator('.mh-mirror').count(), 1)
+            self.assertEqual([m for m in console if 'Content Security Policy' in m], [])
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
     def preset_file(self, marker):
         from llmcord_core.prompts import default_bundle, export_preset
         bundle = default_bundle()

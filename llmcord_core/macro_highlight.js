@@ -1,7 +1,7 @@
 // Mirror-behind-textarea highlighting. Textareas opt in with the ll-macro class on their q-field; each one is
 // attached only once it is visible or focused, so collapsed prompt blocks cost nothing.
 // One shared controller serves every MacroHighlight instance on the page (refcounted), so extra instances never double-attach.
-const RX = /\{\{(.*?)\}\}/gs; // same pattern as prompts.substitute
+const RX = /\{\{((?:(?!\{\{).)*?)\}\}/gs; // same pattern as prompts.expand_known (a match never spans another {{)
 const SELECTOR = ".ll-macro textarea";
 const COPIED = ["fontFamily", "fontSize", "fontWeight", "fontStyle", "lineHeight", "letterSpacing", "paddingTop", "paddingBottom",
   "paddingLeft", "paddingRight", "whiteSpace", "wordBreak", "overflowWrap", "tabSize", "textIndent"];
@@ -72,9 +72,15 @@ function createController(names) {
   const scan = (root) => {
     const found = root.matches(SELECTOR) ? [root] : [];
     found.push(...root.querySelectorAll(SELECTOR));
-    for (const ta of found) if (!seen.has(ta)) { seen.add(ta); visible.observe(ta); }
+    for (const ta of found) if (ta.isConnected && !seen.has(ta)) { seen.add(ta); visible.observe(ta); }
+  };
+  const forget = (root) => {
+    const found = root.matches(SELECTOR) ? [root] : [];
+    found.push(...root.querySelectorAll(SELECTOR));
+    for (const ta of found) if (!ta.isConnected) { visible.unobserve(ta); seen.delete(ta); }
   };
   const watcher = new MutationObserver((records) => {
+    for (const record of records) for (const node of record.removedNodes) if (node.nodeType === 1) forget(node);
     for (const record of records) for (const node of record.addedNodes) if (node.nodeType === 1) scan(node);
     prune();
   });
