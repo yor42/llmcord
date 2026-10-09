@@ -8,10 +8,13 @@ from nicegui import ui
 from .lorebooks import parse_lorebook
 
 
-def guideline_editor(ctx, kind, owner_id, label):
+def guideline_editor(ctx, kind, owner_id, label, button=True):
+    """Guidelines textarea; with button=False no Save button is added and (control, current) is returned for a save-bar editor."""
     current = ctx.store.guidelines(ctx.guild_id, kind, owner_id)
     control = ui.textarea(label, value=current['content']).classes('w-full')
     control.props('placeholder="Setting, participants\' fictional roles, tone, and interaction conventions"')
+    if not button:
+        return control, current
     ctx.button('Save ' + label.lower(),
                lambda: ctx.store.save_guidelines(ctx.guild_id, kind, owner_id, control.value or '', current['revision']),
                'guidelines.edit', {'kind': kind, 'id': owner_id}, then=lambda _: ctx.refresh())

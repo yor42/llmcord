@@ -119,8 +119,11 @@ def run_profile(name: str, seed: str) -> list[dict]:
 
                 def save_cast():
                     page.get_by_role('tab', name='Server setup').click()
-                    page.get_by_role('button', name='Save cast').first.click()
-                measure('click Save cast', save_cast)
+                    page.locator('button.channel-toggle').first.click()
+                    page.get_by_role('switch', name='Ambient participation').first.click()
+                    page.get_by_role('button', name='Save changes', exact=True).click()
+                    page.get_by_text('Channel settings saved', exact=True).wait_for(timeout=60000)
+                measure('Save channel settings', save_cast)
 
                 browser.close()
         except Exception:

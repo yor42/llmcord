@@ -179,6 +179,7 @@ body.body--dark .q-card .q-card, body.body--dark .q-card .q-expansion-item {{ ba
 .ll-form-row {{ width: 100%; display: flex; flex-flow: row wrap; align-items: flex-end; gap: 16px; }}
 .ll-form-row .q-field {{ flex: 0 1 16rem; min-width: min(16rem, 100%); }}
 .ll-form-row .ll-wide {{ flex-basis: 22rem; }}
+.ll-form-row.ll-field-row {{ align-items: center; }}
 .ll-section > .q-expansion-item, .ll-subpanel {{ border: 1px solid {THEME_DIVIDER}; border-radius: 8px; }}
 .ll-stack {{ width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; gap: 16px; padding: 4px 0 8px; }}
 .ll-stack .q-uploader {{ max-width: min(20rem, 100%); }}
@@ -587,13 +588,13 @@ async def setup_panel(ctx):
             with ui.expansion(f"{space['name']} · {space['kind']}").classes('space-card w-full rounded-lg'):
                 guideline_editor(ctx, 'space', space['id'], 'World guidelines' if space['kind'] == 'world' else 'Hub guidelines')
                 lucide_button('Delete ' + space['kind'], 'trash-2', color='negative', on_click=lambda space=space: delete_space_dialog(ctx, space))
-        with ui.element('div').classes('ll-form-row'):
+        with ui.element('div').classes('ll-form-row ll-field-row'):
             name = ui.input('Space name')
             kind = ui.select(['world', 'hub'], value='world', label='Kind')
             ctx.button('Create space', lambda: store.create_space(gid, name.value or '', kind.value), 'space.create', then=lambda _: ctx.refresh())
     with section('Hub links'):
         hubs, worlds = ctx.snapshot.hubs, ctx.snapshot.worlds
-        with ui.element('div').classes('ll-form-row'):
+        with ui.element('div').classes('ll-form-row ll-field-row'):
             hub = ui.select(hubs, label='Hub')
             world = ui.select(worlds, label='World')
             def link(enabled):
@@ -607,7 +608,7 @@ async def setup_panel(ctx):
         for ident in hubs:
             ui.label(hubs[ident] + ': ' + ', '.join(worlds.get(x, str(x)) for x in store.allowed_worlds(ident)))
     with section('Channels and casts'):
-        with ui.element('div').classes('ll-form-row'):
+        with ui.element('div').classes('ll-form-row ll-field-row'):
             channel = ui.select(channel_names, label='Discord text channel')
             space = ui.select(spaces, label='World or hub')
             def bind():
@@ -625,41 +626,83 @@ async def setup_panel(ctx):
             ctx.button('Bind channel', bind, 'channel.bind', bind_detail, then=bound)
         ui.label('Rebinding a channel keeps its ambient mode and removes cast members not available in the new space.').classes('ll-muted')
         for binding in ctx.snapshot.channels:
-            with ui.card().classes('w-full channel-card'):
-                ui.label(channel_names.get(binding['channel_id'], str(binding['channel_id']))).classes('text-lg font-bold')
-                guideline_editor(ctx, 'channel', binding['channel_id'], 'Channel guidelines')
-                options = {r['id']: r['name'] for r in store.eligible_characters(gid, binding['space_id'])}
-                cast = ui.select(options, value=json.loads(binding['default_cast']), multiple=True, label='Default cast (up to five)').classes('w-full')
-                def save_cast(binding=binding, cast=cast):
-                    store.set_cast(binding['channel_id'], None, cast.value or [], default=True)
-                    return True
-                ctx.button('Save cast', save_cast, 'cast.default', success='Cast saved')
-                ambient = ui.switch('Ambient participation', value=bool(binding['ambient']))
-                def save_ambient(binding=binding, ambient=ambient):
-                    store.set_ambient(binding['channel_id'], ambient.value)
-                    return True
-                ctx.button('Save ambient setting', save_ambient, 'channel.ambient', success='Ambient setting saved')
-    with section('Reply footer'):
+            channel_card(ctx, binding, channel_names, spaces)
+    with section('Server settings'):
         footer = ui.switch('Show model and cost footer on replies', value=store.usage_footer_enabled(gid))
+        current = store.guild_timezone(gid)
+        with ui.element('div').classes('ll-form-row ll-field-row'):
+            timezone = ui.select(timezone_options(current), value=current or None,
+                                 label='Server timezone', with_input=True, clearable=True)
+        ui.label('Characters use this for members who have not chosen their own with /time set. Without it they use UTC.').classes('ll-muted')
+        current_asset = store.asset_channel_id(gid)
+        saved_asset = current_asset if current_asset in channel_names else None
+        with ui.element('div').classes('ll-form-row ll-field-row'):
+            asset_channel = ui.select(channel_names, value=saved_asset, label='Private text channel')
+        ui.label('Avatar asset channel: deny View Channel to @everyone and allow the bot to upload images. Images become Discord CDN assets.').classes('ll-muted')
         def save_footer():
             store.set_usage_footer(gid, footer.value)
             return True
-        ctx.button('Save footer setting', save_footer, 'settings.footer', success='Footer setting saved')
-    with section('Timezone'):
-        current = store.guild_timezone(gid)
-        timezone = ui.select(timezone_options(current), value=current or None,
-                             label='Server timezone', with_input=True, clearable=True).classes('w-full max-w-sm')
-        ui.label('Characters use this for members who have not chosen their own with /time set. Without it they use UTC.').classes('ll-muted')
-        ctx.button('Save timezone', lambda: timezone_operation(store, gid, timezone.value), 'settings.timezone',
-                   timezone_detail, success='Timezone saved')
-    with section('Avatar asset channel'):
-        current_asset = store.asset_channel_id(gid)
-        asset_channel = ui.select(channel_names, value=current_asset if current_asset in channel_names else None, label='Private text channel')
         async def configure():
             await ctx.service.avatars.configure(gid, asset_channel.value)
             return True
-        ctx.button('Save asset channel', configure, 'avatar.channel', success='Asset channel saved')
-        ui.label('Deny View Channel to @everyone and allow the bot to upload images. Images become Discord CDN assets.').classes('ll-muted')
+        ctx.savebar.track('Server settings', {}, parts=[
+            {'controls': {footer: store.usage_footer_enabled(gid)}, 'operation': save_footer, 'action': 'settings.footer'},
+            {'controls': {timezone: current or None}, 'operation': lambda: timezone_operation(store, gid, timezone.value),
+             'action': 'settings.timezone', 'detail': timezone_detail},
+            {'controls': {asset_channel: saved_asset}, 'operation': configure, 'action': 'avatar.channel'}],
+            success='Server settings saved')
+
+
+def channel_card(ctx, binding, channel_names, spaces):
+    """One channel binding: a collapsed summary row that expands to a single save-bar editor (guidelines, cast, ambient)."""
+    from nicegui import ui
+    store, gid = ctx.store, ctx.guild_id
+    cid = binding['channel_id']
+    name = channel_names.get(cid, str(cid))
+    space_name = spaces.get(binding['space_id'], '').rsplit(' (', 1)[0]
+    with ui.card().classes('w-full channel-card ll-stack ll-result') as card:
+        with ui.element('div').classes('ll-block-head'):
+            toggle = ui.element('button').classes('ll-block-toggle channel-toggle')
+            toggle.props['type'] = 'button'
+            toggle.props['aria-expanded'] = 'false'
+        body = ui.element('div').classes('ll-stack w-full ll-collapsed')
+        with body:
+            control, current = guideline_editor(ctx, 'channel', cid, 'Channel guidelines', button=False)
+            options = {r['id']: r['name'] for r in store.eligible_characters(gid, binding['space_id'])}
+            saved_cast = json.loads(binding['default_cast'])
+            cast = ui.select(options, value=saved_cast, multiple=True, label='Default cast (up to five)').classes('w-full')
+            ambient = ui.switch('Ambient participation', value=bool(binding['ambient']))
+        with toggle:
+            _span(name + ' ').classes('ll-block-name')
+            with ui.element('span').classes('ll-block-meta'):
+                _span(' \u00b7 ' + space_name + ' \u00b7 ')
+                _span().bind_text_from(cast, 'value', backward=lambda v: f"{len(v or [])} in cast ")
+            _span('Ambient').classes('ll-pill').bind_visibility_from(ambient, 'value')
+            lucide('chevron-down', '1.25em').classes('ll-icon-solo ll-block-caret')
+        def flip():
+            now_open = toggle.props['aria-expanded'] != 'true'
+            card.classes(add='ll-block-open') if now_open else card.classes(remove='ll-block-open')
+            body.classes(remove='ll-collapsed') if now_open else body.classes(add='ll-collapsed')
+            toggle.props['aria-expanded'] = 'true' if now_open else 'false'
+            toggle.update()
+        toggle.on('click', flip)
+    revision = {'n': current['revision']}
+    def save_guidelines():
+        result = store.save_guidelines(gid, 'channel', cid, control.value or '', revision['n'])
+        revision['n'] = store.guidelines(gid, 'channel', cid)['revision']
+        return result
+    def save_cast():
+        store.set_cast(cid, None, cast.value or [], default=True)
+        return True
+    def save_ambient():
+        store.set_ambient(cid, ambient.value)
+        return True
+    ctx.savebar.track(name, {}, parts=[
+        {'controls': {control: current['content']}, 'operation': save_guidelines, 'action': 'guidelines.edit',
+         'detail': {'kind': 'channel', 'id': cid}},
+        {'controls': {cast: saved_cast}, 'operation': save_cast, 'action': 'cast.default'},
+        {'controls': {ambient: bool(binding['ambient'])}, 'operation': save_ambient, 'action': 'channel.ambient'}],
+        success='Channel settings saved')
 
 
 def characters_panel(ctx):

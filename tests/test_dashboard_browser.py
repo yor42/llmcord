@@ -211,9 +211,12 @@ class DashboardBrowserTests(unittest.TestCase):
         world_panel.get_by_label('World guidelines', exact=True).fill('The setting is a courier guild. Treat users as guild members.')
         world_panel.get_by_role('button', name='Save world guidelines', exact=True).click()
         self.wait_for(lambda: any(row['kind'] == 'space' and 'courier guild' in row['content'] for row in self.state()['guidelines']))
-        channel_panel = page.locator('.channel-card').filter(has=page.get_by_text('#scene', exact=True))
+        channel_panel = page.locator('.channel-card').filter(has_text='#scene')
+        channel_panel.locator('button.channel-toggle').click()
         channel_panel.get_by_label('Channel guidelines', exact=True).fill('Occasional fourth-wall jokes are welcome; keep them brief.')
-        channel_panel.get_by_role('button', name='Save channel guidelines', exact=True).click()
+        savebar = page.get_by_role('region', name='Unsaved changes')
+        savebar.get_by_role('button', name='Save changes', exact=True).click()
+        savebar.wait_for(state='hidden')
         self.wait_for(lambda: any(row['kind'] == 'channel' and 'fourth-wall' in row['content'] for row in self.state()['guidelines']))
         page.get_by_label('Space name', exact=True).fill('Browser world')
         page.get_by_role('button', name='Create space', exact=True).click()
@@ -230,7 +233,8 @@ class DashboardBrowserTests(unittest.TestCase):
         self.wait_for(lambda: not any(row['name'] == 'Browser world' for row in self.state()['spaces']))
         page.get_by_label('Private text channel', exact=True).click()
         page.get_by_role('option', name='#assets', exact=True).click()
-        page.get_by_role('button', name='Save asset channel', exact=True).click()
+        savebar.get_by_role('button', name='Save changes', exact=True).click()
+        savebar.wait_for(state='hidden')
 
         page.get_by_role('tab', name='Characters', exact=True).click()
         page.get_by_role('button', name='Create character', exact=True).click()
@@ -795,12 +799,15 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
-    def test_save_cast_shows_success_toast(self):
-        """UX-01: Save cast (an operation returning None) reports 'Cast saved'."""
+    def test_save_channel_settings_shows_success_toast(self):
+        """UX-01 / UI-15: saving a changed channel card from the save bar reports 'Channel settings saved'."""
         context, page, errors = self.ux_page('/admin/guild/1')
         try:
-            page.get_by_role('button', name='Save cast', exact=True).first.click()
-            page.get_by_text('Cast saved', exact=True).wait_for(timeout=5000)
+            card = page.locator('.channel-card').first
+            card.locator('button.channel-toggle').click()
+            card.get_by_role('switch', name='Ambient participation', exact=True).click()
+            page.get_by_role('region', name='Unsaved changes').get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Channel settings saved', exact=True).wait_for(timeout=5000)
             self.assertFalse(errors, (errors, getattr(page, 'network', [])))
         finally:
             context.close()
@@ -815,11 +822,47 @@ class DashboardBrowserTests(unittest.TestCase):
             select.click()
             select.fill('Asia/Seoul')
             page.get_by_role('option', name='Asia/Seoul', exact=True).click()
-            page.get_by_role('button', name='Save timezone', exact=True).click()
-            page.get_by_text('Timezone saved', exact=True).wait_for(timeout=5000)
+            page.get_by_role('region', name='Unsaved changes').get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Server settings saved', exact=True).wait_for(timeout=5000)
             self.wait_for(lambda: self.state()['guild_timezone'] == 'Asia/Seoul')
             rows = [r for r in self.state()['audit'] if r['action'] == 'settings.timezone']
             self.assertEqual([json.loads(r['detail_json']) for r in rows], [{'old': '', 'new': 'Asia/Seoul'}])
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_channel_card_is_one_save_bar_editor(self):
+        """UI-15 / MNT-26: a collapsed channel card saves guidelines and ambient as one edit with one audit row each, can be saved again without a conflict, and Reset restores."""
+        context, page, errors = self.ux_page('/admin/guild/1')
+        try:
+            from playwright.sync_api import expect
+            def count(action):
+                return len([r for r in self.state()['audit'] if r['action'] == action])
+            card = page.locator('.channel-card').first
+            toggle = card.locator('button.channel-toggle')
+            bar = page.get_by_role('region', name='Unsaved changes')
+            guidelines = card.get_by_label('Channel guidelines', exact=True)
+            self.assertEqual(toggle.get_attribute('aria-expanded'), 'false')
+            toggle.click()
+            expect(toggle).to_have_attribute('aria-expanded', 'true')
+            before = {a: count(a) for a in ('guidelines.edit', 'channel.ambient')}
+            guidelines.fill('First edit.')
+            card.get_by_role('switch', name='Ambient participation', exact=True).click()
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Channel settings saved', exact=True).wait_for(timeout=5000)
+            bar.wait_for(state='hidden')
+            self.wait_for(lambda: count('guidelines.edit') == before['guidelines.edit'] + 1)
+            self.assertEqual(count('channel.ambient'), before['channel.ambient'] + 1)
+            toggle.get_by_text('Ambient', exact=True).wait_for()
+            guidelines.fill('Second edit.')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            bar.wait_for(state='hidden')
+            self.wait_for(lambda: count('guidelines.edit') == before['guidelines.edit'] + 2)
+            self.assertEqual(count('channel.ambient'), before['channel.ambient'] + 1)
+            self.assertEqual(page.get_by_text('Guidelines changed; reload before saving', exact=False).count(), 0)
+            guidelines.fill('Discarded edit.')
+            bar.get_by_role('button', name='Reset', exact=True).click()
+            expect(guidelines).to_have_value('Second edit.')
             self.assertFalse(errors, (errors, getattr(page, 'network', [])))
         finally:
             context.close()
@@ -1146,7 +1189,7 @@ class DashboardBrowserTests(unittest.TestCase):
             toggle.focus()
             page.keyboard.press('Enter')
             field.wait_for(timeout=5000)
-            self.assertEqual(toggle.get_attribute('aria-expanded'), 'true')
+            expect(toggle).to_have_attribute('aria-expanded', 'true')
             expect(first.get_by_role('button', name=re.compile(r'system\s+\u00b7\s+relative'))).to_have_class(re.compile('prompt-toggle'))
             name = first.get_by_label('Block name', exact=True)
             name.fill('Renamed block')
@@ -1172,7 +1215,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.get_by_role('option', name='Dialogue', exact=True).click()
             expect(page.locator('.prompt-toggle').first).to_contain_text('Renamed block')
             toggle = page.locator('.prompt-toggle').first
-            self.assertEqual(toggle.get_attribute('aria-expanded'), 'true')
+            expect(toggle).to_have_attribute('aria-expanded', 'true')
             self.assertTrue(page.locator('.prompt-block').first.get_by_label('Prompt text / template', exact=True).is_visible())
             # Add prompt block appends a new, expanded block
             count = cards.count()
