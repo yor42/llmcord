@@ -996,9 +996,10 @@ def imports_panel(ctx):
     with section('Named lorebooks'):
         with ui.element('div').classes('ll-form-row'):
             book_name = ui.input('Lorebook name')
-            target = ui.select({'guild': 'Server lorebook', 'channel': 'Channel lorebook'}, value='guild', label='Lorebook scope')
+            target = ui.select({'guild': 'Server lorebook', 'channel': 'Channel lorebook'}, value='guild', label='Kind')
             channels = {r['channel_id']: ctx.channel_names.get(r['channel_id'], str(r['channel_id'])) for r in ctx.snapshot.channels}
-            channel = ui.select(channels, label='Channel (channel lorebooks only)').classes('ll-wide')
+            channel = ui.select(channels, label='Channel').classes('ll-wide')
+            channel.bind_visibility_from(target, 'value', backward=lambda kind: kind == 'channel')
             ctx.button('Create lorebook', lambda: store.create_lorebook(gid, book_name.value or '', target.value, channel.value or 0), 'book.create', then=lambda _: ctx.refresh())
         for book in ctx.snapshot.lorebooks:
             with ui.expansion(book['name'] + ' · ' + ('server' if book['target_kind'] == 'guild' else book['target_kind'])).classes('w-full'):

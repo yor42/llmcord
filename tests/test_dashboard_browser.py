@@ -12,9 +12,14 @@ from pathlib import Path
 import httpx
 
 
+def _section(page, title):
+    """The dashboard card titled `title`; scopes generic labels such as 'Name', 'Kind', 'Channel' and 'Create'."""
+    return page.locator('.ll-section').filter(has=page.locator('.ll-section-title', has_text=title))
+
+
 def _worlds_section(page):
-    """The Server setup 'Worlds and hubs' card; scopes the generic 'Name' input and 'Create' button."""
-    return page.locator('.ll-section').filter(has=page.locator('.ll-section-title', has_text='Worlds and hubs'))
+    """The Server setup 'Worlds and hubs' card."""
+    return _section(page, 'Worlds and hubs')
 
 
 @unittest.skipUnless(os.environ.get('LLMCORD_BROWSER_TESTS') == '1', 'Set LLMCORD_BROWSER_TESTS=1 to run browser integration tests')
@@ -888,7 +893,12 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertEqual(page.get_by_role('option', name='Channel: 100', exact=True).count(), 0)
             page.keyboard.press('Escape')
             page.get_by_role('tab', name='Imports', exact=True).click()
-            page.get_by_label('Channel (channel lorebooks only)', exact=True).click()
+            named = _section(page, 'Named lorebooks')
+            self.assertFalse(named.get_by_label('Channel', exact=True).is_visible())
+            named.get_by_label('Kind', exact=True).click()
+            page.get_by_role('option', name='Channel lorebook', exact=True).click()
+            named.get_by_label('Channel', exact=True).wait_for(state='visible')
+            named.get_by_label('Channel', exact=True).click()
             page.get_by_role('option', name='#scene', exact=True).wait_for()
             self.assertEqual(page.get_by_role('option', name='100', exact=True).count(), 0)
             page.keyboard.press('Escape')
@@ -1056,9 +1066,9 @@ class DashboardBrowserTests(unittest.TestCase):
         context, page, errors = self.ux_page('/admin/guild/1?tab=lore')
         try:
             page.get_by_role('button', name='Import lorebook', exact=True).wait_for()
-            self.assertEqual(page.get_by_label('Channel (channel lorebooks only)', exact=True).count(), 0)
+            self.assertEqual(_section(page, 'Named lorebooks').get_by_label('Kind', exact=True).count(), 0)
             page.get_by_role('button', name='Import lorebook', exact=True).click()
-            page.get_by_label('Channel (channel lorebooks only)', exact=True).wait_for(timeout=5000)
+            _section(page, 'Named lorebooks').get_by_label('Kind', exact=True).wait_for(timeout=5000)
             self.assertTrue(self.tab_selected(page, 'Imports'))
             page.wait_for_url('**tab=imports*')
             self.assertFalse(errors, (errors, getattr(page, 'network', [])))
@@ -1294,7 +1304,7 @@ class DashboardBrowserTests(unittest.TestCase):
             anchors = {'Server setup': _worlds_section(page).get_by_label('Name', exact=True),
                        'Characters': page.get_by_role('button', name='Create character', exact=True),
                        'Lore': page.get_by_role('button', name='Import lorebook', exact=True),
-                       'Imports': page.get_by_label('Channel (channel lorebooks only)', exact=True),
+                       'Imports': _section(page, 'Named lorebooks').get_by_label('Kind', exact=True),
                        'Prompt presets': page.get_by_label('Sample channel (optional)', exact=True)}
             for tab, anchor in anchors.items():
                 page.get_by_role('tab', name=tab, exact=True).click()
