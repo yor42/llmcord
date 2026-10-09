@@ -56,7 +56,7 @@ Commands marked **Admin** live under `/admin` and require Discord server adminis
 | `/time set`, `/time show`, `/time clear` | Member | Set, view, or remove the member's own timezone for this server (works in any channel). Characters use it for the local time in their prompts; without one they use the server default (set in the dashboard under Server setup → **Server settings** → **Server timezone**), else UTC. `set` suggests IANA names such as `Asia/Seoul` as you type. The timezone is a setting, not a personal memory: it needs no `/memory opt_in`, and `/memory opt_out` does not remove it. |
 | `/scene reset` | Member | Start fresh context on the next invitation. |
 | `/admin scene delete` | Admin | Delete a stored message and everything after it in its branch, by message ID. Earlier messages and other branches stay; Discord messages are not deleted. Personal facts and character encounters first learned from the deleted messages are forgotten too; lore already promoted from them stays. |
-| `/context` | Member | Inspect the last saved character line, or supply a message ID. |
+| `/context` | Admin | Inspect the last saved character line, or supply a message ID. |
 
 Character and space options (`character`, `characters`, `space`, `hub`, `world`) suggest matching names as you type. A name matches exactly first, then ignoring case; if several names differ only by case, type the exact one. In `characters`, separate names with commas; suggestions complete the last name.
 

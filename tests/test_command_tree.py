@@ -198,8 +198,8 @@ EXPECTED_COMMANDS = {
     "context": (
         "Inspect what informed the last character line",
         (("message_id", "string", False, "…", False, ()),),
-        0,
-        "None",
+        1,
+        "<Permissions value=8>",
         False,
     ),
     "lore list": ("Show the lore available in this location", (), 0, "None", False),

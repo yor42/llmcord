@@ -1002,47 +1002,41 @@ def _clean(value: str) -> str:
 
 
 def _context_lore_line(bot: SkitBot, interaction: discord.Interaction, item: dict) -> str:
-    """One /context lore entry as words: its first key (a content excerpt for administrators only) and its owner, never a raw id."""
+    """One /context lore entry (administrators only) as words: its first key or a content excerpt, and its owner, never a raw id."""
     kind, scope_id, guild_id = item["scope"], item["scope_id"], interaction.guild_id
-    is_admin = bool(getattr(getattr(interaction, "permissions", None), "administrator", False))
 
     clean = _clean
 
     label = ""
-    reason = str(item.get("reason") or "")
-    if not is_admin:
-        # Members see only what the keyword reason already revealed, never other keys, excerpts or entry keys.
-        label = reason[len("keyword:"):].strip() if reason.startswith("keyword:") else ""
-    else:
-        if kind in ("character", "space", "channel", "thread"):
-            row = bot.store.lore_row(guild_id, item["id"])
-            if row:
-                try:
-                    keys = json.loads(row["keys_json"] or "[]")
-                except ValueError:
-                    keys = []
-                if isinstance(keys, list) and keys and isinstance(keys[0], str) and keys[0].strip():
-                    label = keys[0].strip()[:40]
-                else:
-                    label = " ".join(str(row["content"]).split())[:40]
-        if kind in ("lorebook", "guild"):
-            ref, sql = (("book-entry", "SELECT e.content FROM lorebook_entries e JOIN lorebooks b ON b.id=e.book_id WHERE b.guild_id=? AND e.id=?")
-                        if kind == "lorebook" else ("guild-lore", "SELECT content FROM guild_lore_entries WHERE guild_id=? AND id=?"))
+    if kind in ("character", "space", "channel", "thread"):
+        row = bot.store.lore_row(guild_id, item["id"])
+        if row:
             try:
-                entry = bot.store.admin_entry(guild_id, f"{ref}:{item['id']}")
-                content, rule = entry["content"], entry["rule"]
-            except (ValueError, TypeError, KeyError):
-                # Unreadable rule JSON: still a guild-scoped content excerpt.
-                found = bot.store.one(sql, (guild_id, item["id"]))
-                content, rule = (found["content"] if found else ""), {}
-            keys = rule.get("keys") if isinstance(rule, dict) else None
+                keys = json.loads(row["keys_json"] or "[]")
+            except ValueError:
+                keys = []
             if isinstance(keys, list) and keys and isinstance(keys[0], str) and keys[0].strip():
                 label = keys[0].strip()[:40]
             else:
-                label = " ".join(str(content).split())[:40]
-        if not label:
-            key = str(item.get("entry_key") or "")
-            label = "" if key.startswith(("lore:", "book:")) else key
+                label = " ".join(str(row["content"]).split())[:40]
+    if kind in ("lorebook", "guild"):
+        ref, sql = (("book-entry", "SELECT e.content FROM lorebook_entries e JOIN lorebooks b ON b.id=e.book_id WHERE b.guild_id=? AND e.id=?")
+                    if kind == "lorebook" else ("guild-lore", "SELECT content FROM guild_lore_entries WHERE guild_id=? AND id=?"))
+        try:
+            entry = bot.store.admin_entry(guild_id, f"{ref}:{item['id']}")
+            content, rule = entry["content"], entry["rule"]
+        except (ValueError, TypeError, KeyError):
+            # Unreadable rule JSON: still a guild-scoped content excerpt.
+            found = bot.store.one(sql, (guild_id, item["id"]))
+            content, rule = (found["content"] if found else ""), {}
+        keys = rule.get("keys") if isinstance(rule, dict) else None
+        if isinstance(keys, list) and keys and isinstance(keys[0], str) and keys[0].strip():
+            label = keys[0].strip()[:40]
+        else:
+            label = " ".join(str(content).split())[:40]
+    if not label:
+        key = str(item.get("entry_key") or "")
+        label = "" if key.startswith(("lore:", "book:")) else key
     label = f'"{clean(label)}"' if label else "an unnamed entry"
     if kind == "space":
         space = bot.store.space_by_id(scope_id)
@@ -1070,6 +1064,8 @@ def _context_lore_line(bot: SkitBot, interaction: discord.Interaction, item: dic
 def _register_context_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
     binding_for = ctx.binding_for
     @bot.tree.command(name="context", description="Inspect what informed the last character line")
+    @app_commands.default_permissions(administrator=True)
+    @app_commands.checks.has_permissions(administrator=True)
     async def context(interaction: discord.Interaction, message_id: str = ""):
         await binding_for(interaction)
         if message_id:

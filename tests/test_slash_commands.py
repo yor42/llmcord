@@ -186,11 +186,11 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(interaction.replies, ["Give a numeric message ID."])
 
     async def test_context_without_trace(self):
-        interaction = FakeInteraction()
+        interaction = FakeInteraction(admin=True)
         await invoke(self.bot, "context", interaction)
         self.assertEqual(interaction.replies, ["No saved context for that character line. Leave the ID empty to use the latest one."])
 
-    def _context_interaction(self, channels=None, admin=False):
+    def _context_interaction(self, channels=None, admin=True):
         interaction = FakeInteraction(admin=admin)
         known = channels or {}
         interaction.guild.get_channel_or_thread = lambda ident: known.get(ident)
@@ -216,36 +216,22 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
         ]})
 
     async def test_context_names_lore_without_raw_ids(self):
-        """Regression (UI-07): /context shows a member the matched keyword (or "an unnamed entry") and the owner in
-        words: no other keys, no content excerpt, no raw ids, and the reply suppresses mentions."""
+        """Regression (UI-07, UI-49): /context labels each entry by its first key, else a 40-character excerpt, and names the owner in
+        words: no raw ids or entry keys, other guilds' entries are never named, and the reply suppresses mentions."""
         from types import SimpleNamespace
         await self._context_trace()
         interaction = self._context_interaction({100: SimpleNamespace(id=100, name="harbor-chat")})
-        await invoke(self.bot, "context", interaction)
-        reply = interaction.replies[0]
-        self.assertIn('"dragon" (world Harbor, keyword: dragon)', reply)
-        self.assertIn("an unnamed entry (#harbor-chat, always on)", reply)
-        self.assertIn("an unnamed entry (server-wide lore, always on)", reply)
-        self.assertIn("an unnamed entry (#unknown-channel, always on)", reply)
-        for hidden in ("wyrm", "tide", "secret", "Hidden", "lore:"):
-            self.assertNotIn(hidden, reply, "members never see other keys, excerpts or entry keys")
-        self.assertNotRegex(reply.split("\n")[0], r"#\d")
-        self.assertNotIn("guild #", reply)
-        self.assertNotIn("space #", reply)
-        self.assertEqual(interaction.response.sent[0][1]["allowed_mentions"].to_dict(), discord.AllowedMentions.none().to_dict())
-
-    async def test_context_shows_administrators_keys_and_excerpts(self):
-        """Regression (UI-07): an administrator's /context labels an entry by its first key, else a 40-character excerpt."""
-        from types import SimpleNamespace
-        await self._context_trace()
-        interaction = self._context_interaction({100: SimpleNamespace(id=100, name="harbor-chat")}, admin=True)
         await invoke(self.bot, "context", interaction)
         reply = interaction.replies[0]
         self.assertIn('"wyrm" (world Harbor, keyword: dragon)', reply)
         self.assertIn('"The tide is high today" (#harbor-chat, always on)', reply)
         self.assertIn("an unnamed entry (server-wide lore, always on)", reply)
         self.assertIn('"secret" (#unknown-channel, always on)', reply)
+        self.assertNotIn("lore:", reply, "entry keys are never shown")
         self.assertNotRegex(reply.split("\n")[0], r"#\d")
+        self.assertNotIn("guild #", reply)
+        self.assertNotIn("space #", reply)
+        self.assertEqual(interaction.response.sent[0][1]["allowed_mentions"].to_dict(), discord.AllowedMentions.none().to_dict())
 
     async def _context_preset_reply(self, preset, **trace):
         self.store.record_node(5001, 1, 100, None, None, self.alice, "Hello")
@@ -290,13 +276,11 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
         self.store.db.commit()
         return book, entry
 
-    async def test_context_lore_line_lorebook_entry_label_for_admins_only(self):
-        """UI-43: administrators see a lorebook entry's first key (guild-scoped lookup); members still see only the matched keyword."""
+    async def test_context_lore_line_lorebook_entry_label(self):
+        """UI-43: a lorebook entry is labelled by its first key (guild-scoped lookup)."""
         book, entry = self._book_entry(1, ["troll", "ogre"])
         item = self._item("lorebook", book, entry, f"book:{book}:u1", book_name="B1")
         self.assertEqual(self._line(self._context_interaction(admin=True), item), '"troll" (lorebook B1, keyword: dragon)')
-        self.assertEqual(self._line(self._context_interaction(), item), '"dragon" (lorebook B1, keyword: dragon)')
-        self.assertNotIn("troll", self._line(self._context_interaction(), self._item("lorebook", book, entry, "x", "always on", book_name="B1")))
 
     def _server_lore(self, guild_id, keys, content="body"):
         import json
@@ -305,12 +289,11 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
         self.store.db.commit()
         return entry
 
-    async def test_context_lore_line_server_wide_entry_label_for_admins_only(self):
-        """UI-43: administrators see a server-wide entry's first key (else an excerpt); members and other servers' entries stay unnamed."""
+    async def test_context_lore_line_server_wide_entry_label(self):
+        """UI-43: a server-wide entry is labelled by its first key (else an excerpt); other servers' entries stay unnamed."""
         entry = self._server_lore(1, ["tavern", "inn"])
         item = self._item("guild", 1, entry, f"lore:{entry}", "always on")
         self.assertEqual(self._line(self._context_interaction(admin=True), item), '"tavern" (server-wide lore, always on)')
-        self.assertEqual(self._line(self._context_interaction(), item), "an unnamed entry (server-wide lore, always on)")
         excerpt = self._server_lore(1, [], "  The   inn is " + "x" * 60)
         self.assertEqual(self._line(self._context_interaction(admin=True), self._item("guild", 1, excerpt, "k", "always on")),
                          f'"The inn is {"x" * 29}" (server-wide lore, always on)')
@@ -345,18 +328,6 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
         item = self._item("lorebook", book, entry, f"book:{book}:u1", book_name="B2")
         self.assertEqual(self._line(self._context_interaction(admin=True), item), "an unnamed entry (lorebook B2, keyword: dragon)")
 
-    async def test_context_lore_line_member_label_is_only_the_matched_keyword(self):
-        """Regression (UI-07): for a member a constant entry with keys is "an unnamed entry", and a keyword entry
-        shows the keyword that matched, not keys[0]."""
-        lore = self.store.add_lore(1, "space", self.world, "Body", ["first", "second"])
-        member = self._context_interaction()
-        self.assertEqual(self._line(member, self._item("space", self.world, lore, "named-key", "always on")),
-                         "an unnamed entry (world Harbor, always on)")
-        self.assertEqual(self._line(member, self._item("space", self.world, lore, "named-key", "keyword: second")),
-                         '"second" (world Harbor, keyword: second)')
-        self.assertEqual(self._line(member, self._item("space", self.world, lore, "named-key", "probability")),
-                         "an unnamed entry (world Harbor, probability)")
-
     async def test_context_lore_line_owner_wording(self):
         """Regression (UI-07): _context_lore_line owner wording and admin label fallbacks for hub, character,
         lorebook, thread and unknown owners."""
@@ -379,19 +350,15 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
         long_text = self.store.add_lore(1, "space", self.world, "x" * 60, [])
         self.assertEqual(line(self._item("space", self.world, long_text, "lore:1")),
                          f'"{"x" * 40}" (world Harbor, keyword: dragon)')
-        interaction.permissions = discord.Permissions(administrator=False)
-        self.assertEqual(line(self._item("character", self.alice, char_lore, "x", "always on")),
-                         "an unnamed entry (character Alice, always on)")
 
     async def test_context_lore_line_escapes_markdown_and_mentions(self):
         """Regression (UI-07): keys, names and reasons are escaped so lore text cannot ping or format the /context reply."""
         lore = self.store.add_lore(1, "space", self.world, "body", ["@everyone *x*"])
         reason = "keyword: @everyone *x*"
-        for admin in (True, False):
-            text = self._line(self._context_interaction(admin=admin), self._item("space", self.world, lore, "k", reason))
-            self.assertNotIn("@everyone", text.replace("@\u200beveryone", ""), admin)
-            self.assertIn("\\*x\\*", text, admin)
-            self.assertEqual(text.count("\\*x\\*"), 2, "label and reason are both escaped")
+        text = self._line(self._context_interaction(), self._item("space", self.world, lore, "k", reason))
+        self.assertNotIn("@everyone", text.replace("@\u200beveryone", ""))
+        self.assertIn("\\*x\\*", text)
+        self.assertEqual(text.count("\\*x\\*"), 2, "label and reason are both escaped")
 
     async def test_context_lore_line_other_guild_space_is_not_named(self):
         """Regression (UI-07): a space or character belonging to another server is not named in the reply."""

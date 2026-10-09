@@ -37,8 +37,9 @@ MEMBER_SURFACE = {
     "time": {"set", "show", "clear"},
     "lore": {"list"},
     "scene": {"reset"},
-    "context": None,
 }
+# UI-49: top-level admin-only command outside the ``/admin`` group.
+ADMIN_TOP_LEVEL = {"context"}
 ADMIN_PATHS = {f"admin {group} {name}" for group, names in ADMIN_SURFACE.items() for name in names}
 MEMBER_PATHS = {group if names is None else f"{group} {name}"
                 for group, names in MEMBER_SURFACE.items() for name in (names or [None])}
@@ -83,9 +84,9 @@ class AdminSurfaceTests(unittest.TestCase):
         self.bot.store.close()
 
     def test_surface_table_matches_d11(self):
-        """Guard for the tests below: the expected tables have the 14 admin and 19 member commands D11 lists."""
+        """Guard for the tests below: the expected tables have the 14 admin and 18 member (plus the admin-only /context) commands D11 lists."""
         self.assertEqual(len(ADMIN_PATHS), 14)
-        self.assertEqual(len(MEMBER_PATHS), 19)
+        self.assertEqual(len(MEMBER_PATHS), 18)
         self.assertEqual(set(ADMIN_OPTIONS), ADMIN_PATHS)
 
     def test_admin_group_holds_exactly_the_admin_subcommands(self):
@@ -107,11 +108,11 @@ class AdminSurfaceTests(unittest.TestCase):
         top = {cmd.name: cmd for cmd in self.bot.tree.get_commands(type=None) if cmd.name != "admin"}
         found = {name: ({sub.name for sub in cmd.commands} if isinstance(cmd, app_commands.Group) else None)
                  for name, cmd in top.items()}
-        self.assertEqual(found, MEMBER_SURFACE)
+        self.assertEqual(found, MEMBER_SURFACE | {name: None for name in ADMIN_TOP_LEVEL})
 
     def test_whole_tree_is_exactly_the_d11_surface(self):
         """SEC-05/UX-06 (D11): every invocable path is either a listed admin or a listed member command."""
-        self.assertEqual(set(leaf_commands(self.bot)), ADMIN_PATHS | MEMBER_PATHS)
+        self.assertEqual(set(leaf_commands(self.bot)), ADMIN_PATHS | MEMBER_PATHS | ADMIN_TOP_LEVEL)
 
     def test_admin_commands_use_consistent_option_names(self):
         """UX-06: each admin command's synced option names and order are ``ADMIN_OPTIONS`` (previously ``space_name``,
@@ -159,6 +160,19 @@ class AdminSurfaceTests(unittest.TestCase):
             unchecked.append(path)
         self.assertEqual(unchecked, [])
 
+    def test_context_is_declared_administrator_only(self):
+        """UI-49: /context is hidden from members (administrator default permission) and keeps the runtime admin check
+        for stale clients: a non-admin gets ``MissingPermissions``, an admin passes."""
+        cmd = self.bot.tree.get_command("context")
+        payload = cmd.to_dict(self.bot.tree)
+        self.assertEqual(str(payload.get("default_member_permissions")), ADMIN_BIT)
+        self.assertTrue(cmd.checks)
+        for check in cmd.checks:
+            check(FakeInteraction(admin=True))
+        with self.assertRaises(app_commands.MissingPermissions):
+            for check in cmd.checks:
+                check(FakeInteraction(admin=False))
+
     def test_member_commands_have_no_admin_check(self):
         """Regression (D11): member commands run for non-admins (their checks, if any, pass)."""
         for path in sorted(MEMBER_PATHS):
@@ -191,6 +205,13 @@ class AdminInvocationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(interaction.replies, ["Only server administrators can use that command."])
                 self.assertIs(interaction.response.sent[0][1].get("ephemeral"), True)
                 self.assertEqual(dump(self.store), before)
+
+    async def test_non_admin_gets_the_admin_message_from_context(self):
+        """UI-49: a member (stale client) calling /context gets the admin-only message."""
+        interaction = FakeInteraction(admin=False)
+        await invoke(self.bot, "context", interaction)
+        self.assertEqual(interaction.replies, ["Only server administrators can use that command."])
+        self.assertIs(interaction.response.sent[0][1].get("ephemeral"), True)
 
     async def test_non_admin_admin_lore_add_writes_nothing(self):
         """SEC-05 (D11): ``/admin lore add`` from a non-admin is refused with the admin-only message, no lore row."""
@@ -260,6 +281,18 @@ class MemberDirectMessageTests(unittest.IsolatedAsyncioTestCase):
                 sent = interaction.response.sent + interaction.followup.sent
                 self.assertIs(sent[0][1].get("ephemeral"), True)
                 self.assertEqual([seen for seen in self.guild_ids_seen if seen[1] is None], [])
+
+    async def test_context_refuses_dms(self):
+        interaction = FakeInteraction(guild_id=None, channel_id=555, admin=True)
+        await invoke(self.bot, "context", interaction)
+        self.assertIn("server", interaction.replies[0].lower())
+
+    async def test_context_refuses_dms_for_non_admins_with_the_server_message(self):
+        """UI-49: a DM has no member permissions, so /context gives the use-in-a-server message, not admin-only."""
+        from llmcord_core.discord_bot import USE_IN_SERVER_CHANNEL
+        interaction = FakeInteraction(guild_id=None, channel_id=555, admin=False)
+        await invoke(self.bot, "context", interaction)
+        self.assertEqual(interaction.replies, [USE_IN_SERVER_CHANNEL])
 
 
 if __name__ == "__main__":
