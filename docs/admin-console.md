@@ -102,12 +102,24 @@ By default each completed Discord message has a footer with model, reply input/o
 
 For Google's `gemini-3.8-flash` endpoint, estimates use [standard paid list rates](https://ai.google.dev/gemini-api/docs/pricing): $0.75/M input, $3.75/M output, and $0.075/M cached input through December 31, 2026, doubling from January 1, 2027 (UTC). These estimates are not billing statements and exclude credits, taxes, and non-token charges. Set a model profile's `billing_tier: free` for a free-tier estimate, or configure `input_cost_per_million`, `output_cost_per_million`, and optional `cached_input_cost_per_million` in `config.yaml`. Other models require configured prices. Set `stream_usage: false` only for compatible backends that reject usage reporting.
 
+## Bot settings and spending caps
+
+Operators are the people who run the bot itself, listed by Discord user ID in `LLMCORD_OPERATOR_IDS` (see [live testing](live-testing-pi.md)). They are separate from server admins. An operator sees **Bot settings** in the account menu; for anyone else that page does not exist. Every save there checks the operator list again and is recorded in the audit log.
+
+**Spending caps** apply to the whole bot, across every server, and use the same estimated USD cost as the reply footer:
+
+- **Soft cap**: when spending this period reaches it, each operator gets one Discord DM. Nothing is paused.
+- **Hard cap**: each operator gets one DM, and new character replies, ambient turns and memory updates pause until the reset day or until an operator raises the cap. A turn that already started finishes. `/summon` answers with a private notice; ambient chat stays silent. Mentions and replies stay silent unless **Post a notice in the channel** is switched on, which posts at most once an hour per channel.
+- **Reset day**: the period starts on this day of the month (1–28, UTC). Both caps start off (blank); leave a field blank to turn that cap off.
+
+Calls without a cost estimate (models with no configured price, or a provider that did not report tokens) count as $0, and the panel shows how many there were this period. Set prices in `config.yaml` to include them. Daily spend totals are kept for 400 days, independent of history retention, so clearing old conversations does not lower the period's spend.
+
 ## Deployment and security
 
 Use one web worker. Keep Tailscale Serve forwarding the existing localhost port, including its live Socket.IO/WebSocket traffic. NiceGUI assets are served locally; the dashboard content-security policy uses per-response script nonces and allows the framework's local runtime evaluation. Existing non-dashboard routes retain their policy.
 
 Live events bind to the authenticated session and recheck administrator permission. Upload endpoints additionally validate session binding, CSRF, origin, and body size. Logs and response traces record preset identities, included blocks, omissions, and adaptations rather than complete prompts.
 
-Schema version 3 and 4 upgrades preserve existing entry IDs, legacy activation keys, avatars, conversations, and traces. Before upgrading an older database, the migration service creates a dated `*.pre-v3-*.sqlite3` (from v1/v2) or `*.pre-v4-*.sqlite3` (from v3) backup. Keep a manual backup too. Rolling back requires the matching older application and pre-upgrade database; older code must not open the upgraded schema.
+Schema upgrades preserve existing entry IDs, legacy activation keys, avatars, conversations, and traces. Before upgrading an older database, the migration service creates a dated `*.pre-vN-*.sqlite3` backup named for the version it upgrades to (for example `*.pre-v6-*` from v5). Schema 6 (spending caps) needs the bot and the dashboard upgraded together. Keep a manual backup too. Rolling back requires the matching older application and pre-upgrade database; older code must not open the upgraded schema.
 
 Live Discord delivery, real OAuth/Tailscale forwarding, and the ARM64 container still require validation on your private server and target Pi. See [verification](verification.md).

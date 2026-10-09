@@ -153,7 +153,8 @@ Uploads (`/admin/_nicegui/client/*/upload/*`) run `guard` with the `X-CSRF-Token
 | Memory | `consent`, `personal_memories`, `candidates`, `evidence`, `encounters` | bot | Personal facts only after opt-in |
 | Presets | `prompt_presets`, `prompt_revisions`, `guild_settings.preset_id`, `scene_guidelines` | web writes, bot snapshots | Scene captures one revision per turn |
 | Usage, ambient, resets, webhooks | `model_usage`, `ambient_activity`, `scene_resets`, `webhooks` | bot | Expired with history |
-| Audit, revisions | `admin_audit` (metadata only), `owner_revisions` | web | Written by `AdminService.run` |
+| Spending caps (FEAT-16) | `bot_settings` (one row), `spend_days`, `budget_notices` | web writes settings; bot writes spend and claims notices | Bot-wide, not per server. `spend_days` is filled in the same transaction as `model_usage`, kept 400 days, never expired with history. `SkitBot.run_scene` checks the hard cap before each turn; `budget_notices` claims make each operator DM once per period across both processes |
+| Audit, revisions | `admin_audit` (metadata only), `owner_revisions` | web | Written by `AdminService.run`; operator actions by `AdminService.run_operator` under guild 0, which a future viewer must not treat as a wildcard |
 | Sessions, auth locks | web process memory | web only | Lost on restart; unbounded (SEC-04) |
 | Turn locks, webhook cache | bot process memory | bot only | Unbounded (REL-04) |
 

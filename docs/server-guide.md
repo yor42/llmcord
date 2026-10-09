@@ -72,4 +72,6 @@ For a card, select its home world and upload a V2/V3 `.json` or `.png` file. The
 
 The dashboard edits the main text fields of an imported card. Use the Lore workspace to edit its embedded character entries. For server and channel lorebooks, use the [import workflow](lore-and-memory.md#importing-sillytavern-lorebooks).
 
+The bot's operators (who run the bot itself, not per-server admins) also get a **Bot settings** page with bot-wide spending caps. When the hard cap is reached, characters stop replying until the reset day; `/summon` tells the member privately, and other messages get no reply unless the operator turned on the channel notice. See [Bot settings and spending caps](admin-console.md#bot-settings-and-spending-caps).
+
 See [Admin console](admin-console.md) for the NiceGUI workspace, rule transfers, emotion avatars, and per-server prompt presets.
