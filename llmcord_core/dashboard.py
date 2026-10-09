@@ -990,7 +990,7 @@ def import_changes(changes):
     for change in changes:
         with ui.expansion(f"{change['uid']} · {change['status']} · {change.get('disposition', '')}").classes('w-full ll-subpanel'):
             with ui.element('div').classes('ll-stack'):
-                ui.label('Current: ' + change.get('before', '')).classes('whitespace-pre-wrap ll-muted')
+                ui.label('Current: ' + (change.get('before') or '(none)')).classes('whitespace-pre-wrap ll-muted')
                 ui.label('Incoming: ' + change.get('after', '')).classes('whitespace-pre-wrap ll-muted')
                 for warning in change.get('warnings', []):
                     ui.label(warning).classes('text-amber-300')
