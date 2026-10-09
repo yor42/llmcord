@@ -183,6 +183,8 @@ body.body--dark .q-card .q-card, body.body--dark .q-card .q-expansion-item {{ ba
 .ll-section > .q-expansion-item, .ll-subpanel {{ border: 1px solid {THEME_DIVIDER}; border-radius: 8px; }}
 .ll-stack {{ width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; gap: 16px; padding: 4px 0 8px; }}
 .ll-stack .q-uploader {{ max-width: min(20rem, 100%); }}
+.q-uploader:not(:has(.q-uploader__file)) .q-uploader__subtitle {{ display: none; }}
+.q-uploader:not(:has(.q-uploader__file)) .q-uploader__list::before {{ content: "Drop a file here or choose +"; display: block; width: 100%; text-align: center; font-size: 13px; color: {THEME_TEXT_MUTED}; padding: 16px 8px; }}
 .ll-result.q-card {{ padding: 16px; box-shadow: none; border: 1px solid {THEME_DIVIDER}; border-radius: 8px; }}
 .ll-subtitle {{ font-size: 16px; font-weight: 700; line-height: 1.3; }}
 .ll-drop.nicegui-column {{ background: {THEME_BODY}; border: 1px dashed {THEME_BORDER}; border-radius: 8px; gap: 8px; }}
