@@ -1554,6 +1554,63 @@ class DashboardBrowserTests(unittest.TestCase):
             context.close()
             self.delete_lore('Same owner entry')
 
+    def test_ui46_lore_and_preset_selects_show_labels_not_codes(self):
+        """UI-46: lore Message role/Placement selects show labels and saving 'After examples' stores after_examples; the preset block form hides
+        'Stable ID' (Block ID lives in the preserved-fields expansion); the preview's expansion titles are role labels and Omitted/Adaptations have no ':N' codes."""
+        import re
+        from playwright.sync_api import expect
+        context, page, errors = self.ux_page('/admin/guild/1?tab=lore')
+        try:
+            page.get_by_role('button', name='New entry', exact=True).first.wait_for(timeout=5000)
+            page.get_by_role('button', name='New entry', exact=True).first.click()
+            page.get_by_label('Content', exact=True).fill('UI46 placement entry')
+            page.get_by_role('button', name='Save lore', exact=True).click()
+            self.wait_for(lambda: any(r['content'] == 'UI46 placement entry' for r in self.state()['lore']))
+            row = page.locator('.lore-drop-left .lore-entry').filter(has_text='UI46 placement entry')
+            row.get_by_role('button', name='Edit entry', exact=True).click()
+            page.get_by_text('Advanced activation and placement rules', exact=True).click()
+            role = page.get_by_label('Message role', exact=True)
+            placement = page.get_by_label('Placement', exact=True)
+            role.wait_for(timeout=5000)
+            self.assertIn(role.input_value(), ('System', 'User', 'Assistant'))
+            self.assertIn(placement.input_value(), ('Before character', 'After character', 'Before examples', 'After examples', 'In chat at depth'))
+            placement.click()
+            page.get_by_role('option', name='After examples', exact=True).click()
+            expect(placement).to_have_value('After examples')
+            page.get_by_role('button', name='Save lore', exact=True).click()
+            self.wait_for(lambda: any(r['content'] == 'UI46 placement entry' and json.loads(r['rule_json']).get('position') == 'after_examples'
+                                      for r in self.state()['lore']))
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+            self.delete_lore('UI46 placement entry')
+        context, page, errors = self.ux_page('/admin/guild/1?tab=prompts')
+        try:
+            toggle = page.locator('.prompt-toggle').first
+            toggle.click()
+            page.get_by_label('Prompt text / template', exact=True).first.wait_for(timeout=5000)
+            card = page.locator('.ll-block-open').first
+            self.assertEqual(card.get_by_text('Stable ID', exact=False).count(), 0)
+            block_id = card.get_by_text(re.compile(r'^Block ID: \S+'))
+            expect(block_id).to_be_hidden()
+            card.get_by_text('Preserved import fields and compatibility remapping', exact=True).click()
+            expect(block_id).to_be_visible()
+            self.assertIn('Block ID: ', card.inner_text())
+            page.get_by_role('button', name='Preview without a model call', exact=True).click()
+            page.get_by_text('Estimated input tokens:', exact=False).wait_for(timeout=5000)
+            omitted = page.get_by_text(re.compile(r'^Omitted: '))
+            adaptations = page.get_by_text(re.compile(r'^Adaptations: '))
+            omitted.wait_for(timeout=5000)
+            self.assertEqual(omitted.inner_text().strip(), 'Omitted: none')
+            self.assertEqual(adaptations.inner_text().strip(), 'Adaptations: none')
+            self.assertNotRegex(omitted.inner_text(), r':\d')
+            self.assertNotRegex(adaptations.inner_text(), r'(top_system|:\d)')
+            titles = page.locator('.q-expansion-item__container .q-item__label').all_inner_texts()
+            self.assertTrue({'System', 'User', 'Assistant'} & {t.strip() for t in titles}, titles)
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
     def test_lore_entry_delete_goes_through_the_dialog(self):
         """UX-05: deleting a lore entry from its editor opens a confirmation dialog (no checkbox); Cancel keeps it."""
         import re

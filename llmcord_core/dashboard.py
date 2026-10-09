@@ -959,9 +959,9 @@ def entry_editor(ctx, entry, owners, refresh):
                 elif type(value) is int:
                     controls[key] = ui.number(key.replace('_', ' ').title(), value=value, precision=0)
                 elif key == 'role':
-                    controls[key] = ui.select(['system', 'user', 'assistant'], value=value, label='Message role')
+                    controls[key] = ui.select(_prompt_options(PROMPT_ROLE_LABELS, value), value=value, label='Message role')
                 elif key == 'position':
-                    controls[key] = ui.select(list(dict.fromkeys(['before_char', 'after_char', 'before_examples', 'after_examples', 'in_chat', value])), value=value, label='Placement')
+                    controls[key] = ui.select(_prompt_options(LORE_PLACEMENT_LABELS, value), value=value, label='Placement')
                 elif key == 'scan_depth' or isinstance(value, list):
                     controls[key] = ui.input(key.replace('_', ' ').title(), value=pretty(value))
             for warning in rule.get('unsupported', []):
@@ -1326,6 +1326,8 @@ def _span(text=''):
 
 PROMPT_ROLE_LABELS = {'system': 'System', 'user': 'User', 'assistant': 'Assistant'}
 PROMPT_PLACEMENT_LABELS = {'relative': 'Relative to the prompt', 'in_chat': 'In chat at depth'}
+LORE_PLACEMENT_LABELS = {'before_char': 'Before character', 'after_char': 'After character', 'before_examples': 'Before examples',
+                         'after_examples': 'After examples', 'in_chat': 'In chat at depth'}
 PROMPT_PLACEMENT_SHORT = {'relative': 'Relative', 'in_chat': 'In chat'}
 PROMPT_SOURCE_LABELS = {
     'text': 'Custom text', 'history': 'Chat history', 'payload': 'Request payload', 'location': 'Location', 'description': 'Character description',
@@ -1403,7 +1405,6 @@ def _preset_editor(ctx, state, purpose, collect):
                                 button.update()
                             name_input.on_value_change(rename)
                             tracked(ui.switch('Enabled')).bind_value(b, 'enabled')
-                        ui.label('Stable ID: ' + b['id']).classes('ll-muted')
                         sources = _prompt_options({k: PROMPT_SOURCE_LABELS.get(k, k) for k in sorted(SOURCES, key=lambda k: PROMPT_SOURCE_LABELS.get(k, k))}, b['source'])
                         tracked(ui.select(sources, label='Context source')).bind_value(b, 'source').classes('w-full')
                         tracked(ui.textarea('Prompt text / template')).bind_value(b, 'content').classes('w-full').props('rows=6')
@@ -1417,6 +1418,7 @@ def _preset_editor(ctx, state, purpose, collect):
                         with ui.expansion('Preserved import fields and compatibility remapping').classes('w-full ll-subpanel'), ui.element('div').classes('ll-stack'):
                             raw = tracked(ui.textarea('Original prompt fields (JSON)', value=pretty(b['raw']))).classes('w-full').props('rows=6')
                             state['raw_controls'][b['id']] = (b, raw)
+                            ui.label('Block ID: ' + b['id']).classes('ll-muted')
                             ui.label('To remap triggers/extensions: clear injection_trigger and set extension to false.').classes('ll-muted')
             async def reordered(event):
                 if await ctx.run(lambda: True):
@@ -1507,14 +1509,25 @@ def _preset_preview(ctx, purpose, collect):
         history = ui.textarea('Sample history (one message per line)').classes('w-full')
         diagnostics = ui.column().classes('w-full')
         def preview():
-            request = ctx.service.preview_prompt(ctx.guild_id, collect(), purpose.value, character.value, sample.value or '', history.value or '', channel.value)
+            bundle = collect()
+            request = ctx.service.preview_prompt(ctx.guild_id, bundle, purpose.value, character.value, sample.value or '', history.value or '', channel.value)
             diagnostics.clear()
             with diagnostics:
                 ui.label(f'Estimated input tokens: {request.estimated_tokens}')
-                ui.label('Omitted: ' + ', '.join(request.omitted))
-                ui.label('Adaptations: ' + ', '.join(request.adaptations))
+                names = {b['id']: b.get('name') or b['id'] for b in purpose_blocks(bundle, purpose.value)}
+                adapt_labels = {'top_system': 'moved to top-level system instructions', 'user': 'converted to user instructions'}
+                def omitted_text(entry):
+                    ident, sep, rest = entry.partition(':')
+                    if sep and rest.isdigit():
+                        return f'{names.get(ident, ident)} (history message {int(rest) + 1})'
+                    return names.get(entry, entry)
+                def adapted_text(entry):
+                    ident, sep, rest = entry.partition(': ')
+                    return f'{names.get(ident, ident)}: {adapt_labels.get(rest, rest)}' if sep else entry
+                ui.label('Omitted: ' + (', '.join(omitted_text(e) for e in request.omitted) or 'none'))
+                ui.label('Adaptations: ' + (', '.join(adapted_text(e) for e in request.adaptations) or 'none'))
                 for message in request.messages:
-                    with ui.expansion(message.role).classes('w-full'):
+                    with ui.expansion(PROMPT_ROLE_LABELS.get(message.role, message.role)).classes('w-full'):
                         ui.label(message.text).classes('whitespace-pre-wrap')
             return True
         with ui.element('div').classes('ll-form-row'):
