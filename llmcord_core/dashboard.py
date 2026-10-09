@@ -704,7 +704,8 @@ async def setup_panel(ctx):
             await ctx.service.avatars.configure(gid, asset_channel.value)
             return True
         ctx.savebar.track('Server settings', {}, parts=[
-            {'controls': {footer: store.usage_footer_enabled(gid)}, 'operation': save_footer, 'action': 'settings.footer'},
+            {'controls': {footer: store.usage_footer_enabled(gid)}, 'operation': save_footer, 'action': 'settings.footer',
+             'detail': lambda _: {'enabled': bool(footer.value)}},
             {'controls': {timezone: current or None}, 'operation': lambda: timezone_operation(store, gid, timezone.value),
              'action': 'settings.timezone', 'detail': timezone_detail},
             {'controls': {asset_channel: saved_asset}, 'operation': configure, 'action': 'avatar.channel'}],

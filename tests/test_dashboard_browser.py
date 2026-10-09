@@ -810,6 +810,9 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertTrue(self.tab_selected(page, 'Characters'))
             self.assertIn('tab=characters', page.url)
             self.assertIn('owner=channel', page.url)
+            page.get_by_role('tab', name='Lore', exact=True).click()
+            page.wait_for_url('**tab=lore*')
+            self.assertIn('owner=channel', page.url)
             self.assertFalse(errors, (errors, getattr(page, 'network', [])))
         finally:
             context.close()
@@ -842,6 +845,23 @@ class DashboardBrowserTests(unittest.TestCase):
             self.wait_for(lambda: self.state()['guild_timezone'] == 'Asia/Seoul')
             rows = [r for r in self.state()['audit'] if r['action'] == 'settings.timezone']
             self.assertEqual([json.loads(r['detail_json']) for r in rows], [{'old': '', 'new': 'Asia/Seoul'}])
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_server_footer_switch_audits_enabled_state(self):
+        """UI-08: toggling the reply footer switch audits settings.footer with the new on/off value."""
+        context, page, errors = self.ux_page('/admin/guild/1')
+        try:
+            page.get_by_role('tab', name='Server setup', exact=True).click()
+            switch = page.get_by_role('switch', name='Show model and cost footer on replies')
+            switch.wait_for(timeout=5000)
+            was = switch.get_attribute('aria-checked') == 'true'
+            switch.click()
+            page.get_by_role('region', name='Unsaved changes').get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Server settings saved', exact=True).wait_for(timeout=5000)
+            rows = [r for r in self.state()['audit'] if r['action'] == 'settings.footer']
+            self.assertEqual([json.loads(r['detail_json']) for r in rows], [{'enabled': not was}])
             self.assertFalse(errors, (errors, getattr(page, 'network', [])))
         finally:
             context.close()
