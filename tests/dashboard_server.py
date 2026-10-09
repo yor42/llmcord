@@ -203,6 +203,17 @@ def main():
                                expected_revision=store.owner_revision(1, 'character', row['id']))
         return {'ok': True}
 
+    @app.post('/_test/cleanup-presets')
+    async def cleanup_presets(prefix: str, active: int = 0):
+        # Best-effort reset after the UI-41 preset tests: re-activate the preset that was active before, then drop every preset whose name starts with `prefix`.
+        row = store.one('SELECT MAX(revision) AS revision FROM prompt_revisions WHERE preset_id = ?', (active,)) if active else None
+        with store.write_admin():
+            store.db.execute('UPDATE guild_settings SET preset_id = ?, preset_revision = ? WHERE guild_id = 1', (active, row['revision'] if row else 0))
+        for preset in store.list_presets(1):
+            if preset['name'].startswith(prefix) and store.active_preset(1)['id'] != preset['id']:
+                store.delete_preset(1, preset['id'])
+        return {'ok': True}
+
     @app.post('/_test/cleanup-ui09')
     async def cleanup_ui09():
         # Best-effort reset after the UI-09 tests (even when one failed midway): drop their extra emotions and hub, put #scene back

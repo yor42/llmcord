@@ -1437,6 +1437,118 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def preset_file(self, marker):
+        from llmcord_core.prompts import default_bundle, export_preset
+        bundle = default_bundle()
+        bundle['purposes']['dialogue'][0]['content'] = marker
+        return {'name': 'preset.json', 'mimeType': 'application/json', 'buffer': json.dumps(export_preset(bundle)).encode()}
+
+    def test_preset_import_is_an_unsaved_preview_that_reset_undoes(self):
+        """UI-41: an import shows 'Imported (not saved)' in the library, Activate/Delete are refused while it is dirty, export while dirty
+        exports the unsaved preview (characterization), Reset restores the previous preset, and a second import works without a reload."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=prompts')
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            library = page.get_by_label('Preset library', exact=True)
+            name = page.get_by_label('Preset name', exact=True)
+            uploader = page.locator('input[type=file]').first
+            before_library, before_name, before_state = library.input_value(), name.input_value(), self.state()
+            uploader.set_input_files(self.preset_file('First imported marker'))
+            bar.wait_for(timeout=5000)
+            self.wait_for(lambda: library.input_value() == 'Imported (not saved)')
+            self.assertEqual(name.input_value(), 'Imported preset')
+            bar.get_by_text('Imported preset has unsaved changes.', exact=True).wait_for()
+
+            refusal = page.get_by_text('Save or reset your changes to Imported preset first.', exact=True)
+            badge = page.locator('.q-notification__badge')
+            self.open_more_item(page, page, 'preset', 'Activate saved revision')
+            self.wait_for(lambda: refusal.count() >= 1)
+            self.open_more_item(page, page, 'preset', 'Delete preset')
+            self.wait_for(lambda: badge.count() and badge.first.inner_text() == '2')  # Quasar groups identical toasts under a counter
+            self.assertEqual(page.get_by_role('dialog').count(), 0)
+            library.click()
+            page.get_by_role('option', name='Built-in default', exact=True).click()
+            self.wait_for(lambda: badge.count() and badge.first.inner_text() == '3')
+            self.wait_for(lambda: library.input_value() == 'Imported (not saved)')
+            self.assertEqual(self.state()['active'], before_state['active'])
+            self.assertEqual(self.state()['presets'], before_state['presets'])
+
+            with page.expect_download() as download:
+                page.get_by_role('button', name='Export full native bundle', exact=True).click()
+            self.assertIn('First imported marker', Path(download.value.path()).read_text(encoding='utf-8'))
+
+            bar.get_by_role('button', name='Reset', exact=True).click()
+            bar.wait_for(state='hidden')
+            self.wait_for(lambda: library.input_value() == before_library)
+            self.assertEqual(name.input_value(), before_name)
+            with page.expect_download() as download:
+                page.get_by_role('button', name='Export full native bundle', exact=True).click()
+            self.assertNotIn('First imported marker', Path(download.value.path()).read_text(encoding='utf-8'))
+
+            page.locator('input[type=file]').first.set_input_files(self.preset_file('Second imported marker'))
+            bar.wait_for(timeout=5000)
+            self.wait_for(lambda: library.input_value() == 'Imported (not saved)')
+            with page.expect_download() as download:
+                page.get_by_role('button', name='Export full native bundle', exact=True).click()
+            self.assertIn('Second imported marker', Path(download.value.path()).read_text(encoding='utf-8'))
+            bar.get_by_role('button', name='Reset', exact=True).click()
+            bar.wait_for(state='hidden')
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_preset_save_as_new_proposes_a_copy_name_and_save_draft_refreshes_subtitle(self):
+        """UI-41: Save as new preset with an unchanged name saves '<name> copy' (then 'copy 2'); Save draft on the active preset refreshes the
+        'Active preset' subtitle; saving an import selects the new preset in the library."""
+        active_before = self.state()['active']
+        context, page, errors = self.ux_page('/admin/guild/1?tab=prompts')
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            name = page.get_by_label('Preset name', exact=True)
+            library = page.get_by_label('Preset library', exact=True)
+            names = lambda: {r['name'] for r in self.state()['presets']}
+            name.fill('UI41 copy source')
+            self.open_more_item(page, page, 'preset', 'Save as new preset')
+            self.wait_for(lambda: 'UI41 copy source' in names())
+            bar.wait_for(state='hidden')
+            self.open_more_item(page, page, 'preset', 'Save as new preset')
+            self.wait_for(lambda: 'UI41 copy source copy' in names())
+            self.assertEqual(name.input_value(), 'UI41 copy source copy')
+            bar.wait_for(state='hidden')
+            name.fill('UI41 copy source')
+            self.open_more_item(page, page, 'preset', 'Save as new preset')
+            self.wait_for(lambda: 'UI41 copy source copy 2' in names())
+            self.assertEqual(name.input_value(), 'UI41 copy source copy 2')
+            self.assertIn('UI41 copy source copy 2', library.input_value())
+
+            self.open_more_item(page, page, 'preset', 'Activate saved revision')
+            subtitle = page.locator('.ll-subtitle').filter(has_text='Active preset:').first
+            self.wait_for(lambda: bool(self.state()['active']))
+            self.wait_for(lambda: 'UI41 copy source copy 2 · draft 1' in subtitle.inner_text())
+            name.fill('UI41 renamed active')
+            bar.get_by_role('button', name='Save draft', exact=True).click()
+            self.wait_for(lambda: 'UI41 renamed active' in names())
+            self.wait_for(lambda: 'UI41 renamed active · draft 2' in subtitle.inner_text())
+
+            page.locator('input[type=file]').first.set_input_files(self.preset_file('Saved import marker'))
+            self.wait_for(lambda: library.input_value() == 'Imported (not saved)')
+            self.wait_for(lambda: name.input_value() == 'Imported preset')
+            bar.wait_for(timeout=5000)
+            name.fill('UI41 saved import')
+            bar.get_by_role('button', name='Save draft', exact=True).click()
+            self.wait_for(lambda: 'UI41 saved import' in names())
+            bar.wait_for(state='hidden')
+            self.wait_for(lambda: library.input_value() == 'UI41 saved import · draft 1')
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+            try:
+                response = self.context.request.post(self.url + '/_test/cleanup-presets', params={'prefix': 'UI41 ', 'active': active_before})
+                if response.status != 200:
+                    print(f'warning: /_test/cleanup-presets returned {response.status}', file=sys.stderr)
+            except Exception as exc:
+                print(f'warning: /_test/cleanup-presets failed: {exc!r}', file=sys.stderr)
+
     def test_prompt_blocks_are_collapsed_rows_with_live_summary(self):
         """UI-23: prompt blocks start collapsed, toggle by keyboard, keep their summary live, stay open across re-renders and remove via the menu."""
         import re

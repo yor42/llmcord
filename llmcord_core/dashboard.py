@@ -163,8 +163,10 @@ class LiveContext:
         async def uploaded(event):
             # Upload endpoint also validates session binding and CSRF before reading the body.
             if self.savebar and self.savebar.refuse():
+                control.reset()
                 return
             ok, result = await self._attempt(lambda: handler(event), action, detail)
+            control.reset()  # max_files=1 drops the input after one file; a second upload in this page view needs it back
             if not ok:
                 return
             if success:
@@ -1240,11 +1242,19 @@ def presets_panel(ctx):
     from nicegui import ui
     store, gid = ctx.store, ctx.guild_id
     presets = store.list_presets(gid)
-    choices = {0: 'Built-in default', **{r['id']: f"{r['name']} · draft {r['revision']}" for r in presets}}
+    IMPORTED = -1
+
+    def library_options(rows, preview=False):
+        return {0: 'Built-in default', **{r['id']: f"{r['name']} · draft {r['revision']}" for r in rows}, **({IMPORTED: 'Imported (not saved)'} if preview else {})}
+
+    def subtitle_text(rows):
+        current = store.active_preset(gid)
+        return f"Active preset: {library_options(rows).get(current['id'], str(current['id']))} · revision {current['revision']}"
+    choices = library_options(presets)
     active = store.active_preset(gid)
     selected = next((r for r in presets if r['id'] == active['id']), None)
     state = {'id': active['id'], 'revision': selected['revision'] if selected else 0, 'bundle': store.preset_bundle(gid, active['id']), 'raw_controls': {},
-             'controls': [], 'after_render': None, 'saved': None, 'label': selected['name'] if selected else 'Built-in default'}
+             'controls': [], 'after_render': None, 'saved': None, 'preview': False, 'label': selected['name'] if selected else 'Built-in default'}
     editor = None
     baseline_label = {'text': state['label']}
 
@@ -1261,7 +1271,7 @@ def presets_panel(ctx):
             ui.menu_item('Delete preset', on_click=lambda: ask_delete()).classes('text-negative').props('role=menuitem')
 
     with section('Preset library', header=preset_menu):
-        ui.label(f"Active preset: {choices.get(active['id'], str(active['id']))} · revision {active['revision']}").classes('ll-subtitle')
+        subtitle = ui.label(subtitle_text(presets)).classes('ll-subtitle')
         select = ui.select(choices, value=active['id'], label='Preset library').classes('w-full')
         name = ui.input('Preset name', value=selected['name'] if selected else 'Default copy').classes('w-full')
 
@@ -1284,11 +1294,19 @@ def presets_panel(ctx):
             if not state.get('quiet'):
                 ctx.savebar.check(editor)
 
+    def show_library(rows=None):
+        """Point the library select at the loaded preset, or at 'Imported (not saved)' while an import preview is unsaved."""
+        select.set_options(library_options(rows if rows is not None else store.list_presets(gid), state['preview']), value=IMPORTED if state['preview'] else state['id'])
+
     def reset():
         baseline = state['saved']
-        state.update(id=baseline['id'], revision=baseline['revision'], bundle=copy.deepcopy(baseline['bundle']), label=baseline_label['text'])
+        was_preview = state['preview']
+        state.update(id=baseline['id'], revision=baseline['revision'], bundle=copy.deepcopy(baseline['bundle']), label=baseline_label['text'], preview=False)
         editor.name = baseline_label['text']
-        select.value = baseline['id']
+        if was_preview:
+            show_library()  # drops the 'Imported (not saved)' option
+        else:
+            select.value = baseline['id']
         name.value = baseline['name']
         render_editor.refresh()
 
@@ -1303,17 +1321,19 @@ def presets_panel(ctx):
         ctx.savebar.check(editor)
 
     async def load():
-        if select.value == state['id']:
+        shown = IMPORTED if state['preview'] else state['id']
+        if select.value == shown:
             return
         if ctx.savebar.refuse():
-            select.value = state['id']
+            select.value = shown
             return
         bundle = await ctx.run(lambda: store.preset_bundle(gid, select.value))
         if bundle is None:
-            select.value = state['id']
+            select.value = shown
             return
         chosen = next((r for r in store.list_presets(gid) if r['id'] == select.value), None)
-        state.update(id=select.value, revision=chosen['revision'] if chosen else 0, bundle=bundle)
+        state.update(id=select.value, revision=chosen['revision'] if chosen else 0, bundle=bundle, preview=False)
+        show_library()
         state.get('open_blocks', set()).clear()
         name.value = chosen['name'] if chosen else 'Default copy'
         adopt(chosen['name'] if chosen else 'Built-in default')
@@ -1325,8 +1345,10 @@ def presets_panel(ctx):
 
     def saved(result):
         state['id'], state['revision'] = result
+        state['preview'] = False
         fresh = store.list_presets(gid)
-        select.set_options({0: 'Built-in default', **{r['id']: f"{r['name']} · draft {r['revision']}" for r in fresh}}, value=state['id'])
+        show_library(fresh)
+        subtitle.set_text(subtitle_text(fresh))
         rebase(name.value or state['label'])
         ctx.savebar.check(editor)
         ui.notify('Draft saved. Activate it when ready.', type='positive')
@@ -1350,6 +1372,15 @@ def presets_panel(ctx):
             return
 
         def duplicate():
+            taken = {r['name'] for r in store.list_presets(gid)}
+            base = (name.value or '').strip()
+            if base in taken:  # an unchanged name would hit the unique name; propose the next free "<name> copy"
+                base = base[:60]
+                proposal = f'{base} copy'
+                n = 2
+                while proposal in taken:
+                    proposal, n = f'{base} copy {n}', n + 1
+                name.value = proposal
             return store.save_preset(gid, name.value or '', collect())
         ok, result = await ctx._attempt(duplicate, 'preset.create')
         if ok:
@@ -1379,9 +1410,9 @@ def presets_panel(ctx):
 
     def imported(bundle):
         editor.name = state['label'] = 'Imported preset'
-        state.update(id=0, revision=0, bundle=bundle)
+        state.update(id=0, revision=0, bundle=bundle, preview=True)
         state.get('open_blocks', set()).clear()
-        select.value = 0
+        show_library()
         name.value = 'Imported preset'
         render_editor.refresh()
         ctx.savebar.check(editor)  # an import preview is unsaved: the baseline stays the previous preset
