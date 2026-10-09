@@ -27,23 +27,48 @@ class SaveBar:
                 self.save_button = ui.button(_SAVE_LABEL, on_click=self.save).props('no-caps')
         self.bar.set_visibility(False)
 
-    def track(self, name, controls, save, action=None, detail=None, then=None, success=None, on_reset=None,
-              dirty=None, reset=None, save_label=_SAVE_LABEL):
+    def track(self, name, controls, save=None, action=None, detail=None, then=None, success=None, on_reset=None,
+              dirty=None, reset=None, save_label=_SAVE_LABEL, parts=None):
         """Register an editor: controls maps each tracked control to its saved value; save runs guarded/audited on Save.
 
         dirty: optional callable replacing the per-control comparison (an exception counts as dirty).
         reset: optional callable used by Reset instead of restoring control values (on_reset still runs after).
         save_label: the bar's Save button text while this editor is active.
         Writes made through ctx._attempt (not ctx.run/button) are never refused, so an editor may run its own
-        write (e.g. Save as new) that way and then call settle()."""
+        write (e.g. Save as new) that way and then call settle().
+
+        parts: instead of save/action/detail, a list of dicts {controls, operation, action, detail=None} (a subset of
+        the editor's controls mapped to their saved values, plus the operation, audit action and detail passed to
+        ctx._attempt). The tracked controls are the union of the parts' controls plus any extra `controls`. Save runs
+        only the parts whose controls differ, in order, each its own guarded/audited write; a part that succeeds
+        becomes the new saved baseline, a failure stops the rest and leaves the bar active for the unsaved parts.
+        When all succeed: one success toast, settle, then then(results), results being the list of per-part
+        results in run order. save and parts are mutually exclusive, and extra non-part controls are rejected with
+        parts (ValueError). retrack() raises NotImplementedError for a parts editor. Operations should read control
+        values at call time: the baseline is rebased to the values captured just before each part ran. If a control
+        was edited during Save the bar stays active (then still runs). On a partial failure then/success are not
+        called, even for parts that already succeeded."""
+        if parts and save is not None:
+            raise ValueError('save and parts are mutually exclusive')
+        if parts and controls:
+            raise ValueError('controls must be given through parts')
+        parts = [types.SimpleNamespace(controls=dict(part['controls']), operation=part['operation'],
+                                       action=part.get('action'), detail=part.get('detail')) for part in parts or []]
+        controls = {**controls}
+        for part in parts:
+            controls.update(part.controls)
         editor = types.SimpleNamespace(name=name, controls=[], save=save, action=action, detail=detail, then=then,
-                                       success=success, on_reset=on_reset, dirty=dirty, reset=reset, save_label=save_label)
+                                       success=success, on_reset=on_reset, dirty=dirty, reset=reset, save_label=save_label,
+                                       parts=[])
         self.editors.append(editor)
         self.retrack(editor, controls)
+        editor.parts = parts
         return editor
 
     def retrack(self, editor, controls):
         """Replace an editor's tracked controls (after a re-render); the old ones stop reporting. Call check(editor) after. The old controls must already be gone from the page: they stop being tracked, so settle() will not re-enable them."""
+        if editor.parts:
+            raise NotImplementedError('retrack is not supported for editors with parts')
         previous = [tracked for tracked, _ in editor.controls]
         editor.controls = list(controls.items())
         for control, _ in editor.controls:
@@ -129,7 +154,10 @@ class SaveBar:
         self.saving = True
         self.save_button.disable()
         try:
-            ok, result = await self.ctx._attempt(editor.save, editor.action, editor.detail)
+            if editor.parts:
+                ok, result = await self._save_parts(editor)
+            else:
+                ok, result = await self.ctx._attempt(editor.save, editor.action, editor.detail)
         finally:
             self.saving = False
             self.save_button.enable()
@@ -137,8 +165,24 @@ class SaveBar:
             return
         if editor.success:
             ui.notify(editor.success, type='positive')
-        self.settle()
+        if not editor.parts or not self.differs(editor):
+            self.settle()
         if editor.then:
             followup = editor.then(result)
             if inspect.isawaitable(followup):
                 await followup
+
+    async def _save_parts(self, editor):
+        saved = {id(control): value for control, value in editor.controls}
+        results = []
+        for part in editor.parts:
+            sent = {control: control.value for control in part.controls}
+            if all(_same(value, saved[id(control)]) for control, value in sent.items()):
+                continue
+            ok, result = await self.ctx._attempt(part.operation, part.action, part.detail)
+            if not ok:
+                return False, None
+            results.append(result)
+            editor.controls = [(control, sent[control] if control in sent else value) for control, value in editor.controls]
+            saved.update({id(control): value for control, value in sent.items()})
+        return True, results
