@@ -35,6 +35,7 @@ def confirm_dialog(ctx, title, lines, button_label, operation, action, detail=No
         with ui.element('div').classes('ll-form-row justify-end'):
             ui.button('Cancel', on_click=dialog.close).props('flat')
             ctx.button(button_label, operation, action, detail, then=done, color='negative').set_enabled(enabled)
+    dialog.on('hide', dialog.delete)
     dialog.open()
 
 
@@ -103,4 +104,5 @@ def direct_import_dialog(ctx, kind, owner_id, on_saved=None):
             ctx.upload(uploaded, 'Upload JSON entries')
         with ui.element('div').classes('ll-form-row justify-end'):
             ui.button('Cancel', on_click=dialog.close).props('flat')
+    dialog.on('hide', dialog.delete)
     dialog.open()

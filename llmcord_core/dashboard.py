@@ -777,6 +777,7 @@ def characters_panel(ctx):
                 ui.button('Cancel', on_click=dialog.close).props('flat')
                 ctx.button('Create', lambda: store.create_character(gid, world.value, name.value or ''),
                            'character.create', then=lambda _: ctx.refresh('characters'))
+        dialog.on('hide', dialog.delete)
         dialog.open()
     rows = ctx.snapshot.characters
     with section('Characters'):

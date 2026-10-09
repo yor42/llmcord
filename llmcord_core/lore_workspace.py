@@ -136,6 +136,7 @@ class _LoreWorkspace:
                     dialog.close()
                     await self.mutate(entries, 'lore.delete')
                 ui.button(f"Delete {count} {'entry' if count == 1 else 'entries'}", on_click=apply, color='negative')
+        dialog.on('hide', dialog.delete)
         dialog.open()
 
     def update_selection(self):

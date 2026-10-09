@@ -1643,6 +1643,35 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def test_cancelled_confirmation_dialogs_leave_the_dom(self):
+        """UI-05: a one-shot confirmation dialog is removed from the page after Cancel or Escape, without a refresh."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=lore')
+        try:
+            page.get_by_role('button', name='New entry', exact=True).first.wait_for(timeout=5000)
+            page.get_by_role('button', name='New entry', exact=True).first.click()
+            page.get_by_label('Content', exact=True).fill('Dialog cleanup entry')
+            page.get_by_role('button', name='Save lore', exact=True).click()
+            self.wait_for(lambda: any(r['content'] == 'Dialog cleanup entry' for r in self.state()['lore']))
+            page.locator('.lore-entry').filter(has_text='Dialog cleanup entry').get_by_role('button', name='Edit entry', exact=True).click()
+            editor = page.locator('.q-card').filter(has=page.get_by_text('Edit lore', exact=True)).last
+            dialogs = "() => Object.values(document.querySelector('#app').__vue_app__._container._vnode.component.proxy.elements).filter(e => e.tag === 'nicegui-dialog').length"
+            self.assertEqual(page.evaluate(dialogs), 0)
+            for close in ('cancel', 'escape'):
+                editor.get_by_role('button', name='Delete', exact=True).click()
+                dialog = page.get_by_role('dialog')
+                dialog.get_by_role('button', name='Cancel', exact=True).wait_for(timeout=5000)
+                if close == 'cancel':
+                    dialog.get_by_role('button', name='Cancel', exact=True).click()
+                else:
+                    page.keyboard.press('Escape')
+                page.wait_for_function("() => document.querySelectorAll('.q-dialog').length === 0", timeout=5000)
+                page.wait_for_timeout(500)
+                self.assertEqual(page.evaluate(dialogs), 0, close)
+            self.assertTrue(any(r['content'] == 'Dialog cleanup entry' for r in self.state()['lore']))
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
     def test_lore_editor_keys_are_chips(self):
         """UI-21: Keys / Secondary keys are chip inputs; a key containing a comma stays ONE key, old keys survive an edit."""
         context, page, errors = self.ux_page('/admin/guild/1?tab=lore')
