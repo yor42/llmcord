@@ -329,6 +329,18 @@ class CatchupCommandTests(unittest.IsolatedAsyncioTestCase):
             await invoke(self.bot, "catchup", it4)
             self.assertEqual(len(self.models.calls), 2)
 
+    async def test_first_catchup_shortly_after_host_boot_is_not_refused(self):
+        """FEAT-15 fix: a first /catchup within 5 minutes of host boot is not refused (monotonic clock starts near 0)."""
+        with patch("llmcord_core.discord_bot.time.monotonic", return_value=10.0):
+            it, _ = self.interaction()
+            await invoke(self.bot, "catchup", it)
+            self.assertEqual(len(self.models.calls), 1)
+            self.assertEqual(it.followup.sent[0][0], "You missed a duel.")
+            it2, _ = self.interaction()
+            await invoke(self.bot, "catchup", it2)
+            self.assertEqual(it2.replies, ["You can use /catchup here again in 5 minutes."])
+            self.assertEqual(len(self.models.calls), 1)
+
     async def test_cooldown_is_per_member_and_channel(self):
         self.store.set_catchup_anywhere(1, True)
         await invoke(self.bot, "catchup", self.interaction()[0])

@@ -936,7 +936,7 @@ def _register_catchup_command(bot: SkitBot) -> None:
             return await reply(_hard_cap_notice(state, "Catch-ups"))
         key = (guild_id, channel.id, user.id)
         now_mono = time.monotonic()
-        wait = bot.catchup_used.get(key, 0.0) + CATCHUP_COOLDOWN_SECONDS - now_mono
+        wait = bot.catchup_used[key] + CATCHUP_COOLDOWN_SECONDS - now_mono if key in bot.catchup_used else 0
         if wait > 0:
             minutes = -(-int(wait) // 60) or 1
             return await reply(f"You can use /catchup here again in {minutes} minute{'s' if minutes != 1 else ''}.")
