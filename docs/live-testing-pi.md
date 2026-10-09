@@ -28,6 +28,7 @@ Edit `.env` privately on the Pi and set:
 | `DISCORD_CLIENT_SECRET` | OAuth client secret, for dashboard OAuth |
 | `WEB_BASE_URL` | Exact Tailscale HTTPS origin, including a non-default port if used |
 | `LLMCORD_DATABASE_PATH` | `data/llmcord.sqlite3` for all processes |
+| `LLMCORD_OPERATOR_IDS` | Optional. Comma-separated Discord user IDs of the bot's operators, who manage bot-wide settings (separate from server admins). Empty or unset means no operators. A malformed entry stops both the bot and the dashboard at startup; changes apply after both restart |
 
 The bot can run with the first three variables alone. Dashboard OAuth additionally needs the client ID, secret, and HTTPS origin. The bot's environment database path overrides YAML, preventing the bot and dashboard from using different databases. The guild ID controls command registration; Discord channel permissions control who can interact with the bot.
 

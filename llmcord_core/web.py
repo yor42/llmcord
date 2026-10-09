@@ -73,7 +73,7 @@ class SecurityHeaders:
 
 
 def create_app(database_path: str | Path, base_url: str, client_id: str,
-               client_secret: str, bot_token: str, oauth_http: httpx.AsyncClient | None = None, *, enable_dashboard: bool = True, config_path: str = "config.yaml") -> FastAPI:
+               client_secret: str, bot_token: str, oauth_http: httpx.AsyncClient | None = None, *, enable_dashboard: bool = True, config_path: str = "config.yaml", operator_ids: frozenset[int] = frozenset()) -> FastAPI:
     base_url = base_url.rstrip("/")
     parsed_url = urlparse(base_url)
     if parsed_url.scheme != "https" or not parsed_url.hostname:
@@ -93,6 +93,7 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
     app.state.store = Store(database_path)
     app.state.http = oauth_http or httpx.AsyncClient(timeout=10)
     app.state.owns_http = oauth_http is None
+    app.state.operator_ids = frozenset(operator_ids)
     app.state.sessions = {}
     app.state.states = {}
     app.state.base_url = base_url

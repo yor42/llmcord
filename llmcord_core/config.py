@@ -49,6 +49,7 @@ class Settings:
     director: str
     memory: str
     limits: dict[str, int]
+    operator_ids: frozenset[int] = frozenset()
 
     def profile(self, role: str) -> ModelProfile:
         return self.profiles[getattr(self, role)]
@@ -83,6 +84,20 @@ def resolve_database_path(config_path: str | Path = "config.yaml") -> Path:
     if not isinstance(raw, dict):
         raise ValueError(f"{config_path} must contain a mapping")
     return _database_path(raw)
+
+
+def operator_ids_from_env(environ=os.environ) -> frozenset[int]:
+    """Comma-separated Discord user IDs in LLMCORD_OPERATOR_IDS; unset or empty means no operators."""
+    ids = set()
+    for entry in (environ.get("LLMCORD_OPERATOR_IDS") or "").split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        if len(entry) > 20 or not (entry.isascii() and entry.isdigit()):
+            shown = entry if len(entry) <= 24 else entry[:24] + "…"
+            raise ValueError(f"LLMCORD_OPERATOR_IDS must be comma-separated Discord user IDs; bad entry: {shown!r}")
+        ids.add(int(entry))
+    return frozenset(ids)
 
 
 def load_settings(path: str | Path = "config.yaml") -> Settings:
@@ -148,5 +163,5 @@ def load_settings(path: str | Path = "config.yaml") -> Settings:
         database_path=_database_path(raw),
         history_retention_days=retention, profiles=profiles,
         dialogue=choices["dialogue"], director=choices["director"],
-        memory=choices["memory"], limits=limits,
+        memory=choices["memory"], limits=limits, operator_ids=operator_ids_from_env(),
     )
