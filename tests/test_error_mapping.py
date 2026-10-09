@@ -383,7 +383,7 @@ class CommandErrorTests(unittest.IsolatedAsyncioTestCase):
         ephemerally."""
         interaction = FakeInteraction(channel_id=999)
         await invoke(self.bot, "cast show", interaction)
-        self.assertEqual(interaction.replies, ["This channel is not bound to a world or hub"])
+        self.assertEqual(interaction.replies, ["This channel is not bound to a world or hub. Ask an administrator to bind it with /admin space bind."])
         self.assertIs(interaction.response.sent[0][1].get("ephemeral"), True)
 
     async def test_missing_permissions_message_unchanged(self):

@@ -108,7 +108,7 @@ def valid_timezone(name):
             raise ValueError
         ZoneInfo(name)
     except Exception:
-        raise ValueError(f'Unknown timezone {name!r}; use an IANA name such as "Asia/Seoul".') from None
+        raise ValueError(f'Unknown timezone {name!r}. Use an IANA name such as "Asia/Seoul".') from None
     return name
 
 
@@ -327,7 +327,7 @@ class AdminStore:
             kind, raw_id = ref.split(':', 1)
             ident = int(raw_id)
         except (AttributeError, ValueError):
-            raise ValueError('Invalid entry reference') from None
+            raise ValueError('Invalid entry reference.') from None
         if kind == 'lore':
             row = self.one('SELECT * FROM lore WHERE guild_id=? AND id=?', (guild_id, ident))
         elif kind == 'guild-lore':
@@ -337,7 +337,7 @@ class AdminStore:
         else:
             row = None
         if not row:
-            raise ValueError('Lore entry not found')
+            raise ValueError('Lore entry not found.')
         return self._entry_dict(kind, ref, ident, row)
 
     def _entry_dict(self, kind, ref, ident, row):
@@ -406,7 +406,7 @@ class AdminStore:
         self.validate_owner(guild_id, kind, owner_id)
         rule = validate_rule(rule, content)
         if not content.strip():
-            raise ValueError('Lore content cannot be empty')
+            raise ValueError('Lore content cannot be empty.')
         with self.write_admin():
             if ref:
                 old = self.admin_entry(guild_id, ref)

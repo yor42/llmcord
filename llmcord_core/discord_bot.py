@@ -34,6 +34,7 @@ MEMORY_WAIT_SECONDS = 15
 PROVIDER_STAGES = {'speaker selection', 'image description', 'dialogue generation'}
 MEMORY_CLOSE_SECONDS = 5
 NO_CHARACTER_NOTE_SECONDS = 15
+LORE_NOT_FOUND = "Lore entry not found. Check the number with /lore list."
 
 
 async def recent_human_lines(channel, limits: dict, cutoff, floor: float, before=None) -> list:
@@ -508,10 +509,10 @@ class _SceneProgress:
 def _command_context(bot: SkitBot) -> SimpleNamespace:
     async def binding_for(interaction: discord.Interaction):
         if not interaction.guild or not interaction.channel:
-            raise ValueError("This command is available in server channels only")
+            raise ValueError("Use this command in a server channel.")
         parent_id, binding = bot.location(interaction.channel)
         if not binding:
-            raise ValueError("This channel is not bound to a world or hub")
+            raise ValueError("This channel is not bound to a world or hub. Ask an administrator to bind it with /admin space bind.")
         return parent_id, binding
 
     def require_guild(interaction: discord.Interaction) -> None:
@@ -651,7 +652,7 @@ def _register_character_commands(bot: SkitBot, ctx: SimpleNamespace, admin_chara
         require_guild(interaction)
         home = guild_space(interaction, world, "world")
         if attachment.size > 8 * 1024 * 1024:
-            raise ValueError("Card exceeds 8 MiB")
+            raise ValueError("Card exceeds 8 MiB. Upload a smaller file.")
         await interaction.response.defer(ephemeral=True)
         parsed = parse_card(attachment.filename, await attachment.read())
         ident = bot.store.add_character(interaction.guild_id, home["id"], parsed.name, parsed.data, parsed.avatar, parsed.entries)
@@ -685,7 +686,7 @@ def _register_cast_commands(bot: SkitBot, ctx: SimpleNamespace, admin_cast: app_
         parent_id, binding = await binding_for(interaction)
         ids = eligible_ids(interaction, binding, characters)
         if not ids:
-            raise ValueError("Give one or more character names")
+            raise ValueError("Give one or more character names, separated by commas.")
         bot.store.set_cast(interaction.channel.id, parent_id, ids)
         names = [bot.store.character_by_id(ident)["name"] for ident in dict.fromkeys(ids)]
         await interaction.response.send_message(f"Active cast: {', '.join(names)}", ephemeral=True)
@@ -710,7 +711,7 @@ def _register_cast_commands(bot: SkitBot, ctx: SimpleNamespace, admin_cast: app_
         bot.store.set_cast(interaction.channel.id, parent_id, kept)
         message = f"Removed {row['name']} from the active cast."
         if dropped := len([ident for ident in current if ident != row["id"]]) - len(kept):
-            message += f" Also dropped {dropped} character(s) no longer available here."
+            message += f" Also dropped {dropped} character{'s' if dropped != 1 else ''} no longer available here."
         await interaction.response.send_message(message, ephemeral=True)
 
     @cast.command(name="show", description="Show this channel or thread's active cast")
@@ -718,7 +719,7 @@ def _register_cast_commands(bot: SkitBot, ctx: SimpleNamespace, admin_cast: app_
         parent_id, _ = await binding_for(interaction)
         ids = bot.store.get_cast(interaction.channel.id, parent_id)
         names = [bot.store.character_by_id(ident)["name"] for ident in ids if bot.store.character_by_id(ident)]
-        await interaction.response.send_message(", ".join(names) or "The cast is empty.", ephemeral=True)
+        await interaction.response.send_message(f"Active cast: {', '.join(names)}" if names else "The active cast is empty. Use /cast set to choose one.", ephemeral=True)
 
     @admin_cast.command(name="default", description="Set the channel's default cast")
     @app_commands.checks.has_permissions(administrator=True)
@@ -741,19 +742,20 @@ def _register_ambient_commands(bot: SkitBot, ctx: SimpleNamespace, admin_ambient
     async def ambient_on(interaction: discord.Interaction):
         _, binding = await binding_for(interaction)
         bot.store.set_ambient(binding["channel_id"], True)
-        await interaction.response.send_message("Ambient participation enabled for this channel.", ephemeral=True)
+        await interaction.response.send_message(f"Ambient is on for <#{binding['channel_id']}>.", ephemeral=True)
 
     @admin_ambient.command(name="off", description="Disable ambient participation in this channel")
     @app_commands.checks.has_permissions(administrator=True)
     async def ambient_off(interaction: discord.Interaction):
         _, binding = await binding_for(interaction)
         bot.store.set_ambient(binding["channel_id"], False)
-        await interaction.response.send_message("Ambient participation disabled for this channel.", ephemeral=True)
+        await interaction.response.send_message(f"Ambient is off for <#{binding['channel_id']}>.", ephemeral=True)
 
     @ambient.command(name="status", description="Show this channel's ambient setting")
     async def ambient_status(interaction: discord.Interaction):
         _, binding = await binding_for(interaction)
-        await interaction.response.send_message("Ambient is on." if binding["ambient"] else "Ambient is off.", ephemeral=True)
+        state = "on" if binding["ambient"] else "off"
+        await interaction.response.send_message(f"Ambient is {state} for <#{binding['channel_id']}>.", ephemeral=True)
 
     bot.tree.add_command(ambient)
 
@@ -895,7 +897,7 @@ def _register_lore_commands(bot: SkitBot, ctx: SimpleNamespace, admin_lore: app_
         scope_kind, scope_id = local_scope(interaction) if scope == "channel" else ("space", binding["space_id"])
         parsed = [key.strip() for key in keys.split(",") if key.strip()]
         home = bot.store.space_by_id(binding["space_id"]) if scope == "space" else None
-        label = home["kind"] if home else "channel" if scope == "channel" else "space"
+        label = home["kind"] if home else "channel" if scope == "channel" else "world or hub"
         ident = bot.store.add_lore(interaction.guild_id, scope_kind, scope_id, content, parsed, constant=not parsed, pinned=not parsed)
         await interaction.response.send_message(f"Added {label} lore #{ident}.", ephemeral=True)
 
@@ -906,7 +908,7 @@ def _register_lore_commands(bot: SkitBot, ctx: SimpleNamespace, admin_lore: app_
         if isinstance(interaction.channel, discord.Thread):
             scopes.append(("thread", interaction.channel.id))
         home = bot.store.space_by_id(binding["space_id"])
-        names = {"space": home["kind"] if home else "space"}
+        names = {"space": home["kind"] if home else "world or hub"}
         lines = []
         for kind, ident in scopes:
             lines.extend(f"#{row['id']} [{names.get(kind, kind)}] {row['content'][:100]}" for row in bot.store.list_lore(interaction.guild_id, kind, ident))
@@ -917,7 +919,7 @@ def _register_lore_commands(bot: SkitBot, ctx: SimpleNamespace, admin_lore: app_
     async def lore_pin(interaction: discord.Interaction, lore_id: int):
         require_guild(interaction)
         if not bot.store.lore_row(interaction.guild_id, lore_id):
-            raise ValueError("Lore entry not found")
+            raise ValueError(LORE_NOT_FOUND)
         bot.store.pin_lore(interaction.guild_id, lore_id)
         await interaction.response.send_message(f"Pinned lore #{lore_id}.", ephemeral=True)
 
@@ -925,6 +927,8 @@ def _register_lore_commands(bot: SkitBot, ctx: SimpleNamespace, admin_lore: app_
     @app_commands.checks.has_permissions(administrator=True)
     async def lore_edit(interaction: discord.Interaction, lore_id: int, content: str):
         require_guild(interaction)
+        if not bot.store.lore_row(interaction.guild_id, lore_id):
+            raise ValueError(LORE_NOT_FOUND)
         bot.store.edit_lore(interaction.guild_id, lore_id, content)
         await interaction.response.send_message(f"Updated lore #{lore_id}.", ephemeral=True)
 
@@ -933,15 +937,18 @@ def _register_lore_commands(bot: SkitBot, ctx: SimpleNamespace, admin_lore: app_
     @app_commands.autocomplete(space=space_choices())
     async def lore_promote(interaction: discord.Interaction, lore_id: int, destination: Literal["channel", "space"], space: str = ""):
         _, binding = await binding_for(interaction)
+        if not bot.store.lore_row(interaction.guild_id, lore_id):
+            raise ValueError(LORE_NOT_FOUND)
         if destination == "channel":
             target_kind, target_id = "channel", binding["channel_id"]
         else:
             target = guild_space(interaction, space) if space.strip() else bot.store.space_by_id(binding["space_id"])
             if not target or target["guild_id"] != interaction.guild_id:
-                raise ValueError("Destination space not found")
+                raise ValueError("Destination world or hub not found. Check the name with /space list.")
             target_kind, target_id = "space", target["id"]
         ident = bot.store.promote_lore(interaction.guild_id, lore_id, target_kind, target_id)
-        await interaction.response.send_message(f"Promoted lore #{lore_id} to #{ident} in {target_kind}.", ephemeral=True)
+        where = f"<#{target_id}>" if target_kind == "channel" else f"{target['kind']} {target['name']}"
+        await interaction.response.send_message(f"Promoted lore #{lore_id} to {where} as lore #{ident}.", ephemeral=True)
 
     @admin_lore.command(name="delete", description="Delete a lore entry")
     @app_commands.checks.has_permissions(administrator=True)
@@ -974,10 +981,10 @@ def _register_scene_commands(bot: SkitBot, ctx: SimpleNamespace, admin_scene: ap
         try:
             target_id = int(message_id)
         except ValueError as error:
-            raise ValueError("Give a numeric message ID") from error
+            raise ValueError("Give a numeric message ID.") from error
         node = bot.store.node(target_id)
         if not node or node["guild_id"] != interaction.guild_id or node["channel_id"] != interaction.channel.id:
-            raise ValueError("Scene message not found in this channel")
+            raise ValueError("Scene message not found in this channel. Give the ID of a message in this scene.")
         count, personal, encounters = bot.store.delete_subtree_counts(interaction.guild_id, target_id)
         message = f"Deleted {count} stored messages from this scene."
         if personal or encounters:
@@ -1048,13 +1055,13 @@ def _register_context_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
             try:
                 ident = int(message_id)
             except ValueError as error:
-                raise ValueError("Give a numeric message ID") from error
+                raise ValueError("Give a numeric message ID.") from error
         else:
             latest = bot.store.latest_character_node(interaction.channel.id)
             ident = latest["message_id"] if latest else 0
         node, trace = bot.store.node(ident), bot.store.trace(ident)
         if not node or node["guild_id"] != interaction.guild_id or node["channel_id"] != interaction.channel.id or not trace:
-            raise ValueError("No saved context for that character line")
+            raise ValueError("No saved context for that character line. Leave the ID empty to use the latest one.")
         lore_lines = [_context_lore_line(bot, interaction, item) for item in trace.get("lore", [])]
         text = "Lore: " + (", ".join(lore_lines) or "none")
         text += f"\nBranch messages: {len(trace.get('messages', []))}"

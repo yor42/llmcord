@@ -7,6 +7,7 @@ from __future__ import annotations
 from discord import app_commands
 
 CHOICE_LIMIT = 25
+PLURALS = {'world or hub': 'worlds or hubs'}
 VALUE_LIMIT = 100
 
 
@@ -18,7 +19,7 @@ def resolve(rows, text: str, noun: str, where: str = ''):
     """An exact name wins; otherwise one casefold match; several casefold matches or none raise ValueError."""
     wanted = text.strip()
     if not wanted:
-        raise ValueError(f'Give a {noun} name')
+        raise ValueError(f'Give a {noun} name.')
     exact = [row for row in rows if row['name'] == wanted]
     if len(exact) == 1:
         return exact[0]
@@ -27,19 +28,19 @@ def resolve(rows, text: str, noun: str, where: str = ''):
         return folded[0]
     if folded:
         names = ', '.join(row['name'] for row in folded[:10])
-        raise ValueError(f'Several {noun}s match {wanted}: {names}. Use the exact name.')
+        raise ValueError(f'Several {PLURALS.get(noun, noun + "s")} match {wanted}: {names}. Use the exact name.')
     raise NameNotFound(f'No {noun} named {wanted}{where}.')
 
 
 def resolve_space(rows, text: str, kind: str | None = None):
     """Resolve among spaces of ``kind`` (any kind when None); a name that only matches the other kind says so."""
     if kind is None:
-        return resolve(rows, text, 'space')
+        return resolve(rows, text, 'world or hub')
     try:
         return resolve([row for row in rows if row['kind'] == kind], text, kind)
     except NameNotFound as missing:
         try:
-            other = resolve([row for row in rows if row['kind'] != kind], text, 'space')
+            other = resolve([row for row in rows if row['kind'] != kind], text, 'world or hub')
         except ValueError:
             raise missing from None
         raise ValueError(f"{other['name']} is a {other['kind']}, not a {kind}.") from None

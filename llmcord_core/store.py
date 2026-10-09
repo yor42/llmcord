@@ -233,7 +233,7 @@ class Store(AdminStore):
 
     def create_space(self, guild_id: int, name: str, kind: str) -> int:
         if kind not in {"world", "hub"} or not name.strip():
-            raise ValueError("Space needs a name and kind world or hub")
+            raise ValueError("Give the world or hub a name.")
         with self.write_admin():
             ident = self.next_owner_id('space', 'spaces')
             self.db.execute('INSERT INTO spaces(id,guild_id,name,kind) VALUES(?,?,?,?)', (ident, guild_id, name.strip(), kind))
@@ -251,7 +251,7 @@ class Store(AdminStore):
     def link_world(self, guild_id: int, hub_id: int, world_id: int) -> None:
         hub, world = self.space_by_id(hub_id), self.space_by_id(world_id)
         if not hub or not world or hub["guild_id"] != guild_id or world["guild_id"] != guild_id or hub["kind"] != "hub" or world["kind"] != "world":
-            raise ValueError("Choose a hub and world in this server")
+            raise ValueError("Choose a hub and world in this server.")
         self.execute("INSERT OR IGNORE INTO hub_worlds VALUES(?,?)", (hub_id, world_id))
 
     def unlink_world(self, guild_id: int, hub_id: int, world_id: int) -> int:
@@ -259,7 +259,7 @@ class Store(AdminStore):
         Thread casts are not pruned (no parent column)."""
         hub, world = self.space_by_id(hub_id), self.space_by_id(world_id)
         if not hub or not world or hub["guild_id"] != guild_id or world["guild_id"] != guild_id or hub["kind"] != "hub":
-            raise ValueError("Choose a hub and world in this server")
+            raise ValueError("Choose a hub and world in this server.")
         pruned = 0
         with self.db:
             self.db.execute("DELETE FROM hub_worlds WHERE hub_id=? AND world_id=?", (hub_id, world_id))
@@ -289,11 +289,11 @@ class Store(AdminStore):
         """Bind, or rebind keeping ambient and pruning both casts to the new space; returns dropped character ids."""
         space = self.space_by_id(space_id)
         if not space or space["guild_id"] != guild_id:
-            raise ValueError("Space does not belong to this server")
+            raise ValueError("That world or hub is not in this server.")
         with self.db:
             existing = self.channel(channel_id)
             if existing and existing['guild_id'] != guild_id:
-                raise ValueError('Channel belongs to another server')
+                raise ValueError("That channel belongs to another server.")
             if not existing:
                 self.db.execute("INSERT INTO channels(channel_id,guild_id,space_id) VALUES(?,?,?)", (channel_id, guild_id, space_id))
                 return []
@@ -360,13 +360,13 @@ class Store(AdminStore):
     def set_cast(self, channel_id: int, parent_id: int | None, cast: list[int], default: bool = False) -> None:
         cast = list(dict.fromkeys(cast))
         if len(cast) > 5:
-            raise ValueError("A cast can have at most five characters")
+            raise ValueError("A cast can have at most five characters.")
         binding = self.binding(channel_id, parent_id)
         if not binding:
-            raise ValueError("Channel is not bound to a space")
+            raise ValueError("This channel is not bound to a world or hub.")
         eligible = {row["id"] for row in self.eligible_characters(binding["guild_id"], binding["space_id"])}
         if not set(cast) <= eligible:
-            raise ValueError("Character is not eligible in this space")
+            raise ValueError("That character is not available in this world or hub.")
         if parent_id and not default:
             self.execute("INSERT INTO thread_casts(thread_id,cast) VALUES(?,?) ON CONFLICT(thread_id) DO UPDATE SET cast=excluded.cast", (channel_id, json.dumps(cast)))
         else:
@@ -377,7 +377,7 @@ class Store(AdminStore):
 
     def add_lore(self, guild_id: int, scope_kind: str, scope_id: int, content: str, keys: list[str] | None = None, constant: bool = False, order: int = 100, source_id: int | None = None, promoted_from: int | None = None, pinned: bool = False) -> int:
         if scope_kind not in {"character", "space", "channel", "thread"} or not content.strip():
-            raise ValueError("Invalid lore scope or empty content")
+            raise ValueError("Lore needs text and a valid channel, world or hub.")
         with self.write_admin():
             ident = self.db.execute("INSERT INTO lore(guild_id,scope_kind,scope_id,content,keys_json,constant,insertion_order,source_message_id,promoted_from,pinned) VALUES(?,?,?,?,?,?,?,?,?,?)", (guild_id, scope_kind, scope_id, content.strip(), json.dumps(keys or []), int(constant), order, source_id, promoted_from, int(pinned))).lastrowid
             self.bump_owner(guild_id, scope_kind, scope_id)
@@ -407,7 +407,7 @@ class Store(AdminStore):
     def promote_lore(self, guild_id: int, lore_id: int, scope_kind: str, scope_id: int) -> int:
         source = self.lore_row(guild_id, lore_id)
         if not source:
-            raise ValueError("Lore entry not found")
+            raise ValueError("Lore entry not found.")
         row = self.admin_entry(guild_id, f'lore:{lore_id}')
         ref = self.transfer_entry(guild_id, row['ref'], scope_kind, scope_id, row['revision'], copy=True)
         ident = int(ref.split(':')[1])

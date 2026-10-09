@@ -5,6 +5,7 @@ for an objectively incorrect current behavior and will report "unexpected succes
 Command error mapping and definite /memory forget and /admin lore delete replies (UX-07, SEC-05 per D3) are pinned in
 tests/test_error_mapping.py.
 """
+import json
 import unittest
 
 import discord
@@ -53,7 +54,7 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
     async def test_unbound_channel_message(self):
         interaction = FakeInteraction(channel_id=999)
         await invoke(self.bot, "cast show", interaction)
-        self.assertEqual(interaction.replies, ["This channel is not bound to a world or hub"])
+        self.assertEqual(interaction.replies, ["This channel is not bound to a world or hub. Ask an administrator to bind it with /admin space bind."])
 
     async def test_cast_set_is_case_insensitive(self):
         """Regression (UX-04): /cast set resolves each comma-separated name case-insensitively (unique matches).
@@ -74,7 +75,52 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
         await invoke(self.bot, "cast remove", FakeInteraction(), "Alice")
         show = FakeInteraction()
         await invoke(self.bot, "cast show", show)
-        self.assertEqual(show.replies, ["Bob"])
+        self.assertEqual(show.replies, ["Active cast: Bob"])
+
+    async def test_cast_show_empty_says_how_to_fill_it(self):
+        """UI-26: an empty cast gets a full-sentence hint instead of a bare "Active cast: "."""
+        interaction = FakeInteraction()
+        await invoke(self.bot, "cast show", interaction)
+        self.assertEqual(interaction.replies, ["The active cast is empty. Use /cast set to choose one."])
+
+    async def test_cast_remove_drop_count_is_pluralised(self):
+        """UI-26: "Also dropped N character(s) no longer available here." says "1 character" vs "2 characters"."""
+        for extra, expected in ((1, "1 character no longer"), (2, "2 characters no longer")):
+            other = self.store.create_space(1, f"Gone{extra}", "world")
+            strays = [self.store.add_character(1, other, f"Stray{extra}{i}", {"name": "S"}, None, []) for i in range(extra)]
+            self.store.execute("UPDATE channels SET active_cast=? WHERE channel_id=100", (json.dumps([self.alice, *strays]),))
+            interaction = FakeInteraction()
+            await invoke(self.bot, "cast remove", interaction, "Alice")
+            self.assertIn(f"Also dropped {expected} available here.", interaction.replies[0], interaction.replies)
+
+    async def test_ambient_on_off_status_replies_name_the_channel(self):
+        """UI-26: ambient replies are full sentences naming the channel mention."""
+        for command, state in (("admin ambient on", "on"), ("admin ambient off", "off")):
+            interaction = FakeInteraction(admin=True)
+            await invoke(self.bot, command, interaction)
+            self.assertEqual(interaction.replies, [f"Ambient is {state} for <#100>."])
+        status = FakeInteraction()
+        await invoke(self.bot, "ambient status", status)
+        self.assertEqual(status.replies, ["Ambient is off for <#100>."])
+
+    async def test_lore_promote_reply_names_destination(self):
+        """UI-26: promote says where the copy went (channel mention, or world/hub kind and name) and its new id."""
+        source = self.store.add_lore(1, "channel", 100, "Salt air", [])
+        interaction = FakeInteraction(admin=True)
+        await invoke(self.bot, "admin lore promote", interaction, source, "space")
+        new_id = self.store.list_lore(1, "space", self.world)[0]["id"]
+        self.assertEqual(interaction.replies, [f"Promoted lore #{source} to world Harbor as lore #{new_id}."])
+        interaction = FakeInteraction(admin=True)
+        await invoke(self.bot, "admin lore promote", interaction, source, "channel")
+        self.assertRegex(interaction.replies[0], rf"^Promoted lore #{source} to <#100> as lore #\d+\.$")
+
+    async def test_lore_edit_and_promote_check_entry_exists_first(self):
+        """UI-26: editing or promoting a missing lore entry replies with the not-found hint and changes nothing."""
+        for command, args in (("admin lore edit", (4242, "New text")), ("admin lore promote", (4242, "channel"))):
+            interaction = FakeInteraction(admin=True)
+            await invoke(self.bot, command, interaction, *args)
+            self.assertEqual(interaction.replies, ["Lore entry not found. Check the number with /lore list."])
+        self.assertEqual(self.store.list_lore(1, "channel", 100), [])
 
     async def test_cast_rejects_ineligible_character(self):
         """Regression (UX-04): a character from a world not bound here is refused and the cast is unchanged. The wording
@@ -137,12 +183,12 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
     async def test_scene_delete_requires_numeric_id(self):
         interaction = FakeInteraction(admin=True)
         await invoke(self.bot, "admin scene delete", interaction, "abc")
-        self.assertEqual(interaction.replies, ["Give a numeric message ID"])
+        self.assertEqual(interaction.replies, ["Give a numeric message ID."])
 
     async def test_context_without_trace(self):
         interaction = FakeInteraction()
         await invoke(self.bot, "context", interaction)
-        self.assertEqual(interaction.replies, ["No saved context for that character line"])
+        self.assertEqual(interaction.replies, ["No saved context for that character line. Leave the ID empty to use the latest one."])
 
     def _context_interaction(self, channels=None, admin=False):
         interaction = FakeInteraction(admin=admin)

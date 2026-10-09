@@ -127,7 +127,7 @@ class DirectMessageInvocationTests(unittest.IsolatedAsyncioTestCase):
         """Characterization (SEC-05): commands using ``binding_for`` already refuse DMs with a clear message."""
         interaction = dm_interaction()
         await invoke(self.bot, "cast show", interaction)
-        self.assertEqual(interaction.replies, ["This command is available in server channels only"])
+        self.assertEqual(interaction.replies, ["Use this command in a server channel."])
         self.assertTrue(interaction.response.sent[0][1].get("ephemeral"))
         self.assertEqual(self.null_guild_rows(), {})
 
@@ -161,7 +161,7 @@ class GuildChannelAndThreadTests(unittest.IsolatedAsyncioTestCase):
         await invoke(self.bot, "cast set", FakeInteraction(channel=thread), "Alice")
         shown = FakeInteraction(channel=thread)
         await invoke(self.bot, "cast show", shown)
-        self.assertEqual(shown.replies, ["Alice"])
+        self.assertEqual(shown.replies, ["Active cast: Alice"])
         self.assertEqual(self.store.get_cast(101, 100), [self.alice])
 
     async def test_admin_lore_add_in_thread_scopes_to_the_thread(self):

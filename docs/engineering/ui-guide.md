@@ -44,7 +44,7 @@ Conventions for polish work on the two user surfaces: the NiceGUI dashboard unde
 ## Discord replies
 
 - Errors: public messages are generic and carry a reference ID; detail goes to the invoker ephemerally and to the log (D3). Don't put provider or internal detail in a public message.
-- Slash-command `ValueError` text is shown to the user as written: write it as a sentence that says what to do ("Give a numeric message ID").
+- Slash-command `ValueError` text is shown to the user as written: write it as a sentence that says what to do ("Give a numeric message ID.").
 - Outcomes are definite (for example "Linked {world} to {hub}."), with counts pluralised correctly.
 - Admin commands live under `/admin` (D11); member commands keep their own groups. Option names: `character`, `characters`, `space`, `hub`, `world`.
 - The public usage footer is a per-server setting (D2); the "no active character" hint deletes itself after about 15 s (D12).
