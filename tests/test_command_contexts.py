@@ -215,6 +215,21 @@ class GuildChannelAndThreadTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(interaction.replies, ["Only server administrators can use that command."])
         self.assertEqual(self.store.list_lore(1, "thread", 101), [])
 
+    async def test_admin_command_from_a_dm_says_use_a_server_channel(self):
+        """UI-06: a stale DM client invoking an admin command (has_permissions fails with no guild) is told to use a
+        server channel, ephemerally, not that only administrators may; a guild non-admin still gets the admin reply."""
+        interaction = dm_interaction()
+        await invoke(self.bot, "admin space create", interaction, "world", "Elsewhere")
+        self.assertEqual(interaction.replies, ["Use this command in a server channel."])
+        self.assertIs(interaction.response.sent[0][1].get("ephemeral"), True)
+        guild_user = FakeInteraction(admin=False)
+        await invoke(self.bot, "admin space create", guild_user, "world", "Elsewhere")
+        self.assertEqual(guild_user.replies, ["Only server administrators can use that command."])
+        uncached = FakeInteraction(admin=False)
+        uncached.guild = None  # guild not cached, but guild_id is set: still a real server non-admin
+        await invoke(self.bot, "admin space create", uncached, "world", "Elsewhere")
+        self.assertEqual(uncached.replies, ["Only server administrators can use that command."])
+
 
 if __name__ == "__main__":
     unittest.main()

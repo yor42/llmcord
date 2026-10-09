@@ -506,10 +506,13 @@ class _SceneProgress:
             self.message = None
 
 
+USE_IN_SERVER_CHANNEL = "Use this command in a server channel."
+
+
 def _command_context(bot: SkitBot) -> SimpleNamespace:
     async def binding_for(interaction: discord.Interaction):
         if not interaction.guild or not interaction.channel:
-            raise ValueError("Use this command in a server channel.")
+            raise ValueError(USE_IN_SERVER_CHANNEL)
         parent_id, binding = bot.location(interaction.channel)
         if not binding:
             raise ValueError("This channel is not bound to a world or hub. Ask an administrator to bind it with /admin space bind.")
@@ -517,7 +520,7 @@ def _command_context(bot: SkitBot) -> SimpleNamespace:
 
     def require_guild(interaction: discord.Interaction) -> None:
         if not interaction.guild:
-            raise ValueError("Use this command in a server.")
+            raise ValueError(USE_IN_SERVER_CHANNEL)
 
     def eligible_rows(interaction: discord.Interaction):
         if not interaction.guild or not interaction.channel:
@@ -1080,7 +1083,9 @@ def _register_error_handler(bot: SkitBot) -> None:
     @bot.tree.error
     async def command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
         if isinstance(error, app_commands.MissingPermissions):
-            message = "Only server administrators can use that command."
+            # UI-06: a stale DM client can still invoke a guild-only command; say where to use it, not who may.
+            # guild_id, not guild: guild can be None for an uncached guild while guild_id is set.
+            message = USE_IN_SERVER_CHANNEL if interaction.guild_id is None else "Only server administrators can use that command."
         elif isinstance(error, app_commands.CommandInvokeError) and isinstance(error.original, ValueError):
             message = str(error.original)
         elif (isinstance(error, app_commands.CommandInvokeError) and isinstance(error.original, sqlite3.IntegrityError)
