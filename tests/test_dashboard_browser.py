@@ -12,6 +12,11 @@ from pathlib import Path
 import httpx
 
 
+def _worlds_section(page):
+    """The Server setup 'Worlds and hubs' card; scopes the generic 'Name' input and 'Create' button."""
+    return page.locator('.ll-section').filter(has=page.locator('.ll-section-title', has_text='Worlds and hubs'))
+
+
 @unittest.skipUnless(os.environ.get('LLMCORD_BROWSER_TESTS') == '1', 'Set LLMCORD_BROWSER_TESTS=1 to run browser integration tests')
 class DashboardBrowserTests(unittest.TestCase):
     SLOW_SERVER_POLLS = 300  # poll count (x 100 ms = 30 s): publishing an emotion image can take seconds on a busy machine
@@ -218,8 +223,8 @@ class DashboardBrowserTests(unittest.TestCase):
         savebar.get_by_role('button', name='Save changes', exact=True).click()
         savebar.wait_for(state='hidden')
         self.wait_for(lambda: any(row['kind'] == 'channel' and 'fourth-wall' in row['content'] for row in self.state()['guidelines']))
-        page.get_by_label('Space name', exact=True).fill('Browser world')
-        page.get_by_role('button', name='Create space', exact=True).click()
+        _worlds_section(page).get_by_label('Name', exact=True).fill('Browser world')
+        _worlds_section(page).get_by_role('button', name='Create', exact=True).click()
         self.wait_for(lambda: any(r['name'] == 'Browser world' for r in self.state()['spaces']))
         unused = page.locator('.space-card').filter(has=page.get_by_text('Browser world · world', exact=True))
         unused.get_by_text('Browser world · world', exact=True).click()
@@ -528,21 +533,21 @@ class DashboardBrowserTests(unittest.TestCase):
         self.assertFalse(json.loads(folder['rule_json'])['enabled'])
 
         page.get_by_role('tab', name='Server setup', exact=True).click()
-        page.get_by_label('Space name', exact=True).fill('Forbidden')
+        _worlds_section(page).get_by_label('Name', exact=True).fill('Forbidden')
         page.wait_for_timeout(200)
         # /_test/revoke also drops cached guild lists, simulating the 300 s TTL (PERF-01 / D1) having elapsed;
         # the live event below must then be rejected on the refetch.
         self.context.request.post(self.url + '/_test/revoke')
-        page.get_by_role('button', name='Create space', exact=True).click(force=True)
+        _worlds_section(page).get_by_role('button', name='Create', exact=True).click(force=True)
         page.wait_for_timeout(300)
         self.assertFalse(any(r['name'] == 'Forbidden' for r in self.state()['spaces']))
         # /_test/restore likewise drops the cached (non-admin) guild list, as if the TTL had elapsed.
         self.context.request.post(self.url + '/_test/restore')
         self.load(page, self.url + '/admin/guild/1')
-        page.get_by_label('Space name', exact=True).fill('Forbidden')
+        _worlds_section(page).get_by_label('Name', exact=True).fill('Forbidden')
         page.wait_for_timeout(200)
         self.context.request.post(self.url + '/_test/expire')
-        page.get_by_role('button', name='Create space', exact=True).click(force=True)
+        _worlds_section(page).get_by_role('button', name='Create', exact=True).click(force=True)
         page.wait_for_timeout(300)
         self.assertFalse(any(r['name'] == 'Forbidden' for r in self.state()['spaces']))
         self.assertFalse(self.errors, self.errors)
@@ -550,7 +555,7 @@ class DashboardBrowserTests(unittest.TestCase):
     def test_rejected_live_event_notifies_bound_client(self):
         """PERF-01 (fixed): a live event rejected by the permission check is dropped but the user is told why.
 
-        A bound client with a matching cookie clicks "Create space" after (1) admin permission is revoked (403),
+        A bound client with a matching cookie clicks "Create" in Worlds and hubs after (1) admin permission is revoked (403),
         (2) Discord keeps rate limiting the guild check (503), and (3) the session expires (401). Each time the
         handler must not run, and the user should see why: the 403/503 detail in a negative notification, and a
         sign-in prompt (notification or redirect) for the 401.
@@ -570,9 +575,9 @@ class DashboardBrowserTests(unittest.TestCase):
             self.watch(page, errors)
             self.load(page, self.url + '/admin/guild/1')
             page.get_by_role('tab', name='Server setup', exact=True).click()
-            page.get_by_label('Space name', exact=True).fill('Rejected')
+            _worlds_section(page).get_by_label('Name', exact=True).fill('Rejected')
             page.wait_for_timeout(200)
-            create = page.get_by_role('button', name='Create space', exact=True)
+            create = _worlds_section(page).get_by_role('button', name='Create', exact=True)
             notification = page.locator('.q-notification')
             def created():
                 return any(r['name'] == 'Rejected' for r in self.state()['spaces'])
@@ -686,7 +691,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertEqual(context.request.post(self.url + '/_test/counters/reset').status, 200)
             self.load(page, self.url + '/admin/guild/1')
             page.get_by_role('tab', name='Server setup', exact=True).click()
-            page.get_by_label('Space name', exact=True).wait_for()
+            _worlds_section(page).get_by_label('Name', exact=True).wait_for()
             page.wait_for_timeout(300)
             counters = context.request.get(self.url + '/_test/counters').json()
             self.assertFalse(errors, errors)
@@ -896,7 +901,7 @@ class DashboardBrowserTests(unittest.TestCase):
         try:
             self.assertEqual(context.request.post(self.url + '/_test/metrics/reset').status, 200)
             self.load(page, self.url + '/admin/guild/1')
-            page.get_by_label('Space name', exact=True).wait_for()
+            _worlds_section(page).get_by_label('Name', exact=True).wait_for()
             page.wait_for_timeout(300)
             calls = context.request.get(self.url + '/_test/metrics').json()
             self.assertEqual(calls.get('GET /guilds/1/channels', 0), 1, calls)
@@ -995,7 +1000,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.wait_for_timeout(300)
             self.assertEqual(self.panel_reads(context), built)
             page.get_by_role('tab', name='Server setup', exact=True).click()
-            page.get_by_label('Space name', exact=True).wait_for()
+            _worlds_section(page).get_by_label('Name', exact=True).wait_for()
             page.wait_for_timeout(300)
             self.assertEqual(self.panel_reads(context), {**built, 'model_usage_summary': 1})
             self.assertFalse(errors, (errors, getattr(page, 'network', [])))
@@ -1004,15 +1009,15 @@ class DashboardBrowserTests(unittest.TestCase):
 
     def create_space_in_place(self, page, name):
         page.evaluate('window.__marker = 1')
-        page.get_by_label('Space name', exact=True).fill(name)
-        page.get_by_role('button', name='Create space', exact=True).click()
+        _worlds_section(page).get_by_label('Name', exact=True).fill(name)
+        _worlds_section(page).get_by_role('button', name='Create', exact=True).click()
         page.get_by_text(f'{name} · world', exact=True).wait_for(timeout=5000)
 
     def test_mutation_updates_page_without_browser_reload(self):
-        """PERF-01: Create space refreshes the page in place: no navigation, no new Discord channel fetch."""
+        """PERF-01: Create (Worlds and hubs) refreshes the page in place: no navigation, no new Discord channel fetch."""
         context, page, errors = self.ux_page('/admin/guild/1')
         try:
-            page.get_by_label('Space name', exact=True).wait_for()
+            _worlds_section(page).get_by_label('Name', exact=True).wait_for()
             self.assertEqual(context.request.post(self.url + '/_test/metrics/reset').status, 200)
             self.create_space_in_place(page, 'Inplace world')
             self.assertEqual(page.evaluate('window.__marker'), 1)
@@ -1281,7 +1286,7 @@ class DashboardBrowserTests(unittest.TestCase):
         clipped = {}
         measured = 0
         try:
-            anchors = {'Server setup': page.get_by_label('Space name', exact=True),
+            anchors = {'Server setup': _worlds_section(page).get_by_label('Name', exact=True),
                        'Characters': page.get_by_role('button', name='Create character', exact=True),
                        'Lore': page.get_by_role('button', name='Import lorebook', exact=True),
                        'Imports': page.get_by_label('Channel (channel lorebooks only)', exact=True),

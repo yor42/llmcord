@@ -583,15 +583,15 @@ async def setup_panel(ctx):
             ui.label('Tracked for this server, including internal model calls. Cost uses list rates or your configured rates; it is not a billing statement. Refresh to update totals.').classes('ll-muted')
         else:
             ui.label('No model profiles are configured for the dashboard.')
-    with section('Spaces'):
+    with section('Worlds and hubs'):
         for space in ctx.snapshot.spaces:
             with ui.expansion(f"{space['name']} · {space['kind']}").classes('space-card w-full rounded-lg'):
                 guideline_editor(ctx, 'space', space['id'], 'World guidelines' if space['kind'] == 'world' else 'Hub guidelines')
                 lucide_button('Delete ' + space['kind'], 'trash-2', color='negative', on_click=lambda space=space: delete_space_dialog(ctx, space))
         with ui.element('div').classes('ll-form-row ll-field-row'):
-            name = ui.input('Space name')
+            name = ui.input('Name')
             kind = ui.select(['world', 'hub'], value='world', label='Kind')
-            ctx.button('Create space', lambda: store.create_space(gid, name.value or '', kind.value), 'space.create', then=lambda _: ctx.refresh())
+            ctx.button('Create', lambda: store.create_space(gid, name.value or '', kind.value), 'space.create', then=lambda _: ctx.refresh())
     with section('Hub links'):
         hubs, worlds = ctx.snapshot.hubs, ctx.snapshot.worlds
         with ui.element('div').classes('ll-form-row ll-field-row'):
@@ -624,7 +624,7 @@ async def setup_panel(ctx):
                     ui.notify('Cast kept.')
                 return ctx.refresh()
             ctx.button('Bind channel', bind, 'channel.bind', bind_detail, then=bound)
-        ui.label('Rebinding a channel keeps its ambient mode and removes cast members not available in the new space.').classes('ll-muted')
+        ui.label('Rebinding a channel keeps its ambient mode and removes cast members not available in the new world or hub.').classes('ll-muted')
         for binding in ctx.snapshot.channels:
             channel_card(ctx, binding, channel_names, spaces)
     with section('Server settings'):

@@ -48,7 +48,7 @@ Run the bot with `python llmcord.py`. It creates the SQLite database if needed. 
 Create three Discord text channels such as `#world-a`, `#world-b`, and `#hub`. As a server administrator:
 
 1. Run `/admin space create` three times: worlds `A` and `B`, then hub `Hub`.
-2. Run `/admin space bind` in any channel, choosing each Discord channel and its matching space.
+2. Run `/admin space bind` in any channel, choosing each Discord channel and its matching world or hub.
 3. Run `/admin space link_world` twice to link `A` and `B` to `Hub`.
 4. Import a V2/V3 card with `/admin character import`, choosing its home world. The [example cards](../examples/cards) are small JSON samples.
 5. Use `/admin cast default` in each channel to choose its default cast. The `characters` option takes comma-separated names; the maximum cast size is five.

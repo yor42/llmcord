@@ -57,7 +57,7 @@ For engineering detail (process and sequence diagrams, shared state, the mainten
 
 ## Scene flow
 
-1. Discord routing accepts an explicit invitation or considers an ambient turn in a bound channel. Threads resolve their space through the parent channel.
+1. Discord routing accepts an explicit invitation or considers an ambient turn in a bound channel. Threads resolve their world or hub through the parent channel.
 2. The engine filters the cast to eligible characters. A structured director result chooses up to the configured three speakers. Ambient turns may select none.
 3. The human message is stored as a node. Each speaker gets its own card, permitted lore, opted-in personal facts, encounters, branch summary, and visible message history. A hub guest's prompt does not include another guest's private world lore.
 4. The dialogue adapter streams one line. A character webhook posts it; the bot saves its Discord message ID, parent ID, source trace, and World Info activations. The next speaker can react to earlier lines from the same turn.

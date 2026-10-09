@@ -63,7 +63,7 @@ tailscale serve status
 
 Tailscale's [Serve command](https://tailscale.com/docs/reference/tailscale-cli/serve) proxies the local port to the Pi's tailnet HTTPS name; `--bg` retains the configuration across a restart. Open `WEB_BASE_URL` from a tailnet device and complete Discord login. You do not need public router port forwarding.
 
-Use the dashboard to create spaces and bind channels, or use the matching Discord commands. Start in a private channel, import one card, set a cast, and mention the bot. Confirm webhook identity, reply routing, `/context`, and a restart before enabling ambient mode.
+Use the dashboard to create worlds and hubs and bind channels, or use the matching Discord commands. Start in a private channel, import one card, set a cast, and mention the bot. Confirm webhook identity, reply routing, `/context`, and a restart before enabling ambient mode.
 
 ## Backups and upgrades
 
@@ -87,5 +87,5 @@ The example keeps the manual backup outside the Git repository; use a new destin
 | Login works, then a restart signs you out | Sessions live in the web process's memory; sign in again. |
 | Character response reports a webhook problem | Give the bot Manage Webhooks in that text channel and check its webhook capacity. |
 | Model requests cannot reach Ollama | Check `base_url` from inside the bot container and Ollama's listening address. |
-| A book entry never activates | Check that the book is enabled for this space or bound to the channel, its keywords match, and its rule has no SillyTavern-only warning. |
+| A book entry never activates | Check that the book is enabled for this world or hub or bound to the channel, its keywords match, and its rule has no SillyTavern-only warning. |
 | Bot never speaks ambiently | Check the channel's ambient toggle, current cast, two-message threshold, cooldown, and the director's invitation decision. |

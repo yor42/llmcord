@@ -8,14 +8,14 @@ Recent human chat observed before a bot turn is kept with that branch and includ
 
 Older saved messages from before this feature retain their user IDs; historical display names that were never recorded cannot be recovered. Speaker names and mention metadata expire with conversation history. Personal memories remain scoped to the consenting user ID and character.
 
-## Spaces and casts
+## Worlds, hubs and casts
 
 | Scope | What it controls |
 | --- | --- |
 | World | Home for characters and world lore. A world channel can use only characters from that world. |
-| Hub | A crossover space. Administrators choose its allowed worlds; a hub guest keeps its own home-world lore and receives hub lore. |
-| Bound channel | Chooses one world or hub and adds channel lore, a default cast, an active cast, and an ambient setting. Multiple channels can share one space. |
-| Thread | Inherits its parent channel's space, channel lore, and ambient setting. It has its own cast and conversation history. |
+| Hub | A crossover setting. Administrators choose its allowed worlds; a hub guest keeps its own home-world lore and receives hub lore. |
+| Bound channel | Chooses one world or hub and adds channel lore, a default cast, an active cast, and an ambient setting. Multiple channels can share one world or hub. |
+| Thread | Inherits its parent channel's world or hub, channel lore, and ambient setting. It has its own cast and conversation history. |
 
 A default cast is an administrator's starting selection for a channel. Members can change the active cast without editing that default. Setting a new default also resets the channel's active cast to it. A thread uses the parent channel's active cast until someone sets a thread cast. A cast can contain up to five eligible characters; the director selects at most three to speak in one turn.
 
@@ -66,7 +66,7 @@ Discord presents the parameters for each slash command. Most command responses a
 
 The dashboard is designed for the Pi's Tailscale HTTPS address. A visitor signs in with Discord. Each server page and change checks that their Discord account is an administrator of the selected server; changes are checked again on every action, and uploads and sign-out also require a CSRF token. See [deployment](deployment-raspberry-pi.md) for login setup.
 
-From a server page, an admin can create spaces, link worlds to hubs, bind channels, choose default casts, toggle ambient mode, turn the reply footer on or off, choose the server timezone, add/edit/pin/promote/delete shared lore, manage characters, and manage named lorebooks. Changes are read from SQLite on the bot's next turn; there is no separate publish step.
+From a server page, an admin can create worlds and hubs, link worlds to hubs, bind channels, choose default casts, toggle ambient mode, turn the reply footer on or off, choose the server timezone, add/edit/pin/promote/delete shared lore, manage characters, and manage named lorebooks. Changes are read from SQLite on the bot's next turn; there is no separate publish step.
 
 For a card, select its home world and upload a V2/V3 `.json` or `.png` file. The preview shows its name, description, personality, scenario, opening line, lore-entry count, and PNG avatar when present. Saving an existing name requires a replacement confirmation. Reimports preview local conflicts and preserve manual additions and avatars unless explicitly replaced. Editing the home world can remove the character from casts where it is no longer eligible. Archived characters are not eligible for scenes.
 
