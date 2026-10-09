@@ -109,6 +109,10 @@ class SkitBot(commands.Bot):
                 self.store.expire_history(self.settings.history_retention_days)
             except Exception:
                 logging.exception('History cleanup failed')
+            try:
+                self.store.expire_monitoring()
+            except Exception:
+                logging.exception('Monitoring cleanup failed')
             await asyncio.sleep(86400)
 
     async def close(self):

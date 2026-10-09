@@ -215,6 +215,43 @@ class CleanupLoopTests(unittest.IsolatedAsyncioTestCase):
         finally:
             bot.store.close()
 
+    async def test_cleanup_monitoring_runs_after_failed_history_pass(self):
+        """FEAT-05 (D19): a failing expire_history does not stop expire_monitoring in the same pass."""
+        bot = SkitBot(make_settings())
+        monitored = []
+
+        def failing(days):
+            raise RuntimeError("database is locked")
+
+        async def no_sleep(_seconds):
+            raise asyncio.CancelledError
+        try:
+            with patch.object(bot.store, "expire_history", failing), patch.object(bot.store, "expire_monitoring", lambda: monitored.append(1)), \
+                    patch("asyncio.sleep", no_sleep), self.assertLogs(level="ERROR"):
+                with self.assertRaises(asyncio.CancelledError):
+                    await bot._cleanup_loop()
+            self.assertEqual(monitored, [1])
+        finally:
+            bot.store.close()
+
+    async def test_cleanup_logs_failed_monitoring_pass(self):
+        """FEAT-05 (D19): a failing expire_monitoring is logged as "Monitoring cleanup failed"."""
+        bot = SkitBot(make_settings())
+
+        def failing():
+            raise RuntimeError("database is locked")
+
+        async def no_sleep(_seconds):
+            raise asyncio.CancelledError
+        try:
+            with patch.object(bot.store, "expire_monitoring", failing), patch("asyncio.sleep", no_sleep), \
+                    self.assertLogs(level="ERROR") as logs:
+                with self.assertRaises(asyncio.CancelledError):
+                    await bot._cleanup_loop()
+            self.assertEqual([r.getMessage() for r in logs.records], ["Monitoring cleanup failed"])
+        finally:
+            bot.store.close()
+
     async def test_close_closes_store_when_models_close_raises(self):
         """REL-05 (fixed): if models.close() raises, close() still cancels cleanup, closes the store and the
         Discord client, then re-raises the model error."""

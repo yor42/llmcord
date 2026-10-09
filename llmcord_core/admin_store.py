@@ -4,10 +4,12 @@ from __future__ import annotations
 import json
 import math
 import uuid
+from datetime import datetime
 import time
 from zoneinfo import ZoneInfo
 from contextlib import contextmanager
 
+from .errors import mask_facts, redact
 from .lorebooks import normalize_entry, parse_lorebook
 
 ADMIN_SCHEMA = """
@@ -133,6 +135,8 @@ def valid_timezone(name):
 
 class ConflictError(ValueError):
     """An optimistic revision or unresolved import conflict rejected a write."""
+
+TURN_LOG_DAYS = (0, 7, 14, 30)
 
 
 class AdminStore:
@@ -796,6 +800,74 @@ class AdminStore:
     def set_catchup_anywhere(self, guild_id, enabled):
         with self.write_admin():
             self.db.execute('INSERT INTO guild_settings(guild_id,catchup_anywhere) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET catchup_anywhere=excluded.catchup_anywhere', (guild_id, int(bool(enabled))))
+
+    def turn_log_settings(self, guild_id):
+        row = self.one('SELECT turn_log_enabled,turn_log_days FROM guild_settings WHERE guild_id=?', (guild_id,))
+        return {'enabled': bool(row['turn_log_enabled']), 'days': row['turn_log_days']} if row else {'enabled': False, 'days': 14}
+
+    def set_turn_log(self, guild_id, enabled, days):
+        if not isinstance(enabled, bool):
+            raise ValueError('The turn log must be on or off.')
+        if isinstance(days, bool) or not isinstance(days, int) or days not in TURN_LOG_DAYS:
+            raise ValueError('Keep the turn log for 7, 14 or 30 days, or for the full month (0).')
+        with self.write_admin():
+            self.db.execute('INSERT INTO guild_settings(guild_id,turn_log_enabled,turn_log_days) VALUES(?,?,?) ON CONFLICT(guild_id) DO UPDATE SET turn_log_enabled=excluded.turn_log_enabled,turn_log_days=excluded.turn_log_days', (guild_id, int(enabled), days))
+
+    def add_turn_log(self, guild_id, *, channel_id=None, message_id=None, stage='', profile='', model='', status='ok', reference_id='',
+                     error_detail='', request_text='', response_text='', input_tokens=None, output_tokens=None,
+                     masked_facts=(), secret_values=(), now=None):
+        if status not in ('ok', 'error'):
+            raise ValueError("Turn log status must be 'ok' or 'error'.")
+        if guild_id is None or not self.turn_log_settings(guild_id)['enabled']:
+            return None
+
+        def clean(text, cap):
+            text = redact(mask_facts(str(text or ''), masked_facts), secret_values, strict=True)
+            return text if len(text) <= cap else f'{text[:cap]}\n[… {len(text) - cap} characters cut]'
+        row = (guild_id, channel_id, message_id, clean(stage, 200), clean(profile, 200), clean(model, 200), status, clean(reference_id, 200),
+               clean(error_detail, 8000), clean(request_text, 48000), clean(response_text, 16000), input_tokens, output_tokens, time.time() if now is None else now)
+        with self.db:
+            return self.db.execute('INSERT INTO turn_log(guild_id,channel_id,message_id,stage,profile,model,status,reference_id,error_detail,request_text,response_text,input_tokens,output_tokens,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)', row).lastrowid
+
+    def turn_log_page(self, guild_id, *, channel_id=None, errors_only=False, reference_id=None, before_id=None, limit=50):
+        where, args = ['guild_id=?'], [guild_id]
+        if channel_id is not None:
+            where.append('channel_id=?'); args.append(channel_id)
+        if errors_only:
+            where.append("status='error'")
+        if reference_id:
+            where.append('reference_id=?'); args.append(reference_id)
+        if before_id is not None:
+            where.append('id<?'); args.append(before_id)
+        where.append('created_at>=?'); args.append(self.monitoring_cutoff(guild_id))
+        limit = max(1, min(200, int(limit)))
+        rows = self.db.execute(f"SELECT id,created_at,channel_id,message_id,stage,profile,model,status,reference_id,input_tokens,output_tokens,SUBSTR(CASE WHEN status='error' AND error_detail!='' THEN error_detail ELSE response_text END,1,200) AS preview FROM turn_log WHERE {' AND '.join(where)} ORDER BY id DESC LIMIT ?", (*args, limit)).fetchall()
+        return [dict(r) for r in rows]
+
+    def turn_log_entry(self, guild_id, entry_id):
+        row = self.one('SELECT * FROM turn_log WHERE guild_id=? AND id=? AND created_at>=?', (guild_id, entry_id, self.monitoring_cutoff(guild_id)))
+        return dict(row) if row else None
+
+    def monitoring_cutoff(self, guild_id, now=None):
+        now = time.time() if now is None else now
+        row = self.one('SELECT turn_log_days,timezone FROM guild_settings WHERE guild_id=?', (guild_id,))
+        days = row['turn_log_days'] if row else 14
+        if days != 0:
+            return now - days * 86400
+        try:
+            zone = ZoneInfo(row['timezone']) if row and row['timezone'] else ZoneInfo('UTC')
+        except Exception:
+            zone = ZoneInfo('UTC')
+        return datetime.fromtimestamp(now, zone).replace(day=1, hour=0, minute=0, second=0, microsecond=0).timestamp()
+
+    def expire_monitoring(self, now=None):
+        now = time.time() if now is None else now
+        guilds = [r[0] for r in self.db.execute('SELECT DISTINCT guild_id FROM turn_log UNION SELECT DISTINCT guild_id FROM model_usage WHERE guild_id IS NOT NULL')]
+        with self.db:
+            for guild_id in guilds:
+                cutoff = self.monitoring_cutoff(guild_id, now)
+                for table in ('turn_log', 'model_usage'):
+                    self.db.execute(f'DELETE FROM {table} WHERE guild_id=? AND created_at<?', (guild_id, cutoff))
 
     def guild_timezone(self, guild_id):
         row = self.one('SELECT timezone FROM guild_settings WHERE guild_id=?', (guild_id,))

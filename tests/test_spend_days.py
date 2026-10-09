@@ -35,8 +35,8 @@ class SpendDaysTests(unittest.TestCase):
             connection.execute("PRAGMA user_version=5")
         return path
 
-    def test_fresh_store_is_v7_with_default_settings(self):
-        """FEAT-16: a new database is v7 with one default bot_settings row and empty spend tables."""
+    def test_fresh_store_is_v8_with_default_settings(self):
+        """FEAT-16: a new database is v8 with one default bot_settings row and empty spend tables."""
         store = Store()
         try:
             self.assertEqual(store.one("PRAGMA user_version")[0], 8)
@@ -94,14 +94,14 @@ class SpendDaysTests(unittest.TestCase):
             store.close()
 
     def test_expire_history_keeps_spend_but_prunes_over_400_days(self):
-        """FEAT-16: expire_history deletes old model_usage, keeps spend_days, and prunes days older than 400."""
+        """FEAT-16 (D19): expire_history no longer touches model_usage, keeps spend_days, and prunes days older than 400."""
         now = DAY1 + 500 * 86400
         store = Store()
         try:
             store.record_model_usage(usage(now - 100 * 86400, 1.0))
             store.record_model_usage(usage(now - 450 * 86400, 2.0))
             store.expire_history(30, now=now)
-            self.assertEqual(store.one("SELECT COUNT(*) FROM model_usage")[0], 0)
+            self.assertEqual(store.one("SELECT COUNT(*) FROM model_usage")[0], 2)
             self.assertEqual(list(spend(store).values()), [(1.0, 0)])
         finally:
             store.close()
