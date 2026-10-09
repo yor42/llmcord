@@ -1712,6 +1712,84 @@ class DashboardBrowserTests(unittest.TestCase):
             self.post_hook('/_test/backend-reset')
             context.close()
 
+    def test_operator_backend_test_connection(self):
+        """D24 step 5 (FEAT-11): Test connection sends the unsaved form values to the tester, shows its success or failure line, audits name and ok only, and stores nothing."""
+        from playwright.sync_api import expect
+        context, page, errors = self.operator_page('/admin/operator?tab=backend')
+        before = self.state()
+        try:
+            self.post_hook('/_test/backend-tester', {'mode': 'ok'})
+            page.get_by_role('button', name='Add profile').click()
+            dialog = self.fill_profile_editor(page, 'tmp-probe', 'typed-not-saved', 2048, base='https://probe.example/v1')
+            expect(dialog.get_by_text('Sends one short request from the dashboard with these settings. It is not counted in usage.')).to_be_visible()
+            button = dialog.get_by_role('button', name='Test connection')
+            button.click()
+            result = dialog.get_by_role('status')
+            expect(result).to_have_text('Connected. typed-not-saved replied in 42 ms.')
+            expect(result).to_have_class(re.compile('text-positive'))
+            expect(button).to_be_enabled()
+            self.shot(page, 'backend-test-ok-1000.png')
+            calls = self.context.request.get(self.url + '/_test/backend-tester-calls').json()
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0]['name'], 'tmp-probe')
+            self.assertEqual((calls[0]['mapping']['model'], calls[0]['mapping']['context_tokens'], calls[0]['mapping']['base_url']),
+                             ('typed-not-saved', 2048, 'https://probe.example/v1'))
+            self.post_hook('/_test/backend-tester', {'mode': 'fail'})
+            button.click()
+            expect(result).to_have_text('Provider returned 401: bad credentials')
+            expect(result).to_have_class(re.compile('text-negative'))
+            self.shot(page, 'backend-test-fail-1000.png')
+            after = self.state()
+            self.assertEqual((after['model_profiles'], after['model_roles']), (before['model_profiles'], before['model_roles']))
+            tests = [(r['guild_id'], json.loads(r['detail_json'])) for r in after['audit'][len(before['audit']):] if r['action'] == 'backend.test']
+            self.assertEqual(tests, [(0, {'name': 'tmp-probe', 'ok': True}), (0, {'name': 'tmp-probe', 'ok': False})])
+            self.assertFalse([r for r in after['audit'][len(before['audit']):] if r['action'] != 'backend.test'])
+            dialog.get_by_role('button', name='Cancel').click()
+            self.assertFalse(errors, errors)
+        finally:
+            self.post_hook('/_test/backend-tester', {'mode': 'ok'})
+            context.close()
+
+    def test_operator_backend_test_connection_button_disabled_while_running(self):
+        """D24 step 5 (FEAT-11): while a test is running the button is disabled; it comes back with the result once the tester answers."""
+        from playwright.sync_api import expect
+        context, page, errors = self.operator_page('/admin/operator?tab=backend')
+        try:
+            self.post_hook('/_test/backend-tester', {'mode': 'ok', 'hold': True})
+            page.get_by_role('button', name='Add profile').click()
+            dialog = self.fill_profile_editor(page, 'tmp-slow', 'slow-model', 1000, base='https://slow.example/v1')
+            button = dialog.get_by_role('button', name='Test connection')
+            button.click()
+            expect(button).to_be_disabled()
+            expect(dialog.get_by_role('status')).to_have_count(0)
+            self.post_hook('/_test/backend-tester-release')
+            expect(dialog.get_by_role('status')).to_have_text('Connected. slow-model replied in 42 ms.')
+            expect(button).to_be_enabled()
+            dialog.get_by_role('button', name='Cancel').click()
+            self.assertFalse(errors, errors)
+        finally:
+            self.post_hook('/_test/backend-tester', {'mode': 'ok'})
+            context.close()
+
+    def test_operator_backend_test_connection_rejects_invalid_name_without_audit(self):
+        """D24 step 5 (FEAT-11): an invalid profile name in the Add form is refused before the tester runs and writes no backend.test audit row."""
+        context, page, errors = self.operator_page('/admin/operator?tab=backend')
+        before = self.state()
+        try:
+            self.post_hook('/_test/backend-tester', {'mode': 'ok'})
+            calls_before = len(self.context.request.get(self.url + '/_test/backend-tester-calls').json())
+            page.get_by_role('button', name='Add profile').click()
+            dialog = self.fill_profile_editor(page, 'Bad Name!', 'm', 1000, base='https://bad.example/v1')
+            dialog.get_by_role('button', name='Test connection').click()
+            page.wait_for_timeout(800)
+            after = self.state()
+            self.assertEqual([r for r in after['audit'][len(before['audit']):] if r['action'] == 'backend.test'], [])
+            self.assertEqual(len(self.context.request.get(self.url + '/_test/backend-tester-calls').json()), calls_before)
+            self.assertEqual(dialog.get_by_role('status').count(), 0)
+            dialog.get_by_role('button', name='Cancel').click()
+        finally:
+            context.close()
+
     def test_operator_backend_route_stays_404_for_non_operators(self):
         """D24 step 4 (FEAT-11): the Backend tab adds no new door; /operator?tab=backend is still the unknown-page 404 for a plain server admin. The operator-only 404 itself is pinned by test_operator_bot_settings_page_and_menu."""
         context = self.browser.new_context(ignore_https_errors=True)

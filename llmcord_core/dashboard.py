@@ -366,7 +366,6 @@ async def backend_panel(ctx, config):
                                                       ('cached_input_cost_per_million', 'Cached input cost per million (USD)'))}
                         timeout = ui.number('Timeout (seconds)', value=initial.get('timeout_seconds', 120), min=0).classes('w-full')
                         retries = ui.number('Max retries', value=initial.get('max_retries', 1), min=0, step=1, format='%d').classes('w-full')
-                # Step 5: the "Test connection" button and its result line go here, above the dialog buttons.
 
             def mapping():
                 return profile_mapping({'provider': provider.value, 'model': model.value, 'api_key': key.value, 'base_url': base.value, 'context_tokens': tokens.value,
@@ -393,9 +392,41 @@ async def backend_panel(ctx, config):
                 if editing:
                     dialog.close()
                     await render()
+            running = False
+
+            async def probe():
+                nonlocal running
+                from . import backend as backend_module
+                from .config import key_hosts_from_env
+                if running:
+                    raise ValueError('A connection test is already running.')
+                running = True
+                try:
+                    probe_name = (name.value or '').strip()
+                    if not editing:
+                        validate_profile_name(probe_name)
+                    values = mapping()
+                    # Test seam only: tests/dashboard_server.py sets this; production uses the real probe.
+                    tester = getattr(ctx.service.app.state, 'connection_tester', None) or backend_module.test_profile_connection
+                    test.disable()
+                    return await tester(probe_name or 'profile', values, key_hosts_from_env())
+                finally:
+                    running = False
+                    if not dialog.is_deleted:
+                        test.enable()
+
+            def tested(result):
+                if dialog.is_deleted:
+                    return
+                outcome.clear()
+                with outcome:
+                    ui.label(result.message).classes('text-positive' if result.ok else 'text-negative').props('role=status')
             with ui.element('div').classes('ll-form-row justify-end'):
                 ui.button('Cancel', on_click=dialog.close).props('flat')
+                test = ctx.button('Test connection', probe, 'backend.test', lambda result: {'name': (name.value or '').strip(), 'ok': result.ok}, then=tested).props('outline')
                 ctx.button('Save profile', save, 'backend.profile', detail, then=saved, success='Profile saved.', conflict=stale)
+            outcome = ui.column().classes('w-full')
+            ui.label('Sends one short request from the dashboard with these settings. It is not counted in usage.').classes('ll-muted')
         dialog.on('hide', dialog.delete)
         dialog.open()
 

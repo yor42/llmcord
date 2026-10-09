@@ -2,13 +2,19 @@
 from __future__ import annotations
 
 import contextlib
+import asyncio
 import contextvars
 import logging
+import os
+import time
 from dataclasses import dataclass, replace
+from pathlib import Path
 
-from .config import ModelProfile, Settings, key_hosts_from_env, profile_from_mapping, validate_profile_name
+from .config import ModelProfile, Settings, check_key_pin, key_hosts_from_env, profile_from_mapping, validate_profile_name
+from .errors import error_detail, is_timeout, redact
 
 ROLES = ('dialogue', 'director', 'memory')
+PROBE_TIMEOUT_SECONDS = 25
 
 
 @dataclass(frozen=True)
@@ -108,3 +114,59 @@ class BackendResolver:
 
     def current(self) -> Settings:
         return self._pinned.get() or self.snapshot()
+
+
+@dataclass(frozen=True)
+class ConnectionResult:
+    ok: bool
+    latency_ms: int | None
+    message: str
+
+
+class _ProbeSource(StaticSource):
+    """One-off settings for a connection test: its own key hosts and environment, no pinning context manager needed."""
+
+    def __init__(self, settings: Settings, key_hosts, environ):
+        super().__init__(settings)
+        self.key_hosts, self.environ = key_hosts, environ
+
+
+def _failure(message: str, secret: str | None = None) -> ConnectionResult:
+    return ConnectionResult(False, None, redact(message, extra_values=[secret], strict=True)[:300])
+
+
+async def test_profile_connection(name, mapping, key_hosts, environ=os.environ) -> ConnectionResult:
+    """Send one tiny request with the unsaved profile `mapping`; never raises and never returns the key value."""
+    from .models import ModelGateway, TurnMessage
+    gateway, secret = None, None
+    try:
+        try:
+            profile = profile_from_mapping(name, mapping, source='dashboard')
+            check_key_pin(profile, key_hosts)
+        except ValueError as error:
+            return _failure(str(error))
+        if profile.api_key_env:
+            secret = environ.get(profile.api_key_env)
+            if not secret:
+                return _failure(f"{profile.api_key_env} is not set in the dashboard's environment.")
+        profile = replace(profile, timeout_seconds=min(profile.timeout_seconds, 20), max_retries=0)
+        settings = Settings('', None, Path(':memory:'), 0, {name: profile}, name, name, name, {})
+        gateway = ModelGateway(_ProbeSource(settings, key_hosts, environ))
+        started = time.perf_counter()
+        try:
+            await asyncio.wait_for(gateway.text('dialogue', 'Reply with the word OK.', [TurnMessage('user', 'OK?')], max_tokens=16), PROBE_TIMEOUT_SECONDS)
+        except asyncio.TimeoutError:
+            return _failure('The model provider did not respond in time')
+        except Exception as error:
+            return _failure('The model provider did not respond in time' if is_timeout(error) else error_detail(error, 10000), secret)
+        latency = int((time.perf_counter() - started) * 1000)
+        return ConnectionResult(True, latency, f'Connected. {profile.model} replied in {latency} ms.')
+    except Exception as error:
+        logging.warning('Connection test failed unexpectedly: %s', type(error).__name__)
+        return ConnectionResult(False, None, 'The test could not run; see the dashboard log.')
+    finally:
+        if gateway is not None:
+            try:
+                await gateway.close()
+            except Exception as error:
+                logging.warning('Connection test client did not close: %s', type(error).__name__)

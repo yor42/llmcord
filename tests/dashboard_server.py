@@ -376,6 +376,35 @@ def main():
                                  existing['revision'] if existing else None)
         return {'ok': True}
 
+    # D24 step 5: a fake connection tester (the real one would send a request); /_test/backend-tester picks success or failure
+    # and optionally holds the call until /_test/backend-tester-release.
+    tester = {'mode': 'ok', 'hold': False, 'calls': [], 'gate': asyncio.Event()}
+    async def fake_connection_tester(name, mapping, key_hosts):
+        from llmcord_core.backend import ConnectionResult
+        tester['calls'].append({'name': name, 'mapping': mapping})
+        if tester['hold']:
+            await tester['gate'].wait()
+        if tester['mode'] == 'ok':
+            return ConnectionResult(True, 42, f"Connected. {mapping['model']} replied in 42 ms.")
+        return ConnectionResult(False, None, 'Provider returned 401: bad credentials')
+    app.state.connection_tester = fake_connection_tester
+
+    @app.post('/_test/backend-tester')
+    async def backend_tester(request: Request):
+        value = await request.json()
+        tester.update(mode=value.get('mode', 'ok'), hold=bool(value.get('hold')), calls=[])
+        tester['gate'] = asyncio.Event()
+        return {'ok': True}
+
+    @app.post('/_test/backend-tester-release')
+    async def backend_tester_release():
+        tester['gate'].set()
+        return {'ok': True}
+
+    @app.get('/_test/backend-tester-calls')
+    async def backend_tester_calls():
+        return tester['calls']
+
     @app.post('/_test/backend-reset')
     async def backend_reset():
         # Drop every dashboard profile and role assignment (cleanup after the Backend tab tests).

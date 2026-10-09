@@ -132,17 +132,18 @@ class ModelGateway:
     def _client(self, profile_name: str, profile: ModelProfile | None = None):
         profile = profile or self.settings.profiles[profile_name]
         dashboard = profile.source == 'dashboard'
+        environ = getattr(self.source, 'environ', os.environ)  # only the dashboard's one-off connection test supplies its own
         if dashboard:
             try:
                 check_key_pin(profile, self.source.key_hosts)
             except ValueError as error:
                 raise ModelConfigError(f'Profile {profile_name}: {error}') from None
-            if profile.api_key_env and not os.environ.get(profile.api_key_env):
+            if profile.api_key_env and not environ.get(profile.api_key_env):
                 raise ModelConfigError(f"{profile.api_key_env} is not set in the bot's environment (profile {profile_name})")
         fingerprint = (profile.provider, profile.base_url, profile.api_key_env, profile.timeout_seconds, profile.max_retries, profile.source)
         if profile_name in self.clients and self.fingerprints.get(profile_name, fingerprint) == fingerprint:
             return self.clients[profile_name]
-        key = os.environ.get(profile.api_key_env or "", "local-no-key")
+        key = environ.get(profile.api_key_env or "", "local-no-key")
         if profile.provider == "anthropic":
             kwargs = {"api_key": key, "timeout": profile.timeout_seconds, "max_retries": profile.max_retries}
             if dashboard:
