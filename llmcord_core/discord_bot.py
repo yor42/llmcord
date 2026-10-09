@@ -17,6 +17,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from . import budget
 from .cards import parse_card
 from .config import Settings
 from .engine import Engine, SceneContext
@@ -149,6 +150,9 @@ class SkitBot(commands.Bot):
         if not explicit and not binding["ambient"]:
             return
         if not explicit:
+            state = self._budget_check()
+            if state and state.hard_reached:
+                return
             async with self.channel_locks.setdefault(message.channel.id, asyncio.Lock()):
                 self.store.count_ambient_message(message.channel.id)
                 count, last = self.store.ambient_state(message.channel.id)
@@ -264,7 +268,60 @@ class SkitBot(commands.Bot):
                 return {**selected, 'url': None, 'asset_id': None}
         return selected
 
+    def _budget_check(self, now=None):
+        """Current spending state, DMing operators once per period; None (fail open) if it cannot be read."""
+        try:
+            now = time.time() if now is None else now
+            state = budget.state(self.store, now)
+            if state.hard_reached:
+                kinds = [('soft', False), ('hard', True)]
+            elif state.soft_reached:
+                kinds = [('soft', True)]
+            else:
+                kinds = []
+            for operator_id in sorted(self.settings.operator_ids):
+                for kind, send in kinds:
+                    if self.store.claim_notice(state.period, kind, operator_id, now) and send:
+                        self._send_operator_dm(operator_id, _operator_text(kind, state))
+            return state
+        except Exception as error:
+            logging.error('Budget check failed: %s\n%s', error_detail(error), error_stack(error))
+            return None
+
+    def _send_operator_dm(self, operator_id, text):
+        async def send():
+            try:
+                user = self.get_user(operator_id) or await self.fetch_user(operator_id)
+                await user.send(text, allowed_mentions=discord.AllowedMentions.none())
+            except discord.DiscordException as error:
+                logging.warning('Operator spending DM to %s failed: %s', operator_id, error_detail(error))
+            except Exception as error:
+                logging.error('Operator spending DM to %s failed: %s', operator_id, error_detail(error))
+
+        task = asyncio.create_task(send())
+        self.note_tasks.add(task)
+        task.add_done_callback(self.note_tasks.discard)
+
     async def run_scene(self, scene: SceneContext, channel, interaction=None):
+        state = self._budget_check()
+        if state and state.hard_reached:
+            notice = _hard_cap_notice(state)
+            if interaction is not None:
+                try:
+                    target = interaction.followup if interaction.response.is_done() else interaction.response
+                    if target is interaction.followup:
+                        await target.send(notice, ephemeral=True)
+                    else:
+                        await target.send_message(notice, ephemeral=True)
+                except discord.DiscordException as error:
+                    logging.warning('Spending limit notice failed: %s', error_detail(error))
+            elif not scene.ambient and state.channel_notice \
+                    and self.store.claim_notice(state.period, 'channel', scene.channel_id, time.time(), interval=3600):
+                try:
+                    await channel.send(notice, allowed_mentions=discord.AllowedMentions.none())
+                except discord.DiscordException as error:
+                    logging.warning('Spending limit channel notice failed: %s', error_detail(error))
+            return
         previous = self.memory_tasks.get(channel.id)
         if previous and not previous.done():
             _, pending = await asyncio.wait({previous}, timeout=MEMORY_WAIT_SECONDS)
@@ -763,6 +820,32 @@ def _register_ambient_commands(bot: SkitBot, ctx: SimpleNamespace, admin_ambient
     bot.tree.add_command(ambient)
 
 
+def _money(amount: float) -> str:
+    return f"${amount:,.2f}"
+
+
+def _hard_cap_notice(state) -> str:
+    return ("Character replies are paused: this bot reached its spending limit for this period. "
+            f"They resume on {state.resets_on.isoformat()} (UTC), or sooner if an operator raises the limit.")
+
+
+def _operator_text(kind: str, state) -> str:
+    resets = state.resets_on.isoformat()
+    if kind == 'soft':
+        text = (f"Spending warning: this bot has spent {_money(state.spent_usd)} since {state.period}, "
+                f"past the soft cap of {_money(state.soft_cap_usd)}. Hard cap: "
+                f"{'off' if state.hard_cap_usd is None else _money(state.hard_cap_usd)}. The period resets on {resets} (UTC).")
+    else:
+        text = (f"Spending limit reached: this bot has spent {_money(state.spent_usd)} since {state.period}, "
+                f"at or past the hard cap of {_money(state.hard_cap_usd)}. Character replies, ambient turns and memory "
+                f"updates are paused until {resets} (UTC) or until an operator raises the cap in the dashboard's Bot settings.")
+    n = state.unpriced_calls
+    if n > 0:
+        text += (" 1 model call without a cost estimate was counted as $0." if n == 1
+                 else f" {n} model calls without a cost estimate were counted as $0.")
+    return text
+
+
 def _register_summon_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
     binding_for, eligible_character, character_choices = ctx.binding_for, ctx.eligible_character, ctx.character_choices
     @bot.tree.command(name="summon", description="Invite an eligible character for one turn")
@@ -770,6 +853,10 @@ def _register_summon_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
     async def summon(interaction: discord.Interaction, character: str, prompt: str):
         parent_id, binding = await binding_for(interaction)
         row = eligible_character(interaction, binding, character)
+        state = bot._budget_check()
+        if state and state.hard_reached:
+            await interaction.response.send_message(_hard_cap_notice(state), ephemeral=True)
+            return
         cutoff = interaction.created_at - timedelta(seconds=bot.settings.limits["recent_window_seconds"])
         reset_at = bot.store.scene_reset_at(interaction.channel.id)
         latest = bot.store.latest_character_node(interaction.channel.id)
