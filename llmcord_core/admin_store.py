@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS model_usage (
  profile TEXT NOT NULL, model TEXT NOT NULL, role TEXT NOT NULL,
  input_tokens INTEGER, output_tokens INTEGER, cached_tokens INTEGER NOT NULL,
  reasoning_tokens INTEGER NOT NULL, cost_usd REAL, cost_basis TEXT NOT NULL,
- created_at REAL NOT NULL
+ created_at REAL NOT NULL, channel_id INTEGER, feature TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS usage_guild_model_time ON model_usage(guild_id,profile,model,created_at);
 CREATE TABLE IF NOT EXISTS bot_settings (
@@ -139,8 +139,8 @@ class AdminStore:
     def record_model_usage(self, usage):
         with self.db:
             if usage.guild_id is not None:
-                self.db.execute('INSERT INTO model_usage(guild_id,profile,model,role,input_tokens,output_tokens,cached_tokens,reasoning_tokens,cost_usd,cost_basis,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
-                                (usage.guild_id, usage.profile, usage.model, usage.role, usage.input_tokens, usage.output_tokens, usage.cached_tokens, usage.reasoning_tokens, usage.cost_usd, usage.cost_basis, usage.created_at))
+                self.db.execute('INSERT INTO model_usage(guild_id,profile,model,role,input_tokens,output_tokens,cached_tokens,reasoning_tokens,cost_usd,cost_basis,created_at,channel_id,feature) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                                (usage.guild_id, usage.profile, usage.model, usage.role, usage.input_tokens, usage.output_tokens, usage.cached_tokens, usage.reasoning_tokens, usage.cost_usd, usage.cost_basis, usage.created_at, usage.channel_id, usage.feature))
             self.db.execute("INSERT INTO spend_days(day,cost_usd,unpriced_calls) VALUES(strftime('%Y-%m-%d',?,'unixepoch'),?,?) ON CONFLICT(day) DO UPDATE SET cost_usd=cost_usd+excluded.cost_usd,unpriced_calls=unpriced_calls+excluded.unpriced_calls",
                             (usage.created_at, usage.cost_usd or 0, int(usage.cost_usd is None)))
 
@@ -296,11 +296,13 @@ class AdminStore:
             'lorebook_entries': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0', 'pinned': 'INTEGER NOT NULL DEFAULT 0', 'source_message_id': 'INTEGER', 'promoted_from': 'INTEGER'},
             'characters': {'avatar_manual': 'INTEGER NOT NULL DEFAULT 0'},
             'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0'},
+            'model_usage': {'channel_id': 'INTEGER', 'feature': "TEXT NOT NULL DEFAULT ''"},
         }.items():
             columns = {row[1] for row in self.db.execute(f'PRAGMA table_info({table})')}
             for name, spec in additions.items():
                 if name not in columns:
                     self.db.execute(f'ALTER TABLE {table} ADD COLUMN {name} {spec}')
+        self.db.execute('CREATE INDEX IF NOT EXISTS model_usage_guild_time ON model_usage(guild_id, created_at)')
         self.db.execute("UPDATE lore SET entry_key='lore:'||id WHERE entry_key=''")
         self.db.execute("UPDATE lorebook_entries SET entry_key='book:'||book_id||':'||uid WHERE entry_key=''")
         if self.one('PRAGMA user_version')[0] < 3:

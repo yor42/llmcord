@@ -11,10 +11,12 @@ _capture = ContextVar('llmcord_model_usage', default=None)
 
 
 @contextmanager
-def capture_usage(guild_id=None):
+def capture_usage(guild_id=None, channel_id=None, feature=None):
     parent = _capture.get()
     records = []
-    token = _capture.set((guild_id if guild_id is not None else parent[0] if parent else None, records))
+    token = _capture.set((guild_id if guild_id is not None else parent[0] if parent else None, records,
+                          channel_id if channel_id is not None else parent[2] if parent else None,
+                          feature if feature is not None else parent[3] if parent else ''))
     try:
         yield records
     finally:
@@ -57,6 +59,8 @@ class ModelUsage:
     cost_usd: float | None
     cost_basis: str
     created_at: float
+    channel_id: int | None = None
+    feature: str = ''
 
     def as_dict(self):
         return asdict(self)
@@ -77,7 +81,8 @@ def collect_usage(profile_name, profile, role, usage):
     cost = None
     if inputs is not None and outputs is not None and input_rate is not None and output_rate is not None:
         cost = ((inputs - cached) * input_rate + cached * cached_rate + outputs * output_rate) / 1_000_000
-    record = ModelUsage(captured[0] if captured else None, profile_name, profile.model, role, inputs, outputs, cached, reasoning, cost, basis, now)
+    record = ModelUsage(captured[0] if captured else None, profile_name, profile.model, role, inputs, outputs, cached, reasoning, cost, basis, now,
+                        captured[2] if captured else None, captured[3] if captured else '')
     if captured:
         captured[1].append(record)
     return record

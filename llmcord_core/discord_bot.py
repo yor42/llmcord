@@ -330,7 +330,7 @@ class SkitBot(commands.Bot):
             if pending:
                 logging.warning('Memory task for channel %s still running after %ss; continuing without it',
                                 channel.id, MEMORY_WAIT_SECONDS)
-        with budget.admit(), capture_usage(scene.guild_id):
+        with budget.admit(), capture_usage(scene.guild_id, scene.channel_id, 'ambient' if scene.ambient else 'summon' if scene.forced_character_id is not None else 'reply'):
             return await self._run_scene(scene, channel, interaction)
 
     def _schedule_memory(self, channel_id, scene, completed, preceding, root_id, parent_message_id):
@@ -344,7 +344,7 @@ class SkitBot(commands.Bot):
                     previous.cancel()
                     await asyncio.gather(previous, return_exceptions=True)
                     raise
-            with capture_usage(scene.guild_id):
+            with capture_usage(scene.guild_id, scene.channel_id, 'memory'):
                 try:
                     await self.engine.extract_memories(scene, completed, preceding, root_id)
                     await self.engine.summarize_scene(parent_message_id, scene)
@@ -924,7 +924,7 @@ def _register_catchup_command(bot: SkitBot) -> None:
             message = catchup.user_message(user.display_name, catchup.transcript(lines), focus, facts, hours)
             attempted = True
             try:
-                with capture_usage(guild_id):
+                with capture_usage(guild_id, channel.id, 'catchup'):
                     text = await bot.models.text('memory', catchup.SYSTEM, [TurnMessage('user', message)],
                                                  max_tokens=catchup.MAX_OUTPUT_TOKENS)
             except budget.BudgetExceeded as error:

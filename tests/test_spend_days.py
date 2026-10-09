@@ -13,7 +13,8 @@ DAY2 = DAY1 + 86400
 
 def usage(created_at, cost, guild_id=1):
     return SimpleNamespace(guild_id=guild_id, profile="p", model="m", role="dialogue", input_tokens=1, output_tokens=1,
-                           cached_tokens=0, reasoning_tokens=0, cost_usd=cost, cost_basis="x", created_at=created_at)
+                           cached_tokens=0, reasoning_tokens=0, cost_usd=cost, cost_basis="x", created_at=created_at,
+                           channel_id=None, feature="")
 
 
 def spend(store):
@@ -38,7 +39,7 @@ class SpendDaysTests(unittest.TestCase):
         """FEAT-16: a new database is v7 with one default bot_settings row and empty spend tables."""
         store = Store()
         try:
-            self.assertEqual(store.one("PRAGMA user_version")[0], 7)
+            self.assertEqual(store.one("PRAGMA user_version")[0], 8)
             row = store.one("SELECT * FROM bot_settings")
             self.assertEqual((row["id"], row["soft_cap_usd"], row["hard_cap_usd"], row["reset_day"], row["channel_notice"], row["revision"]), (1, None, None, 1, 0, 0))
             self.assertEqual(store.one("SELECT COUNT(*) FROM bot_settings")[0], 1)
@@ -53,7 +54,7 @@ class SpendDaysTests(unittest.TestCase):
             path = self.v5_file(folder)
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 7)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 8)
                 self.assertEqual(spend(store), {"2023-11-14": (0.5, 1), "2023-11-15": (1.5, 0)})
             finally:
                 store.close()
@@ -127,7 +128,7 @@ class SpendDaysTests(unittest.TestCase):
             store = Store(path)
             try:
                 self.assertEqual(spend(store), {"2023-11-14": (0.5, 1), "2023-11-15": (1.5, 0)})
-                self.assertEqual(store.one("PRAGMA user_version")[0], 7)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 8)
             finally:
                 store.close()
 
@@ -156,12 +157,12 @@ class SpendDaysTests(unittest.TestCase):
         finally:
             store.close()
 
-    def test_v8_file_is_rejected(self):
-        """FEAT-16: a version 8 file raises 'newer than this application'."""
+    def test_v9_file_is_rejected(self):
+        """FEAT-16: a version 9 file raises 'newer than this application'."""
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "new.sqlite3"
             with closing(sqlite3.connect(path)) as connection, connection:
-                connection.execute("PRAGMA user_version=8")
+                connection.execute("PRAGMA user_version=9")
             with self.assertRaisesRegex(ValueError, "newer than this application"):
                 Store(path)
 
@@ -196,7 +197,7 @@ class SpendDaysTests(unittest.TestCase):
             self.downgrade(path, 6)
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 7)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 8)
                 self.assertFalse(store.catchup_anywhere(1))
                 self.assertFalse(store.usage_footer_enabled(1))
                 self.assertEqual(store.one("SELECT catchup_anywhere FROM guild_settings WHERE guild_id=1")[0], 0)
@@ -211,14 +212,14 @@ class SpendDaysTests(unittest.TestCase):
             Store(path).close()
             self.assertEqual(len(list(Path(folder).glob("*.pre-*"))), 1)
 
-    def test_v5_file_reaches_v7_with_backfill_and_column(self):
-        """FEAT-15: a v5 file without the column still backfills spend_days and ends at v7 with the column."""
+    def test_v5_file_reaches_v8_with_backfill_and_column(self):
+        """FEAT-15: a v5 file without the column still backfills spend_days and ends at v8 with the column."""
         with tempfile.TemporaryDirectory() as folder:
             path = self.v5_file(folder)
             self.downgrade(path, 5)
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 7)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 8)
                 self.assertEqual(spend(store), {"2023-11-14": (0.5, 1), "2023-11-15": (1.5, 0)})
                 self.assertFalse(store.catchup_anywhere(1))
             finally:
