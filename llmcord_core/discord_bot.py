@@ -6,6 +6,7 @@ import sqlite3
 import time
 import re
 import hashlib
+import json
 from dataclasses import replace
 from datetime import timedelta
 from types import SimpleNamespace
@@ -986,6 +987,58 @@ def _register_scene_commands(bot: SkitBot, ctx: SimpleNamespace, admin_scene: ap
     bot.tree.add_command(scene)
 
 
+def _context_lore_line(bot: SkitBot, interaction: discord.Interaction, item: dict) -> str:
+    """One /context lore entry as words: its first key (a content excerpt for administrators only) and its owner, never a raw id."""
+    kind, scope_id, guild_id = item["scope"], item["scope_id"], interaction.guild_id
+    is_admin = bool(getattr(getattr(interaction, "permissions", None), "administrator", False))
+
+    def clean(value: str) -> str:
+        return discord.utils.escape_mentions(discord.utils.escape_markdown(value))
+
+    label = ""
+    reason = str(item.get("reason") or "")
+    if not is_admin:
+        # Members see only what the keyword reason already revealed, never other keys, excerpts or entry keys.
+        label = reason[len("keyword:"):].strip() if reason.startswith("keyword:") else ""
+    else:
+        if kind in ("character", "space", "channel", "thread"):
+            row = bot.store.lore_row(guild_id, item["id"])
+            if row:
+                try:
+                    keys = json.loads(row["keys_json"] or "[]")
+                except ValueError:
+                    keys = []
+                if isinstance(keys, list) and keys and isinstance(keys[0], str) and keys[0].strip():
+                    label = keys[0].strip()
+                else:
+                    label = " ".join(str(row["content"]).split())[:40]
+        if not label:
+            key = str(item.get("entry_key") or "")
+            label = "" if key.startswith(("lore:", "book:")) else key
+    label = f'"{clean(label)}"' if label else "an unnamed entry"
+    if kind == "space":
+        space = bot.store.space_by_id(scope_id)
+        if space and space["guild_id"] != guild_id:
+            space = None
+        owner = f"{space['kind']} {clean(space['name'])}" if space else "a world or hub"
+    elif kind == "character":
+        character = bot.store.character_by_id(scope_id)
+        if character and character["guild_id"] != guild_id:
+            character = None
+        owner = f"character {clean(character['name'])}" if character else "a character"
+    elif kind == "lorebook":
+        owner = f"lorebook {clean(item['book_name'])}" if item.get("book_name") else "a lorebook"
+    elif kind == "guild":
+        owner = "server-wide lore"
+    elif kind in ("channel", "thread"):
+        channel = interaction.guild.get_channel_or_thread(scope_id) if interaction.guild else None
+        name = getattr(channel, "name", "")
+        owner = f"#{clean(name)}" if name else ("a thread" if kind == "thread" else "#unknown-channel")
+    else:
+        owner = "another owner"
+    return f"{label} ({owner}, {clean(str(item['reason']))})"
+
+
 def _register_context_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
     binding_for = ctx.binding_for
     @bot.tree.command(name="context", description="Inspect what informed the last character line")
@@ -1002,20 +1055,7 @@ def _register_context_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
         node, trace = bot.store.node(ident), bot.store.trace(ident)
         if not node or node["guild_id"] != interaction.guild_id or node["channel_id"] != interaction.channel.id or not trace:
             raise ValueError("No saved context for that character line")
-        lore_lines = []
-        for item in trace.get("lore", []):
-            scope = item["scope"]
-            if scope == "space":
-                space = bot.store.space_by_id(item["scope_id"])
-                scope = f"{space['kind']} {space['name']}" if space else f"space #{item['scope_id']}"
-            elif scope == "character":
-                character = bot.store.character_by_id(item["scope_id"])
-                scope = f"character {character['name']}" if character else f"character #{item['scope_id']}"
-            elif scope == "lorebook":
-                scope = f"lorebook {item.get('book_name', item['scope_id'])}"
-            else:
-                scope = f"{scope} #{item['scope_id']}"
-            lore_lines.append(f"#{item['id']} ({scope}, {item['reason']})")
+        lore_lines = [_context_lore_line(bot, interaction, item) for item in trace.get("lore", [])]
         text = "Lore: " + (", ".join(lore_lines) or "none")
         text += f"\nBranch messages: {len(trace.get('messages', []))}"
         text += f"; nearby group messages: {len(trace.get('recent', []))}"
@@ -1026,7 +1066,7 @@ def _register_context_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
             text += f"\nPrompt blocks: {len(preset.get('blocks', []))}; trimmed blocks: {len(preset.get('omitted', []))}"
             if preset.get('adaptations'):
                 text += '\nProvider adaptations: ' + '; '.join(preset['adaptations'])[:300]
-        await interaction.response.send_message(text[:1900], ephemeral=True)
+        await interaction.response.send_message(text[:1900], ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
 
 def _register_error_handler(bot: SkitBot) -> None:

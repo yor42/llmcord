@@ -7,6 +7,8 @@ tests/test_error_mapping.py.
 """
 import unittest
 
+import discord
+
 from helpers import FakeInteraction, invoke, make_settings
 
 from llmcord_core.discord_bot import SkitBot
@@ -141,6 +143,131 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
         interaction = FakeInteraction()
         await invoke(self.bot, "context", interaction)
         self.assertEqual(interaction.replies, ["No saved context for that character line"])
+
+    def _context_interaction(self, channels=None, admin=False):
+        interaction = FakeInteraction(admin=admin)
+        known = channels or {}
+        interaction.guild.get_channel_or_thread = lambda ident: known.get(ident)
+        return interaction
+
+    def _item(self, kind, scope_id, lore_id, entry_key, reason="keyword: dragon", **extra):
+        return {"id": lore_id, "scope": kind, "scope_id": scope_id, "entry_key": entry_key, "reason": reason, **extra}
+
+    def _line(self, interaction, item):
+        from llmcord_core.discord_bot import _context_lore_line
+        return _context_lore_line(self.bot, interaction, item)
+
+    async def _context_trace(self):
+        self.store.record_node(5000, 1, 100, None, None, self.alice, "Hello")
+        world_lore = self.store.add_lore(1, "space", self.world, "Dragons sleep under the hill", ["wyrm", "dragon"])
+        chan_lore = self.store.add_lore(1, "channel", 100, "  The tide   is high today ", [])
+        ghost_lore = self.store.add_lore(1, "channel", 4242, "Hidden room", ["secret"])
+        self.store.save_trace(5000, {"lore": [
+            self._item("space", self.world, world_lore, f"lore:{world_lore}"),
+            self._item("channel", 100, chan_lore, f"lore:{chan_lore}", "always on"),
+            self._item("guild", 1, 77, "lore:77", "always on"),
+            self._item("channel", 4242, ghost_lore, f"lore:{ghost_lore}", "always on"),
+        ]})
+
+    async def test_context_names_lore_without_raw_ids(self):
+        """Regression (UI-07): /context shows a member the matched keyword (or "an unnamed entry") and the owner in
+        words: no other keys, no content excerpt, no raw ids, and the reply suppresses mentions."""
+        from types import SimpleNamespace
+        await self._context_trace()
+        interaction = self._context_interaction({100: SimpleNamespace(id=100, name="harbor-chat")})
+        await invoke(self.bot, "context", interaction)
+        reply = interaction.replies[0]
+        self.assertIn('"dragon" (world Harbor, keyword: dragon)', reply)
+        self.assertIn("an unnamed entry (#harbor-chat, always on)", reply)
+        self.assertIn("an unnamed entry (server-wide lore, always on)", reply)
+        self.assertIn("an unnamed entry (#unknown-channel, always on)", reply)
+        for hidden in ("wyrm", "tide", "secret", "Hidden", "lore:"):
+            self.assertNotIn(hidden, reply, "members never see other keys, excerpts or entry keys")
+        self.assertNotRegex(reply.split("\n")[0], r"#\d")
+        self.assertNotIn("guild #", reply)
+        self.assertNotIn("space #", reply)
+        self.assertEqual(interaction.response.sent[0][1]["allowed_mentions"].to_dict(), discord.AllowedMentions.none().to_dict())
+
+    async def test_context_shows_administrators_keys_and_excerpts(self):
+        """Regression (UI-07): an administrator's /context labels an entry by its first key, else a 40-character excerpt."""
+        from types import SimpleNamespace
+        await self._context_trace()
+        interaction = self._context_interaction({100: SimpleNamespace(id=100, name="harbor-chat")}, admin=True)
+        await invoke(self.bot, "context", interaction)
+        reply = interaction.replies[0]
+        self.assertIn('"wyrm" (world Harbor, keyword: dragon)', reply)
+        self.assertIn('"The tide is high today" (#harbor-chat, always on)', reply)
+        self.assertIn("an unnamed entry (server-wide lore, always on)", reply)
+        self.assertIn('"secret" (#unknown-channel, always on)', reply)
+        self.assertNotRegex(reply.split("\n")[0], r"#\d")
+
+    async def test_context_lore_line_member_label_is_only_the_matched_keyword(self):
+        """Regression (UI-07): for a member a constant entry with keys is "an unnamed entry", and a keyword entry
+        shows the keyword that matched, not keys[0]."""
+        lore = self.store.add_lore(1, "space", self.world, "Body", ["first", "second"])
+        member = self._context_interaction()
+        self.assertEqual(self._line(member, self._item("space", self.world, lore, "named-key", "always on")),
+                         "an unnamed entry (world Harbor, always on)")
+        self.assertEqual(self._line(member, self._item("space", self.world, lore, "named-key", "keyword: second")),
+                         '"second" (world Harbor, keyword: second)')
+        self.assertEqual(self._line(member, self._item("space", self.world, lore, "named-key", "probability")),
+                         "an unnamed entry (world Harbor, probability)")
+
+    async def test_context_lore_line_owner_wording(self):
+        """Regression (UI-07): _context_lore_line owner wording and admin label fallbacks for hub, character,
+        lorebook, thread and unknown owners."""
+        from types import SimpleNamespace
+        hub = self.store.create_space(1, "Plaza", "hub")
+        char_lore = self.store.add_lore(1, "character", self.alice, "Alice fears fire", [])
+        interaction = self._context_interaction({300: SimpleNamespace(id=300, name="side-quest")}, admin=True)
+        line = lambda item: self._line(interaction, item)  # noqa: E731
+
+        self.assertEqual(line(self._item("space", hub, 999, "plaza-rule")), '"plaza-rule" (hub Plaza, keyword: dragon)')
+        self.assertEqual(line(self._item("space", 9999, 999, "book:1:2")), "an unnamed entry (a world or hub, keyword: dragon)")
+        self.assertEqual(line(self._item("character", self.alice, char_lore, "x")),
+                         '"Alice fears fire" (character Alice, keyword: dragon)')
+        self.assertEqual(line(self._item("lorebook", 5, 6, "book:5:1", book_name="Bestiary")),
+                         "an unnamed entry (lorebook Bestiary, keyword: dragon)")
+        self.assertEqual(line(self._item("lorebook", 5, 6, "troll", book_name=None)), '"troll" (a lorebook, keyword: dragon)')
+        self.assertEqual(line(self._item("thread", 300, 8, "")), "an unnamed entry (#side-quest, keyword: dragon)")
+        self.assertEqual(line(self._item("thread", 301, 8, "")), "an unnamed entry (a thread, keyword: dragon)")
+        self.assertEqual(line(self._item("mystery", 1, 8, "")), "an unnamed entry (another owner, keyword: dragon)")
+        long_text = self.store.add_lore(1, "space", self.world, "x" * 60, [])
+        self.assertEqual(line(self._item("space", self.world, long_text, "lore:1")),
+                         f'"{"x" * 40}" (world Harbor, keyword: dragon)')
+        interaction.permissions = discord.Permissions(administrator=False)
+        self.assertEqual(line(self._item("character", self.alice, char_lore, "x", "always on")),
+                         "an unnamed entry (character Alice, always on)")
+
+    async def test_context_lore_line_escapes_markdown_and_mentions(self):
+        """Regression (UI-07): keys, names and reasons are escaped so lore text cannot ping or format the /context reply."""
+        lore = self.store.add_lore(1, "space", self.world, "body", ["@everyone *x*"])
+        reason = "keyword: @everyone *x*"
+        for admin in (True, False):
+            text = self._line(self._context_interaction(admin=admin), self._item("space", self.world, lore, "k", reason))
+            self.assertNotIn("@everyone", text.replace("@\u200beveryone", ""), admin)
+            self.assertIn("\\*x\\*", text, admin)
+            self.assertEqual(text.count("\\*x\\*"), 2, "label and reason are both escaped")
+
+    async def test_context_lore_line_other_guild_space_is_not_named(self):
+        """Regression (UI-07): a space or character belonging to another server is not named in the reply."""
+        foreign = self.store.create_space(2, "Secretland", "world")
+        foreign_char = self.store.add_character(2, foreign, "Spy", {"name": "Spy"}, None, [])
+        interaction = self._context_interaction(admin=True)
+        self.assertEqual(self._line(interaction, self._item("space", foreign, 999, "k")), '"k" (a world or hub, keyword: dragon)')
+        self.assertEqual(self._line(interaction, self._item("character", foreign_char, 999, "k")),
+                         '"k" (a character, keyword: dragon)')
+
+    async def test_context_lore_line_tolerates_malformed_keys_json(self):
+        """Regression (UI-07): keys_json that is not a non-empty list of strings falls back to the excerpt for an
+        administrator instead of raising."""
+        interaction = self._context_interaction(admin=True)
+        for raw in ("{}", "[1]", "not json", "[]"):
+            lore = self.store.add_lore(1, "space", self.world, "Plain body", ["a"])
+            self.store.execute("UPDATE lore SET keys_json=? WHERE id=?", (raw, lore))
+            text = self._line(interaction, self._item("space", self.world, lore, f"lore:{lore}"))
+            self.assertEqual(text, '"Plain body" (world Harbor, keyword: dragon)', raw)
+
 
 
 if __name__ == "__main__":
