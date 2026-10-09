@@ -184,6 +184,36 @@ class AdminStore:
         since = time.time() - 86400 if since is None else since
         return dict(self.one('SELECT COUNT(*) AS requests,COALESCE(SUM(input_tokens),0) AS input_tokens,COALESCE(SUM(output_tokens),0) AS output_tokens,COALESCE(SUM(cost_usd),0) AS cost_usd,COALESCE(SUM(input_tokens IS NULL OR output_tokens IS NULL),0) AS unreported,COALESCE(SUM(cost_usd IS NULL),0) AS unpriced FROM model_usage WHERE guild_id=? AND profile=? AND model=? AND created_at>=?', (guild_id, profile, model, since)))
 
+    def usage_report(self, guild_id, since, now=None):
+        """Usage for one server from `since` (clamped to the retention cutoff): daily token buckets per model in the server timezone, and breakdowns by model, channel and feature."""
+        now = time.time() if now is None else now
+        since = max(since, self.monitoring_cutoff(guild_id, now))
+        try:
+            zone = ZoneInfo(self.guild_timezone(guild_id) or 'UTC')
+        except Exception:
+            zone = ZoneInfo('UTC')
+        daily = {}
+        for r in self.db.execute('SELECT CAST(created_at/900 AS INTEGER) AS slot,model,COALESCE(SUM(input_tokens),0) AS i,COALESCE(SUM(output_tokens),0) AS o FROM model_usage WHERE guild_id=? AND created_at>=? AND created_at<=? GROUP BY slot,model', (guild_id, since, now)):
+            day = datetime.fromtimestamp(r['slot'] * 900, zone).date().isoformat()
+            cell = daily.setdefault(r['model'], {}).setdefault(day, [0, 0])
+            cell[0] += r['i']; cell[1] += r['o']
+        groups = {'model': {}, 'channel': {}, 'feature': {}}
+        totals = {'requests': 0, 'input_tokens': 0, 'output_tokens': 0, 'cost_usd': 0.0, 'unpriced': 0, 'unreported': 0}
+        for r in self.db.execute('SELECT profile,model,channel_id,feature,COUNT(*) AS requests,COALESCE(SUM(input_tokens),0) AS input_tokens,COALESCE(SUM(output_tokens),0) AS output_tokens,COALESCE(SUM(cost_usd),0) AS cost_usd,COALESCE(SUM(cost_usd IS NULL),0) AS unpriced,COALESCE(SUM(input_tokens IS NULL OR output_tokens IS NULL),0) AS unreported FROM model_usage WHERE guild_id=? AND created_at>=? AND created_at<=? GROUP BY profile,model,channel_id,feature', (guild_id, since, now)):
+            for kind, key in (('model', (r['profile'], r['model'])), ('channel', r['channel_id']), ('feature', r['feature'] or None)):
+                row = groups[kind].setdefault(key, {'requests': 0, 'input_tokens': 0, 'output_tokens': 0, 'cost_usd': 0.0, 'unpriced': 0, 'unreported': 0})
+                for field in totals:
+                    row[field] += r[field]
+            for field in totals:
+                totals[field] += r[field]
+        def listed(kind, label):
+            return sorted(({**label(key), **row} for key, row in groups[kind].items()), key=lambda x: (-x['input_tokens'] - x['output_tokens'], -x['requests']))
+        days = sorted({d for cells in daily.values() for d in cells})
+        return {'since': since, 'zone': zone.key, 'days': days, 'daily': daily, 'totals': totals,
+                'by_model': listed('model', lambda k: {'profile': k[0], 'model': k[1]}),
+                'by_channel': listed('channel', lambda k: {'channel_id': k}),
+                'by_feature': listed('feature', lambda k: {'feature': k})}
+
     def next_owner_id(self, kind, table):
         if (kind, table) not in {('space', 'spaces'), ('book', 'lorebooks')}:
             raise ValueError('Owner type must be a world, hub or lorebook. Reload the page and try again.')

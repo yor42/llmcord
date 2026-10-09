@@ -214,7 +214,7 @@ class DashboardBrowserTests(unittest.TestCase):
         self.assertEqual(response.status, 200)
         self.assertIn('nonce-', response.headers['content-security-policy'])
         page.get_by_text('Server administration', exact=True).wait_for()
-        page.get_by_text('fixture-model', exact=True).wait_for()
+        page.get_by_text('Server settings', exact=True).wait_for()
         # Rendered controls precede the connection that delivers their events.
         page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
         world_panel = page.locator('.space-card').filter(has=page.get_by_text('World · world', exact=True))
@@ -885,6 +885,90 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def usage_table(self, page, index):
+        """Rows of the nth usage table as lists of cell texts."""
+        return page.locator('.ll-usage').nth(index).locator('tbody tr').evaluate_all('rows => rows.map(r => [...r.cells].map(c => c.textContent.trim()))')
+
+    def test_monitoring_tab_shows_usage_for_this_server_only(self):
+        """FEAT-12: the Monitoring tab charts the last 7 days and lists usage by model, channel and feature; another server's calls and the old Server setup table are absent."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=monitoring')
+        try:
+            page.get_by_text('By model', exact=True).wait_for(timeout=5000)
+            self.assertEqual(page.locator('.ll-section-title', has_text='Usage').count(), 1)
+            page.locator('canvas').first.wait_for()
+            self.assertEqual(self.usage_table(page, 0)[0][:3], ['second-model', 'dialogue, director, memory', '2'])
+            models = {row[0]: row for row in self.usage_table(page, 0)}
+            self.assertEqual(models['fixture-model'][2:], ['5', '4,323', '715', '$0.0085', '0'])
+            self.assertEqual(models['second-model'][2:], ['2', '7,000', '900', '$0.01', '1'])
+            self.assertEqual(models['fixture-model'][1], 'dialogue, director, memory')
+            channels = {row[0]: row[1] for row in self.usage_table(page, 1)}
+            self.assertEqual(channels, {'#scene': '4', 'Deleted channel': '1', 'Unknown (before this update)': '2'})
+            features = {row[0]: row[1] for row in self.usage_table(page, 2)}
+            self.assertEqual(features, {'Replies': '1', 'Ambient turns': '1', 'Summons': '1', 'Memory updates': '1', 'Catch-ups': '1', 'Unknown (before this update)': '2'})
+            self.assertEqual(page.get_by_text('other-guild-model').count(), 0)
+            page.get_by_text('Tracked for this server, including internal model calls.', exact=False).wait_for()
+            page.get_by_role('tab', name='Server setup', exact=True).click()
+            _worlds_section(page).get_by_label('Name', exact=True).wait_for()
+            self.assertEqual(page.get_by_text('Models and usage', exact=False).count(), 0)
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_monitoring_range_change_updates_totals(self):
+        """FEAT-12: switching the period re-renders the tables; Last 24 hours only has the three recent calls."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=monitoring')
+        try:
+            page.get_by_text('By model', exact=True).wait_for(timeout=5000)
+            self.assertEqual({row[0] for row in self.usage_table(page, 0)}, {'fixture-model', 'second-model'})
+            page.get_by_label('Period', exact=True).click()
+            page.get_by_role('option', name='Last 24 hours', exact=True).click()
+            self.wait_for(lambda: [row[0] for row in self.usage_table(page, 0)] == ['fixture-model'])
+            self.assertEqual(self.usage_table(page, 0)[0][2:5], ['3', '1,623', '345'])
+            page.get_by_label('Period', exact=True).click()
+            days = self.state()['turn_log']['days']
+            shown = {7: 2, 14: 3, 30: 5, 0: 3}[days]  # options longer than the retention are hidden, with a note
+            self.assertEqual(page.get_by_role('option').count(), shown)
+            page.keyboard.press('Escape')
+            if shown < 5:
+                page.get_by_text(f'Usage is kept for {days} days (Server settings).' if days else 'Usage is kept for the current month (Server settings).').wait_for()
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_monitoring_fits_phone_width(self):
+        """FEAT-12: at 390 px the chart and tables stay inside the page (no horizontal scroll) and the chart is drawn."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=monitoring')
+        try:
+            page.set_viewport_size({'width': 390, 'height': 844})
+            page.get_by_text('By feature', exact=True).wait_for(timeout=5000)
+            page.wait_for_timeout(500)
+            self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'))
+            box = page.locator('canvas').first.bounding_box()
+            self.assertTrue(0 < box['width'] <= 390 and box['height'] > 100, box)
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_server_turn_log_settings_persist(self):
+        """D22 step 4: the Keep a turn log switch and retention save together as one settings.turn_log audit row."""
+        context, page, errors = self.ux_page('/admin/guild/1')
+        try:
+            page.get_by_role('tab', name='Server setup', exact=True).click()
+            switch = page.get_by_role('switch', name='Keep a turn log')
+            switch.wait_for(timeout=5000)
+            self.assertEqual(switch.get_attribute('aria-checked'), 'false')
+            switch.click()
+            page.get_by_label('Keep usage and log for', exact=True).click()
+            page.get_by_role('option', name='30 days', exact=True).click()
+            page.get_by_role('region', name='Unsaved changes').get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Server settings saved', exact=True).wait_for(timeout=5000)
+            self.wait_for(lambda: self.state()['turn_log'] == {'enabled': True, 'days': 30})
+            rows = [r for r in self.state()['audit'] if r['action'] == 'settings.turn_log']
+            self.assertEqual([json.loads(r['detail_json']) for r in rows], [{'enabled': True, 'days': 30}])
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
     def test_channel_card_is_one_save_bar_editor(self):
         """UI-15 / MNT-26: a collapsed channel card saves guidelines and ambient as one edit with one audit row each, can be saved again without a conflict, and Reset restores."""
         context, page, errors = self.ux_page('/admin/guild/1')
@@ -1162,12 +1246,12 @@ class DashboardBrowserTests(unittest.TestCase):
 
     def panel_reads(self, context):
         counters = context.request.get(self.url + '/_test/counters').json()
-        return {name: counters.get('store:' + name, 0) for name in ('model_usage_summary', 'list_presets')}
+        return {name: counters.get('store:' + name, 0) for name in ('usage_report', 'list_presets')}
 
     def test_lazy_panels_build_on_first_selection(self):
         """PERF-01: a page load builds only the selected tab's panel; others are built once, on first selection.
 
-        ``model_usage_summary`` is read only by Server setup and ``list_presets`` only by Prompt presets.
+        ``usage_report`` is read only by Monitoring and ``list_presets`` only by Prompt presets.
         """
         context, page, errors = self.ux_page('/admin/')
         try:
@@ -1175,12 +1259,12 @@ class DashboardBrowserTests(unittest.TestCase):
             self.load(page, self.url + '/admin/guild/1?tab=characters')
             page.get_by_role('button', name='Create character', exact=True).wait_for()
             page.wait_for_timeout(300)
-            self.assertEqual(self.panel_reads(context), {'model_usage_summary': 0, 'list_presets': 0})
+            self.assertEqual(self.panel_reads(context), {'usage_report': 0, 'list_presets': 0})
             page.get_by_role('tab', name='Prompt presets', exact=True).click()
             page.get_by_label('Sample channel (optional)', exact=True).wait_for()
             page.wait_for_timeout(300)
             built = self.panel_reads(context)
-            self.assertEqual(built['model_usage_summary'], 0, built)
+            self.assertEqual(built['usage_report'], 0, built)
             self.assertGreaterEqual(built['list_presets'], 1, built)
             # Leaving and returning does not rebuild the panel.
             page.get_by_role('tab', name='Characters', exact=True).click()
@@ -1188,10 +1272,10 @@ class DashboardBrowserTests(unittest.TestCase):
             page.get_by_label('Sample channel (optional)', exact=True).wait_for()
             page.wait_for_timeout(300)
             self.assertEqual(self.panel_reads(context), built)
-            page.get_by_role('tab', name='Server setup', exact=True).click()
-            _worlds_section(page).get_by_label('Name', exact=True).wait_for()
+            page.get_by_role('tab', name='Monitoring', exact=True).click()
+            page.get_by_text('By model', exact=True).wait_for()
             page.wait_for_timeout(300)
-            self.assertEqual(self.panel_reads(context), {**built, 'model_usage_summary': 1})
+            self.assertEqual(self.panel_reads(context), {**built, 'usage_report': 1})
             self.assertFalse(errors, (errors, getattr(page, 'network', [])))
         finally:
             context.close()

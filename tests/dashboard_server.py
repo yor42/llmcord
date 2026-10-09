@@ -46,6 +46,16 @@ def main():
     app.state.admin.model_config = {'dialogue': 'fixture', 'director': 'fixture', 'memory': 'fixture', 'profiles': {'fixture': {'model': 'fixture-model'}}}
     from llmcord_core.usage import ModelUsage
     store.record_model_usage(ModelUsage(1, 'fixture', 'fixture-model', 'dialogue', 123, 45, 0, 0, 0.001, 'configured', time.time()))
+    # Monitoring tab data: two models over several days, two channels, every feature, one old row and one unpriced call; guild 2 must never show.
+    # Inserted directly so the operator's spend_days (global caps panel) still sees only the one recorded call above.
+    for guild, days_ago, profile, model, channel, feature, inputs, outputs, cost in (
+            (1, 0.1, 'fixture', 'fixture-model', 100, 'reply', 1000, 200, 0.002), (1, 0.2, 'fixture', 'fixture-model', 100, 'ambient', 500, 100, 0.001),
+            (1, 1.5, 'fixture', 'fixture-model', 777, 'summon', 2000, 300, 0.004), (1, 2.5, 'fixture', 'second-model', 100, 'memory', 3000, 400, None),
+            (1, 2.6, 'fixture', 'second-model', 100, 'catchup', 4000, 500, 0.01), (1, 3.5, 'fixture', 'fixture-model', None, '', 700, 70, 0.0005),
+            (2, 0.04, 'other', 'other-guild-model', 100, 'reply', 999999, 888888, 5.0)):
+        store.db.execute("INSERT INTO model_usage(guild_id,profile,model,role,input_tokens,output_tokens,cached_tokens,reasoning_tokens,cost_usd,cost_basis,created_at,channel_id,feature) VALUES(?,?,?,'dialogue',?,?,0,0,?,'configured',?,?,?)",
+                         (guild, profile, model, inputs, outputs, cost, time.time() - days_ago * 86400, channel, feature))
+    store.db.commit()
     world = store.create_space(1, 'World', 'world')
     store.bind_channel(1, 100, world)
     store.add_character(1, world, 'Alice', {'name': 'Alice', 'description': 'A cheerful courier'}, None, [])
@@ -112,7 +122,7 @@ def main():
             return original(*args, **kwargs)
         setattr(store, name, counting)
     for name in ('list_spaces', 'list_characters', 'list_channels', 'list_lorebooks', 'thread_lore_scopes', 'lorebook_links',
-                 'model_usage_summary', 'list_presets'):  # the last two are panel-specific (Server setup / Prompt presets): R5 step 6
+                 'usage_report', 'list_presets'):  # the last two are panel-specific (Server setup / Prompt presets): R5 step 6
         count_store_method(name)
 
     @app.get('/_test/state')
@@ -126,7 +136,7 @@ def main():
             'books': [dict(r) for r in store.all('SELECT * FROM lorebook_entries')],
             'presets': [dict(r) for r in store.list_presets(1)], 'active': store.active_preset(1)['id'],
             'active_bundle': store.active_preset(1)['bundle'], 'assets': [dict(r) for r in store.all('SELECT * FROM avatar_assets')],
-            'guild_timezone': store.guild_timezone(1), 'catchup_anywhere': store.catchup_anywhere(1), 'audit': [dict(r) for r in store.all('SELECT * FROM admin_audit ORDER BY id')],
+            'guild_timezone': store.guild_timezone(1), 'catchup_anywhere': store.catchup_anywhere(1), 'turn_log': store.turn_log_settings(1), 'audit': [dict(r) for r in store.all('SELECT * FROM admin_audit ORDER BY id')],
             'slots': [{'character_id': r['character_id'], 'slot_key': r['slot_key'], 'label': r['label'], 'has_image': bool(r['image'])} for r in store.all('SELECT * FROM avatar_slots')]}
 
     @app.get('/_test/uploads')

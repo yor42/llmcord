@@ -25,7 +25,7 @@ from pathlib import Path
 import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
-TABS = ('setup', 'characters', 'lore', 'imports', 'prompts')
+TABS = ('setup', 'characters', 'lore', 'imports', 'prompts', 'monitoring')
 VIEWPORTS = {
     'desktop': {'viewport': {'width': 1400, 'height': 1000}},
     'phone': {'viewport': {'width': 390, 'height': 844}, 'is_mobile': True, 'has_touch': True, 'device_scale_factor': 2},

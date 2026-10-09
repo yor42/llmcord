@@ -12,6 +12,8 @@ import time
 import inspect
 import types
 import zoneinfo
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import httpx
 from urllib.parse import parse_qs
 from http.cookies import SimpleCookie
@@ -643,8 +645,9 @@ def _register_pages(app):
                 lore = ui.tab('lore', 'Lore')
                 imports = ui.tab('imports', 'Imports')
                 prompts = ui.tab('prompts', 'Prompt presets')
+                monitoring = ui.tab('monitoring', 'Monitoring')
             selected_tab = request.query_params.get('tab')
-            if selected_tab not in ('setup', 'characters', 'lore', 'imports', 'prompts'):
+            if selected_tab not in ('setup', 'characters', 'lore', 'imports', 'prompts', 'monitoring'):
                 selected_tab = 'setup'
             await ctx.load_channel_names()  # must precede any ctx.snapshot access: it bakes channel names into owner labels
             await ctx.load_thread_names()
@@ -655,9 +658,10 @@ def _register_pages(app):
                 await ctx.build(event.value)
             ctx.builders = {'setup': lambda: setup_panel(ctx), 'characters': lambda: characters_panel(ctx),
                             'lore': lambda: lore_panel(ctx, on_import=lambda: ctx.selector.set_value('imports')),
-                            'imports': lambda: imports_panel(ctx), 'prompts': lambda: presets_panel(ctx)}
+                            'imports': lambda: imports_panel(ctx), 'prompts': lambda: presets_panel(ctx),
+                            'monitoring': lambda: monitoring_panel(ctx)}
             with ui.tab_panels(tabs, value=selected_tab, on_change=changed).classes('w-full') as ctx.selector:
-                for tab in (setup, characters, lore, imports, prompts):
+                for tab in (setup, characters, lore, imports, prompts, monitoring):
                     ctx.containers[tab.props['name']] = ui.tab_panel(tab)
             ctx.savebar = SaveBar(ctx)
             await ctx.build(selected_tab)
@@ -760,30 +764,132 @@ def format_usd(value):
     return '$' + text
 
 
+RETENTION_OPTIONS = {7: '7 days', 14: '14 days', 30: '30 days', 0: 'Full month'}
+USAGE_FEATURES = {'reply': 'Replies', 'ambient': 'Ambient turns', 'summon': 'Summons', 'memory': 'Memory updates', 'catchup': 'Catch-ups'}
+USAGE_RANGES = {'day': ('Last 24 hours', 1), '7': ('Last 7 days', 7), '14': ('Last 14 days', 14), '30': ('Last 30 days', 30), 'month': ('This month', 31)}
+USAGE_UNKNOWN = 'Unknown (before this update)'
+
+
+def usage_since(zone_name, key, now):
+    """Start of a usage range: a rolling window, or the 1st of the month in the server timezone."""
+    if key == 'month':
+        try:
+            zone = ZoneInfo(zone_name or 'UTC')
+        except Exception:
+            zone = ZoneInfo('UTC')
+        return datetime.fromtimestamp(now, zone).replace(day=1, hour=0, minute=0, second=0, microsecond=0).timestamp()
+    return now - USAGE_RANGES[key][1] * 86400
+
+
+def usage_chart_options(report, since, now):
+    zone = ZoneInfo(report['zone'])
+    day, last, days = datetime.fromtimestamp(since, zone).date(), datetime.fromtimestamp(now, zone).date(), []
+    while day <= last:
+        days.append(day.isoformat()); day += timedelta(days=1)
+    palette = [THEME_PRIMARY, '#3ba55d', '#faa61a', THEME_NEGATIVE, '#9b84ee', THEME_TEXT_MUTED]
+    series = []
+    for index, (model, cells) in enumerate(sorted(report['daily'].items())):
+        color = palette[index % len(palette)]
+        for pos, label in ((0, 'Input'), (1, 'Output')):
+            series.append({'name': f'{model} · {label}', 'type': 'bar', 'stack': label, 'data': [cells.get(d, [0, 0])[pos] for d in days],
+                           'itemStyle': {'color': color, 'opacity': 1 if pos == 0 else 0.6}})
+    axis = {'axisLabel': {'color': THEME_TEXT_MUTED}, 'axisLine': {'lineStyle': {'color': THEME_BORDER}}}
+    return {'backgroundColor': 'transparent', 'textStyle': {'color': THEME_TEXT_MUTED}, 'color': palette,
+            'legend': {'type': 'scroll', 'bottom': 0, 'textStyle': {'color': THEME_TEXT_MUTED}},
+            'tooltip': {'trigger': 'axis', 'axisPointer': {'type': 'shadow'}, 'backgroundColor': THEME_CARD_HOVER, 'borderColor': THEME_BORDER, 'textStyle': {'color': THEME_TILE_TEXT},
+                        ':formatter': "params => params[0].axisValueLabel + '<br>' + params.filter(p => p.value > 0).map(p => p.marker + p.seriesName + ': ' + Number(p.value).toLocaleString('en-US') + ' tokens').join('<br>')"},
+            'grid': {'left': 8, 'right': 8, 'top': 16, 'bottom': 48, 'containLabel': True},
+            'xAxis': {'type': 'category', 'data': [d[5:] for d in days], **axis},
+            'yAxis': {'type': 'value', 'splitLine': {'lineStyle': {'color': THEME_DIVIDER}}, 'axisLabel': {'color': THEME_TEXT_MUTED, ':formatter': "v => v >= 1000000 ? v / 1000000 + 'M' : v >= 1000 ? v / 1000 + 'k' : v"}},
+            'series': series}
+
+
+def usage_range_keys(days):
+    """Period options for a retention of `days` (0 = current month only): rolling ranges that fit, and 'month' only at 30."""
+    if days == 0:
+        return ['day', '7', 'month']
+    return [k for k in USAGE_RANGES if k == 'month' and days == 30 or k != 'month' and USAGE_RANGES[k][1] <= days]
+
+
+def usage_feature_rows(rows):
+    """By-feature rows with display labels: empty -> before-update bucket; unrecognised names merge into one 'Unknown feature' row."""
+    merged = {}
+    for r in rows:
+        feature = r['feature']
+        label = USAGE_FEATURES.get(feature) or (USAGE_UNKNOWN if not feature else 'Unknown feature')
+        row = merged.setdefault(label, {'feature': label, 'requests': 0, 'input_tokens': 0, 'output_tokens': 0, 'cost_usd': 0.0, 'unpriced': 0, 'unreported': 0})
+        for field in ('requests', 'input_tokens', 'output_tokens', 'unpriced', 'unreported'):
+            row[field] += r[field] or 0
+        if r['cost_usd'] is None:
+            row['unpriced'] += r['requests']
+        else:
+            row['cost_usd'] += r['cost_usd']
+    return list(merged.values())
+
+
+def usage_table(columns, rows, key):
+    from nicegui import ui
+    ui.table(columns=[{'name': name, 'field': name, 'label': label, 'align': 'left'} for name, label in columns], rows=rows, row_key=key
+             ).classes('w-full ll-usage').props(':grid="Quasar.Screen.lt.sm" hide-pagination')
+
+
+async def monitoring_panel(ctx):
+    from nicegui import ui
+    store, gid = ctx.store, ctx.guild_id
+    days = store.turn_log_settings(gid)['days']
+    keys = usage_range_keys(days)
+    models = ctx.service.model_config
+    roles = {}
+    for role in ('dialogue', 'director', 'memory'):
+        ident = models.get(role, models.get('dialogue'))
+        if ident:
+            roles.setdefault(ident, []).append(role)
+    thread_names = ctx.thread_names or {}
+    def channel_label(cid):
+        if cid is None:
+            return USAGE_UNKNOWN
+        return ctx.channel_names.get(cid) or thread_names.get(cid) or 'Deleted channel'
+    def money(row):
+        return format_usd(row['cost_usd'])
+    with section('Usage'):
+        select = ui.select({k: USAGE_RANGES[k][0] for k in keys}, value='7', label='Period')
+        if len(keys) < len(USAGE_RANGES):
+            ui.label('Usage is kept for ' + ('the current month' if days == 0 else f'{days} days') + ' (Server settings).').classes('ll-muted')
+        body = ui.column().classes('w-full gap-4')
+        def render():
+            body.clear()
+            now = time.time()
+            since = usage_since(store.guild_timezone(gid), select.value, now)
+            report = store.usage_report(gid, since, now)
+            with body:
+                if not report['totals']['requests']:
+                    ui.label('No model calls in this period.')
+                    return
+                ui.echart(usage_chart_options(report, report['since'], now)).classes('w-full h-80')
+                ui.label('By model').classes('ll-subtitle')
+                usage_table([('model', 'Model'), ('roles', 'Used for'), ('requests', 'Requests'), ('input', 'Input tokens'), ('output', 'Output tokens'), ('cost', 'Estimated USD'), ('unpriced', 'Without cost estimate')],
+                            [{'key': f"{r['profile']}/{r['model']}", 'model': r['model'], 'roles': ', '.join(roles.get(r['profile'], [])), 'requests': f"{r['requests']:,}", 'input': f"{r['input_tokens']:,}",
+                              'output': f"{r['output_tokens']:,}", 'cost': money(r), 'unpriced': r['unpriced']} for r in report['by_model']], 'key')
+                ui.label('By channel').classes('ll-subtitle')
+                usage_table([('channel', 'Channel'), ('requests', 'Requests'), ('input', 'Input tokens'), ('output', 'Output tokens'), ('cost', 'Estimated USD'), ('unpriced', 'Without cost estimate')],
+                            [{'key': str(r['channel_id']), 'channel': channel_label(r['channel_id']), 'requests': f"{r['requests']:,}", 'input': f"{r['input_tokens']:,}",
+                              'output': f"{r['output_tokens']:,}", 'cost': money(r), 'unpriced': r['unpriced']} for r in report['by_channel']], 'key')
+                ui.label('By feature').classes('ll-subtitle')
+                usage_table([('feature', 'Feature'), ('requests', 'Requests'), ('input', 'Input tokens'), ('output', 'Output tokens'), ('cost', 'Estimated USD'), ('unpriced', 'Without cost estimate')],
+                            [{'key': r['feature'], 'feature': r['feature'], 'requests': f"{r['requests']:,}", 'input': f"{r['input_tokens']:,}",
+                              'output': f"{r['output_tokens']:,}", 'cost': money(r), 'unpriced': r['unpriced']} for r in usage_feature_rows(report['by_feature'])], 'key')
+                if report['totals']['unreported']:
+                    ui.label(f"{report['totals']['unreported']:,} calls did not report token counts, so their tokens are not included.").classes('ll-muted')
+                ui.label('Tracked for this server, including internal model calls. Cost uses list rates or your configured rates; it is not a billing statement.').classes('ll-muted')
+        select.on_value_change(lambda _: render())
+        render()
+
+
 async def setup_panel(ctx):
     from nicegui import ui
     store, gid = ctx.store, ctx.guild_id
     spaces = {r['id']: r['name'] + ' (' + r['kind'] + ')' for r in ctx.snapshot.spaces}
     channel_names = ctx.channel_names
-    with section('Models and usage · last 24 hours'):
-        models = ctx.service.model_config
-        grouped = {}
-        for role in ('dialogue', 'director', 'memory'):
-            ident = models.get(role, models.get('dialogue'))
-            if ident:
-                grouped.setdefault(ident, []).append(role)
-        rows = []
-        for ident, roles in grouped.items():
-            model = models.get('profiles', {}).get(ident, {}).get('model', '')
-            summary = store.model_usage_summary(gid, ident, model)
-            cost = format_usd(summary['cost_usd']) + (f" + {summary['unpriced']} unpriced calls" if summary['unpriced'] else '')
-            rows.append({'profile': ident, 'model': model, 'roles': ', '.join(roles), 'input': f"{summary['input_tokens']:,}", 'output': f"{summary['output_tokens']:,}", 'cost': cost, 'unreported': summary['unreported']})
-        if rows:
-            ui.table(columns=[{'name': key, 'field': key, 'label': label, 'align': 'left'} for key, label in
-                              (('model', 'Model'), ('roles', 'Used for'), ('input', 'Input tokens'), ('output', 'Output tokens'), ('cost', 'Estimated USD'), ('unreported', 'Unreported calls'))], rows=rows, row_key='profile').classes('w-full ll-usage').props(':grid="Quasar.Screen.lt.sm" hide-pagination')
-            ui.label('Tracked for this server, including internal model calls. Cost uses list rates or your configured rates; it is not a billing statement. Refresh to update totals.').classes('ll-muted')
-        else:
-            ui.label('No model profiles are configured for the dashboard.')
     with section('Worlds and hubs'):
         for space in ctx.snapshot.spaces:
             with ui.expansion(f"{space['name']} · {space['kind']}").classes('space-card w-full rounded-lg'):
@@ -832,6 +938,11 @@ async def setup_panel(ctx):
         footer = ui.switch('Show model and cost footer on replies', value=store.usage_footer_enabled(gid))
         catchup = ui.switch('Allow /catchup in channels without characters', value=store.catchup_anywhere(gid))
         ui.label('Members can then get a private summary of any channel they can read. Its messages are sent to the summary model.').classes('ll-muted')
+        turn_log = store.turn_log_settings(gid)
+        log_switch = ui.switch('Keep a turn log', value=turn_log['enabled'])
+        with ui.element('div').classes('ll-form-row ll-field-row'):
+            log_days = ui.select(RETENTION_OPTIONS, value=turn_log['days'], label='Keep usage and log for')
+        ui.label('The turn log stores the prompt and reply of every model call on this server, including /catchup, so admins can check errors. Personal facts are hidden. Usage history is kept for the same period.').classes('ll-muted')
         current = store.guild_timezone(gid)
         with ui.element('div').classes('ll-form-row ll-field-row'):
             timezone = ui.select(timezone_options(current), value=current or None,
@@ -848,6 +959,9 @@ async def setup_panel(ctx):
         def save_catchup():
             store.set_catchup_anywhere(gid, catchup.value)
             return True
+        def save_turn_log():
+            store.set_turn_log(gid, bool(log_switch.value), int(log_days.value))
+            return True
         async def configure():
             await ctx.service.avatars.configure(gid, asset_channel.value)
             return True
@@ -856,6 +970,8 @@ async def setup_panel(ctx):
              'detail': lambda _: {'enabled': bool(footer.value)}},
             {'controls': {catchup: store.catchup_anywhere(gid)}, 'operation': save_catchup, 'action': 'settings.catchup',
              'detail': lambda _: {'enabled': bool(catchup.value)}},
+            {'controls': {log_switch: turn_log['enabled'], log_days: turn_log['days']}, 'operation': save_turn_log, 'action': 'settings.turn_log',
+             'detail': lambda _: {'enabled': bool(log_switch.value), 'days': int(log_days.value)}},
             {'controls': {timezone: current or None}, 'operation': lambda: timezone_operation(store, gid, timezone.value),
              'action': 'settings.timezone', 'detail': timezone_detail},
             {'controls': {asset_channel: saved_asset}, 'operation': configure, 'action': 'avatar.channel'}],
