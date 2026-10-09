@@ -41,7 +41,7 @@ def main():
             return httpx.Response(200, json={'id': '900', 'attachments': [{'url': 'https://cdn.discordapp.com/attachments/100/900/image.png?ex=test'}]})
         return httpx.Response(200, json=[{'id': '100', 'name': 'scene', 'type': 0},
             {'id': '200', 'name': 'assets', 'type': 0, 'permission_overwrites': [{'id': '1', 'deny': str(1 << 10)}]}])
-    app = create_app(':memory:', f'https://localhost:{port}', 'test-client', 'test-secret', 'test-token', httpx.AsyncClient(transport=httpx.MockTransport(discord_api)), config_path='tests/nonexistent-config.yaml')
+    app = create_app(':memory:', f'https://localhost:{port}', 'test-client', 'test-secret', 'test-token', httpx.AsyncClient(transport=httpx.MockTransport(discord_api)), config_path='tests/nonexistent-config.yaml', operator_ids=frozenset({6}))
     store = app.state.store
     app.state.admin.model_config = {'dialogue': 'fixture', 'director': 'fixture', 'memory': 'fixture', 'profiles': {'fixture': {'model': 'fixture-model'}}}
     from llmcord_core.usage import ModelUsage
@@ -83,6 +83,12 @@ def main():
     # UI-37: a session with global_name and an avatar hash (fake data; the CDN URL is never fetched).
     app.state.sessions['browser-profile-session'] = {'user': {'id': '5', 'username': 'moonuser', 'global_name': 'Moon Display', 'avatar': 'a' * 32},
         'expires': time.time() + 3600, 'token_expires': time.time() + 3600, 'csrf': 'browser-profile-csrf', 'access': 'test', 'refresh': 'test'}
+
+    # FEAT-08: an operator (user id 6, in operator_ids) and a plain server admin for the Bot settings page.
+    app.state.sessions['browser-operator-session'] = {'user': {'id': '6', 'username': 'Test operator'}, 'expires': time.time() + 3600,
+        'token_expires': time.time() + 3600, 'csrf': 'browser-operator-csrf', 'access': 'test', 'refresh': 'test'}
+    app.state.sessions['browser-plain-session'] = {'user': {'id': '4', 'username': 'Test admin'}, 'expires': time.time() + 3600,
+        'token_expires': time.time() + 3600, 'csrf': 'browser-plain-csrf', 'access': 'test', 'refresh': 'test'}
 
     # Count lore board renders (PERF-01/02): render_board loads each side through AdminStore.admin_entries_page,
     # counted here under the 'admin_entries' counter keys (one per side per render).

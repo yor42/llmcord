@@ -347,5 +347,82 @@ class UploadBoundaryTests(unittest.TestCase):
         self.assertEqual(self.client.post(self.url, files=big, headers={"X-CSRF-Token": "nope"}).status_code, 403)
 
 
+class OperatorBindingTests(unittest.TestCase):
+    """FEAT-08: the /operator page binds its client to the OPERATOR sentinel; socket events and uploads re-check operator
+    status (never the guild guard), and the page answers non-operators exactly like an unknown path."""
+
+    def setUp(self):
+        from nicegui import Client
+        self.app, self.client = shared_dashboard()
+        self.addCleanup(setattr, self.app.state, "operator_ids", self.app.state.operator_ids)
+        self.app.state.operator_ids = frozenset({9})
+        self.ident = f"operator-{self.id().rsplit('.', 1)[-1]}"
+        install_session(self.app, self.ident, user_id="9")
+        self.client.cookies.set("llmcord_session", self.ident)
+        self.assertEqual(self.client.get("/admin/operator", headers={"accept-encoding": "identity"}).status_code, 200)
+        from llmcord_core.dashboard import OPERATOR
+        clients = [key for key, value in Client.instances.items()
+                   if (b := getattr(value, "llmcord_binding", None)) and b[0] == self.ident and b[1] is OPERATOR]
+        self.assertTrue(clients, "operator page did not bind a client to the OPERATOR sentinel")
+        self.client_id = clients[-1]
+
+    def socket(self, name, patched=None):
+        """Run the installed socket handler `name`; True when the guarded original ran."""
+        import asyncio
+        from unittest.mock import PropertyMock
+        from nicegui import Client, core
+        client = Client.instances[self.client_id]
+        message = {"client_id": self.client_id, "next_message_id": 0}
+        environ = {"HTTP_COOKIE": f"llmcord_session={self.ident}"}
+        calls = []
+        with patch.object(core.sio, "get_environ", return_value=environ), \
+                patch.object(client.outbox, "prune_history", side_effect=lambda *a: calls.append(a)), \
+                patch.object(client, "handle_event", side_effect=lambda *a: calls.append(a)), \
+                patch.object(Client, "has_socket_connection", new_callable=PropertyMock, return_value=True), \
+                patch.object(self.app.state.auth, "guard", side_effect=AssertionError("guard called for OPERATOR")):
+            asyncio.run(core.sio.handlers["/"][name]("sid", message))
+        return bool(calls)
+
+    def test_operator_event_allowed_then_dropped_after_removal(self):
+        """FEAT-08: a live event from an operator-bound client runs; once the user leaves operator_ids it is dropped."""
+        self.assertTrue(self.socket("event"))
+        self.app.state.operator_ids = frozenset()
+        self.assertFalse(self.socket("event"))
+
+    def test_session_only_events_do_not_need_operator(self):
+        """FEAT-08: acks/JS results (check_permissions=False) only need the session, like the guild-less binding."""
+        self.app.state.operator_ids = frozenset()
+        self.assertTrue(self.socket("ack"))
+        self.app.state.sessions.pop(self.ident)
+        self.assertFalse(self.socket("ack"))
+
+    def test_upload_to_operator_client_is_403_without_the_guild_guard(self):
+        """FEAT-08: the operator page has no uploads; the guild guard is never consulted with OPERATOR."""
+        url = f"/admin/_nicegui/client/{self.client_id}/upload/missing-element"
+        with patch.object(self.app.state.auth, "guard", side_effect=AssertionError("guard called for OPERATOR")):
+            response = self.client.post(url, files={"file": ("a.json", b"{}", "application/json")},
+                                        headers={"X-CSRF-Token": "csrf", "Origin": "https://pi.test"})
+        self.assertEqual(response.status_code, 403)
+
+    def test_non_operator_and_signed_out_get_the_unknown_page_response(self):
+        """FEAT-08: /admin/operator for a non-operator or signed-out visitor matches an unknown path (status and size)."""
+        unknown = self.client.get("/admin/no-such-page")
+        self.assertEqual(unknown.status_code, 404)
+        self.app.state.operator_ids = frozenset()
+        for cookies in ({"llmcord_session": self.ident}, {}):
+            self.client.cookies.clear()
+            for key, value in cookies.items():
+                self.client.cookies.set(key, value)
+            response = self.client.get("/admin/operator")
+            self.assertEqual((response.status_code, len(response.text)), (404, len(unknown.text)))
+
+    def test_is_operator_tolerates_malformed_ids(self):
+        """FEAT-08: a session without a numeric user id is simply not an operator."""
+        auth = self.app.state.auth
+        self.assertTrue(auth.is_operator({"user": {"id": "9"}}))
+        for bad in ({}, {"user": {}}, {"user": {"id": "x"}}, {"user": {"id": None}}):
+            self.assertFalse(auth.is_operator(bad))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -370,6 +370,9 @@ def mount_dashboard(app):
                 gzip_middleware_factory=None, on_air=None, show_welcome_message=False)
 
 
+OPERATOR = object()  # llmcord_binding[1] for the bot-wide operator page; never a guild id
+
+
 def _install_socket_auth(app):
     from nicegui import Client, core, ui
 
@@ -393,7 +396,12 @@ def _install_socket_auth(app):
         if not ident or ident.value != binding[0]:
             return False, None, None
         try:
-            if binding[1] is not None and check_permissions:
+            if binding[1] is OPERATOR:
+                if check_permissions:
+                    await app.state.auth.guard_operator(binding[0])
+                else:
+                    await app.state.auth.session(binding[0])
+            elif binding[1] is not None and check_permissions:
                 await app.state.auth.guard(binding[0], binding[1])
             else:
                 await app.state.auth.session(binding[0])
@@ -457,6 +465,8 @@ def _install_upload_guard(app):
             binding = getattr(client, 'llmcord_binding', None)
             if not binding or request.cookies.get('llmcord_session') != binding[0]:
                 return PlainTextResponse('Sign in with Discord', 401)
+            if binding[1] is OPERATOR:
+                return PlainTextResponse('Uploads are not available here', 403)
             try:
                 await app.state.auth.guard(binding[0], binding[1], request.headers.get('x-csrf-token', ''), request.headers.get('origin'))
             except HTTPException as error:
@@ -496,7 +506,7 @@ def _register_pages(app):
         guilds = await app.state.auth.guilds(session)
         with ui.header().classes('items-center justify-between no-wrap'):
             header_crumb()
-            account_menu(session)
+            account_menu(session, app.state.auth.is_operator(session))
         with ui.column().classes('ll-servers gap-1'):
             ui.label('Your servers').classes('text-3xl font-bold')
             ui.label('Servers where you are an administrator.').classes('ll-muted')
@@ -514,6 +524,23 @@ def _register_pages(app):
                             ui.label(server_initials(guild['name'])).classes('ll-server-tile').props('aria-hidden=true')
                         ui.label(str(guild['name'])).classes('ll-server-name')
 
+    @ui.page('/operator')
+    async def operator(request: Request):
+        try:
+            session = await app.state.auth.guard_operator(request.cookies.get('llmcord_session', ''), origin=request.headers.get('origin'))
+        except HTTPException:
+            raise HTTPException(404)  # indistinguishable from an unknown path
+        apply_theme()
+        ui.context.client.llmcord_binding = (request.cookies['llmcord_session'], OPERATOR)
+        ui.page_title('Bot settings')
+        with ui.header().classes('items-center justify-between no-wrap'):
+            header_crumb()
+            account_menu(session, True)
+        with ui.column().classes('ll-page'):
+            ui.label('Bot settings').classes('text-3xl font-bold')
+            ui.label('Bot-wide settings. Only operators can see this page.').classes('ll-muted')
+            ui.label('Nothing to configure yet.').classes('ll-faint')
+
     @ui.page('/guild/{guild_id}', response_timeout=30)
     async def guild(request: Request, guild_id: int):
         apply_theme()
@@ -526,7 +553,7 @@ def _register_pages(app):
             current = None
         with ui.header().classes('items-center justify-between no-wrap'):
             header_crumb(current)
-            account_menu(session)
+            account_menu(session, app.state.auth.is_operator(session))
         with ui.column().classes('ll-page'):
             ui.label('Server administration').classes('text-3xl font-bold')
             ui.label('Changes apply on the next bot turn. Prompt drafts require activation.').classes('ll-muted')
@@ -613,7 +640,7 @@ def header_crumb(current=None):
             ui.label(str(current.get('name', ''))).classes('ll-crumb-name')
 
 
-def account_menu(session):
+def account_menu(session, is_operator=False):
     """Header account button (avatar plus name) opening a menu with the name and a Sign out item."""
     from nicegui import ui
     import html
@@ -633,6 +660,8 @@ def account_menu(session):
                 ui.label(name).classes('font-semibold')
                 if str(user['username']) != name:
                     ui.label('@' + str(user['username'])).classes('ll-muted text-sm')
+            if is_operator:
+                ui.link('Bot settings', '/operator').classes('ll-menu-item no-underline')  # ui.link adds the /admin mount prefix
             ui.separator()
             # A normal POST retains the existing origin and CSRF checks.
             ui.html('<form action="/logout" method="post"><input type="hidden" name="csrf" value="' + html.escape(session['csrf'], quote=True) + '"><button type="submit" class="ll-menu-item">Sign out</button></form>', sanitize=False)

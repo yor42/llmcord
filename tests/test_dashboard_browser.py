@@ -1007,6 +1007,48 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def test_operator_bot_settings_page_and_menu(self):
+        """FEAT-08: operators get a Bot settings item in the account menu that opens /operator; others (and signed-out visitors) get the unknown-page 404."""
+        from playwright.sync_api import expect
+        def plain_404(page, path):
+            response = page.goto(self.url + path)
+            return response.status, len(page.content())
+        context = self.browser.new_context(ignore_https_errors=True, viewport={'width': 1000, 'height': 800})
+        context.add_cookies([{'name': 'llmcord_session', 'value': 'browser-operator-session', 'url': self.url,
+                              'secure': True, 'httpOnly': True, 'sameSite': 'Lax'}])
+        page = context.new_page()
+        errors = []
+        self.watch(page, errors)
+        try:
+            page.goto(self.url + '/admin/guild/1')
+            page.get_by_role('button', name='Account menu').click()
+            item = page.locator('.ll-menu').get_by_role('link', name='Bot settings')
+            expect(item).to_be_visible()
+            item.click()
+            page.wait_for_url('**/admin/operator')
+            expect(page.get_by_text('Bot-wide settings. Only operators can see this page.')).to_be_visible()
+            expect(page.get_by_text('Nothing to configure yet.')).to_be_visible()
+            self.assertEqual(page.title(), 'Bot settings')
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+        for session in ('browser-plain-session', None):
+            context = self.browser.new_context(ignore_https_errors=True)
+            if session:
+                context.add_cookies([{'name': 'llmcord_session', 'value': session, 'url': self.url,
+                                      'secure': True, 'httpOnly': True, 'sameSite': 'Lax'}])
+            page = context.new_page()
+            try:
+                if session:
+                    page.goto(self.url + '/admin/')
+                    page.get_by_role('button', name='Account menu').click()
+                    expect(page.get_by_text('Sign out')).to_be_visible()
+                    expect(page.get_by_text('Bot settings')).to_have_count(0)
+                self.assertEqual(plain_404(page, '/admin/operator'), plain_404(page, '/admin/no-such-page'))
+                self.assertEqual(plain_404(page, '/admin/operator')[0], 404)
+            finally:
+                context.close()
+
     def test_account_menu_profile_lines_avatar_and_position(self):
         """UI-37: global_name and @username lines, the avatar image src, and the menu opening below the header at both widths."""
         from playwright.sync_api import expect
