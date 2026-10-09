@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import uuid
 import time
 from zoneinfo import ZoneInfo
@@ -141,6 +142,38 @@ class AdminStore:
                                 (usage.guild_id, usage.profile, usage.model, usage.role, usage.input_tokens, usage.output_tokens, usage.cached_tokens, usage.reasoning_tokens, usage.cost_usd, usage.cost_basis, usage.created_at))
             self.db.execute("INSERT INTO spend_days(day,cost_usd,unpriced_calls) VALUES(strftime('%Y-%m-%d',?,'unixepoch'),?,?) ON CONFLICT(day) DO UPDATE SET cost_usd=cost_usd+excluded.cost_usd,unpriced_calls=unpriced_calls+excluded.unpriced_calls",
                             (usage.created_at, usage.cost_usd or 0, int(usage.cost_usd is None)))
+
+    def budget_settings(self):
+        return dict(self.one('SELECT soft_cap_usd,hard_cap_usd,reset_day,channel_notice,revision FROM bot_settings WHERE id=1'))
+
+    def save_budget(self, soft_cap_usd, hard_cap_usd, reset_day, channel_notice, expected_revision):
+        for name, cap in (('Soft', soft_cap_usd), ('Hard', hard_cap_usd)):
+            if cap is not None and (isinstance(cap, bool) or not isinstance(cap, (int, float)) or not math.isfinite(cap) or cap < 0):
+                raise ValueError(f'{name} cap must be blank or a number of dollars, zero or more.')
+        if soft_cap_usd is not None and hard_cap_usd is not None and soft_cap_usd > hard_cap_usd:
+            raise ValueError('The soft cap cannot be higher than the hard cap.')
+        if isinstance(reset_day, bool) or not isinstance(reset_day, int) or not 1 <= reset_day <= 28:
+            raise ValueError('Reset day must be a whole number from 1 to 28.')
+        if not isinstance(channel_notice, bool):
+            raise ValueError('Channel notice must be on or off.')
+        with self.write_admin():
+            if self.budget_settings()['revision'] != expected_revision:
+                raise ConflictError('Bot settings changed; reload before saving')
+            self.db.execute('UPDATE bot_settings SET soft_cap_usd=?,hard_cap_usd=?,reset_day=?,channel_notice=?,revision=? WHERE id=1',
+                            (None if soft_cap_usd is None else float(soft_cap_usd), None if hard_cap_usd is None else float(hard_cap_usd), reset_day, int(channel_notice), expected_revision + 1))
+        return True
+
+    def period_spend(self, start, end):
+        row = self.one('SELECT COALESCE(SUM(cost_usd),0) AS c,COALESCE(SUM(unpriced_calls),0) AS u FROM spend_days WHERE day>=? AND day<?', (start.isoformat(), end.isoformat()))
+        return float(row['c']), int(row['u'])
+
+    def claim_notice(self, period, kind, target_id, now, interval=None):
+        with self.db:
+            if interval is None:
+                cur = self.db.execute('INSERT OR IGNORE INTO budget_notices(period,kind,target_id,sent_at) VALUES(?,?,?,?)', (period, kind, target_id, now))
+            else:
+                cur = self.db.execute('INSERT INTO budget_notices(period,kind,target_id,sent_at) VALUES(?,?,?,?) ON CONFLICT(period,kind,target_id) DO UPDATE SET sent_at=excluded.sent_at WHERE budget_notices.sent_at <= excluded.sent_at - ?', (period, kind, target_id, now, interval))
+            return cur.rowcount > 0
 
     def model_usage_summary(self, guild_id, profile, model, since=None):
         since = time.time() - 86400 if since is None else since

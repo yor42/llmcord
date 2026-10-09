@@ -559,6 +559,7 @@ class Store(AdminStore):
             self.db.execute("DELETE FROM nodes WHERE created_at<?", (cutoff,))
             self.db.execute('DELETE FROM model_usage WHERE created_at<?', (cutoff,))
             self.db.execute("DELETE FROM spend_days WHERE day<strftime('%Y-%m-%d',?,'unixepoch')", ((now or time.time()) - 400 * 86400,))
+            self.db.execute('DELETE FROM budget_notices WHERE sent_at<?', ((now or time.time()) - 400 * 86400,))
             self.db.execute("UPDATE candidates SET evidence_count=(SELECT COUNT(*) FROM evidence WHERE candidate_id=candidates.id)")
             self.db.execute("DELETE FROM candidates WHERE evidence_count=0 AND promoted=0")
             return count
