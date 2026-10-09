@@ -24,6 +24,7 @@ These are the words the Discord commands, the admin dashboard and these docs use
 | **Personal fact** | Something a member said about themselves, kept only after `/memory opt_in`. | | `memories` |
 | **Operator** | Someone who runs the bot itself and manages bot-wide settings on the dashboard's **Bot settings** page. Listed in `LLMCORD_OPERATOR_IDS`; separate from server admins. | "owner", "maintainer" | `operator_ids`, `guard_operator` |
 | **Spending cap** | A bot-wide limit on estimated model cost per period. The **soft cap** warns operators; the **hard cap** pauses new character replies until the reset day. | "budget" in user text | `bot_settings`, `budget.py` |
+| **Catch-up** | A private summary of what a member missed in one channel or thread (`/catchup`). Not a scene turn: it uses its own instruction, not the character prompt, and saves nothing. | "recap" (the scene summary memory keeps) | `catchup.py`, `catchup_anywhere` |
 
 ## Writing rules
 

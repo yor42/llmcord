@@ -157,6 +157,7 @@ Uploads (`/admin/_nicegui/client/*/upload/*`) run `guard` with the `X-CSRF-Token
 | Audit, revisions | `admin_audit` (metadata only), `owner_revisions` | web | Written by `AdminService.run`; operator actions by `AdminService.run_operator` under guild 0, which a future viewer must not treat as a wildcard |
 | Sessions, auth locks | web process memory | web only | Lost on restart; unbounded (SEC-04) |
 | Turn locks, webhook cache | bot process memory | bot only | Unbounded (REL-04) |
+| `/catchup` (FEAT-15) | `guild_settings.catchup_anywhere` (web writes); cooldowns in `SkitBot.catchup_used` (bot memory, pruned on use) | web writes, bot reads | Not a scene: no channel lock, no saved nodes. Its own instruction in `catchup.py` on the memory profile; usage recorded with the guild. `ModelGateway` checks the hard cap on every call unless the task holds a `budget.admit()` pass, which only `run_scene` grants |
 
 ## External dependencies
 
