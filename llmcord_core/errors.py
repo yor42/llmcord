@@ -14,6 +14,10 @@ LOOSE_CREDENTIAL = re.compile(r'(?i)\b(?:Bearer|Bot)\s+[^\s,;]+')
 STRICT_CREDENTIAL = re.compile(r'(?i:Authorization)\s*:\s*(?:(?:Bearer|Bot|Basic)\s+)?[^\s,;]+|\b(?:Bearer|Bot) [A-Za-z0-9._~+/=-]{20,}')
 
 
+class ModelConfigError(RuntimeError):
+    """A model profile cannot be used as saved. The message names the profile, host or variable, never a key value."""
+
+
 def redact(text: str, extra_values=(), strict: bool = False) -> str:
     # Secret env values, caller-supplied values and credentials; strict only matches token-shaped ones so prose survives.
     values = [v for n, v in os.environ.items() if len(v) >= 8 and n.endswith(('_TOKEN', '_KEY', '_SECRET'))]

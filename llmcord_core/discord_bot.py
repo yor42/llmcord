@@ -20,6 +20,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from . import budget, catchup
+from .backend import BackendResolver
 from .cards import parse_card
 from .config import Settings
 from .engine import Engine, SceneContext
@@ -28,7 +29,7 @@ from .prompts import time_values
 from .names import resolve, resolve_space, suggest
 from .store import Store
 from .avatars import emotion_stream
-from .errors import error_detail, error_stack, reference_id, user_detail
+from .errors import ModelConfigError, error_detail, error_stack, reference_id, user_detail
 from .usage import capture_usage, log_attribution, log_purpose, log_scope, mask_for_log, reply_footer
 from .identity import discord_identity, message_context
 
@@ -75,11 +76,12 @@ class SkitBot(commands.Bot):
         intents = discord.Intents.default()
         intents.message_content = True
         super().__init__(command_prefix=commands.when_mentioned, intents=intents)
-        self.settings = settings
+        self.base_settings = settings
         self.store = Store(settings.database_path)
-        self.models = ModelGateway(settings, usage_sink=self.store.record_model_usage,
+        self.backend = BackendResolver(self.store, settings)
+        self.models = ModelGateway(self.backend, usage_sink=self.store.record_model_usage,
                                   budget_gate=self._budget_check, log_sink=self._log_model_call)
-        self.engine = Engine(self.store, self.models, settings)
+        self.engine = Engine(self.store, self.models, self.backend)
         self.channel_locks: dict[int, asyncio.Lock] = {}
         self.catchup_used: dict[tuple[int, int, int], float] = {}
         self.webhook_locks = {}
@@ -93,8 +95,8 @@ class SkitBot(commands.Bot):
         register_commands(self)
 
     async def setup_hook(self):
-        if self.settings.development_guild_id:
-            guild = discord.Object(id=self.settings.development_guild_id)
+        if self.base_settings.development_guild_id:
+            guild = discord.Object(id=self.base_settings.development_guild_id)
             self.tree.copy_global_to(guild=guild)
             await self.tree.sync(guild=guild)
         else:
@@ -103,12 +105,12 @@ class SkitBot(commands.Bot):
 
     async def on_ready(self):
         logging.info("Discord connected as %s; servers=%d; command scope=%s",
-                     self.user, len(self.guilds), self.settings.development_guild_id or "global")
+                     self.user, len(self.guilds), self.base_settings.development_guild_id or "global")
 
     async def _cleanup_loop(self):
         while True:
             try:
-                self.store.expire_history(self.settings.history_retention_days)
+                self.store.expire_history(self.base_settings.history_retention_days)
             except Exception:
                 logging.exception('History cleanup failed')
             try:
@@ -164,7 +166,7 @@ class SkitBot(commands.Bot):
             async with self.channel_locks.setdefault(message.channel.id, asyncio.Lock()):
                 self.store.count_ambient_message(message.channel.id)
                 count, last = self.store.ambient_state(message.channel.id)
-                if count < 2 or time.time() - last < self.settings.limits["ambient_cooldown_seconds"]:
+                if count < 2 or time.time() - last < self.base_settings.limits["ambient_cooldown_seconds"]:
                     return
                 # A silent director decision still consumes this ambient opportunity.
                 self.store.mark_ambient_response(message.channel.id)
@@ -173,22 +175,23 @@ class SkitBot(commands.Bot):
         # A rewind sees only the ancestry at its target, never newer channel chat.
         is_rewind = bool(explicit_reply and latest and reference_id != latest["message_id"])
         if not is_rewind:
-            cutoff = message.created_at - timedelta(seconds=self.settings.limits["recent_window_seconds"])
+            cutoff = message.created_at - timedelta(seconds=self.base_settings.limits["recent_window_seconds"])
             reset_at = self.store.scene_reset_at(message.channel.id)
             after_parent = referenced["created_at"] if explicit_reply and referenced else 0.0
-            recent = await recent_human_lines(message.channel, self.settings.limits, cutoff, max(reset_at, after_parent), before=message)
+            recent = await recent_human_lines(message.channel, self.base_settings.limits, cutoff, max(reset_at, after_parent), before=message)
         text = message.content
         if self.user:
             text = text.replace(self.user.mention, "", 1).strip()
         images = []
+        current = self.settings if message.attachments else None
         try:
             for attachment in message.attachments:
-                if attachment.size > self.settings.limits["max_attachment_bytes"]:
+                if attachment.size > self.base_settings.limits["max_attachment_bytes"]:
                     raise ValueError("An attachment exceeds the configured size limit")
                 if attachment.content_type and attachment.content_type.startswith("image/"):
-                    if len(images) >= self.settings.limits["max_images"]:
+                    if len(images) >= self.base_settings.limits["max_images"]:
                         raise ValueError("Too many image attachments")
-                    if not self.settings.profile("dialogue").supports_images:
+                    if not current.profile("dialogue").supports_images:
                         raise ValueError("The configured dialogue model cannot read images")
                     images.append(ImageInput(attachment.content_type, await attachment.read()))
                 elif attachment.content_type and attachment.content_type.startswith("text/"):
@@ -287,7 +290,7 @@ class SkitBot(commands.Bot):
                 kinds = [('soft', True)]
             else:
                 kinds = []
-            for operator_id in sorted(self.settings.operator_ids):
+            for operator_id in sorted(self.base_settings.operator_ids):
                 for kind, send in kinds:
                     if self.store.claim_notice(state.period, kind, operator_id, now) and send:
                         self._send_operator_dm(operator_id, _operator_text(kind, state))
@@ -309,6 +312,10 @@ class SkitBot(commands.Bot):
         task = asyncio.create_task(send())
         self.note_tasks.add(task)
         task.add_done_callback(self.note_tasks.discard)
+
+    @property
+    def settings(self) -> Settings:
+        return self.backend.current()
 
     async def run_scene(self, scene: SceneContext, channel, interaction=None):
         state = self._budget_check()
@@ -336,7 +343,7 @@ class SkitBot(commands.Bot):
             if pending:
                 logging.warning('Memory task for channel %s still running after %ss; continuing without it',
                                 channel.id, MEMORY_WAIT_SECONDS)
-        with budget.admit(), log_scope(scene.user_message_id), capture_usage(scene.guild_id, scene.channel_id, 'ambient' if scene.ambient else 'summon' if scene.forced_character_id is not None else 'reply'):
+        with self.backend.pin(), budget.admit(), log_scope(scene.user_message_id), capture_usage(scene.guild_id, scene.channel_id, 'ambient' if scene.ambient else 'summon' if scene.forced_character_id is not None else 'reply'):
             return await self._run_scene(scene, channel, interaction)
 
     def _log_entry(self, guild_id, channel_id, message_id, facts, **fields):
@@ -559,13 +566,19 @@ class SkitBot(commands.Bot):
         except discord.DiscordException as post_error:
             logging.warning('Public failure notice failed [ref %s]: %s', ref, error_detail(post_error))
         if interaction:
-            detail = (user_detail(error) if stage in PROVIDER_STAGES
+            detail = (_member_detail(error, ref) if stage in PROVIDER_STAGES
                       else f'internal error. {pointer}')
             try:
                 await interaction.followup.send(f"Your turn failed during {stage} (ref {ref}): {detail}"[:1900],
                     ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
             except Exception as notify_error:
                 logging.warning('Private failure notice failed [ref %s]: %s', ref, error_detail(notify_error))
+
+
+def _member_detail(error, ref):
+    if isinstance(error, ModelConfigError):
+        return "The bot's model setup needs attention. An admin can look it up with the reference ID."
+    return user_detail(error)
 
 
 class _Stage:
@@ -905,12 +918,12 @@ def _register_summon_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
         if state and state.hard_reached:
             await interaction.response.send_message(_hard_cap_notice(state), ephemeral=True)
             return
-        cutoff = interaction.created_at - timedelta(seconds=bot.settings.limits["recent_window_seconds"])
+        cutoff = interaction.created_at - timedelta(seconds=bot.base_settings.limits["recent_window_seconds"])
         reset_at = bot.store.scene_reset_at(interaction.channel.id)
         latest = bot.store.latest_character_node(interaction.channel.id)
         parent_message_id = latest["message_id"] if latest and latest["created_at"] >= max(cutoff.timestamp(), reset_at) else None
         after_parent = latest["created_at"] if parent_message_id else 0.0
-        recent = await recent_human_lines(interaction.channel, bot.settings.limits, cutoff, max(reset_at, after_parent))
+        recent = await recent_human_lines(interaction.channel, bot.base_settings.limits, cutoff, max(reset_at, after_parent))
         await interaction.response.send_message(
             f"{interaction.user.display_name} summons {row['name']}: {prompt[:1700]}",
             allowed_mentions=discord.AllowedMentions.none())
@@ -967,7 +980,7 @@ def _register_catchup_command(bot: SkitBot) -> None:
             message = catchup.user_message(user.display_name, catchup.transcript(lines), focus, facts, hours)
             attempted = True
             try:
-                with capture_usage(guild_id, channel.id, 'catchup'), log_scope(getattr(interaction, 'id', None)), log_purpose('catchup'):
+                with bot.backend.pin(), capture_usage(guild_id, channel.id, 'catchup'), log_scope(getattr(interaction, 'id', None)), log_purpose('catchup'):
                     mask_for_log(*catchup.fact_variants(facts))
                     text = await bot.models.text('memory', catchup.SYSTEM, [TurnMessage('user', message)],
                                                  max_tokens=catchup.MAX_OUTPUT_TOKENS)
@@ -979,7 +992,7 @@ def _register_catchup_command(bot: SkitBot) -> None:
                 logging.error('Catchup failed [ref %s]: %s\n%s', ref, error_detail(error), error_stack(error))
                 bot._log_failure(error, ref, 'catchup', guild_id=guild_id, channel_id=channel.id, feature='catchup',
                                  message_id=getattr(interaction, 'id', None), facts=catchup.fact_variants(facts))
-                return await reply(f"Could not write the catch-up: {user_detail(error)[:300]} (ref {ref})")
+                return await reply(f"Could not write the catch-up: {_member_detail(error, ref)[:300]} (ref {ref})")
         finally:
             if not attempted:
                 bot.catchup_used.pop(key, None)

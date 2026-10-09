@@ -4,6 +4,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 
+from .backend import settings_source
 from .config import LIMIT_DEFAULTS, Settings
 from .lore import estimate_tokens, lore_scopes
 from .world_info import evaluate
@@ -42,8 +43,17 @@ class SceneContext:
 
 
 class Engine:
-    def __init__(self, store: Store, models: ModelGateway, settings: Settings):
-        self.store, self.models, self.settings = store, models, settings
+    def __init__(self, store: Store, models: ModelGateway, settings):
+        self.store, self.models = store, models
+        self.source = settings_source(settings)
+
+    @property
+    def settings(self) -> Settings:
+        return self.source.current()
+
+    @settings.setter
+    def settings(self, value: Settings) -> None:
+        self.source = settings_source(value)
 
     def eligible(self, scene: SceneContext) -> list:
         return self.store.eligible_characters(scene.guild_id, scene.space_id)

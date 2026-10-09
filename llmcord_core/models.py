@@ -11,8 +11,9 @@ from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 
 from . import budget
-from .config import Settings
-from .errors import error_detail
+from .backend import settings_source
+from .config import ModelProfile, Settings, check_key_pin
+from .errors import ModelConfigError, error_detail
 from .usage import collect_usage, mask_for_log
 
 
@@ -52,13 +53,34 @@ class TurnMessage:
     images: list[ImageInput] = field(default_factory=list)
 
 
+def AsyncOpenAI(**kwargs):
+    from openai import AsyncOpenAI as sdk  # imported on first use: the web process imports this module too
+    return sdk(**kwargs)
+
+
+def AsyncAnthropic(**kwargs):
+    from anthropic import AsyncAnthropic as sdk
+    return sdk(**kwargs)
+
+
 class ModelGateway:
-    def __init__(self, settings: Settings, usage_sink=None, budget_gate=None, log_sink=None):
-        self.settings = settings
+    def __init__(self, settings, usage_sink=None, budget_gate=None, log_sink=None):
+        """`settings` is a Settings or a BackendResolver (anything with `.current()`)."""
+        self.source = settings_source(settings)
+        self.fingerprints: dict[str, tuple] = {}
+        self.retired: list[Any] = []
         self.log_sink = log_sink
         self.clients: dict[str, Any] = {}
         self.usage_sink = usage_sink
         self.budget_gate = budget_gate
+
+    @property
+    def settings(self) -> Settings:
+        return self.source.current()
+
+    @settings.setter
+    def settings(self, value: Settings) -> None:
+        self.source = settings_source(value)
 
     def _check_budget(self):
         if self.budget_gate is None or budget.admitted():
@@ -71,9 +93,9 @@ class ModelGateway:
         if state is not None and state.hard_reached:
             raise budget.BudgetExceeded(state)
 
-    def _entry(self, role, system, messages):
-        profile_name = getattr(self.settings, role)
-        return {'role': role, 'profile': profile_name, 'model': self.settings.profiles[profile_name].model,
+    def _entry(self, role, system, messages, settings):
+        profile_name = getattr(settings, role)
+        return {'role': role, 'profile': profile_name, 'model': settings.profiles[profile_name].model,
                 'system': system, 'messages': messages, 'usage': None, 'raw': None, 'ctx': contextvars.copy_context()}
 
     @staticmethod
@@ -97,8 +119,8 @@ class ModelGateway:
         except Exception as sink_error:
             logging.warning('Turn log entry could not be saved: %s', type(sink_error).__name__)
 
-    def _usage(self, profile_name, role, usage, entry=None):
-        record = collect_usage(profile_name, self.settings.profiles[profile_name], role, usage)
+    def _usage(self, profile_name, role, usage, entry=None, profile=None):
+        record = collect_usage(profile_name, profile or self.settings.profiles[profile_name], role, usage)
         if entry is not None:
             entry['usage'] = record
         if self.usage_sink:
@@ -107,40 +129,58 @@ class ModelGateway:
             except Exception as error:
                 logging.warning('Model usage could not be saved: %s', type(error).__name__)
 
-    def _client(self, profile_name: str):
-        if profile_name not in self.clients:
-            profile = self.settings.profiles[profile_name]
-            key = os.environ.get(profile.api_key_env or "", "local-no-key")
-            if profile.provider == "anthropic":
-                from anthropic import AsyncAnthropic
-                self.clients[profile_name] = AsyncAnthropic(
-                    api_key=key, timeout=profile.timeout_seconds, max_retries=profile.max_retries)
-            else:
-                from openai import AsyncOpenAI
-                kwargs = {"api_key": key, "timeout": profile.timeout_seconds, "max_retries": profile.max_retries}
-                if profile.base_url:
-                    kwargs["base_url"] = profile.base_url
-                self.clients[profile_name] = AsyncOpenAI(**kwargs)
-        return self.clients[profile_name]
+    def _client(self, profile_name: str, profile: ModelProfile | None = None):
+        profile = profile or self.settings.profiles[profile_name]
+        dashboard = profile.source == 'dashboard'
+        if dashboard:
+            try:
+                check_key_pin(profile, self.source.key_hosts)
+            except ValueError as error:
+                raise ModelConfigError(f'Profile {profile_name}: {error}') from None
+            if profile.api_key_env and not os.environ.get(profile.api_key_env):
+                raise ModelConfigError(f"{profile.api_key_env} is not set in the bot's environment (profile {profile_name})")
+        fingerprint = (profile.provider, profile.base_url, profile.api_key_env, profile.timeout_seconds, profile.max_retries, profile.source)
+        if profile_name in self.clients and self.fingerprints.get(profile_name, fingerprint) == fingerprint:
+            return self.clients[profile_name]
+        key = os.environ.get(profile.api_key_env or "", "local-no-key")
+        if profile.provider == "anthropic":
+            kwargs = {"api_key": key, "timeout": profile.timeout_seconds, "max_retries": profile.max_retries}
+            if dashboard:
+                kwargs["base_url"] = 'https://api.anthropic.com'
+            client = AsyncAnthropic(**kwargs)
+        else:
+            kwargs = {"api_key": key, "timeout": profile.timeout_seconds, "max_retries": profile.max_retries}
+            if profile.base_url:
+                kwargs["base_url"] = profile.base_url
+            elif dashboard and profile.provider == "openai":
+                kwargs["base_url"] = 'https://api.openai.com/v1'
+            client = AsyncOpenAI(**kwargs)
+        if profile_name in self.clients:
+            self.retired.append(self.clients[profile_name])
+        self.clients[profile_name], self.fingerprints[profile_name] = client, fingerprint
+        return client
 
-    def compiled_input(self, role, request):
-        if self.settings.profile(role).provider == 'anthropic':
+    def compiled_input(self, role, request, settings=None):
+        if (settings or self.settings).profile(role).provider == 'anthropic':
             return '\n\n'.join(m.text for m in request.messages if m.role == 'system'), [m for m in request.messages if m.role != 'system']
         return '', request.messages
 
     async def text_compiled(self, role, request, max_tokens=None):
-        system, messages = self.compiled_input(role, request)
-        return await self.text(role, system, messages, max_tokens)
+        settings = self.settings
+        system, messages = self.compiled_input(role, request, settings)
+        return await self.text(role, system, messages, max_tokens, settings)
 
     async def stream_compiled(self, role, request):
-        system, messages = self.compiled_input(role, request)
-        async with contextlib.aclosing(self.stream_text(role, system, messages)) as stream:
+        settings = self.settings
+        system, messages = self.compiled_input(role, request, settings)
+        async with contextlib.aclosing(self.stream_text(role, system, messages, None, settings)) as stream:
             async for delta in stream:
                 yield delta
 
     async def structured_compiled(self, role, request, schema_name, schema):
-        system, messages = self.compiled_input(role, request)
-        return await self.structured(role, system, messages, schema_name, schema)
+        settings = self.settings
+        system, messages = self.compiled_input(role, request, settings)
+        return await self.structured(role, system, messages, schema_name, schema, settings)
 
     @staticmethod
     def _openai_input(messages: list[TurnMessage]) -> list[dict]:
@@ -182,43 +222,45 @@ class ModelGateway:
             result.append({"role": message.role, "content": content})
         return result
 
-    async def text(self, role: str, system: str, messages: list[TurnMessage], max_tokens: int | None = None) -> str:
+    async def text(self, role: str, system: str, messages: list[TurnMessage], max_tokens: int | None = None, settings: Settings | None = None) -> str:
         self._check_budget()
-        entry = self._entry(role, system, messages)
+        settings = settings or self.settings
+        entry = self._entry(role, system, messages, settings)
         try:
-            result = await self._text(role, system, messages, max_tokens, entry)
+            result = await self._text(role, system, messages, max_tokens, entry, settings)
         except Exception as error:
             self._log(entry, entry['raw'], error)
             raise
         self._log(entry, result)
         return result
 
-    async def _text(self, role, system, messages, max_tokens, entry) -> str:
-        profile_name = getattr(self.settings, role)
-        profile = self.settings.profiles[profile_name]
-        client = self._client(profile_name)
-        limit = max_tokens or self.settings.limits["max_output_tokens"]
+    async def _text(self, role, system, messages, max_tokens, entry, settings) -> str:
+        profile_name = getattr(settings, role)
+        profile = settings.profiles[profile_name]
+        client = self._client(profile_name, profile)
+        limit = max_tokens or settings.limits["max_output_tokens"]
         if profile.provider == "openai":
             response = await client.responses.create(model=profile.model, instructions=system,
                 input=self._openai_input(messages), max_output_tokens=limit)
-            self._usage(profile_name, role, getattr(response, 'usage', None), entry)
+            self._usage(profile_name, role, getattr(response, 'usage', None), entry, profile)
             return response.output_text or ""
         if profile.provider == "anthropic":
             response = await client.messages.create(model=profile.model, system=system,
                 messages=self._anthropic_input(messages), max_tokens=limit)
-            self._usage(profile_name, role, getattr(response, 'usage', None), entry)
+            self._usage(profile_name, role, getattr(response, 'usage', None), entry, profile)
             return "".join(block.text for block in response.content if block.type == "text")
         response = await client.chat.completions.create(model=profile.model,
             messages=([{"role": "system", "content": system}] if system else []) + self._chat_input(messages), max_tokens=limit,
             **({"reasoning_effort": profile.reasoning_effort} if profile.reasoning_effort else {}))
-        self._usage(profile_name, role, getattr(response, 'usage', None), entry)
+        self._usage(profile_name, role, getattr(response, 'usage', None), entry, profile)
         return response.choices[0].message.content or ""
 
-    async def stream_text(self, role: str, system: str, messages: list[TurnMessage], max_tokens: int | None = None) -> AsyncIterator[str]:
+    async def stream_text(self, role: str, system: str, messages: list[TurnMessage], max_tokens: int | None = None, settings: Settings | None = None) -> AsyncIterator[str]:
         self._check_budget()
-        entry = self._entry(role, system, messages)
+        settings = settings or self.settings
+        entry = self._entry(role, system, messages, settings)
         pieces, failure = [], None
-        inner = self._stream(role, system, messages, max_tokens, entry)
+        inner = self._stream(role, system, messages, max_tokens, entry, settings)
         try:
             async for delta in inner:
                 pieces.append(delta)
@@ -233,11 +275,11 @@ class ModelGateway:
             await inner.aclose()  # runs the usage recording so the entry carries this call's tokens
             self._log(entry, ''.join(pieces), failure)
 
-    async def _stream(self, role, system, messages, max_tokens, entry) -> AsyncIterator[str]:
-        profile_name = getattr(self.settings, role)
-        profile = self.settings.profiles[profile_name]
-        client = self._client(profile_name)
-        limit = max_tokens or self.settings.limits["max_output_tokens"]
+    async def _stream(self, role, system, messages, max_tokens, entry, settings) -> AsyncIterator[str]:
+        profile_name = getattr(settings, role)
+        profile = settings.profiles[profile_name]
+        client = self._client(profile_name, profile)
+        limit = max_tokens or settings.limits["max_output_tokens"]
         if profile.provider == "openai":
             stream = await client.responses.create(model=profile.model, instructions=system,
                 input=self._openai_input(messages), max_output_tokens=limit, stream=True)
@@ -249,7 +291,7 @@ class ModelGateway:
                     if event.type == "response.output_text.delta" and event.delta:
                         yield event.delta
             finally:
-                self._usage(profile_name, role, usage, entry)
+                self._usage(profile_name, role, usage, entry, profile)
         elif profile.provider == "anthropic":
             usage = None
             try:
@@ -259,7 +301,7 @@ class ModelGateway:
                         yield chunk
                     usage = (await stream.get_final_message()).usage
             finally:
-                self._usage(profile_name, role, usage, entry)
+                self._usage(profile_name, role, usage, entry, profile)
         else:
             stream = await client.chat.completions.create(model=profile.model,
                 messages=([{"role": "system", "content": system}] if system else []) + self._chat_input(messages),
@@ -275,13 +317,14 @@ class ModelGateway:
                     if delta:
                         yield delta
             finally:
-                self._usage(profile_name, role, usage, entry)
+                self._usage(profile_name, role, usage, entry, profile)
 
-    async def structured(self, role: str, system: str, messages: list[TurnMessage], schema_name: str, schema: dict) -> dict:
+    async def structured(self, role: str, system: str, messages: list[TurnMessage], schema_name: str, schema: dict, settings: Settings | None = None) -> dict:
         self._check_budget()
-        entry = self._entry(role, system, messages)
+        settings = settings or self.settings
+        entry = self._entry(role, system, messages, settings)
         try:
-            result = await self._structured(role, system, messages, schema_name, schema, entry)
+            result = await self._structured(role, system, messages, schema_name, schema, entry, settings)
         except Exception as error:
             if not entry.get('logged'):
                 self._log(entry, entry['raw'], error)
@@ -295,16 +338,16 @@ class ModelGateway:
             mask_for_log(*result['personal_facts'])
         self._log(entry, json.dumps(result, ensure_ascii=False))
 
-    async def _structured(self, role, system, messages, schema_name, schema, entry) -> dict:
-        profile_name = getattr(self.settings, role)
-        profile = self.settings.profiles[profile_name]
-        client = self._client(profile_name)
-        limit = self.settings.limits["max_output_tokens"]
+    async def _structured(self, role, system, messages, schema_name, schema, entry, settings) -> dict:
+        profile_name = getattr(settings, role)
+        profile = settings.profiles[profile_name]
+        client = self._client(profile_name, profile)
+        limit = settings.limits["max_output_tokens"]
         if profile.provider == "openai":
             response = await client.responses.create(model=profile.model, instructions=system,
                 input=self._openai_input(messages), max_output_tokens=limit,
                 text={"format": {"type": "json_schema", "name": schema_name, "schema": schema, "strict": True}})
-            self._usage(profile_name, role, getattr(response, 'usage', None), entry)
+            self._usage(profile_name, role, getattr(response, 'usage', None), entry, profile)
             entry['raw'] = response.output_text
             return validate_result(json.loads(response.output_text), schema)
         if profile.provider == "anthropic":
@@ -312,7 +355,7 @@ class ModelGateway:
                 messages=self._anthropic_input(messages), max_tokens=limit,
                 tools=[{"name": schema_name, "description": "Return the requested structured result", "input_schema": schema}],
                 tool_choice={"type": "tool", "name": schema_name})
-            self._usage(profile_name, role, getattr(response, 'usage', None), entry)
+            self._usage(profile_name, role, getattr(response, 'usage', None), entry, profile)
             for block in response.content:
                 if block.type == "tool_use" and block.name == schema_name:
                     entry['raw'] = json.dumps(block.input, ensure_ascii=False, default=str)
@@ -324,7 +367,7 @@ class ModelGateway:
                 max_tokens=limit,
                 response_format={"type": "json_schema", "json_schema": {"name": schema_name, "schema": schema, "strict": True}},
                 **({"reasoning_effort": profile.reasoning_effort} if profile.reasoning_effort else {}))
-            self._usage(profile_name, role, getattr(response, 'usage', None), entry)
+            self._usage(profile_name, role, getattr(response, 'usage', None), entry, profile)
             choice = response.choices[0]
             entry['raw'] = choice.message.content
             try:
@@ -335,9 +378,9 @@ class ModelGateway:
         for attempt in range(2):
             entry['logged'] = True
             self._check_budget()
-            attempt_entry = self._entry(role, instruction, messages)
+            attempt_entry = self._entry(role, instruction, messages, settings)
             try:
-                raw = await self._text(role, instruction, messages, limit, attempt_entry)
+                raw = await self._text(role, instruction, messages, limit, attempt_entry, settings)
             except Exception as error:
                 self._log(attempt_entry, attempt_entry['raw'], error)
                 raise
@@ -354,7 +397,7 @@ class ModelGateway:
         raise ValueError("Compatible model returned invalid JSON")
 
     async def close(self) -> None:
-        for client in self.clients.values():
+        for client in [*self.clients.values(), *self.retired]:
             await client.close()
 
 
