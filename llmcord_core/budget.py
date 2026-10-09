@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 
@@ -48,6 +50,29 @@ class BudgetState:
     @property
     def hard_reached(self) -> bool:
         return self.hard_cap_usd is not None and self.spent_usd >= self.hard_cap_usd
+
+
+class BudgetExceeded(Exception):
+    def __init__(self, state: BudgetState):
+        super().__init__('Spending hard cap reached')
+        self.state = state
+
+
+_admitted: ContextVar[bool] = ContextVar('budget_admitted', default=False)
+
+
+def admitted() -> bool:
+    return _admitted.get()
+
+
+@contextmanager
+def admit():
+    """Pass for a started turn: model calls in this context (and tasks created in it) skip the hard-cap gate."""
+    token = _admitted.set(True)
+    try:
+        yield
+    finally:
+        _admitted.reset(token)
 
 
 def state(store, now: float | None = None) -> BudgetState:

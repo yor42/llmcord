@@ -7,6 +7,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 
+from . import budget
 from .config import Settings
 from .usage import collect_usage
 
@@ -48,10 +49,22 @@ class TurnMessage:
 
 
 class ModelGateway:
-    def __init__(self, settings: Settings, usage_sink=None):
+    def __init__(self, settings: Settings, usage_sink=None, budget_gate=None):
         self.settings = settings
         self.clients: dict[str, Any] = {}
         self.usage_sink = usage_sink
+        self.budget_gate = budget_gate
+
+    def _check_budget(self):
+        if self.budget_gate is None or budget.admitted():
+            return
+        try:
+            state = self.budget_gate()
+        except Exception as error:
+            logging.error('Budget gate failed: %s', type(error).__name__)
+            return
+        if state is not None and state.hard_reached:
+            raise budget.BudgetExceeded(state)
 
     def _usage(self, profile_name, role, usage):
         record = collect_usage(profile_name, self.settings.profiles[profile_name], role, usage)
@@ -136,6 +149,7 @@ class ModelGateway:
         return result
 
     async def text(self, role: str, system: str, messages: list[TurnMessage], max_tokens: int | None = None) -> str:
+        self._check_budget()
         profile_name = getattr(self.settings, role)
         profile = self.settings.profiles[profile_name]
         client = self._client(profile_name)
@@ -157,6 +171,7 @@ class ModelGateway:
         return response.choices[0].message.content or ""
 
     async def stream_text(self, role: str, system: str, messages: list[TurnMessage], max_tokens: int | None = None) -> AsyncIterator[str]:
+        self._check_budget()
         profile_name = getattr(self.settings, role)
         profile = self.settings.profiles[profile_name]
         client = self._client(profile_name)
@@ -201,6 +216,7 @@ class ModelGateway:
                 self._usage(profile_name, role, usage)
 
     async def structured(self, role: str, system: str, messages: list[TurnMessage], schema_name: str, schema: dict) -> dict:
+        self._check_budget()
         profile_name = getattr(self.settings, role)
         profile = self.settings.profiles[profile_name]
         client = self._client(profile_name)

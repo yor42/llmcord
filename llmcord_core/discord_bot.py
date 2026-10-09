@@ -75,7 +75,8 @@ class SkitBot(commands.Bot):
         super().__init__(command_prefix=commands.when_mentioned, intents=intents)
         self.settings = settings
         self.store = Store(settings.database_path)
-        self.models = ModelGateway(settings, usage_sink=self.store.record_model_usage)
+        self.models = ModelGateway(settings, usage_sink=self.store.record_model_usage,
+                                  budget_gate=self._budget_check)
         self.engine = Engine(self.store, self.models, settings)
         self.channel_locks: dict[int, asyncio.Lock] = {}
         self.webhook_locks = {}
@@ -328,7 +329,7 @@ class SkitBot(commands.Bot):
             if pending:
                 logging.warning('Memory task for channel %s still running after %ss; continuing without it',
                                 channel.id, MEMORY_WAIT_SECONDS)
-        with capture_usage(scene.guild_id):
+        with budget.admit(), capture_usage(scene.guild_id):
             return await self._run_scene(scene, channel, interaction)
 
     def _schedule_memory(self, channel_id, scene, completed, preceding, root_id, parent_message_id):
