@@ -20,7 +20,7 @@ def guideline_editor(ctx, kind, owner_id, label, button=True):
                'guidelines.edit', {'kind': kind, 'id': owner_id}, then=lambda _: ctx.refresh())
 
 
-def confirm_dialog(ctx, title, lines, button_label, operation, action, detail=None, then=None, enabled=True):
+def confirm_dialog(ctx, title, lines, button_label, operation, action, detail=None, then=None, enabled=True, conflict=None):
     """One shape for destructive confirmations: bold title, explanation lines, Cancel and a red confirm button."""
     with ui.dialog() as dialog, ui.card().classes('w-full max-w-lg'):
         ui.label(title).classes('text-xl font-bold')
@@ -32,9 +32,14 @@ def confirm_dialog(ctx, title, lines, button_label, operation, action, detail=No
                 followup = then(result)
                 if inspect.isawaitable(followup):
                     await followup
+        async def stale():
+            dialog.close()
+            followup = conflict()
+            if inspect.isawaitable(followup):
+                await followup
         with ui.element('div').classes('ll-form-row justify-end'):
             ui.button('Cancel', on_click=dialog.close).props('flat')
-            ctx.button(button_label, operation, action, detail, then=done, color='negative').set_enabled(enabled)
+            ctx.button(button_label, operation, action, detail, then=done, color='negative', **({'conflict': stale} if conflict else {})).set_enabled(enabled)
     dialog.on('hide', dialog.delete)
     dialog.open()
 

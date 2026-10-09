@@ -276,6 +276,12 @@ def _profiles_and_roles(models: dict[str, Any]) -> tuple[dict[str, ModelProfile]
     return profiles, {role: models.get(role, models.get("dialogue")) for role in ("dialogue", "director", "memory")}
 
 
+def profiles_from_models(models: dict[str, Any]) -> tuple[dict[str, ModelProfile], dict[str, str]]:
+    """Profiles and role choices from an already parsed `models` mapping."""
+    profiles, choices = _profiles_and_roles(models or {})
+    return profiles, {role: value for role, value in choices.items() if value is not None}
+
+
 def load_profiles(path: str | Path = "config.yaml") -> tuple[dict[str, ModelProfile], dict[str, str]]:
     """Profiles and role choices from the models section only (no token or key checks)."""
     import yaml
@@ -285,8 +291,7 @@ def load_profiles(path: str | Path = "config.yaml") -> tuple[dict[str, ModelProf
             raw = yaml.safe_load(file) or {}
     except FileNotFoundError:
         return {}, {}
-    profiles, choices = _profiles_and_roles(raw.get("models") or {})
-    return profiles, {role: value for role, value in choices.items() if value is not None}
+    return profiles_from_models(raw.get("models") or {})
 
 
 def load_settings(path: str | Path = "config.yaml") -> Settings:

@@ -7,6 +7,7 @@ import functools
 import json
 import logging
 import math
+import os
 import re
 import sqlite3
 import time
@@ -24,8 +25,10 @@ from fastapi.responses import PlainTextResponse
 
 from .auth import guild_icon_url, is_server_admin, user_avatar_url
 from .admin_store import ConflictError
+from .backend import ROLES, effective_backend
 from .avatars import MAX_AVATAR_BYTES, avatar_version, normalize_avatar
 from .cards import parse_card
+from .config import PROFILE_KEYS, format_key_ref, parse_key_ref, validate_profile_name
 from .icons import icon_css, lucide, lucide_button, more_menu
 from .lorebooks import parse_lorebook
 from .macro_highlight import MacroHighlight
@@ -60,12 +63,16 @@ class OperatorContext:
             ok, result = await self._attempt(operation, action, detail)
             if not ok:
                 if conflict and isinstance(result, ConflictError):
-                    conflict()
+                    followup = conflict()
+                    if inspect.isawaitable(followup):
+                        await followup
                 return
             if success:
                 ui.notify(success, type='positive')
             if then:
-                then(result)
+                followup = then(result)
+                if inspect.isawaitable(followup):
+                    await followup
         return ui.button(text, on_click=clicked, **kwargs)
 
 
@@ -117,6 +124,282 @@ def budget_panel(ctx):
             with ui.element('div').classes('ll-form-row'):
                 ctx.button('Save', save, 'budget.settings', lambda _result: detail(), then=lambda _result: render(), success='Spending caps saved.', conflict=render)
     render()
+
+ROLE_LABELS = {'dialogue': 'Dialogue', 'director': 'Director', 'memory': 'Memory'}
+PROFILE_SOURCES = {'config': 'config.yaml', 'dashboard': 'Dashboard', 'override': 'Dashboard (overrides config.yaml)', 'skipped': 'Dashboard (skipped, see warning)'}
+BACKEND_NOTE = ('Changes apply from the next message. "Set" means this dashboard\'s environment has the variable; '
+                'the bot checks its own environment when it calls the model.')
+KEY_HINT = 'A ${NAME} reference to a variable ending in _API_KEY. Never paste the key itself.'
+
+
+def profile_mapping_of(profile):
+    """The stored shape of a ModelProfile: PROFILE_KEYS with a value."""
+    return {key: getattr(profile, key) for key in PROFILE_KEYS if getattr(profile, key) is not None}
+
+
+def key_status(name, environ=os.environ):
+    """('none' | 'set' | 'missing', text) for a profile's key reference; only whether the variable has a value is read."""
+    if not name:
+        return 'none', 'No key'
+    state = 'set' if environ.get(name) else 'missing'
+    return state, f'{format_key_ref(name)} ({state})'
+
+
+def profile_view(backend, config_profiles, db_rows, environ=os.environ):
+    """Row view-model for the Profiles list, sorted by name; never carries an environment value."""
+    revisions = {row['name']: row['revision'] for row in db_rows}
+    badges = {}
+    for role in ROLES:
+        if backend.roles.get(role):
+            badges.setdefault(backend.roles[role], []).append(role)
+    views = []
+    for name in sorted(backend.profiles):
+        profile = backend.profiles[name]
+        kind = ('override' if name in config_profiles else 'dashboard') if profile.source == 'dashboard' else 'config'
+        state, key = key_status(profile.api_key_env, environ)
+        views.append({'name': name, 'provider': profile.provider, 'model': profile.model, 'key': key, 'key_state': state, 'kind': kind,
+                      'source': PROFILE_SOURCES[kind], 'revision': revisions.get(name) if kind != 'config' else None,
+                      'roles': badges.get(name, []), 'initial': profile_mapping_of(profile)})
+    for row in db_rows:  # saved rows the merge skipped stay listed so they can be fixed or deleted
+        name = row['name']
+        try:
+            validate_profile_name(name)
+        except ValueError:
+            continue
+        if name in backend.profiles and backend.profiles[name].source == 'dashboard':
+            continue
+        data = row['data'] if isinstance(row['data'], dict) else {}
+        ref = data.get('api_key_env') if isinstance(data.get('api_key_env'), str) else None
+        state, key = key_status(ref, environ)
+        views.append({'name': name, 'provider': str(data.get('provider', '')), 'model': str(data.get('model', '')), 'key': key, 'key_state': state,
+                      'kind': 'skipped', 'source': PROFILE_SOURCES['skipped'], 'revision': row['revision'], 'roles': [],
+                      'initial': {k: v for k, v in data.items() if k in PROFILE_KEYS}})
+    return sorted(views, key=lambda view: view['name'])
+
+
+def role_options(saved_value, backend_profiles, config_role):
+    """Options for a role select: use config.yaml, each available profile, and a saved value that no longer resolves."""
+    options = {'': f'Use config.yaml ({config_role or "none"})'}
+    options.update({name: name for name in backend_profiles})
+    if saved_value and saved_value not in options:
+        options[saved_value] = f'{saved_value} (not available)'
+    return options
+
+
+def editor_initial(mapping):
+    """Editor starting values: a saved provider, billing tier or reasoning effort the selects cannot show falls back to the default (or is dropped)."""
+    initial = dict(mapping)
+    for field, allowed, default in (('provider', ('openai', 'anthropic', 'compatible'), 'compatible'), ('billing_tier', ('paid', 'free'), 'paid'),
+                                    ('reasoning_effort', ('none', 'minimal', 'low', 'medium', 'high'), None)):
+        if field in initial and initial[field] not in allowed:
+            initial.pop(field)
+            if default:
+                initial[field] = default
+    return initial
+
+
+def _number(value, label, whole=False):
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    try:
+        if isinstance(value, bool):
+            raise ValueError
+        number = float(value.strip() if isinstance(value, str) else value)
+        if not math.isfinite(number):
+            raise ValueError
+    except (TypeError, ValueError):
+        raise ValueError(f'{label} must be a number.') from None
+    if whole:
+        if not number.is_integer():
+            raise ValueError(f'{label} must be a whole number.')
+        return int(number)
+    return number
+
+
+def profile_mapping(values):
+    """Form values -> a config.yaml-shaped mapping with only the keys that apply. The key text is parsed, never echoed in errors."""
+    provider = values.get('provider')
+    model = (values.get('model') or '').strip()
+    if not model:
+        raise ValueError('Model is required.')
+    tokens = _number(values.get('context_tokens'), 'Context tokens', whole=True)
+    if tokens is None or tokens < 1:
+        raise ValueError('Context tokens must be a whole number of at least 1.')
+    mapping = {'provider': provider, 'model': model, 'context_tokens': tokens, 'supports_images': bool(values.get('supports_images')),
+               'structured_outputs': bool(values.get('structured_outputs')), 'stream_usage': bool(values.get('stream_usage', True)),
+               'billing_tier': values.get('billing_tier') or 'paid'}
+    key = parse_key_ref(values.get('api_key'))
+    if key:
+        mapping['api_key_env'] = key
+    base_url = (values.get('base_url') or '').strip()
+    if base_url and provider != 'anthropic':
+        mapping['base_url'] = base_url
+    if values.get('reasoning_effort') and provider == 'compatible':
+        mapping['reasoning_effort'] = values['reasoning_effort']
+    for field, label in (('input_cost_per_million', 'Input cost'), ('output_cost_per_million', 'Output cost'), ('cached_input_cost_per_million', 'Cached input cost'),
+                         ('timeout_seconds', 'Timeout')):
+        number = _number(values.get(field), label)
+        if number is not None:
+            mapping[field] = number
+    retries = _number(values.get('max_retries'), 'Max retries', whole=True)
+    if retries is not None:
+        mapping['max_retries'] = retries
+    return mapping
+
+
+def changed_fields(mapping, initial):
+    """Names of the fields that differ from `initial` (all of them for a new profile); names only, never values."""
+    initial = initial or {}
+    return sorted(key for key in set(mapping) | set(initial) if mapping.get(key) != initial.get(key))
+
+
+def roles_detail(old, new):
+    return {role: {'from': old.get(role), 'to': new.get(role)} for role in ROLES if old.get(role) != new.get(role)}
+
+
+async def backend_panel(ctx, config):
+    """Backend tab: role assignment and the profile list/editor. `config` has .profiles, .roles and .error from config.yaml."""
+    from nicegui import ui
+    from .scene_ui import confirm_dialog
+    config_names = set(config.profiles)
+    current_views = []
+    with section('Roles'):
+        roles_body = ui.column().classes('ll-stack w-full')
+    with section('Profiles'):
+        profiles_body = ui.column().classes('ll-stack w-full')
+
+    async def render():
+        state = await ctx.read(lambda: (ctx.store.model_profile_rows(), ctx.store.model_roles()))
+        if state is None:
+            return
+        rows, saved = state
+        backend = effective_backend(config.profiles, config.roles, rows, saved)
+        views = profile_view(backend, config.profiles, rows)
+        current_views[:] = views
+        roles_body.clear()
+        profiles_body.clear()
+        with roles_body:
+            render_roles(saved, backend)
+        with profiles_body:
+            render_profiles(views, backend)
+
+    def render_roles(saved, backend):
+        selects = {}
+        with ui.element('div').classes('ll-form-row'):
+            for role in ROLES:
+                selects[role] = ui.select(role_options(saved.get(role), backend.profiles, config.roles.get(role)), value=saved.get(role) or '', label=ROLE_LABELS[role]).classes('ll-wide')
+        ui.label('A role set here replaces the config.yaml role of the same name.').classes('ll-muted')
+
+        def chosen():
+            return {role: selects[role].value or None for role in ROLES}
+        with ui.element('div').classes('ll-form-row'):
+            ctx.button('Save roles', lambda: ctx.store.save_model_roles(chosen(), saved['revision'], config_names),
+                       'backend.roles', lambda _result: roles_detail(saved, chosen()), then=lambda _result: render(), success='Roles saved.', conflict=render)
+
+    def render_profiles(views, backend):
+        if config.error:
+            ui.label(f'config.yaml could not be read, so only dashboard profiles are listed. {config.error}').classes('text-warning')
+        for problem in backend.problems:
+            ui.label(problem).classes('text-warning')
+        if not views:
+            ui.label('No profiles yet.').classes('ll-muted')
+        for view in views:
+            with ui.element('div').classes('ll-stack ll-result w-full'):
+                with ui.element('div').classes('ll-form-row'):
+                    ui.label(view['name']).classes('font-bold')
+                    for role in view['roles']:
+                        ui.badge(f'{ROLE_LABELS[role]} role').props('outline')
+                ui.label(f"{view['provider']} · {view['model']}")
+                ui.label(f"Key: {view['key']}").classes('ll-muted')
+                ui.label(f"From: {view['source']}").classes('ll-muted')
+                with ui.element('div').classes('ll-form-row'):
+                    edit = ui.button('Edit', on_click=lambda v=view: open_editor(v)).props('outline size=sm')
+                    edit.props['aria-label'] = f"Edit {view['name']}"
+                    if view['kind'] in ('dashboard', 'skipped'):
+                        drop = ui.button('Delete', on_click=lambda v=view: confirm_drop(v)).props('outline size=sm color=negative')
+                        drop.props['aria-label'] = f"Delete {view['name']}"
+                    elif view['kind'] == 'override':
+                        reset = ui.button('Reset to config.yaml', on_click=lambda v=view: confirm_drop(v)).props('outline size=sm')
+                        reset.props['aria-label'] = f"Reset to config.yaml for {view['name']}"
+        with ui.element('div').classes('ll-form-row'):
+            lucide_button('Add profile', 'plus', on_click=lambda: open_editor(None))
+        ui.label(BACKEND_NOTE).classes('ll-muted')
+
+    def confirm_drop(view):
+        name, reset = view['name'], view['kind'] == 'override'
+        lines = (['The config.yaml version of this profile applies again. Edits made on the dashboard are lost.'] if reset else
+                 ['This removes the saved profile. Roles assigned to it must be changed first.'])
+        confirm_dialog(ctx, f'Reset {name} to config.yaml?' if reset else f'Delete {name}?', lines, 'Reset profile' if reset else 'Delete profile',
+                       lambda: ctx.store.delete_model_profile(name, view['revision'], config_names), 'backend.profile_delete', {'name': name},
+                       then=lambda _result: render(), conflict=lambda: render())
+
+    def open_editor(view):
+        editing = view is not None
+        initial = editor_initial(view['initial']) if editing else {}
+        revision = view['revision'] if editing else None
+        with ui.dialog() as dialog, ui.card().classes('w-full max-w-2xl'):
+            ui.label(f"Edit {view['name']}" if editing else 'Add profile').classes('text-xl font-bold')
+            with ui.column().classes('ll-stack w-full'):
+                name = ui.input('Name', value=view['name'] if editing else '').classes('w-full')
+                if editing:
+                    name.props('readonly')
+                else:
+                    name.props('hint="Lowercase letters, digits and . _ / -"')
+                provider = ui.select(['openai', 'anthropic', 'compatible'], value=initial.get('provider', 'compatible'), label='Provider').classes('w-full')
+                model = ui.input('Model', value=initial.get('model', '')).classes('w-full')
+                key = ui.input('API key', value=format_key_ref(initial['api_key_env']) if initial.get('api_key_env') else '',
+                               placeholder='${OPENAI_API_KEY}').classes('w-full').props(f'hint="{KEY_HINT}"')
+                base = ui.input('Base URL', value=initial.get('base_url', '')).classes('w-full').props('hint="Required for compatible providers."')
+                base.bind_visibility_from(provider, 'value', lambda value: value != 'anthropic')
+                tokens = ui.number('Context tokens', value=initial.get('context_tokens'), min=1, step=1, format='%d').classes('w-full')
+                images = ui.switch('Supports images', value=initial.get('supports_images', False))
+                with ui.expansion('Advanced').classes('w-full'):
+                    with ui.column().classes('ll-stack w-full'):
+                        effort = ui.select(['', 'none', 'minimal', 'low', 'medium', 'high'], value=initial.get('reasoning_effort') or '',
+                                           label='Reasoning effort').classes('w-full').props('hint="Compatible providers only"')
+                        effort.bind_visibility_from(provider, 'value', lambda value: value == 'compatible')
+                        structured = ui.switch('Structured outputs', value=initial.get('structured_outputs', False))
+                        usage = ui.switch('Stream usage', value=initial.get('stream_usage', True))
+                        tier = ui.select(['paid', 'free'], value=initial.get('billing_tier', 'paid'), label='Billing tier').classes('w-full')
+                        costs = {field: ui.number(label, value=initial.get(field), min=0).props('clearable hint="Blank means none"').classes('w-full')
+                                 for field, label in (('input_cost_per_million', 'Input cost per million (USD)'), ('output_cost_per_million', 'Output cost per million (USD)'),
+                                                      ('cached_input_cost_per_million', 'Cached input cost per million (USD)'))}
+                        timeout = ui.number('Timeout (seconds)', value=initial.get('timeout_seconds', 120), min=0).classes('w-full')
+                        retries = ui.number('Max retries', value=initial.get('max_retries', 1), min=0, step=1, format='%d').classes('w-full')
+                # Step 5: the "Test connection" button and its result line go here, above the dialog buttons.
+
+            def mapping():
+                return profile_mapping({'provider': provider.value, 'model': model.value, 'api_key': key.value, 'base_url': base.value, 'context_tokens': tokens.value,
+                                        'supports_images': images.value, 'reasoning_effort': effort.value, 'structured_outputs': structured.value,
+                                        'stream_usage': usage.value, 'billing_tier': tier.value, 'timeout_seconds': timeout.value,
+                                        'max_retries': retries.value, **{field: control.value for field, control in costs.items()}})
+
+            def save():
+                new_name = (name.value or '').strip()
+                if not editing:
+                    validate_profile_name(new_name)
+                    if new_name in config_names or any(v['name'] == new_name for v in current_views):
+                        raise ValueError(f'A profile named {new_name} already exists. Use Edit to change it.')
+                return ctx.store.save_model_profile(new_name, mapping(), revision)
+
+            def detail(_result):
+                return {'name': (name.value or '').strip(), 'created': revision is None, 'fields': changed_fields(mapping(), initial if editing else None)}
+
+            async def saved(_result):
+                dialog.close()
+                await render()
+
+            async def stale():
+                if editing:
+                    dialog.close()
+                    await render()
+            with ui.element('div').classes('ll-form-row justify-end'):
+                ui.button('Cancel', on_click=dialog.close).props('flat')
+                ctx.button('Save profile', save, 'backend.profile', detail, then=saved, success='Profile saved.', conflict=stale)
+        dialog.on('hide', dialog.delete)
+        dialog.open()
+
+    await render()
 
 
 OPERATOR_USAGE_PERIODS = {'period': 'This spending period', '7': 'Last 7 days', '30': 'Last 30 days'}
@@ -682,11 +965,12 @@ def _register_pages(app):
             ui.label('Bot-wide settings. Only operators can see this page.').classes('ll-muted')
             ctx = OperatorContext(app, request)
             selected_tab = request.query_params.get('tab')
-            if selected_tab not in ('spending', 'usage'):
+            if selected_tab not in ('spending', 'usage', 'backend'):
                 selected_tab = 'spending'
             with ui.tabs().classes('w-full ll-tabs').props('align=left outside-arrows mobile-arrows') as tabs:
                 spending = ui.tab('spending', 'Spending')
                 usage = ui.tab('usage', 'Usage by server')
+                backend = ui.tab('backend', 'Backend')
             built = set()
             async def build(tab):
                 if tab in built:
@@ -696,6 +980,8 @@ def _register_pages(app):
                     with panels[tab]:
                         if tab == 'spending':
                             budget_panel(ctx)
+                        elif tab == 'backend':
+                            await backend_panel(ctx, types.SimpleNamespace(profiles=app.state.config_profiles, roles=app.state.config_roles, error=app.state.config_error))
                         else:
                             await usage_by_server_panel(ctx, lambda: app.state.auth.guilds(session))
                 except BaseException:
@@ -705,7 +991,7 @@ def _register_pages(app):
                 ui.run_javascript(f'const u = new URL(location.href); u.searchParams.set("tab", {json.dumps(event.value)}); history.replaceState(history.state, "", u);')
                 await build(event.value)
             with ui.tab_panels(tabs, value=selected_tab, on_change=changed).classes('w-full'):
-                panels = {'spending': ui.tab_panel(spending), 'usage': ui.tab_panel(usage)}
+                panels = {'spending': ui.tab_panel(spending), 'usage': ui.tab_panel(usage), 'backend': ui.tab_panel(backend)}
             await build(selected_tab)
 
     @ui.page('/guild/{guild_id}', response_timeout=30)

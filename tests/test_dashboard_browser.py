@@ -1483,6 +1483,247 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    @staticmethod
+    def shot(page, name, **options):
+        """Documentation screenshots are written only when LLMCORD_SHOTS_DIR is set."""
+        folder = os.environ.get('LLMCORD_SHOTS_DIR')
+        if folder:
+            Path(folder).mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(Path(folder) / name), **options)
+
+    @staticmethod
+    def backend_row(page, name):
+        """The Profiles list row for `name` (row texts such as 'From: config.yaml' repeat, so rows are found by name)."""
+        return page.locator('.ll-result').filter(has=page.get_by_text(name, exact=True))
+
+    def fill_profile_editor(self, page, name, model, tokens, key='', base=''):
+        dialog = page.get_by_role('dialog')
+        dialog.get_by_label('Name', exact=True).fill(name)
+        dialog.get_by_label('Model', exact=True).fill(model)
+        if key:
+            dialog.get_by_label('API key', exact=True).fill(key)
+        if base:
+            dialog.get_by_label('Base URL', exact=True).fill(base)
+        dialog.get_by_label('Context tokens', exact=True).fill(str(tokens))
+        return dialog
+
+    def test_operator_backend_tab_lists_config_profiles(self):
+        """D24 step 4 (FEAT-11): the Backend tab lists a config.yaml profile with its key status and source, and the role selects offer the config default."""
+        from playwright.sync_api import expect
+        context, page, errors = self.operator_page('/admin/operator?tab=backend')
+        try:
+            expect(page.get_by_role('tab', name='Backend')).to_be_visible()
+            expect(page.get_by_text('Roles', exact=True)).to_be_visible()
+            expect(page.get_by_text('Profiles', exact=True)).to_be_visible()
+            row = self.backend_row(page, 'cfg-main')
+            expect(row).to_contain_text('openai · cfg-model')
+            expect(row).to_contain_text('Key: ${FIXTURE_API_KEY} (missing)')
+            expect(row).to_contain_text('From: config.yaml')
+            for role in ('Dialogue', 'Director', 'Memory'):
+                expect(row).to_contain_text(f'{role} role')
+                expect(page.get_by_label(role, exact=True)).to_have_value('Use config.yaml (cfg-main)')
+            expect(self.backend_row(page, 'cfg-second')).to_contain_text('Key: No key')
+            expect(page.get_by_role('button', name='Edit cfg-main')).to_be_visible()
+            expect(page.get_by_role('button', name='Delete cfg-main')).to_have_count(0)
+            expect(page.get_by_role('button', name='Reset to config.yaml for cfg-main')).to_have_count(0)
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_operator_backend_add_keyless_profile_and_assign_director(self):
+        """D24 step 4 (FEAT-11): add a compatible profile without a key, assign it to Director; it survives a reload and the audit rows carry names only."""
+        from playwright.sync_api import expect
+        context, page, errors = self.operator_page('/admin/operator?tab=backend')
+        before = len(self.state()['audit'])
+        try:
+            expect(page.get_by_role('button', name='Add profile')).to_be_visible()
+            page.get_by_role('button', name='Add profile').click()
+            dialog = self.fill_profile_editor(page, 'tmp-keyless', 'tmp-secret-model-name', 4096, base='https://tmp.example/v1')
+            dialog.get_by_role('button', name='Save profile').click()
+            expect(page.get_by_text('Profile saved.')).to_be_visible()
+            expect(page.get_by_role('dialog')).to_have_count(0)
+            row = self.backend_row(page, 'tmp-keyless')
+            expect(row).to_contain_text('From: Dashboard')
+            page.get_by_label('Director', exact=True).click()
+            page.get_by_role('option', name='tmp-keyless', exact=True).click()
+            page.get_by_role('button', name='Save roles').click()
+            expect(page.get_by_text('Roles saved.')).to_be_visible()
+            page.reload()
+            row = self.backend_row(page, 'tmp-keyless')
+            expect(row).to_contain_text('From: Dashboard')
+            expect(row).to_contain_text('Key: No key')
+            expect(row).to_contain_text('Director role')
+            expect(self.backend_row(page, 'cfg-main')).not_to_contain_text('Director role')
+            expect(page.get_by_label('Director', exact=True)).to_have_value('tmp-keyless')
+            state = self.state()
+            self.assertEqual([r['name'] for r in state['model_profiles']], ['tmp-keyless'])
+            self.assertEqual(state['model_roles']['director'], 'tmp-keyless')
+            audit = {r['action']: json.loads(r['detail_json']) for r in state['audit'][before:] if r['action'].startswith('backend.')}
+            self.assertEqual(set(audit), {'backend.profile', 'backend.roles'})
+            self.assertEqual((audit['backend.profile']['name'], audit['backend.profile']['created']), ('tmp-keyless', True))
+            self.assertEqual(set(audit['backend.profile']), {'name', 'created', 'fields'})
+            self.assertEqual(audit['backend.roles'], {'director': {'from': None, 'to': 'tmp-keyless'}})
+            raw = json.dumps(audit)
+            for value in ('tmp-secret-model-name', 'tmp.example', '4096'):
+                self.assertNotIn(value, raw)
+            # Screenshots (light theme): the tab at both widths.
+            page.set_viewport_size({'width': 1000, 'height': 1100})
+            expect(row).to_be_visible()
+            self.shot(page, 'backend-tab-1000.png', full_page=True)
+            page.set_viewport_size({'width': 390, 'height': 1100})
+            expect(row).to_be_visible()
+            page.wait_for_function('document.documentElement.scrollWidth <= window.innerWidth')
+            self.shot(page, 'backend-tab-390.png', full_page=True)
+            self.assertEqual(page.evaluate('[document.documentElement.scrollWidth, window.innerWidth]'), [390, 390])
+            page.set_viewport_size({'width': 1000, 'height': 1100})
+            page.get_by_role('button', name='Edit tmp-keyless').click()
+            dialog = page.get_by_role('dialog')
+            page.set_viewport_size({'width': 1000, 'height': 1500})
+            dialog.get_by_text('Advanced', exact=True).click()
+            expect(dialog.locator('.q-expansion-item--expanded')).to_have_count(1)
+            expect(dialog.get_by_label('Max retries', exact=True)).to_be_visible()
+            # Quasar animates the height in JS, so wait until the open content is fully inside the card (the card grew past its collapsed size).
+            page.wait_for_function("() => { const c = document.querySelector('.q-dialog .q-card'); const x = c.querySelector('.q-expansion-item__content'); return !x.getAttribute('style') && c.getBoundingClientRect().bottom >= x.getBoundingClientRect().bottom; }")
+            self.shot(page, 'backend-editor-advanced-1000.png')
+            page.set_viewport_size({'width': 390, 'height': 844})
+            expect(dialog.get_by_label('Max retries', exact=True)).to_be_attached()
+            page.wait_for_function('document.documentElement.scrollWidth <= window.innerWidth')
+            self.shot(page, 'backend-editor-390.png')
+            # On a phone the open editor is taller than the screen: Save profile must still be reachable by scrolling, and nothing covers it.
+            save = dialog.get_by_role('button', name='Save profile')
+            save.scroll_into_view_if_needed()
+            expect(save).to_be_in_viewport()
+            save.click(trial=True)
+            dialog.get_by_role('button', name='Cancel').click()
+            expect(page.get_by_role('dialog')).to_have_count(0)
+            self.assertFalse(errors, errors)
+        finally:
+            # Leave the shared fixture clean: Director back to config.yaml, then drop the profile. If the UI cleanup fails, fall back to the store.
+            try:
+                try:
+                    page.goto(self.url + '/admin/operator?tab=backend')
+                    page.get_by_label('Director', exact=True).click()
+                    page.get_by_role('option', name='Use config.yaml (cfg-main)', exact=True).click()
+                    page.get_by_role('button', name='Save roles').click()
+                    expect(page.get_by_text('Roles saved.')).to_be_visible()
+                    page.get_by_role('button', name='Delete tmp-keyless').click()
+                    page.get_by_role('dialog').get_by_role('button', name='Delete profile').click()
+                    expect(self.backend_row(page, 'tmp-keyless')).to_have_count(0)
+                except Exception:
+                    self.post_hook('/_test/backend-reset')
+                    raise
+            finally:
+                context.close()
+
+    def test_operator_backend_pinned_key_refused(self):
+        """D24 step 4 (FEAT-11): a ${OPENAI_API_KEY} reference with a foreign base URL is refused with a toast; nothing is stored and the dialog keeps the input."""
+        from playwright.sync_api import expect
+        context, page, errors = self.operator_page('/admin/operator?tab=backend')
+        before = self.state()
+        try:
+            page.get_by_role('button', name='Add profile').click()
+            dialog = self.fill_profile_editor(page, 'tmp-evil', 'evil-model', 1000, key='${OPENAI_API_KEY}', base='https://evil.example/v1')
+            dialog.get_by_role('button', name='Save profile').click()
+            expect(page.get_by_text('OPENAI_API_KEY may only be sent to its pinned hosts')).to_be_visible()
+            expect(dialog).to_be_visible()
+            expect(dialog.get_by_label('Name', exact=True)).to_have_value('tmp-evil')
+            expect(dialog.get_by_label('API key', exact=True)).to_have_value('${OPENAI_API_KEY}')
+            expect(dialog.get_by_label('Base URL', exact=True)).to_have_value('https://evil.example/v1')
+            after = self.state()
+            self.assertEqual(after['model_profiles'], before['model_profiles'])
+            self.assertEqual(after['model_roles'], before['model_roles'])
+            self.assertEqual(len(after['audit']), len(before['audit']))
+            dialog.get_by_role('button', name='Cancel').click()
+            expect(self.backend_row(page, 'tmp-evil')).to_have_count(0)
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_operator_backend_override_and_reset_to_config(self):
+        """D24 step 4 (FEAT-11): editing a config.yaml profile saves an override (Reset appears); Reset to config.yaml removes it and restores the file's version."""
+        from playwright.sync_api import expect
+        context, page, errors = self.operator_page('/admin/operator?tab=backend')
+        before = len(self.state()['audit'])
+        try:
+            row = self.backend_row(page, 'cfg-second')
+            expect(row).to_contain_text('From: config.yaml')
+            page.get_by_role('button', name='Edit cfg-second').click()
+            dialog = page.get_by_role('dialog')
+            expect(dialog.get_by_label('Name', exact=True)).to_have_value('cfg-second')
+            expect(dialog.get_by_label('Model', exact=True)).to_have_value('second-model')
+            dialog.get_by_label('Model', exact=True).fill('overridden-model')
+            dialog.get_by_role('button', name='Save profile').click()
+            expect(page.get_by_text('Profile saved.')).to_be_visible()
+            expect(row).to_contain_text('From: Dashboard (overrides config.yaml)')
+            expect(row).to_contain_text('overridden-model')
+            expect(page.get_by_role('button', name='Delete cfg-second')).to_have_count(0)
+            page.reload()
+            expect(self.backend_row(page, 'cfg-second')).to_contain_text('overridden-model')
+            self.assertEqual([r['name'] for r in self.state()['model_profiles']], ['cfg-second'])
+            page.get_by_role('button', name='Reset to config.yaml for cfg-second').click()
+            page.get_by_role('dialog').get_by_role('button', name='Reset profile').click()
+            row = self.backend_row(page, 'cfg-second')
+            expect(row).to_contain_text('From: config.yaml')
+            expect(row).to_contain_text('second-model')
+            expect(row).not_to_contain_text('overridden-model')
+            self.assertEqual(self.state()['model_profiles'], [])
+            actions = [(r['action'], json.loads(r['detail_json'])) for r in self.state()['audit'][before:] if r['action'].startswith('backend.')]
+            self.assertEqual([a for a, _ in actions], ['backend.profile', 'backend.profile_delete'])
+            self.assertEqual(actions[1][1], {'name': 'cfg-second'})
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_operator_backend_duplicate_name_is_refused(self):
+        """D24 step 4 (FEAT-11): Add profile with the name of an existing profile toasts that it exists and stores nothing."""
+        from playwright.sync_api import expect
+        context, page, errors = self.operator_page('/admin/operator?tab=backend')
+        before = self.state()
+        try:
+            page.get_by_role('button', name='Add profile').click()
+            dialog = self.fill_profile_editor(page, 'cfg-main', 'dup-model', 1000, base='https://dup.example/v1')
+            dialog.get_by_role('button', name='Save profile').click()
+            expect(page.get_by_text('A profile named cfg-main already exists. Use Edit to change it.')).to_be_visible()
+            expect(dialog).to_be_visible()
+            after = self.state()
+            self.assertEqual((after['model_profiles'], after['model_roles']), (before['model_profiles'], before['model_roles']))
+            self.assertEqual(len(after['audit']), len(before['audit']))
+            dialog.get_by_role('button', name='Cancel').click()
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_operator_backend_delete_conflict_refreshes_the_list(self):
+        """D24 step 4 (FEAT-11): deleting a profile changed behind the page's back shows the conflict toast, closes the dialog and redraws the list."""
+        from playwright.sync_api import expect
+        self.post_hook('/_test/backend-profile', {'name': 'tmp-stale', 'model': 'old-model'})
+        context, page, errors = self.operator_page('/admin/operator?tab=backend')
+        try:
+            expect(self.backend_row(page, 'tmp-stale')).to_contain_text('old-model')
+            page.get_by_role('button', name='Delete tmp-stale').click()
+            self.post_hook('/_test/backend-profile', {'name': 'tmp-stale', 'model': 'newer-model'})
+            page.get_by_role('dialog').get_by_role('button', name='Delete profile').click()
+            expect(page.locator('.q-notification').filter(has_text=re.compile('changed|reload', re.I))).to_be_visible()
+            expect(page.get_by_role('dialog')).to_have_count(0)
+            expect(self.backend_row(page, 'tmp-stale')).to_contain_text('newer-model')
+            self.assertEqual([r['name'] for r in self.state()['model_profiles']], ['tmp-stale'])
+            self.assertFalse(errors, errors)
+        finally:
+            self.post_hook('/_test/backend-reset')
+            context.close()
+
+    def test_operator_backend_route_stays_404_for_non_operators(self):
+        """D24 step 4 (FEAT-11): the Backend tab adds no new door; /operator?tab=backend is still the unknown-page 404 for a plain server admin. The operator-only 404 itself is pinned by test_operator_bot_settings_page_and_menu."""
+        context = self.browser.new_context(ignore_https_errors=True)
+        context.add_cookies([{'name': 'llmcord_session', 'value': 'browser-plain-session', 'url': self.url, 'secure': True, 'httpOnly': True, 'sameSite': 'Lax'}])
+        page = context.new_page()
+        try:
+            response = page.goto(self.url + '/admin/operator?tab=backend')
+            self.assertEqual(response.status, 404)
+            self.assertNotIn('Add profile', page.content())
+        finally:
+            context.close()
+
     def test_monitoring_bot_wide_spending_line_for_operators_only(self):
         """FEAT-13: an operator sees the bot-wide spending line and an Open Bot settings link on a server's Monitoring tab; a plain server admin gets neither in the page."""
         import re

@@ -4,13 +4,13 @@ from __future__ import annotations
 import inspect
 import json
 import time
-from pathlib import Path
 
 from .avatars import AvatarPublisher
-from .config import prompt_provider
+from .backend import effective_backend
 from .models import TurnMessage
 from .prompts import compile_prompt, time_values
 
+PURPOSE_ROLES = {'dialogue': 'dialogue', 'director': 'director', 'extraction': 'memory', 'summary': 'memory', 'images': 'dialogue'}
 OPERATOR_AUDIT_GUILD = 0  # no Discord snowflake is 0; operator actions have no server
 
 
@@ -18,18 +18,36 @@ class AdminService:
     def __init__(self, app, config_path='config.yaml'):
         self.app, self.store, self.auth = app, app.state.store, app.state.auth
         self.avatars = AvatarPublisher(self.store, app.state.http, app.state.bot_token)
-        raw = {}
-        if Path(config_path).exists():
-            import yaml
-            raw = yaml.safe_load(Path(config_path).read_text(encoding='utf-8')) or {}
-        models = raw.get('models', {})
-        self.model_config = models
-        profiles = models.get('profiles', {})
-        self.providers, self.budgets = {}, {}
-        for purpose, role in {'dialogue': 'dialogue', 'director': 'director', 'extraction': 'memory', 'summary': 'memory', 'images': 'dialogue'}.items():
-            profile = profiles.get(models.get(role, models.get('dialogue')), {})
-            self.providers[purpose] = prompt_provider(profile.get('provider', 'compatible'), profile.get('base_url'))
-            self.budgets[purpose] = min(raw.get('limits', {}).get('max_input_tokens', 12000), profile.get('context_tokens', 32000) - raw.get('limits', {}).get('max_output_tokens', 700))
+        self.model_config = getattr(app.state, 'config_models', {})
+        self.limits = getattr(app.state, 'config_limits', {})
+        # config.yaml profiles/roles are loaded once by create_app; the dashboard and the preview share them.
+        self.config_profiles = getattr(app.state, 'config_profiles', {})
+        self.config_roles = getattr(app.state, 'config_roles', {})
+        self.config_error = getattr(app.state, 'config_error', None)
+        self._purposes = None
+
+    def effective_backend(self):
+        return effective_backend(self.config_profiles, self.config_roles, self.store.model_profile_rows(), self.store.model_roles())
+
+    def _purpose_settings(self):
+        version = self.store.model_backend_version()
+        if self._purposes is None or self._purposes[0] != version:
+            backend = self.effective_backend()
+            providers, budgets = {}, {}
+            for purpose, role in PURPOSE_ROLES.items():
+                profile = backend.profiles.get(backend.roles.get(role) or backend.roles.get('dialogue'))
+                providers[purpose] = profile.prompt_provider if profile else 'compatible'
+                budgets[purpose] = min(self.limits.get('max_input_tokens', 12000), (profile.context_tokens if profile else 32000) - self.limits.get('max_output_tokens', 700))
+            self._purposes = (version, providers, budgets)
+        return self._purposes
+
+    @property
+    def providers(self):
+        return self._purpose_settings()[1]
+
+    @property
+    def budgets(self):
+        return self._purpose_settings()[2]
 
     async def run(self, ident, guild_id, operation, action=None, detail=None):
         # Live (socket.io) calls carry no per-request CSRF/origin: the boundary is the socket's cookie-to-client

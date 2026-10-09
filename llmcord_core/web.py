@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
 import httpx
+import yaml
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse, RedirectResponse, Response
 from starlette.datastructures import MutableHeaders
@@ -18,6 +19,7 @@ from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES, GZipMiddle
 from .store import Store
 from .auth import DISCORD_API, AuthService
 from .admin import AdminService
+from .config import profiles_from_models
 
 
 AVATAR_CACHE = {"Cache-Control": "private, max-age=300"}
@@ -113,6 +115,21 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
     cacheable, versioned = set(), {}
     app.add_middleware(SecurityHeaders, base_url=base_url, cacheable=cacheable, versioned=versioned)
 
+    # config.yaml is parsed once; the Backend tab, the prompt preview and AdminService share the result. A bad file leaves empty sets and a message.
+    app.state.config_profiles, app.state.config_roles, app.state.config_error = {}, {}, None
+    app.state.config_models, app.state.config_limits = {}, {}
+    try:
+        raw = {}
+        if Path(config_path).exists():
+            raw = yaml.safe_load(Path(config_path).read_text(encoding="utf-8")) or {}
+        models, limits = raw.get("models") or {}, raw.get("limits") or {}
+        if not isinstance(models, dict) or not isinstance(limits, dict):
+            raise TypeError("models and limits must be mappings")
+        app.state.config_profiles, app.state.config_roles = profiles_from_models(models)
+        app.state.config_models, app.state.config_limits = models, limits
+    except (ValueError, OSError, yaml.YAMLError, TypeError, AttributeError) as error:
+        app.state.config_profiles, app.state.config_roles = {}, {}
+        app.state.config_error = str(error) if isinstance(error, ValueError) else "the file could not be read"
     app.state.auth = AuthService(app)
     app.state.admin = AdminService(app, config_path)
     discord_get = app.state.auth.discord_get

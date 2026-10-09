@@ -2,8 +2,10 @@
 import asyncio
 import json
 import os
+import tempfile
 import time
 from collections import Counter
+from pathlib import Path
 
 import httpx
 import uvicorn
@@ -41,7 +43,12 @@ def main():
             return httpx.Response(200, json={'id': '900', 'attachments': [{'url': 'https://cdn.discordapp.com/attachments/100/900/image.png?ex=test'}]})
         return httpx.Response(200, json=[{'id': '100', 'name': 'scene', 'type': 0},
             {'id': '200', 'name': 'assets', 'type': 0, 'permission_overwrites': [{'id': '1', 'deny': str(1 << 10)}]}])
-    app = create_app(':memory:', f'https://localhost:{port}', 'test-client', 'test-secret', 'test-token', httpx.AsyncClient(transport=httpx.MockTransport(discord_api)), config_path='tests/nonexistent-config.yaml', operator_ids=frozenset({6}))
+    # D24 step 4: a temp config.yaml with two profiles for the operator Backend tab (the page reads only the models section).
+    config_file = Path(tempfile.mkdtemp()) / 'config.yaml'
+    config_file.write_text(json.dumps({'models': {'dialogue': 'cfg-main', 'director': 'cfg-main', 'memory': 'cfg-main', 'profiles': {
+        'cfg-main': {'provider': 'openai', 'model': 'cfg-model', 'api_key_env': 'FIXTURE_API_KEY', 'context_tokens': 32000},
+        'cfg-second': {'provider': 'compatible', 'model': 'second-model', 'base_url': 'https://models.example/v1', 'context_tokens': 8000}}}}))
+    app = create_app(':memory:', f'https://localhost:{port}', 'test-client', 'test-secret', 'test-token', httpx.AsyncClient(transport=httpx.MockTransport(discord_api)), config_path=str(config_file), operator_ids=frozenset({6}))
     store = app.state.store
     app.state.admin.model_config = {'dialogue': 'fixture', 'director': 'fixture', 'memory': 'fixture', 'profiles': {'fixture': {'model': 'fixture-model'}}}
     from llmcord_core.usage import ModelUsage
@@ -160,6 +167,7 @@ def main():
             'presets': [dict(r) for r in store.list_presets(1)], 'active': store.active_preset(1)['id'],
             'active_bundle': store.active_preset(1)['bundle'], 'assets': [dict(r) for r in store.all('SELECT * FROM avatar_assets')],
             'guild_timezone': store.guild_timezone(1), 'catchup_anywhere': store.catchup_anywhere(1), 'turn_log': store.turn_log_settings(1), 'audit': [dict(r) for r in store.all('SELECT * FROM admin_audit ORDER BY id')],
+            'model_profiles': [dict(r) for r in store.model_profile_rows()], 'model_roles': dict(store.model_roles()),
             'slots': [{'character_id': r['character_id'], 'slot_key': r['slot_key'], 'label': r['label'], 'has_image': bool(r['image'])} for r in store.all('SELECT * FROM avatar_slots')]}
 
     @app.get('/_test/uploads')
@@ -357,6 +365,23 @@ def main():
     async def fail_turn_log_page(n: int = 1):
         # MNT-28: the next `n` turn log list reads raise ValueError (the dashboard shows it as an error toast).
         turn_log_hooks['fail'] = n
+        return {'ok': True}
+
+    @app.post('/_test/backend-profile')
+    async def backend_profile(request: Request):
+        # D24 step 4: create or change a dashboard profile behind the open page's back (stale revision tests).
+        value = await request.json()
+        existing = next((r for r in store.model_profile_rows() if r['name'] == value['name']), None)
+        store.save_model_profile(value['name'], {'provider': 'compatible', 'model': value['model'], 'context_tokens': 1000, 'base_url': 'https://tmp.example/v1'},
+                                 existing['revision'] if existing else None)
+        return {'ok': True}
+
+    @app.post('/_test/backend-reset')
+    async def backend_reset():
+        # Drop every dashboard profile and role assignment (cleanup after the Backend tab tests).
+        store.save_model_roles({'dialogue': None, 'director': None, 'memory': None}, store.model_roles()['revision'], set(app.state.config_profiles))
+        for profile in store.model_profile_rows():
+            store.delete_model_profile(profile['name'], profile['revision'], set(app.state.config_profiles))
         return {'ok': True}
 
     @app.post('/_test/stop')
