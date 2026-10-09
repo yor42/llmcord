@@ -742,7 +742,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.goto(url)
             page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
             errors = page.watched_errors
-            if attempt == 2 or not (page.failed_assets and errors and all(e.startswith("SecurityError: Failed to read the 'cssRules'") for e in errors)):
+            if attempt == 2 or not (page.failed_assets and errors and all("Failed to read the 'cssRules'" in e for e in errors)):
                 return
             errors.clear()
             page.failed_assets.clear()
