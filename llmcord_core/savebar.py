@@ -172,15 +172,23 @@ class SaveBar:
             if inspect.isawaitable(followup):
                 await followup
 
+    def _warn(self, message):
+        from nicegui import ui
+        ui.notify(message, type='warning', timeout=8000)
+
     async def _save_parts(self, editor):
         saved = {id(control): value for control, value in editor.controls}
         results = []
-        for part in editor.parts:
+        for index, part in enumerate(editor.parts):
             sent = {control: control.value for control in part.controls}
             if all(_same(value, saved[id(control)]) for control, value in sent.items()):
                 continue
             ok, result = await self.ctx._attempt(part.operation, part.action, part.detail)
             if not ok:
+                later = [p for p in editor.parts[index + 1:]
+                         if any(not _same(control.value, saved[id(control)]) for control in p.controls)]
+                if later:
+                    self._warn('Your other changes were not saved. They are still pending.')
                 return False, None
             results.append(result)
             editor.controls = [(control, sent[control] if control in sent else value) for control, value in editor.controls]

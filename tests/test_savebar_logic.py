@@ -146,7 +146,8 @@ class SaveBarPartsTests(unittest.IsolatedAsyncioTestCase):
         for field in self.fields:
             field.set_value(field.value + '2')
         self.fail = {'y'}
-        await self.bar.save()
+        with mock.patch('nicegui.ui.notify'):
+            await self.bar.save()
         self.assertEqual([call[0] for call in self.calls], ['x', 'y'])
         self.assertIs(self.bar.active, self.editor)
         self.assertEqual(self.notes, [])
@@ -179,6 +180,20 @@ class SaveBarPartsTests(unittest.IsolatedAsyncioTestCase):
         await self.bar.save()
         self.assertIs(self.bar.active, self.editor)
         self.assertEqual(self.notes, [['r-x', 'r-y']])
+
+    async def test_failure_toast_says_later_changes_are_pending(self):
+        """UI-42: a failed part tells the user the later changed parts were not saved; no extra toast when none are pending."""
+        self.fields[0].set_value('a2')
+        self.fields[1].set_value('b2')
+        self.fail = {'x'}
+        with mock.patch('nicegui.ui.notify') as notify:
+            await self.bar.save()
+        notify.assert_called_once_with('Your other changes were not saved. They are still pending.', type='warning', timeout=8000)
+        self.bar.reset()
+        self.fields[0].set_value('a2')
+        with mock.patch('nicegui.ui.notify') as notify:
+            await self.bar.save()
+        notify.assert_not_called()
 
     async def test_success_toast_on_full_success(self):
         self.editor.success = 'Saved'

@@ -1,6 +1,7 @@
 """Opt-in browser integration tests against a disposable mocked Discord server."""
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -221,7 +222,7 @@ class DashboardBrowserTests(unittest.TestCase):
         world_panel.get_by_label('World guidelines', exact=True).fill('The setting is a courier guild. Treat users as guild members.')
         world_panel.get_by_role('button', name='Save world guidelines', exact=True).click()
         self.wait_for(lambda: any(row['kind'] == 'space' and 'courier guild' in row['content'] for row in self.state()['guidelines']))
-        channel_panel = page.locator('.channel-card').filter(has_text='#scene')
+        channel_panel = page.locator('.channel-card').filter(has=page.locator('.ll-block-name').get_by_text(re.compile(r'^#scene\s*$')))
         channel_panel.locator('button.channel-toggle').click()
         channel_panel.get_by_label('Channel guidelines', exact=True).fill('Occasional fourth-wall jokes are welcome; keep them brief.')
         savebar = page.get_by_role('region', name='Unsaved changes')

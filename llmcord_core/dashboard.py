@@ -20,6 +20,7 @@ from fastapi import HTTPException, Request
 from fastapi.responses import PlainTextResponse
 
 from .auth import guild_icon_url, is_server_admin, user_avatar_url
+from .admin_store import ConflictError
 from .avatars import MAX_AVATAR_BYTES, avatar_version, normalize_avatar
 from .cards import parse_card
 from .icons import icon_css, lucide, lucide_button, more_menu
@@ -279,6 +280,7 @@ body.body--dark .q-tab-panels, body.body--dark .q-tab-panel {{ background: trans
 .ll-block-toggle:hover {{ background: {THEME_CARD_HOVER}; }}
 .ll-block-toggle:focus-visible {{ outline: 2px solid {THEME_PRIMARY}; }}
 .ll-block-name {{ flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }}
+.ll-block-meta .ll-block-missing {{ color: {THEME_NEGATIVE}; }}
 .ll-block-meta {{ display: flex; flex: 0 100 auto; min-width: 0; overflow: hidden; white-space: pre; color: {THEME_TEXT_MUTED}; font-size: 13px; }}
 .ll-block-caret {{ margin: 0 0 0 auto !important; transition: transform .15s; }}
 .ll-block-open .ll-block-caret {{ transform: rotate(180deg); }}
@@ -735,13 +737,51 @@ async def setup_panel(ctx):
             success='Server settings saved')
 
 
+def channel_savers(store, gid, cid, cast_value, ambient_value, cast, ambient):
+    """Save operations for a channel card's default cast and ambient mode, with a stale-overwrite guard (UI-42).
+
+    There is no revision column: each operation re-reads the guild's binding and compares it with the value the card was
+    built from (or last saved), raising ConflictError if it changed elsewhere. The compare and the write run inside
+    store.write_admin() (BEGIN IMMEDIATE), so the bot process cannot write between them. store.execute's own commit ends
+    that transaction after the first UPDATE, which is the one that changes the compared column.
+    """
+    baseline = {'cast': list(cast_value), 'ambient': bool(ambient_value)}
+    def current():
+        row = store.channel(cid)
+        if row is None or row['guild_id'] != gid:
+            raise ConflictError('This channel is no longer bound in Discord. Reload the page and try again.')
+        return row
+    def save_cast():
+        value = list(cast())
+        with store.write_admin():
+            if json.loads(current()['default_cast']) != baseline['cast']:
+                raise ConflictError('Default cast changed in Discord. Reload the page and try again.')
+            store.set_cast(cid, None, value, default=True)
+        baseline['cast'] = list(dict.fromkeys(value))
+        return True
+    def save_ambient():
+        value = bool(ambient())
+        with store.write_admin():
+            if bool(current()['ambient']) != baseline['ambient']:
+                raise ConflictError('Ambient participation changed in Discord. Reload the page and try again.')
+            store.set_ambient(cid, value)
+        baseline['ambient'] = value
+        return True
+    return save_cast, save_ambient
+
+
+def binding_space_name(spaces, space_id):
+    """The bound world or hub's name for a channel summary row, or '' when it no longer exists (UI-42)."""
+    return spaces[space_id].rsplit(' (', 1)[0] if space_id in spaces else ''
+
+
 def channel_card(ctx, binding, channel_names, spaces):
     """One channel binding: a collapsed summary row that expands to a single save-bar editor (guidelines, cast, ambient)."""
     from nicegui import ui
     store, gid = ctx.store, ctx.guild_id
     cid = binding['channel_id']
     name = channel_names.get(cid, str(cid))
-    space_name = spaces.get(binding['space_id'], '').rsplit(' (', 1)[0]
+    space_name = binding_space_name(spaces, binding['space_id'])
     with ui.card().classes('w-full channel-card ll-stack ll-result') as card:
         with ui.element('div').classes('ll-block-head'):
             toggle = ui.element('button').classes('ll-block-toggle channel-toggle')
@@ -757,7 +797,9 @@ def channel_card(ctx, binding, channel_names, spaces):
         with toggle:
             _span(name + ' ').classes('ll-block-name')
             with ui.element('span').classes('ll-block-meta'):
-                _span(' \u00b7 ' + space_name + ' \u00b7 ')
+                _span(' \u00b7 ')
+                _span(space_name or 'World or hub missing').classes('' if space_name else 'll-block-missing')
+                _span(' \u00b7 ')
                 _span().bind_text_from(cast, 'value', backward=lambda v: f"{len(v or [])} in cast ")
             _span('Ambient').classes('ll-pill').bind_visibility_from(ambient, 'value')
             lucide('chevron-down', '1.25em').classes('ll-icon-solo ll-block-caret')
@@ -773,12 +815,8 @@ def channel_card(ctx, binding, channel_names, spaces):
         result = store.save_guidelines(gid, 'channel', cid, control.value or '', revision['n'])
         revision['n'] = store.guidelines(gid, 'channel', cid)['revision']
         return result
-    def save_cast():
-        store.set_cast(cid, None, cast.value or [], default=True)
-        return True
-    def save_ambient():
-        store.set_ambient(cid, ambient.value)
-        return True
+    save_cast, save_ambient = channel_savers(store, gid, cid, saved_cast, binding['ambient'],
+                                             lambda: cast.value or [], lambda: ambient.value)
     ctx.savebar.track(name, {}, parts=[
         {'controls': {control: current['content']}, 'operation': save_guidelines, 'action': 'guidelines.edit',
          'detail': {'kind': 'channel', 'id': cid}},
