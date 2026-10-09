@@ -284,6 +284,12 @@ body.body--dark .q-tab-panels, body.body--dark .q-tab-panel {{ background: trans
 .q-field--outlined .q-field__control:after {{ border-radius: 8px; }}
 .ll-tabs .q-tabs__arrow--left, .ll-tabs .q-tabs__arrow--right {{ color: {THEME_TEXT_MUTED}; }}
 @media (max-width: 599px) {{
+.prompt-toggle {{ display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; column-gap: 8px; }}
+.prompt-toggle .ll-block-name {{ grid-column: 1; grid-row: 1; }}
+.prompt-toggle .ll-block-meta {{ grid-column: 1; grid-row: 2; }}
+.prompt-toggle .ll-pill {{ grid-column: 2; grid-row: 1 / span 2; }}
+.prompt-toggle .ll-block-caret {{ grid-column: 3; grid-row: 1 / span 2; }}
+.prompt-handle {{ box-sizing: content-box; padding: 11.25px; margin: -11.25px -2px -11.25px -11.25px; touch-action: none; }}
 .ll-tabs .q-tabs__arrow, .ll-tabs .q-tabs__arrow--faded {{ display: none; }}
 .ll-tabs .q-tabs__content {{ flex-wrap: wrap; overflow: visible; }}
 .ll-tabs .q-tab {{ flex: 0 0 auto; padding: 0 12px; min-height: 40px; }}
@@ -1363,7 +1369,7 @@ def _preset_editor(ctx, state, purpose, collect):
             return control
         blocks = state['bundle']['purposes'].setdefault(purpose.value, copy.deepcopy(default_bundle()['purposes'][purpose.value]))
         with ui.column().classes('w-full gap-4') as ordered:
-            for b in blocks:
+            for position, b in enumerate(blocks):
                 with ui.card().classes('w-full prompt-block ll-stack ll-result') as card:
                     card.prompt_id = b['id']
                     key = (purpose.value, b['id'])  # block ids repeat across purposes
@@ -1390,8 +1396,23 @@ def _preset_editor(ctx, state, purpose, collect):
                                 blocks.remove(b)
                                 state['open_blocks'].discard(key)
                                 render_editor.refresh()
+                        async def move(delta, b=b):
+                            # same path as a drag: collect the fields, reorder the list, re-render (the save bar sees the new order)
+                            if await ctx.run(lambda: True):
+                                collect()
+                                at = blocks.index(b)
+                                if 0 <= at + delta < len(blocks):
+                                    blocks.insert(at + delta, blocks.pop(at))
+                                render_editor.refresh()
                         with more_menu(b['name'] or 'Untitled block') as menu:
                             more_button = menu.parent_slot.parent
+                            up = ui.menu_item('Move up', on_click=lambda b=b: move(-1, b)).props('role=menuitem')
+                            down = ui.menu_item('Move down', on_click=lambda b=b: move(1, b)).props('role=menuitem')
+                            if position == 0:
+                                up.props('disable')
+                            if position == len(blocks) - 1:
+                                down.props('disable')
+                            ui.separator()
                             ui.menu_item('Remove block', on_click=remove).classes('text-negative').props('role=menuitem')
                     body = ui.element('div').classes('ll-stack w-full')
                     if not opened:

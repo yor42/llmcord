@@ -1464,6 +1464,84 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def block_names(self, page):
+        return [t.strip() for t in page.locator('.prompt-block .ll-block-name').all_inner_texts()]
+
+    def test_prompt_block_menu_lists_move_and_remove_in_order(self):
+        """UI-36: each block's menu holds Move up, Move down, Remove block; Move up is disabled on the first block and Move down on the last."""
+        from playwright.sync_api import expect
+        context, page, errors = self.ux_page('/admin/guild/1?tab=prompts')
+        try:
+            cards = page.locator('.prompt-block')
+            cards.first.wait_for(timeout=5000)
+            self.assertGreaterEqual(cards.count(), 2)
+            names = self.block_names(page)
+            items = page.get_by_role('menuitem')
+
+            def open_menu(index):
+                button = cards.nth(index).get_by_role('button', name=f'More actions for {names[index]}', exact=True)
+                button.click()
+                items.first.wait_for(timeout=5000)
+
+            open_menu(0)
+            self.assertEqual([t.strip() for t in items.all_inner_texts()], ['Move up', 'Move down', 'Remove block'])
+            expect(page.get_by_role('menuitem', name='Move up', exact=True)).to_be_disabled()
+            expect(page.get_by_role('menuitem', name='Move down', exact=True)).to_be_enabled()
+            expect(page.get_by_role('menuitem', name='Remove block', exact=True)).to_be_enabled()
+            page.keyboard.press('Escape')
+            items.first.wait_for(state='hidden')
+            open_menu(len(names) - 1)
+            expect(page.get_by_role('menuitem', name='Move down', exact=True)).to_be_disabled()
+            expect(page.get_by_role('menuitem', name='Move up', exact=True)).to_be_enabled()
+            page.keyboard.press('Escape')
+            self.assertFalse(page.get_by_role('region', name='Unsaved changes').count())
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_prompt_block_move_down_reorders_and_reset_restores(self):
+        """UI-36: Move down swaps the first two blocks, raises the save bar, and Reset restores the order without touching the stored preset."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=prompts')
+        try:
+            cards = page.locator('.prompt-block')
+            cards.first.wait_for(timeout=5000)
+            bar = page.get_by_role('region', name='Unsaved changes')
+            before_presets = self.state()['presets']
+            original = self.block_names(page)
+            self.assertGreaterEqual(len(original), 2)
+            self.open_more_item(page, cards.first, original[0], 'Move down')
+            expected = [original[1], original[0]] + original[2:]
+            self.wait_for(lambda: self.block_names(page) == expected)
+            bar.wait_for(timeout=5000)
+            bar.get_by_text('has unsaved changes.', exact=False).wait_for()
+            self.assertEqual(self.state()['presets'], before_presets)
+            bar.get_by_role('button', name='Reset', exact=True).click()
+            bar.wait_for(state='hidden')
+            self.wait_for(lambda: self.block_names(page) == original)
+            self.assertEqual(self.state()['presets'], before_presets)
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_prompt_block_rows_fit_phone_width(self):
+        """UI-36: at 390 px a block's summary sits on a second line under its name and the drag handle has a >= 40 px hit area."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=prompts')
+        try:
+            page.set_viewport_size({'width': 390, 'height': 844})
+            row = page.locator('.prompt-block').first.locator('.prompt-toggle')
+            row.wait_for(timeout=5000)
+            name = row.locator('.ll-block-name').bounding_box()
+            meta = row.locator('.ll-block-meta').bounding_box()
+            self.assertGreaterEqual(meta['y'], name['y'] + name['height'] - 1, (name, meta))
+            handle = page.locator('.prompt-block').first.locator('.prompt-handle').bounding_box()
+            # measured 40 x 40 (1.25em icon + 11.25 px padding each side = 40 px)
+            self.assertGreaterEqual(handle['width'], 39.5, handle)
+            self.assertGreaterEqual(handle['height'], 39.5, handle)
+            self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'))
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
     def test_prompt_selects_show_labels_and_export_leave_out_works(self):
         """UI-24: block Placement shows a readable label (stored value unchanged) and Export's "Leave out blocks" select drops the chosen block from the SillyTavern JSON."""
         from playwright.sync_api import expect
@@ -2032,6 +2110,30 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def test_more_menu_hides_tooltip_and_keyboard_returns_focus(self):
+        """UI-39: no "More actions" tooltip stays over the open menu; Tab, Enter opens it, Escape closes it and focus returns to the button."""
+        context, page, errors, card, description = self.open_alice()
+        try:
+            button = card.get_by_role('button', name='More actions for Alice', exact=True)
+            button.hover()
+            page.locator('.q-tooltip', has_text='More actions').wait_for(state='visible', timeout=5000)
+            button.click()
+            page.get_by_role('menuitem', name='Archive', exact=True).wait_for(timeout=5000)
+            page.wait_for_timeout(500)
+            self.assertEqual(page.locator('.q-tooltip:visible', has_text='More actions').count(), 0)
+            page.keyboard.press('Escape')
+            page.get_by_role('menuitem', name='Archive', exact=True).wait_for(state='hidden', timeout=5000)
+            page.mouse.move(0, 0)
+            button.focus()
+            page.keyboard.press('Enter')
+            page.get_by_role('menuitem', name='Archive', exact=True).wait_for(timeout=5000)
+            page.keyboard.press('Escape')
+            page.get_by_role('menuitem', name='Archive', exact=True).wait_for(state='hidden', timeout=5000)
+            self.assertEqual(page.evaluate('() => document.activeElement && document.activeElement.getAttribute("aria-label")'), 'More actions for Alice')
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
     def test_savebar_name_edit_shows_saved_name(self):
         """MNT-21: editing Name shows the bar with the SAVED name, not the edited one."""
         context, page, errors, card, description = self.open_alice()
@@ -2086,27 +2188,3 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertFalse(errors, errors)
         finally:
             context.close()
-    def test_more_menu_hides_tooltip_and_keyboard_returns_focus(self):
-        """UI-39: no "More actions" tooltip stays over the open menu; Tab, Enter opens it, Escape closes it and focus returns to the button."""
-        context, page, errors, card, description = self.open_alice()
-        try:
-            button = card.get_by_role('button', name='More actions for Alice', exact=True)
-            button.hover()
-            page.locator('.q-tooltip', has_text='More actions').wait_for(state='visible', timeout=5000)
-            button.click()
-            page.get_by_role('menuitem', name='Archive', exact=True).wait_for(timeout=5000)
-            page.wait_for_timeout(500)
-            self.assertEqual(page.locator('.q-tooltip:visible', has_text='More actions').count(), 0)
-            page.keyboard.press('Escape')
-            page.get_by_role('menuitem', name='Archive', exact=True).wait_for(state='hidden', timeout=5000)
-            page.mouse.move(0, 0)
-            button.focus()
-            page.keyboard.press('Enter')
-            page.get_by_role('menuitem', name='Archive', exact=True).wait_for(timeout=5000)
-            page.keyboard.press('Escape')
-            page.get_by_role('menuitem', name='Archive', exact=True).wait_for(state='hidden', timeout=5000)
-            self.assertEqual(page.evaluate('() => document.activeElement && document.activeElement.getAttribute("aria-label")'), 'More actions for Alice')
-            self.assertFalse(errors, errors)
-        finally:
-            context.close()
-
