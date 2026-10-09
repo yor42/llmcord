@@ -227,6 +227,15 @@ body.body--dark .q-tab-panels, body.body--dark .q-tab-panel {{ background: trans
 .ll-card-header {{ display: flex; align-items: center; width: 100%; min-width: 0; }}
 .ll-card-title {{ flex: 1 1 auto; min-width: 0; font-weight: 500; }}
 .ll-more {{ margin-right: 4px; }}
+.ll-block-head {{ display: flex; align-items: center; gap: 8px; width: 100%; min-width: 0; }}
+.ll-block-toggle {{ flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 6px 4px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; border-radius: 8px; }}
+.ll-block-toggle:hover {{ background: {THEME_CARD_HOVER}; }}
+.ll-block-toggle:focus-visible {{ outline: 2px solid {THEME_PRIMARY}; }}
+.ll-block-name {{ flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }}
+.ll-block-meta {{ display: flex; flex: 0 100 auto; min-width: 0; overflow: hidden; white-space: pre; color: {THEME_TEXT_MUTED}; font-size: 13px; }}
+.ll-block-caret {{ margin: 0 0 0 auto !important; transition: transform .15s; }}
+.ll-block-open .ll-block-caret {{ transform: rotate(180deg); }}
+.ll-collapsed {{ display: none !important; }}
 .q-card {{ border-radius: 12px; }}
 .q-btn, .q-tab {{ text-transform: none; }}
 .q-field--outlined .q-field__control {{ background: {THEME_BODY}; border-radius: 8px; }}
@@ -1088,6 +1097,7 @@ def presets_panel(ctx):
             return
         chosen = next((r for r in store.list_presets(gid) if r['id'] == select.value), None)
         state.update(id=select.value, revision=chosen['revision'] if chosen else 0, bundle=bundle)
+        state.get('open_blocks', set()).clear()
         name.value = chosen['name'] if chosen else 'Default copy'
         adopt(chosen['name'] if chosen else 'Built-in default')
 
@@ -1153,6 +1163,7 @@ def presets_panel(ctx):
     def imported(bundle):
         editor.name = state['label'] = 'Imported preset'
         state.update(id=0, revision=0, bundle=bundle)
+        state.get('open_blocks', set()).clear()
         select.value = 0
         name.value = 'Imported preset'
         render_editor.refresh()
@@ -1172,6 +1183,12 @@ def _read_button(ctx, text, operation):
     return ui.button(text, on_click=clicked)
 
 
+def _span(text=''):
+    """An inline text element (``ui.label`` renders a div, which a button may not contain)."""
+    from nicegui.elements.mixins.text_element import TextElement
+    return TextElement(tag='span', text=text)
+
+
 def _preset_editor(ctx, state, purpose, collect):
     from nicegui import ui
 
@@ -1187,32 +1204,68 @@ def _preset_editor(ctx, state, purpose, collect):
             for b in blocks:
                 with ui.card().classes('w-full prompt-block ll-stack ll-result') as card:
                     card.prompt_id = b['id']
-                    with ui.element('div').classes('ll-form-row'):
+                    key = (purpose.value, b['id'])  # block ids repeat across purposes
+                    opened = key in state.setdefault('open_blocks', set())
+                    if opened:
+                        card.classes('ll-block-open')
+                    with ui.element('div').classes('ll-block-head'):
                         lucide('grip-vertical', '1.25em').classes('prompt-handle cursor-grab self-center ll-icon-solo')
-                        tracked(ui.input('Block name')).bind_value(b, 'name')
-                        tracked(ui.switch('Enabled')).bind_value(b, 'enabled')
-                    ui.label('Stable ID: ' + b['id']).classes('ll-muted')
-                    sources = list(dict.fromkeys(sorted(SOURCES) + [b['source']]))
-                    tracked(ui.select(sources, label='Context source')).bind_value(b, 'source').classes('w-full')
-                    tracked(ui.textarea('Prompt text / template')).bind_value(b, 'content').classes('w-full').props('rows=6')
-                    with ui.element('div').classes('ll-form-row'):
-                        tracked(ui.select(['system', 'user', 'assistant'], label='Role')).bind_value(b, 'role')
-                        tracked(ui.select(['relative', 'in_chat'], label='Placement')).bind_value(b, 'placement')
-                        tracked(ui.number('Depth', precision=0)).bind_value(b, 'depth', backward=lambda v: int(v or 0)).props('outlined dense')
-                        tracked(ui.number('Injection order', precision=0)).bind_value(b, 'order', backward=lambda v: int(v or 0)).props('outlined dense')
-                        tracked(ui.number('Trimming priority', precision=0)).bind_value(b, 'priority', backward=lambda v: int(v or 0)).props('outlined dense')
-                    tracked(ui.select({'': 'Exact placement', 'top_system': 'Move to top-level system instructions', 'user': 'Convert late system block to user instructions'}, label='System instruction placement')).bind_value(b, 'adaptation').classes('w-full')
-                    with ui.expansion('Preserved import fields and compatibility remapping').classes('w-full ll-subpanel'), ui.element('div').classes('ll-stack'):
-                        raw = tracked(ui.textarea('Original prompt fields (JSON)', value=pretty(b['raw']))).classes('w-full').props('rows=6')
-                        state['raw_controls'][b['id']] = (b, raw)
-                        ui.label('To remap triggers/extensions: clear injection_trigger and set extension to false.').classes('ll-muted')
-                    async def remove(b=b):
-                        if await ctx.run(lambda: True):
-                            collect()
-                            blocks.remove(b)
-                            render_editor.refresh()
-                    with ui.element('div').classes('ll-form-row'):
-                        ui.button('Remove block', on_click=remove, color='negative')
+                        toggle = ui.element('button').classes('ll-block-toggle prompt-toggle')
+                        toggle.props['type'] = 'button'
+                        toggle.props['aria-expanded'] = 'true' if opened else 'false'
+                        with toggle:
+                            # phrasing content only (a <button> cannot hold divs); trailing spaces keep the accessible name readable
+                            _span().classes('ll-block-name').bind_text_from(b, 'name', backward=lambda v: (v or 'Untitled block') + ' ')
+                            with ui.element('span').classes('ll-block-meta'):
+                                _span().bind_text_from(b, 'role')
+                                _span(' \u00b7 ')
+                                _span().bind_text_from(b, 'placement', backward=lambda v: f'{v} ')
+                            _span('Disabled').classes('ll-pill ll-pill-off').bind_visibility_from(b, 'enabled', backward=lambda v: not v)
+                            lucide('chevron-down', '1.25em').classes('ll-icon-solo ll-block-caret')
+                        async def remove(b=b, key=key):
+                            if await ctx.run(lambda: True):
+                                collect()
+                                blocks.remove(b)
+                                state['open_blocks'].discard(key)
+                                render_editor.refresh()
+                        with more_menu(b['name'] or 'Untitled block') as menu:
+                            more_button = menu.parent_slot.parent
+                            ui.menu_item('Remove block', on_click=remove).classes('text-negative').props('role=menuitem')
+                    body = ui.element('div').classes('ll-stack w-full')
+                    if not opened:
+                        body.classes('ll-collapsed')
+                    def flip(card=card, toggle=toggle, body=body, bid=key):
+                        open_ids = state['open_blocks']
+                        now_open = bid not in open_ids
+                        (open_ids.add if now_open else open_ids.discard)(bid)
+                        card.classes(add='ll-block-open') if now_open else card.classes(remove='ll-block-open')
+                        body.classes(remove='ll-collapsed') if now_open else body.classes(add='ll-collapsed')
+                        toggle.props['aria-expanded'] = 'true' if now_open else 'false'
+                        toggle.update()
+                    toggle.on('click', flip)
+                    with body:
+                        with ui.element('div').classes('ll-form-row'):
+                            name_input = tracked(ui.input('Block name')).bind_value(b, 'name')
+                            def rename(event, button=more_button):
+                                button.props['aria-label'] = f"More actions for {event.value or 'Untitled block'}"
+                                button.update()
+                            name_input.on_value_change(rename)
+                            tracked(ui.switch('Enabled')).bind_value(b, 'enabled')
+                        ui.label('Stable ID: ' + b['id']).classes('ll-muted')
+                        sources = list(dict.fromkeys(sorted(SOURCES) + [b['source']]))
+                        tracked(ui.select(sources, label='Context source')).bind_value(b, 'source').classes('w-full')
+                        tracked(ui.textarea('Prompt text / template')).bind_value(b, 'content').classes('w-full').props('rows=6')
+                        with ui.element('div').classes('ll-form-row'):
+                            tracked(ui.select(['system', 'user', 'assistant'], label='Role')).bind_value(b, 'role')
+                            tracked(ui.select(['relative', 'in_chat'], label='Placement')).bind_value(b, 'placement')
+                            tracked(ui.number('Depth', precision=0)).bind_value(b, 'depth', backward=lambda v: int(v or 0)).props('outlined dense')
+                            tracked(ui.number('Injection order', precision=0)).bind_value(b, 'order', backward=lambda v: int(v or 0)).props('outlined dense')
+                            tracked(ui.number('Trimming priority', precision=0)).bind_value(b, 'priority', backward=lambda v: int(v or 0)).props('outlined dense')
+                        tracked(ui.select({'': 'Exact placement', 'top_system': 'Move to top-level system instructions', 'user': 'Convert late system block to user instructions'}, label='System instruction placement')).bind_value(b, 'adaptation').classes('w-full')
+                        with ui.expansion('Preserved import fields and compatibility remapping').classes('w-full ll-subpanel'), ui.element('div').classes('ll-stack'):
+                            raw = tracked(ui.textarea('Original prompt fields (JSON)', value=pretty(b['raw']))).classes('w-full').props('rows=6')
+                            state['raw_controls'][b['id']] = (b, raw)
+                            ui.label('To remap triggers/extensions: clear injection_trigger and set extension to false.').classes('ll-muted')
             async def reordered(event):
                 if await ctx.run(lambda: True):
                     collect()
@@ -1224,7 +1277,9 @@ def _preset_editor(ctx, state, purpose, collect):
             if await ctx.run(lambda: True):
                 collect()
                 import uuid
-                blocks.append(block('custom-' + uuid.uuid4().hex[:8]))
+                fresh = block('custom-' + uuid.uuid4().hex[:8])
+                blocks.append(fresh)
+                state.setdefault('open_blocks', set()).add((purpose.value, fresh['id']))
                 render_editor.refresh()
         with ui.element('div').classes('ll-form-row'):
             ui.button('Add prompt block', on_click=add).props('outline')

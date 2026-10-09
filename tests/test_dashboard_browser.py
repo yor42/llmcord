@@ -415,6 +415,7 @@ class DashboardBrowserTests(unittest.TestCase):
         page.get_by_text('0 selected', exact=True).wait_for()
 
         page.get_by_role('tab', name='Prompt presets', exact=True).click()
+        page.locator('.prompt-toggle').first.click()
         page.get_by_label('Prompt text / template', exact=True).first.fill('Respond as {{char}}. Browser custom instructions.')
         page.get_by_label('Prompt text / template', exact=True).first.press('Tab')
         cards = page.locator('.prompt-block')
@@ -1084,6 +1085,7 @@ class DashboardBrowserTests(unittest.TestCase):
         try:
             bar = page.get_by_role('region', name='Unsaved changes')
             field = page.get_by_label('Prompt text / template', exact=True).first
+            page.locator('.prompt-toggle').first.click()
             field.wait_for(timeout=5000)
             page.get_by_label('Preset name', exact=True).fill('Bar preset')
             self.open_more_item(page, page, 'preset', 'Save as new preset')
@@ -1123,6 +1125,67 @@ class DashboardBrowserTests(unittest.TestCase):
             dialog.wait_for(timeout=5000)
             dialog.get_by_role('button', name='Delete preset', exact=True).click()
             self.wait_for(lambda: not any(r['name'] == 'Bar preset' for r in self.state()['presets']))
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_prompt_blocks_are_collapsed_rows_with_live_summary(self):
+        """UI-23: prompt blocks start collapsed, toggle by keyboard, keep their summary live, stay open across re-renders and remove via the menu."""
+        import re
+        from playwright.sync_api import expect
+        context, page, errors = self.ux_page('/admin/guild/1?tab=prompts')
+        try:
+            cards = page.locator('.prompt-block')
+            cards.first.wait_for(timeout=5000)
+            first = cards.first
+            toggle = first.locator('.prompt-toggle')
+            field = first.get_by_label('Prompt text / template', exact=True)
+            bar = page.get_by_role('region', name='Unsaved changes')
+            self.assertEqual(toggle.get_attribute('aria-expanded'), 'false')
+            self.assertFalse(field.is_visible())
+            toggle.focus()
+            page.keyboard.press('Enter')
+            field.wait_for(timeout=5000)
+            self.assertEqual(toggle.get_attribute('aria-expanded'), 'true')
+            expect(first.get_by_role('button', name=re.compile(r'system\s+\u00b7\s+relative'))).to_have_class(re.compile('prompt-toggle'))
+            name = first.get_by_label('Block name', exact=True)
+            name.fill('Renamed block')
+            expect(toggle).to_contain_text('Renamed block')
+            expect(first.get_by_role('button', name='More actions for Renamed block', exact=True)).to_be_visible()
+            pill = toggle.locator('.ll-pill-off')
+            enabled = first.get_by_role('switch', name='Enabled', exact=True)
+            expect(enabled).to_be_checked()
+            expect(pill).to_be_hidden()
+            enabled.click()
+            expect(pill).to_have_text('Disabled')
+            enabled.click()
+            expect(pill).to_be_hidden()
+            # a re-render (Purpose away and back) keeps the open block open
+            purpose = page.get_by_label('Purpose', exact=True)
+            purpose.click()
+            page.get_by_role('option', name='Director', exact=True).click()
+            director_toggle = page.locator('.prompt-block').first.locator('.prompt-toggle')
+            expect(director_toggle).not_to_contain_text('Renamed block')
+            # open state is per purpose: Director's block with the same id stays collapsed
+            expect(director_toggle).to_have_attribute('aria-expanded', 'false')
+            purpose.click()
+            page.get_by_role('option', name='Dialogue', exact=True).click()
+            expect(page.locator('.prompt-toggle').first).to_contain_text('Renamed block')
+            toggle = page.locator('.prompt-toggle').first
+            self.assertEqual(toggle.get_attribute('aria-expanded'), 'true')
+            self.assertTrue(page.locator('.prompt-block').first.get_by_label('Prompt text / template', exact=True).is_visible())
+            # Add prompt block appends a new, expanded block
+            count = cards.count()
+            page.get_by_role('button', name='Add prompt block', exact=True).click()
+            expect(cards).to_have_count(count + 1)
+            added = cards.last
+            self.assertEqual(added.locator('.prompt-toggle').get_attribute('aria-expanded'), 'true')
+            self.assertTrue(added.get_by_label('Prompt text / template', exact=True).is_visible())
+            # Remove block via the menu drops that block and raises the save bar
+            added_name = added.get_by_label('Block name', exact=True).input_value() or 'Untitled block'
+            self.open_more_item(page, added, added_name, 'Remove block')
+            expect(cards).to_have_count(count)
+            bar.wait_for(timeout=5000)
             self.assertFalse(errors, (errors, getattr(page, 'network', [])))
         finally:
             context.close()
