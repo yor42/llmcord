@@ -271,6 +271,63 @@ class RecordingTurnTests(TurnLogBase):
         self.assertEqual(stages['catchup · catchup']['status'], 'error')
 
 
+class FailureWordingTests(TurnLogBase):
+    DASHBOARD = 'An admin can find details in the dashboard under Monitoring → Log.'
+    BOT_LOG = 'An admin can find details in the bot log.'
+
+    async def command_error_text(self):
+        from discord import app_commands
+        it = FakeInteraction(guild_id=1)
+        cmd = SimpleNamespace(name='x', qualified_name='admin x')
+        await self.bot.tree.on_error(it, app_commands.CommandInvokeError(cmd, RuntimeError('boom')))
+        return it.replies[0]
+
+    async def test_scene_failure_points_to_the_dashboard_when_the_log_is_on(self):
+        """UI-27: with the turn log on, the public failure notice names Monitoring → Log."""
+        self.store.set_turn_log(1, True, 14)
+        self.fail_dialogue = RuntimeError('provider exploded')
+        channel = await self.turn()
+        self.assertIn('(ref ', channel.errors[0])
+        self.assertTrue(channel.errors[0].endswith(self.DASHBOARD), channel.errors[0])
+
+    async def test_scene_failure_keeps_bot_log_wording_when_the_log_is_off(self):
+        """UI-27: with the turn log off, the public failure notice still points at the bot log."""
+        self.fail_dialogue = RuntimeError('provider exploded')
+        channel = await self.turn()
+        self.assertTrue(channel.errors[0].endswith(self.BOT_LOG), channel.errors[0])
+
+    async def test_scene_failure_still_posts_when_the_setting_read_raises(self):
+        """UI-27: a failing setting read falls back to bot-log wording and the notice still posts."""
+        self.store.set_turn_log(1, True, 14)
+        self.fail_dialogue = RuntimeError('provider exploded')
+        with patch.object(self.store, 'turn_log_settings', side_effect=RuntimeError('db gone')):
+            channel = await self.turn()
+        self.assertEqual(len(channel.errors), 1)
+        self.assertTrue(channel.errors[0].endswith(self.BOT_LOG), channel.errors[0])
+
+    async def test_private_internal_error_detail_follows_the_same_choice(self):
+        """UI-27: the private interaction detail for an internal error names Monitoring → Log when the log is on."""
+        self.store.set_turn_log(1, True, 14)
+        self.fail_dialogue = RuntimeError('provider exploded')
+        it = FakeInteraction(guild_id=1)
+        with patch.object(self.bot.engine, 'prepare_dialogue', side_effect=RuntimeError('internal')):
+            await self.bot.run_scene(self.scene(), FakeChannel(100), it)
+        self.assertIn(f'internal error. {self.DASHBOARD}', it.replies[0])
+
+    async def test_command_error_wording(self):
+        """UI-27: command errors name Monitoring → Log only when the log is on; DM, off and read failures keep the old text."""
+        old = 'The error was logged.'
+        self.assertTrue((await self.command_error_text()).endswith(old))
+        self.store.set_turn_log(1, True, 14)
+        self.assertTrue((await self.command_error_text()).endswith(self.DASHBOARD))
+        with patch.object(self.store, 'turn_log_settings', side_effect=RuntimeError('db gone')):
+            self.assertTrue((await self.command_error_text()).endswith(old))
+        from discord import app_commands
+        dm = FakeInteraction(guild_id=None)
+        await self.bot.tree.on_error(dm, app_commands.CommandInvokeError(SimpleNamespace(name='x', qualified_name='x'), RuntimeError('boom')))
+        self.assertTrue(dm.replies[0].endswith(old))
+
+
 class GatewayLogTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.entries = []

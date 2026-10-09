@@ -532,11 +532,21 @@ class SkitBot(commands.Bot):
             parent_message_id = posted.id
         return parent_message_id
 
+    def _failure_pointer(self, guild_id, fallback="An admin can find details in the bot log.") -> str:
+        # UI-27: point admins at Monitoring → Log only when the turn log is on (so the failure entry exists).
+        try:
+            if guild_id is not None and self.store.turn_log_settings(guild_id)['enabled']:
+                return "An admin can find details in the dashboard under Monitoring → Log."
+        except Exception:
+            pass
+        return fallback
+
     async def _report_scene_failure(self, error, stage, progress, channel, interaction):
         ref = reference_id()
         logging.error('Scene failed during %s [ref %s]: %s\n%s', stage, ref, error_detail(error), error_stack(error))
         self._log_failure(error, ref, stage)
-        failure = f"The character couldn't reply (ref {ref}). An admin can find details in the bot log."
+        pointer = self._failure_pointer(log_attribution()['guild_id'])
+        failure = f"The character couldn't reply (ref {ref}). {pointer}"
         try:
             if progress.message:
                 try:
@@ -550,7 +560,7 @@ class SkitBot(commands.Bot):
             logging.warning('Public failure notice failed [ref %s]: %s', ref, error_detail(post_error))
         if interaction:
             detail = (user_detail(error) if stage in PROVIDER_STAGES
-                      else 'internal error. An admin can find details in the bot log.')
+                      else f'internal error. {pointer}')
             try:
                 await interaction.followup.send(f"Your turn failed during {stage} (ref {ref}): {detail}"[:1900],
                     ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
@@ -1305,7 +1315,8 @@ def _register_error_handler(bot: SkitBot) -> None:
                           ref, error_detail(original), error_stack(original))
             bot._log_failure(original, ref, getattr(getattr(error, 'command', None), 'qualified_name', '?'), guild_id=interaction.guild_id,
                              channel_id=getattr(interaction, 'channel_id', None), feature='command', message_id=getattr(interaction, 'id', None))
-            message = f"Something went wrong (ref {ref}). The error was logged."
+            pointer = bot._failure_pointer(interaction.guild_id, 'The error was logged.')
+            message = f"Something went wrong (ref {ref}). {pointer}"
         if interaction.response.is_done():
             await interaction.followup.send(message[:1900], ephemeral=True)
         else:
