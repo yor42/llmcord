@@ -1468,13 +1468,24 @@ class DashboardBrowserTests(unittest.TestCase):
     def alice_slot(self, page, label):
         """Alice's card with the emotion `label` expanded (the characters tab rebuilds after writes, so this re-opens only what is closed)."""
         card = page.locator('.character-card').filter(has=page.get_by_text('Alice', exact=True)).first
-        header = card.locator('.q-item').filter(has=page.get_by_text(label, exact=True)).first
-        if not header.is_visible():
-            card.get_by_text('Alice', exact=True).first.click()
-            header.wait_for(state='visible')
-        if header.get_attribute('aria-expanded') != 'true':
-            header.click()
-        return card, card.locator('.q-expansion-item').filter(has=page.get_by_text(label, exact=True)).last
+        def attempt():
+            header = card.locator('.q-item').filter(has=page.get_by_text(label, exact=True)).first
+            if not header.is_visible():
+                if not card.get_by_label('Description', exact=True).is_visible():
+                    card.get_by_text('Alice', exact=True).first.click()
+                header.wait_for(state='visible', timeout=3000)
+            if header.get_attribute('aria-expanded', timeout=3000) != 'true':
+                header.click(timeout=5000)
+            return card.locator('.q-expansion-item').filter(has=page.get_by_text(label, exact=True)).last
+        for _ in range(5):
+            try:
+                emotion = attempt()
+                if emotion.locator('input[type=file]').count():
+                    return card, emotion
+            except Exception:
+                pass
+            page.wait_for_timeout(300)
+        return card, attempt()
 
     def ui09_cleanup(self):
         """Best-effort reset of what the UI-09 tests change (extra emotions, 'Audit hub', #scene binding, Alice's fallback avatar)."""
@@ -1579,11 +1590,17 @@ class DashboardBrowserTests(unittest.TestCase):
             # The fallback avatar uses the same scheme.
             def fallback_src():
                 card = page.locator('.character-card').filter(has=page.get_by_text('Alice', exact=True)).first
-                if not card.get_by_text('Fallback static avatar', exact=True).is_visible():
-                    card.get_by_text('Alice', exact=True).first.click()
                 fallback = card.locator('.fallback-avatar')
-                if not fallback.get_by_text('Used when the selected emotion', exact=False).is_visible():
-                    card.get_by_text('Fallback static avatar', exact=True).click()
+                for _ in range(10):
+                    try:
+                        if not card.get_by_label('Description', exact=True).is_visible():
+                            card.get_by_text('Alice', exact=True).first.click(timeout=3000)
+                        if not fallback.get_by_text('Used when the selected emotion', exact=False).is_visible():
+                            card.get_by_text('Fallback static avatar', exact=True).click(timeout=3000)
+                        fallback.get_by_text('Used when the selected emotion', exact=False).wait_for(state='visible', timeout=3000)
+                        break
+                    except Exception:
+                        page.wait_for_timeout(300)
                 return card, fallback
             card, fallback = fallback_src()
             fallback.locator('input[type=file]').set_input_files(self.png('green'))
