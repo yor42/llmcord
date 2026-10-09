@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
+import os
 import sqlite3
 import time
 import re
@@ -27,7 +29,7 @@ from .names import resolve, resolve_space, suggest
 from .store import Store
 from .avatars import emotion_stream
 from .errors import error_detail, error_stack, reference_id, user_detail
-from .usage import capture_usage, reply_footer
+from .usage import capture_usage, log_attribution, log_purpose, log_scope, mask_for_log, reply_footer
 from .identity import discord_identity, message_context
 
 AVATAR_ASSET_CHECK_TTL = 600
@@ -76,7 +78,7 @@ class SkitBot(commands.Bot):
         self.settings = settings
         self.store = Store(settings.database_path)
         self.models = ModelGateway(settings, usage_sink=self.store.record_model_usage,
-                                  budget_gate=self._budget_check)
+                                  budget_gate=self._budget_check, log_sink=self._log_model_call)
         self.engine = Engine(self.store, self.models, settings)
         self.channel_locks: dict[int, asyncio.Lock] = {}
         self.catchup_used: dict[tuple[int, int, int], float] = {}
@@ -334,8 +336,34 @@ class SkitBot(commands.Bot):
             if pending:
                 logging.warning('Memory task for channel %s still running after %ss; continuing without it',
                                 channel.id, MEMORY_WAIT_SECONDS)
-        with budget.admit(), capture_usage(scene.guild_id, scene.channel_id, 'ambient' if scene.ambient else 'summon' if scene.forced_character_id is not None else 'reply'):
+        with budget.admit(), log_scope(scene.user_message_id), capture_usage(scene.guild_id, scene.channel_id, 'ambient' if scene.ambient else 'summon' if scene.forced_character_id is not None else 'reply'):
             return await self._run_scene(scene, channel, interaction)
+
+    def _log_entry(self, guild_id, channel_id, message_id, facts, **fields):
+        # A log failure never touches the turn; nothing is rendered unless the server's turn log is on.
+        try:
+            if guild_id is None or not self.store.turn_log_settings(guild_id)['enabled']:
+                return
+            secrets = [os.environ.get(p.api_key_env, '') for p in self.settings.profiles.values() if p.api_key_env]
+            fields = {key: value() if key in ('request_text', 'error_detail') and callable(value) else value for key, value in fields.items()}
+            self.store.add_turn_log(guild_id, channel_id=channel_id, message_id=message_id, masked_facts=facts,
+                                    secret_values=[v for v in secrets if v], **fields)
+        except Exception as error:
+            logging.warning('Turn log entry could not be saved: %s', type(error).__name__)
+
+    def _log_model_call(self, entry):
+        where = log_attribution()
+        self._log_entry(where['guild_id'], where['channel_id'], where['message_id'], where['facts'],
+                        stage=f"{where['feature']} · {where['purpose'] or entry['role']}", profile=entry['profile'], model=entry['model'],
+                        status=entry['status'], error_detail=entry['error_detail'], request_text=entry['render_request'],
+                        response_text=entry['response_text'], input_tokens=entry['input_tokens'], output_tokens=entry['output_tokens'])
+
+    def _log_failure(self, error, ref, stage, *, guild_id=None, channel_id=None, feature=None, message_id=None, facts=()):
+        where = log_attribution()
+        self._log_entry(guild_id if guild_id is not None else where['guild_id'], channel_id if channel_id is not None else where['channel_id'],
+                        message_id if message_id is not None else where['message_id'], [*where['facts'], *facts],
+                        stage=f"{feature or where['feature']} · failed at {stage}", status='error', reference_id=ref,
+                        error_detail=lambda: error_detail(error) + '\n' + error_stack(error))
 
     def _schedule_memory(self, channel_id, scene, completed, preceding, root_id, parent_message_id):
         previous = self.memory_tasks.get(channel_id)
@@ -439,30 +467,30 @@ class SkitBot(commands.Bot):
             stage.name = 'dialogue generation'
             await progress.update(progress.status(f'Streaming **{name}**'))
             with capture_usage() as usage_records:
-                stream = self.models.stream_compiled('dialogue', request)
-                async for event in emotion_stream(stream, slots):
-                    if event.emotion is not None:
-                        emotion = event.emotion
-                        stage.name = 'avatar lookup'
-                        chosen_avatar = await self.resolve_avatar(slots.get(emotion, slots['neutral']))
-                        stage.name = 'webhook delivery'
-                        try:
-                            placeholder = await send_placeholder()
-                        except discord.NotFound:
-                            self._forget_webhook(self._webhook_key(channel, character))
-                            stage.name = 'webhook setup'
-                            webhook = await self._webhook(channel, character)
+                async with contextlib.aclosing(self.models.stream_compiled('dialogue', request)) as stream:
+                    async for event in emotion_stream(stream, slots):
+                        if event.emotion is not None:
+                            emotion = event.emotion
+                            stage.name = 'avatar lookup'
+                            chosen_avatar = await self.resolve_avatar(slots.get(emotion, slots['neutral']))
                             stage.name = 'webhook delivery'
-                            placeholder = await send_placeholder()
-                        stage.name = 'dialogue generation'
-                        continue
-                    pieces.append(event.text)
-                    current = "".join(pieces)
-                    if time.monotonic() - last_edit > 1.2 and len(current) < 1800:
-                        stage.name = 'webhook delivery'
-                        await placeholder.edit(content=current + " ▌", allowed_mentions=discord.AllowedMentions.none())
-                        last_edit = time.monotonic()
-                        stage.name = 'dialogue generation'
+                            try:
+                                placeholder = await send_placeholder()
+                            except discord.NotFound:
+                                self._forget_webhook(self._webhook_key(channel, character))
+                                stage.name = 'webhook setup'
+                                webhook = await self._webhook(channel, character)
+                                stage.name = 'webhook delivery'
+                                placeholder = await send_placeholder()
+                            stage.name = 'dialogue generation'
+                            continue
+                        pieces.append(event.text)
+                        current = "".join(pieces)
+                        if time.monotonic() - last_edit > 1.2 and len(current) < 1800:
+                            stage.name = 'webhook delivery'
+                            await placeholder.edit(content=current + " ▌", allowed_mentions=discord.AllowedMentions.none())
+                            last_edit = time.monotonic()
+                            stage.name = 'dialogue generation'
             line = re.sub(r'<emotion>[^\n]*?</emotion>\s*', '', "".join(pieces)).strip()
             usage = usage_records[-1] if usage_records else None
             footer = reply_footer(model_label, usage) if self.store.usage_footer_enabled(scene.guild_id) else ''
@@ -507,6 +535,7 @@ class SkitBot(commands.Bot):
     async def _report_scene_failure(self, error, stage, progress, channel, interaction):
         ref = reference_id()
         logging.error('Scene failed during %s [ref %s]: %s\n%s', stage, ref, error_detail(error), error_stack(error))
+        self._log_failure(error, ref, stage)
         failure = f"The character couldn't reply (ref {ref}). An admin can find details in the bot log."
         try:
             if progress.message:
@@ -928,7 +957,8 @@ def _register_catchup_command(bot: SkitBot) -> None:
             message = catchup.user_message(user.display_name, catchup.transcript(lines), focus, facts, hours)
             attempted = True
             try:
-                with capture_usage(guild_id, channel.id, 'catchup'):
+                with capture_usage(guild_id, channel.id, 'catchup'), log_scope(getattr(interaction, 'id', None)), log_purpose('catchup'):
+                    mask_for_log(*catchup.fact_variants(facts))
                     text = await bot.models.text('memory', catchup.SYSTEM, [TurnMessage('user', message)],
                                                  max_tokens=catchup.MAX_OUTPUT_TOKENS)
             except budget.BudgetExceeded as error:
@@ -937,6 +967,8 @@ def _register_catchup_command(bot: SkitBot) -> None:
             except Exception as error:
                 ref = reference_id()
                 logging.error('Catchup failed [ref %s]: %s\n%s', ref, error_detail(error), error_stack(error))
+                bot._log_failure(error, ref, 'catchup', guild_id=guild_id, channel_id=channel.id, feature='catchup',
+                                 message_id=getattr(interaction, 'id', None), facts=catchup.fact_variants(facts))
                 return await reply(f"Could not write the catch-up: {user_detail(error)[:300]} (ref {ref})")
         finally:
             if not attempted:
@@ -1271,6 +1303,8 @@ def _register_error_handler(bot: SkitBot) -> None:
             ref = reference_id()
             logging.error('Command %s failed [ref %s]: %s\n%s', getattr(getattr(error, 'command', None), 'qualified_name', '?'),
                           ref, error_detail(original), error_stack(original))
+            bot._log_failure(original, ref, getattr(getattr(error, 'command', None), 'qualified_name', '?'), guild_id=interaction.guild_id,
+                             channel_id=getattr(interaction, 'channel_id', None), feature='command', message_id=getattr(interaction, 'id', None))
             message = f"Something went wrong (ref {ref}). The error was logged."
         if interaction.response.is_done():
             await interaction.followup.send(message[:1900], ephemeral=True)

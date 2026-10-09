@@ -23,6 +23,42 @@ def capture_usage(guild_id=None, channel_id=None, feature=None):
         _capture.reset(token)
 
 
+_log_context = ContextVar('llmcord_turn_log', default=None)
+_log_purpose = ContextVar('llmcord_turn_log_purpose', default='')
+
+
+@contextmanager
+def log_scope(message_id=None):
+    """Turn-log context for one turn: its message id and the shared set of personal facts to mask."""
+    token = _log_context.set((message_id, set()))
+    try:
+        yield
+    finally:
+        _log_context.reset(token)
+
+
+@contextmanager
+def log_purpose(name):
+    token = _log_purpose.set(name)
+    try:
+        yield
+    finally:
+        _log_purpose.reset(token)
+
+
+def mask_for_log(*facts):
+    context = _log_context.get()
+    if context:
+        context[1].update(fact for fact in facts if isinstance(fact, str) and fact.strip())
+
+
+def log_attribution():
+    captured, context = _capture.get(), _log_context.get()
+    return {'guild_id': captured[0] if captured else None, 'channel_id': captured[2] if captured else None,
+            'feature': captured[3] if captured else '', 'message_id': context[0] if context else None,
+            'facts': context[1] if context else set(), 'purpose': _log_purpose.get()}
+
+
 def field(value, name, default=None):
     return value.get(name, default) if isinstance(value, dict) else getattr(value, name, default)
 

@@ -124,6 +124,15 @@ def transcript(lines: list[Line], budget: int = TRANSCRIPT_CHARS) -> str:
     return ('(earlier messages left out)\n' if len(kept) < len(lines) else '') + '\n'.join(kept)
 
 
+def fact_variants(facts: list[str]) -> list[str]:
+    """Every form of the facts that can reach the prompt (as stored, flattened, clipped), so logs can mask them."""
+    out = []
+    for fact in facts[:MAX_FACTS]:
+        shown = _defang(_clip(_flat(fact), FACT_CHARS))
+        out += [fact, _flat(fact), shown, shown.removesuffix('…')]
+    return out
+
+
 def user_message(member: str, body: str, focus: str | None, facts: list[str], hours: int | None) -> str:
     window = 'since the member last spoke here' if hours is None else f'in the last {hours} hour{"s" if hours != 1 else ""}'
     parts = [f"Member: {_defang(_flat(member)[:80])}", f"Window: messages {window}."]

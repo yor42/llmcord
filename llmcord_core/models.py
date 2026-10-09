@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import base64
+import contextlib
+import contextvars
 import json
 import os
 import logging
@@ -9,7 +12,8 @@ from typing import Any, AsyncIterator
 
 from . import budget
 from .config import Settings
-from .usage import collect_usage
+from .errors import error_detail
+from .usage import collect_usage, mask_for_log
 
 
 def validate_result(value, schema):
@@ -49,8 +53,9 @@ class TurnMessage:
 
 
 class ModelGateway:
-    def __init__(self, settings: Settings, usage_sink=None, budget_gate=None):
+    def __init__(self, settings: Settings, usage_sink=None, budget_gate=None, log_sink=None):
         self.settings = settings
+        self.log_sink = log_sink
         self.clients: dict[str, Any] = {}
         self.usage_sink = usage_sink
         self.budget_gate = budget_gate
@@ -66,8 +71,36 @@ class ModelGateway:
         if state is not None and state.hard_reached:
             raise budget.BudgetExceeded(state)
 
-    def _usage(self, profile_name, role, usage):
+    def _entry(self, role, system, messages):
+        profile_name = getattr(self.settings, role)
+        return {'role': role, 'profile': profile_name, 'model': self.settings.profiles[profile_name].model,
+                'system': system, 'messages': messages, 'usage': None, 'raw': None, 'ctx': contextvars.copy_context()}
+
+    @staticmethod
+    def _render(system, messages):
+        parts = [system] if system else []
+        for message in messages:
+            images = ''.join(f'\n[image: {image.media_type}, {len(image.data)} bytes]' for image in message.images)
+            parts.append(f'[{message.role}]\n{message.text}{images}')
+        return '\n\n'.join(parts)
+
+    def _log(self, entry, response='', error=None):
+        if self.log_sink is None:
+            return
+        try:
+            usage = entry['usage']
+            entry['ctx'].run(self.log_sink, {
+                'role': entry['role'], 'profile': entry['profile'], 'model': entry['model'],
+                'render_request': lambda: self._render(entry['system'], entry['messages']), 'response_text': response or '',
+                'input_tokens': usage.input_tokens if usage else None, 'output_tokens': usage.output_tokens if usage else None,
+                'status': 'error' if error else 'ok', 'error_detail': error_detail(error) if error else ''})
+        except Exception as sink_error:
+            logging.warning('Turn log entry could not be saved: %s', type(sink_error).__name__)
+
+    def _usage(self, profile_name, role, usage, entry=None):
         record = collect_usage(profile_name, self.settings.profiles[profile_name], role, usage)
+        if entry is not None:
+            entry['usage'] = record
         if self.usage_sink:
             try:
                 self.usage_sink(record)
@@ -101,8 +134,9 @@ class ModelGateway:
 
     async def stream_compiled(self, role, request):
         system, messages = self.compiled_input(role, request)
-        async for delta in self.stream_text(role, system, messages):
-            yield delta
+        async with contextlib.aclosing(self.stream_text(role, system, messages)) as stream:
+            async for delta in stream:
+                yield delta
 
     async def structured_compiled(self, role, request, schema_name, schema):
         system, messages = self.compiled_input(role, request)
@@ -150,6 +184,16 @@ class ModelGateway:
 
     async def text(self, role: str, system: str, messages: list[TurnMessage], max_tokens: int | None = None) -> str:
         self._check_budget()
+        entry = self._entry(role, system, messages)
+        try:
+            result = await self._text(role, system, messages, max_tokens, entry)
+        except Exception as error:
+            self._log(entry, entry['raw'], error)
+            raise
+        self._log(entry, result)
+        return result
+
+    async def _text(self, role, system, messages, max_tokens, entry) -> str:
         profile_name = getattr(self.settings, role)
         profile = self.settings.profiles[profile_name]
         client = self._client(profile_name)
@@ -157,21 +201,39 @@ class ModelGateway:
         if profile.provider == "openai":
             response = await client.responses.create(model=profile.model, instructions=system,
                 input=self._openai_input(messages), max_output_tokens=limit)
-            self._usage(profile_name, role, getattr(response, 'usage', None))
+            self._usage(profile_name, role, getattr(response, 'usage', None), entry)
             return response.output_text or ""
         if profile.provider == "anthropic":
             response = await client.messages.create(model=profile.model, system=system,
                 messages=self._anthropic_input(messages), max_tokens=limit)
-            self._usage(profile_name, role, getattr(response, 'usage', None))
+            self._usage(profile_name, role, getattr(response, 'usage', None), entry)
             return "".join(block.text for block in response.content if block.type == "text")
         response = await client.chat.completions.create(model=profile.model,
             messages=([{"role": "system", "content": system}] if system else []) + self._chat_input(messages), max_tokens=limit,
             **({"reasoning_effort": profile.reasoning_effort} if profile.reasoning_effort else {}))
-        self._usage(profile_name, role, getattr(response, 'usage', None))
+        self._usage(profile_name, role, getattr(response, 'usage', None), entry)
         return response.choices[0].message.content or ""
 
     async def stream_text(self, role: str, system: str, messages: list[TurnMessage], max_tokens: int | None = None) -> AsyncIterator[str]:
         self._check_budget()
+        entry = self._entry(role, system, messages)
+        pieces, failure = [], None
+        inner = self._stream(role, system, messages, max_tokens, entry)
+        try:
+            async for delta in inner:
+                pieces.append(delta)
+                yield delta
+        except (asyncio.CancelledError, GeneratorExit) as error:
+            failure = RuntimeError(f'stream closed before completion ({type(error).__name__})')
+            raise
+        except Exception as error:
+            failure = error
+            raise
+        finally:
+            await inner.aclose()  # runs the usage recording so the entry carries this call's tokens
+            self._log(entry, ''.join(pieces), failure)
+
+    async def _stream(self, role, system, messages, max_tokens, entry) -> AsyncIterator[str]:
         profile_name = getattr(self.settings, role)
         profile = self.settings.profiles[profile_name]
         client = self._client(profile_name)
@@ -187,7 +249,7 @@ class ModelGateway:
                     if event.type == "response.output_text.delta" and event.delta:
                         yield event.delta
             finally:
-                self._usage(profile_name, role, usage)
+                self._usage(profile_name, role, usage, entry)
         elif profile.provider == "anthropic":
             usage = None
             try:
@@ -197,7 +259,7 @@ class ModelGateway:
                         yield chunk
                     usage = (await stream.get_final_message()).usage
             finally:
-                self._usage(profile_name, role, usage)
+                self._usage(profile_name, role, usage, entry)
         else:
             stream = await client.chat.completions.create(model=profile.model,
                 messages=([{"role": "system", "content": system}] if system else []) + self._chat_input(messages),
@@ -213,10 +275,27 @@ class ModelGateway:
                     if delta:
                         yield delta
             finally:
-                self._usage(profile_name, role, usage)
+                self._usage(profile_name, role, usage, entry)
 
     async def structured(self, role: str, system: str, messages: list[TurnMessage], schema_name: str, schema: dict) -> dict:
         self._check_budget()
+        entry = self._entry(role, system, messages)
+        try:
+            result = await self._structured(role, system, messages, schema_name, schema, entry)
+        except Exception as error:
+            if not entry.get('logged'):
+                self._log(entry, entry['raw'], error)
+            raise
+        if not entry.get('logged'):
+            self._log_result(entry, result)
+        return result
+
+    def _log_result(self, entry, result):
+        if isinstance(result, dict) and isinstance(result.get('personal_facts'), list):
+            mask_for_log(*result['personal_facts'])
+        self._log(entry, json.dumps(result, ensure_ascii=False))
+
+    async def _structured(self, role, system, messages, schema_name, schema, entry) -> dict:
         profile_name = getattr(self.settings, role)
         profile = self.settings.profiles[profile_name]
         client = self._client(profile_name)
@@ -225,16 +304,18 @@ class ModelGateway:
             response = await client.responses.create(model=profile.model, instructions=system,
                 input=self._openai_input(messages), max_output_tokens=limit,
                 text={"format": {"type": "json_schema", "name": schema_name, "schema": schema, "strict": True}})
-            self._usage(profile_name, role, getattr(response, 'usage', None))
+            self._usage(profile_name, role, getattr(response, 'usage', None), entry)
+            entry['raw'] = response.output_text
             return validate_result(json.loads(response.output_text), schema)
         if profile.provider == "anthropic":
             response = await client.messages.create(model=profile.model, system=system,
                 messages=self._anthropic_input(messages), max_tokens=limit,
                 tools=[{"name": schema_name, "description": "Return the requested structured result", "input_schema": schema}],
                 tool_choice={"type": "tool", "name": schema_name})
-            self._usage(profile_name, role, getattr(response, 'usage', None))
+            self._usage(profile_name, role, getattr(response, 'usage', None), entry)
             for block in response.content:
                 if block.type == "tool_use" and block.name == schema_name:
+                    entry['raw'] = json.dumps(block.input, ensure_ascii=False, default=str)
                     return validate_result(block.input, schema)
             raise ValueError("Model returned no structured result")
         if profile.structured_outputs:
@@ -243,21 +324,32 @@ class ModelGateway:
                 max_tokens=limit,
                 response_format={"type": "json_schema", "json_schema": {"name": schema_name, "schema": schema, "strict": True}},
                 **({"reasoning_effort": profile.reasoning_effort} if profile.reasoning_effort else {}))
-            self._usage(profile_name, role, getattr(response, 'usage', None))
+            self._usage(profile_name, role, getattr(response, 'usage', None), entry)
             choice = response.choices[0]
+            entry['raw'] = choice.message.content
             try:
                 return validate_result(json.loads(choice.message.content or ''), schema)
             except (json.JSONDecodeError, ValueError) as error:
                 raise ValueError(f"Model returned invalid {schema_name} JSON (finish reason: {choice.finish_reason})") from error
         instruction = f"{system}\nReturn only JSON matching this schema: {json.dumps(schema)}"
         for attempt in range(2):
-            raw = await self.text(role, instruction, messages, limit)
+            entry['logged'] = True
+            self._check_budget()
+            attempt_entry = self._entry(role, instruction, messages)
+            try:
+                raw = await self._text(role, instruction, messages, limit, attempt_entry)
+            except Exception as error:
+                self._log(attempt_entry, attempt_entry['raw'], error)
+                raise
             try:
                 value = json.loads(raw.strip().removeprefix("```json").removesuffix("```").strip())
                 if isinstance(value, dict):
-                    return validate_result(value, schema)
+                    result = validate_result(value, schema)
+                    self._log_result(attempt_entry, result)
+                    return result
             except (json.JSONDecodeError, ValueError):
                 pass
+            self._log(attempt_entry, raw, ValueError("Compatible model returned invalid JSON") if attempt else None)
             instruction += "\nYour previous result did not match the required JSON schema. Try again."
         raise ValueError("Compatible model returned invalid JSON")
 

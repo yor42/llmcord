@@ -11,6 +11,7 @@ from .models import DIRECTOR_SCHEMA, MEMORY_SCHEMA, ImageInput, ModelGateway, Tu
 from .store import Store
 from .prompts import compile_prompt, time_values
 from .errors import error_detail
+from .usage import log_purpose, mask_for_log
 from .identity import speaker_context, user_line
 
 
@@ -72,12 +73,14 @@ class Engine:
             values['speaker_identity'] = self.identities(scene)
         request = self.compile(scene, purpose, values, images=images, max_tokens=max_tokens)
         role = 'dialogue' if purpose == 'images' else 'memory'
-        return await self.models.text_compiled(role, request, max_tokens)
+        with log_purpose(purpose):
+            return await self.models.text_compiled(role, request, max_tokens)
 
     async def purpose_structured(self, scene, purpose, payload, name, schema):
         request = self.compile(scene, purpose, {'payload': payload, 'speaker_identity': self.identities(scene)}, contract='Return only the required structured result. Output schema: ' + json.dumps(schema))
         role = 'director' if purpose == 'director' else 'memory'
-        return await self.models.structured_compiled(role, request, name, schema)
+        with log_purpose(purpose):
+            return await self.models.structured_compiled(role, request, name, schema)
 
     async def speakers(self, scene: SceneContext) -> list:
         eligible = {row["id"]: row for row in self.eligible(scene)}
@@ -209,6 +212,7 @@ class Engine:
              (row['promoted_from'] is not None or visible(row['source_message_id']))]
         personal = self.store.personal(scene.guild_id, scene.user_id, character["id"]) if self.store.has_consent(scene.guild_id, scene.user_id) else []
         personal = [row for row in personal if visible(row["source_message_id"])]
+        mask_for_log(*(row['content'] for row in personal))
         encounters = self.store.encounters(scene.guild_id, character["id"], character["world_id"])
         if scene.space_id != character["world_id"]:
             encounters += self.store.encounters(scene.guild_id, character["id"], scene.space_id)
