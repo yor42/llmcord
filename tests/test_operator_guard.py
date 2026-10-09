@@ -108,6 +108,22 @@ class OperatorGuardTests(unittest.IsolatedAsyncioTestCase):
         await self.assertStatus(403, self.service.run(self.session, 0, self.operation, "x", {}))
         self.assertEqual(self.ran, [])
 
+    async def test_budget_save_through_run_operator_audits_guild_zero(self):
+        revision = self.store.budget_settings()["revision"]
+        detail = {"soft_cap_usd": 5.0, "hard_cap_usd": 10.0, "reset_day": 15, "channel_notice": True}
+        await self.service.run_operator(self.session, lambda: self.store.save_budget(5.0, 10.0, 15, True, revision), "budget.settings", detail)
+        row = self.audit_rows()[0]
+        self.assertEqual((row["guild_id"], row["action"]), (0, "budget.settings"))
+        self.assertIn('"hard_cap_usd": 10.0', row["detail_json"])
+        self.assertEqual(self.store.budget_settings()["revision"], revision + 1)
+
+    async def test_budget_save_refused_for_non_operator(self):
+        other = install_session(self.app, ident="other", user_id="5")
+        before = dict(self.store.budget_settings())
+        await self.assertStatus(403, self.service.run_operator(other, lambda: self.store.save_budget(1.0, 2.0, 1, False, before["revision"]), "budget.settings", {}))
+        self.assertEqual(dict(self.store.budget_settings()), before)
+        self.assertEqual(self.audit_rows(), [])
+
 
 if __name__ == "__main__":
     unittest.main()

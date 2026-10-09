@@ -31,6 +31,86 @@ from .savebar import SaveBar
 from .scene_ui import confirm_dialog, delete_book_dialog, delete_space_dialog, direct_import_dialog, guideline_editor
 
 
+class OperatorContext:
+    """Live context for the /operator page: every action re-checks the operator allowlist (AdminService.run_operator)."""
+    def __init__(self, app, request):
+        self.service = app.state.admin
+        self.store = self.service.store
+        self.ident = request.cookies.get('llmcord_session', '')
+
+    async def _attempt(self, operation, action=None, detail=None):
+        from nicegui import ui
+        try:
+            return True, await self.service.run_operator(self.ident, operation, action, detail)
+        except (ValueError, HTTPException) as error:
+            ui.notify(error.detail if isinstance(error, HTTPException) else str(error), type='negative', timeout=8000)
+            return False, error
+
+    def button(self, text, operation, action=None, detail=None, then=None, success=None, conflict=None, **kwargs):
+        from nicegui import ui
+        async def clicked():
+            ok, result = await self._attempt(operation, action, detail)
+            if not ok:
+                if conflict and isinstance(result, ConflictError):
+                    conflict()
+                return
+            if success:
+                ui.notify(success, type='positive')
+            if then:
+                then(result)
+        return ui.button(text, on_click=clicked, **kwargs)
+
+
+def budget_panel(ctx):
+    from nicegui import ui
+    from . import budget
+    with section('Spending caps'):
+        body = ui.column().classes('ll-stack w-full')
+
+    def render():
+        state = budget.state(ctx.store)
+        body.clear()
+        with body:
+            ui.label('Applies to the whole bot. Operators get a DM when spending passes each cap. At the hard cap, new character replies, '
+                     'ambient turns and memory updates pause until the reset day or until you raise the cap.').classes('ll-muted')
+            ui.label(f'{format_usd(state.spent_usd)} spent since {state.period}. The period resets on {state.resets_on.isoformat()} (UTC).')
+            if state.hard_reached:
+                ui.label('Hard cap reached: character replies are paused.').classes('font-bold')
+            elif state.soft_reached:
+                ui.label('Soft cap reached: operators were warned.').classes('font-bold')
+            if state.unpriced_calls:
+                n = state.unpriced_calls
+                ui.label(f'{n} model call{"" if n == 1 else "s"} without a cost estimate this period {"was" if n == 1 else "were"} counted as $0. '
+                         'Set prices for those models to include them.').classes('text-warning')
+            with ui.element('div').classes('ll-form-row'):
+                soft = ui.number('Soft cap (USD)', value=state.soft_cap_usd, min=0, step=1).props('hint="Blank means off" clearable')
+                hard = ui.number('Hard cap (USD)', value=state.hard_cap_usd, min=0, step=1).props('hint="Blank means off" clearable')
+                day = ui.select(list(range(1, 29)), value=state.reset_day, label='Reset day').props('hint="Day of the month, UTC"')
+            notice = ui.switch('Post a notice in the channel when the hard cap pauses a reply (at most once an hour per channel)', value=state.channel_notice)
+
+            def values():
+                def cap(control, name):
+                    if control.value in (None, ''):
+                        return None
+                    try:
+                        return float(control.value)
+                    except (TypeError, ValueError):
+                        raise ValueError(f'{name} cap must be blank or a number of dollars, zero or more.')
+                if isinstance(day.value, bool) or not isinstance(day.value, int) or not 1 <= day.value <= 28:
+                    raise ValueError('Reset day must be a whole number from 1 to 28.')
+                return cap(soft, 'Soft'), cap(hard, 'Hard'), day.value, bool(notice.value)
+
+            def save():
+                return ctx.store.save_budget(*values(), state.revision)
+
+            def detail():
+                soft_cap, hard_cap, reset_day, channel_notice = values()
+                return {'soft_cap_usd': soft_cap, 'hard_cap_usd': hard_cap, 'reset_day': reset_day, 'channel_notice': channel_notice}
+            with ui.element('div').classes('ll-form-row'):
+                ctx.button('Save', save, 'budget.settings', lambda _result: detail(), then=lambda _result: render(), success='Spending caps saved.', conflict=render)
+    render()
+
+
 class LiveContext:
     def __init__(self, app, request, guild_id, session):
         self.app, self.guild_id = app, guild_id
@@ -539,7 +619,7 @@ def _register_pages(app):
         with ui.column().classes('ll-page'):
             ui.label('Bot settings').classes('text-3xl font-bold')
             ui.label('Bot-wide settings. Only operators can see this page.').classes('ll-muted')
-            ui.label('Nothing to configure yet.').classes('ll-faint')
+            budget_panel(OperatorContext(app, request))
 
     @ui.page('/guild/{guild_id}', response_timeout=30)
     async def guild(request: Request, guild_id: int):

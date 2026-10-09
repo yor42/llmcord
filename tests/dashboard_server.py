@@ -273,6 +273,24 @@ def main():
         app.state.sessions[session]['expires'] = 0
         return {'ok': True}
 
+    @app.post('/_test/budget-unpriced')
+    async def budget_unpriced(n: int = 2):
+        # FEAT-16: model calls without a cost estimate in the current period.
+        for _ in range(n):
+            store.record_model_usage(ModelUsage(1, 'fixture', 'fixture-model', 'dialogue', 10, 5, 0, 0, None, 'unconfigured', time.time()))
+        return {'ok': True}
+
+    @app.get('/_test/budget')
+    async def budget_settings():
+        return dict(store.budget_settings())
+
+    @app.post('/_test/budget-save')
+    async def budget_save():
+        # Another operator saves behind the open page's back (stale revision test).
+        current = store.budget_settings()
+        store.save_budget(current['soft_cap_usd'], current['hard_cap_usd'], current['reset_day'], bool(current['channel_notice']), current['revision'])
+        return {'ok': True}
+
     @app.post('/_test/stop')
     async def stop():
         server.should_exit = True

@@ -1007,6 +1007,66 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def test_operator_spending_caps_panel(self):
+        """FEAT-16 step 7: the operator saves caps, reset day and the channel notice; invalid and stale saves toast and write nothing."""
+        from playwright.sync_api import expect
+        context = self.browser.new_context(ignore_https_errors=True, viewport={'width': 1000, 'height': 900})
+        context.add_cookies([{'name': 'llmcord_session', 'value': 'browser-operator-session', 'url': self.url,
+                              'secure': True, 'httpOnly': True, 'sameSite': 'Lax'}])
+        page = context.new_page()
+        errors = []
+        self.watch(page, errors)
+        def settings():
+            return context.request.get(self.url + '/_test/budget').json()
+        try:
+            page.goto(self.url + '/admin/operator')
+            expect(page.get_by_text('$0.001 spent since')).to_be_visible()
+            expect(page.get_by_text('(UTC).')).to_be_visible()
+            expect(page.get_by_label('Soft cap (USD)')).to_have_value('')
+            expect(page.get_by_label('Hard cap (USD)')).to_have_value('')
+            expect(page.get_by_text('Blank means off')).to_have_count(2)
+            expect(page.get_by_text('without a cost estimate')).to_have_count(0)
+            self.assertEqual(settings()['revision'], 0)
+            page.get_by_label('Soft cap (USD)').fill('10')
+            page.get_by_label('Hard cap (USD)').fill('5')
+            page.get_by_role('button', name='Save').click()
+            expect(page.get_by_text('The soft cap cannot be higher than the hard cap.')).to_be_visible()
+            self.assertEqual(settings()['revision'], 0)
+            page.get_by_label('Soft cap (USD)').fill('5')
+            page.get_by_label('Hard cap (USD)').fill('10')
+            page.get_by_label('Reset day').click()
+            page.get_by_role('option', name='15', exact=True).click()
+            page.get_by_role('switch').click()
+            page.get_by_role('button', name='Save').click()
+            expect(page.get_by_text('Spending caps saved.')).to_be_visible()
+            saved = settings()
+            self.assertEqual((saved['revision'], saved['soft_cap_usd'], saved['hard_cap_usd'], saved['reset_day'], saved['channel_notice']), (1, 5.0, 10.0, 15, 1))
+            page.reload()
+            expect(page.get_by_label('Soft cap (USD)')).to_have_value('5')
+            expect(page.get_by_label('Hard cap (USD)')).to_have_value('10')
+            expect(page.get_by_label('Reset day')).to_have_value('15')
+            expect(page.get_by_role('switch')).to_have_attribute('aria-checked', 'true')
+            # A change made behind the page's back makes the open form stale.
+            self.assertTrue(context.request.post(self.url + '/_test/budget-save').ok)
+            page.get_by_role('button', name='Save').click()
+            expect(page.get_by_text('Bot settings changed; reload before saving')).to_be_visible()
+            self.assertEqual(settings()['revision'], 2)
+            expect(page.get_by_label('Soft cap (USD)')).to_have_value('5')
+            page.get_by_role('button', name='Save').click()
+            expect(page.get_by_text('Spending caps saved.')).to_be_visible()
+            self.assertEqual(settings()['revision'], 3)
+            # Unpriced calls show a warning.
+            self.assertTrue(context.request.post(self.url + '/_test/budget-unpriced?n=2').ok)
+            page.reload()
+            expect(page.get_by_text('2 model calls without a cost estimate this period were counted as $0.')).to_be_visible()
+            # Phone width: nothing scrolls sideways.
+            page.set_viewport_size({'width': 390, 'height': 900})
+            expect(page.get_by_role('button', name='Save')).to_be_visible()
+            self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth'), 390)
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
     def test_operator_bot_settings_page_and_menu(self):
         """FEAT-08: operators get a Bot settings item in the account menu that opens /operator; others (and signed-out visitors) get the unknown-page 404."""
         from playwright.sync_api import expect
@@ -1027,7 +1087,7 @@ class DashboardBrowserTests(unittest.TestCase):
             item.click()
             page.wait_for_url('**/admin/operator')
             expect(page.get_by_text('Bot-wide settings. Only operators can see this page.')).to_be_visible()
-            expect(page.get_by_text('Nothing to configure yet.')).to_be_visible()
+            expect(page.get_by_text('Spending caps', exact=True)).to_be_visible()
             self.assertEqual(page.title(), 'Bot settings')
             self.assertFalse(errors, errors)
         finally:
