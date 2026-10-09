@@ -2,8 +2,12 @@
 from __future__ import annotations
 
 import inspect
+import logging
 import types
 
+logger = logging.getLogger(__name__)
+
+_SAVE_LABEL = 'Save changes'
 _LEAVE_WARNING = 'window.onbeforeunload = (e) => { e.preventDefault(); e.returnValue = ""; return ""; };'
 
 
@@ -20,21 +24,43 @@ class SaveBar:
             self.text = ui.label('').classes('ll-savebar-text').props('aria-live=polite')
             with ui.element('div').classes('ll-savebar-actions'):
                 ui.button('Reset', on_click=self.reset).props('flat no-caps').classes('ll-savebar-reset')
-                self.save_button = ui.button('Save changes', on_click=self.save).props('no-caps')
+                self.save_button = ui.button(_SAVE_LABEL, on_click=self.save).props('no-caps')
         self.bar.set_visibility(False)
 
-    def track(self, name, controls, save, action=None, detail=None, then=None, success=None, on_reset=None):
-        """Register an editor: controls maps each tracked control to its saved value; save runs guarded/audited on Save changes."""
-        editor = types.SimpleNamespace(name=name, controls=list(controls.items()), save=save, action=action,
-                                       detail=detail, then=then, success=success, on_reset=on_reset)
+    def track(self, name, controls, save, action=None, detail=None, then=None, success=None, on_reset=None,
+              dirty=None, reset=None, save_label=_SAVE_LABEL):
+        """Register an editor: controls maps each tracked control to its saved value; save runs guarded/audited on Save.
+
+        dirty: optional callable replacing the per-control comparison (an exception counts as dirty).
+        reset: optional callable used by Reset instead of restoring control values (on_reset still runs after).
+        save_label: the bar's Save button text while this editor is active.
+        Writes made through ctx._attempt (not ctx.run/button) are never refused, so an editor may run its own
+        write (e.g. Save as new) that way and then call settle()."""
+        editor = types.SimpleNamespace(name=name, controls=[], save=save, action=action, detail=detail, then=then,
+                                       success=success, on_reset=on_reset, dirty=dirty, reset=reset, save_label=save_label)
         self.editors.append(editor)
-        for control, _ in editor.controls:
-            control.on_value_change(lambda _event, editor=editor: self.check(editor))
-            if self.active:
-                control.disable()
+        self.retrack(editor, controls)
         return editor
 
+    def retrack(self, editor, controls):
+        """Replace an editor's tracked controls (after a re-render); the old ones stop reporting. Call check(editor) after. The old controls must already be gone from the page: they stop being tracked, so settle() will not re-enable them."""
+        editor.controls = list(controls.items())
+        for control, _ in editor.controls:
+            control.on_value_change(lambda _event, editor=editor, control=control: self._changed(editor, control))
+            if self.active is not None and self.active is not editor:
+                control.disable()
+
+    def _changed(self, editor, control):
+        if any(control is tracked for tracked, _ in editor.controls):
+            self.check(editor)
+
     def differs(self, editor):
+        if editor.dirty:
+            try:
+                return bool(editor.dirty())
+            except Exception:
+                logger.exception('Save bar dirty check failed for %s', editor.name)
+                return True
         return any(not _same(control.value, saved) for control, saved in editor.controls)
 
     def check(self, editor):
@@ -44,6 +70,7 @@ class SaveBar:
             if self.active is None:
                 self.active = editor
                 self.text.set_text(f'{editor.name} has unsaved changes.')
+                self.save_button.set_text(editor.save_label)
                 self.bar.set_visibility(True)
                 for other in self.editors:
                     if other is not editor:
@@ -57,6 +84,7 @@ class SaveBar:
         """Hide the bar and re-enable every tracked field."""
         was_active, self.active = self.active, None
         self.bar.set_visibility(False)
+        self.save_button.set_text(_SAVE_LABEL)
         for editor in self.editors:
             for control, _ in editor.controls:
                 control.enable()
@@ -82,8 +110,11 @@ class SaveBar:
         editor = self.active
         if editor is None:
             return
-        for control, saved in editor.controls:
-            control.set_value(saved)
+        if editor.reset:
+            editor.reset()
+        else:
+            for control, saved in editor.controls:
+                control.set_value(saved)
         if editor.on_reset:
             editor.on_reset()
         self.settle()
