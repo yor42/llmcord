@@ -16,7 +16,7 @@ Guidelines are managed instructions included after preset/card instructions, ind
 
 Choose **Create character**, enter a name and home world, and choose **Create** to start with empty card fields and the default emotion slots. Create a world in Server setup first if none exists. Names must be unique within the server.
 
-**Delete character** opens a confirmation. **Delete permanently** removes the character, its owned lore, personal memories, encounters, saved avatar data, and channel/thread cast assignments. Past chat history and Discord messages remain; lore previously moved to another owner also remains. Archive is available when you want to restore a character later. Deletion rejects changes made since the page was loaded, and character IDs are never reused for a new character.
+**Delete character** (in the ⋯ menu beside the character name, below **Archive**) opens a confirmation. **Delete permanently** removes the character, its owned lore, personal memories, encounters, saved avatar data, and channel/thread cast assignments. Past chat history and Discord messages remain; lore previously moved to another owner also remains. Archive is available when you want to restore a character later. Deletion rejects changes made since the page was loaded, and character IDs are never reused for a new character.
 
 ## Lore workspace
 

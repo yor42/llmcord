@@ -19,7 +19,7 @@ from fastapi.responses import PlainTextResponse
 from .auth import guild_icon_url, is_server_admin, user_avatar_url
 from .avatars import MAX_AVATAR_BYTES, avatar_version, normalize_avatar
 from .cards import parse_card
-from .icons import icon_css, lucide, lucide_button
+from .icons import icon_css, lucide, lucide_button, more_menu
 from .lorebooks import parse_lorebook
 from .prompts import PURPOSES, SOURCES, block, compatibility, default_bundle, export_preset, parse_preset
 from .savebar import SaveBar
@@ -218,6 +218,9 @@ body.body--dark .q-tab-panels, body.body--dark .q-tab-panel {{ background: trans
 .ll-menu form {{ margin: 0; }}
 .ll-menu-item {{ display: block; width: 100%; padding: 10px 16px; border: 0; background: transparent; color: #fff; font: inherit; text-align: left; cursor: pointer; }}
 .ll-menu-item:hover, .ll-menu-item:focus-visible {{ background: {THEME_CARD_HOVER}; }}
+.ll-card-header {{ display: flex; align-items: center; width: 100%; min-width: 0; }}
+.ll-card-title {{ flex: 1 1 auto; min-width: 0; font-weight: 500; }}
+.ll-more {{ margin-right: 4px; }}
 .q-card {{ border-radius: 12px; }}
 .q-btn, .q-tab {{ text-transform: none; }}
 .q-field--outlined .q-field__control {{ background: {THEME_BODY}; border-radius: 8px; }}
@@ -666,7 +669,26 @@ def characters_panel(ctx):
 def character_card(ctx, row, worlds):
     from nicegui import ui
     store, gid = ctx.store, ctx.guild_id
-    with ui.expansion(row['name'] + (' · Archived' if row['archived'] else '')).classes('w-full character-card'):
+    revision = store.owner_revision(gid, 'character', row['id'])
+    with ui.expansion().classes('w-full character-card') as card_panel:
+        with card_panel.add_slot('header'), ui.element('div').classes('ll-card-header'):
+            ui.label(row['name'] + (' · Archived' if row['archived'] else '')).classes('ll-card-title')
+            with more_menu(row['name']):
+                async def archive_item(row=row):
+                    def archive():
+                        store.archive_character(gid, row['id'], not row['archived'])
+                        return True
+                    if await ctx.run(archive, 'character.archive', {'id': row['id']}):
+                        await ctx.refresh('characters')
+                ui.menu_item('Restore' if row['archived'] else 'Archive', on_click=archive_item).props('role=menuitem')
+                ui.separator()
+                def confirm_delete(row=row, revision=revision):
+                    confirm_dialog(ctx, f"Delete {row['name']}?",
+                                   ['Permanently delete this character, its lore, memories, and saved avatars, and remove it from all casts. Past Discord messages remain.',
+                                    'This cannot be undone. Use Archive if you may want to restore the character later.'],
+                                   'Delete permanently', lambda: store.delete_character(gid, row['id'], revision),
+                                   'character.delete', {'id': row['id']}, then=lambda _: ctx.refresh('characters'))
+                ui.menu_item('Delete character', on_click=confirm_delete).classes('text-negative').props('role=menuitem')
         with ui.element('div').classes('ll-stack'):
             card = json.loads(row['card'])
             with ui.element('div').classes('ll-form-row'):
@@ -675,7 +697,8 @@ def character_card(ctx, row, worlds):
             fields = {field: ui.textarea(label, value=card.get(field, '')).classes('w-full') for field, label in
                 [('description', 'Description'), ('personality', 'Personality'), ('scenario', 'Scenario'), ('first_mes', 'Opening line'), ('mes_example', 'Example dialogue'), ('system_prompt', 'Card instructions'), ('post_history_instructions', 'Card post-history instructions')]}
             confirm = ui.checkbox('Confirm moving worlds; ineligible casts will be cleared')
-            revision = store.owner_revision(gid, 'character', row['id'])
+            confirm.bind_visibility_from(world, 'value', backward=lambda value, saved=row['world_id']: value != saved)
+            world.on_value_change(lambda _: confirm.set_value(False))  # a world move needs a fresh tick
             def save(row=row, card=card, name=name, world=world, fields=fields, confirm=confirm, revision=revision):
                 if world.value != row['world_id'] and not confirm.value:
                     raise ValueError('Confirm the world move before saving')
@@ -684,18 +707,6 @@ def character_card(ctx, row, worlds):
                 return True
             tracked = {name: row['name'], world: row['world_id'], **{control: card.get(key, '') for key, control in fields.items()}}
             ctx.savebar.track(row['name'], tracked, save, 'character.edit', {'id': row['id']}, then=lambda _: ctx.refresh('characters'), on_reset=lambda: confirm.set_value(False))
-            with ui.element('div').classes('ll-form-row'):
-                def archive(row=row):
-                    store.archive_character(gid, row['id'], not row['archived'])
-                    return True
-                ctx.button('Restore' if row['archived'] else 'Archive', archive, 'character.archive', {'id': row['id']}, then=lambda _: ctx.refresh('characters')).props('outline')
-                def confirm_delete(row=row, revision=revision):
-                    confirm_dialog(ctx, f"Delete {row['name']}?",
-                                   ['Permanently delete this character, its lore, memories, and saved avatars, and remove it from all casts. Past Discord messages remain.',
-                                    'This cannot be undone. Use Archive if you may want to restore the character later.'],
-                                   'Delete permanently', lambda: store.delete_character(gid, row['id'], revision),
-                                   'character.delete', {'id': row['id']}, then=lambda _: ctx.refresh('characters'))
-                lucide_button('Delete character', 'trash-2', color='negative', on_click=confirm_delete)
             static_avatar_editor(ctx, row)
             ui.label('Emotion avatars').classes('ll-subtitle')
             ui.label('The selected emotion image is used first. If unavailable, the fallback static avatar is used.').classes('ll-muted')

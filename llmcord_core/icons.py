@@ -59,3 +59,19 @@ def lucide_button(text: str, name: str, **kwargs):
     with button:
         lucide(name)
     return button
+
+
+def more_menu(name: str):
+    """Title-row ⋯ menu (D21): an icon-only flat round button and its ``ll-menu``; use as ``with more_menu(name):`` and add items.
+
+    The button is named ``More actions for <name>`` and does not propagate its click, so it can sit in an expansion header.
+    """
+    from nicegui import ui
+    button = ui.button().props('flat round dense text-color=white').classes('ll-more')
+    button.props['aria-label'] = f'More actions for {name}'  # not string-parsed: names are user data
+    stop = '(event) => event.stopPropagation()'
+    button.on('click', js_handler=stop).on('keyup', js_handler=stop)
+    with button:
+        lucide('ellipsis', '1.4em').classes('ll-icon-solo')
+        ui.tooltip('More actions')
+        return ui.menu().classes('ll-menu')

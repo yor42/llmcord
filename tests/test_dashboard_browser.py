@@ -274,11 +274,11 @@ class DashboardBrowserTests(unittest.TestCase):
         dialog.get_by_role('button', name='Remove fallback avatar', exact=True).click()
         self.wait_for(lambda: not next(row for row in self.state()['characters'] if row['id'] == blank['id'])['has_static_avatar'])
         character.get_by_text('Browser blank', exact=True).click()
-        character.get_by_role('button', name='Delete character', exact=True).click()
+        self.open_more_item(page, character, 'Browser blank', 'Delete character')
         dialog.get_by_text('Delete Browser blank?', exact=True).wait_for()
         dialog.get_by_role('button', name='Cancel', exact=True).click()
         self.assertTrue(any(row['id'] == blank['id'] for row in self.state()['characters']))
-        character.get_by_role('button', name='Delete character', exact=True).click()
+        self.open_more_item(page, character, 'Browser blank', 'Delete character')
         dialog.get_by_role('button', name='Delete permanently', exact=True).click()
         self.wait_for(lambda: not any(row['id'] == blank['id'] for row in self.state()['characters']))
         self.assertFalse(any(row['character_id'] == blank['id'] for row in self.state()['slots']))
@@ -700,6 +700,19 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             self.page = original_page
             context.close()
+
+    def open_more_item(self, page, card, name, item):
+        """Open a character card's more-actions menu and click `item`. The menu is portalled to the body, so a lost click retries once."""
+        from playwright.sync_api import TimeoutError as PlaywrightTimeout
+        menuitem = page.get_by_role('menuitem', name=item, exact=True)
+        button = card.get_by_role('button', name=f'More actions for {name}', exact=True)
+        button.click()
+        try:
+            menuitem.wait_for(timeout=5000)
+        except PlaywrightTimeout:
+            button.click()
+            menuitem.wait_for(timeout=10000)
+        menuitem.click()
 
     def open_dialog(self, trigger, dialog):
         """Click `trigger` and wait until `dialog` is open and its buttons sit inside the viewport (Quasar animates it in).
@@ -1224,7 +1237,7 @@ class DashboardBrowserTests(unittest.TestCase):
             description.fill(description.input_value() + ' dirty')
             bar.wait_for(state='visible', timeout=5000)
             before = self.state()
-            card.get_by_role('button', name='Archive', exact=True).click()
+            self.open_more_item(page, card, 'Alice', 'Archive')
             page.get_by_text('Save or reset your changes to Alice first.', exact=True).wait_for(timeout=5000)
             page.wait_for_function("() => document.querySelector('.ll-savebar')?.classList.contains('ll-savebar-alert')", timeout=2000)
             after = self.state()
@@ -1302,6 +1315,9 @@ class DashboardBrowserTests(unittest.TestCase):
         try:
             bar = page.get_by_role('region', name='Unsaved changes')
             confirm = card.get_by_role('checkbox', name='Confirm moving worlds; ineligible casts will be cleared')
+            card.get_by_label('Home world', exact=True).click()
+            page.get_by_role('option', name='Annex', exact=True).click()
+            confirm.wait_for(state='visible', timeout=5000)
             confirm.click()
             page.wait_for_function("() => [...document.querySelectorAll('.character-card [role=checkbox]')].some(c => c.getAttribute('aria-checked') === 'true')", timeout=5000)
             description.fill(description.input_value() + ' dirty')
@@ -1309,7 +1325,63 @@ class DashboardBrowserTests(unittest.TestCase):
             bar.get_by_role('button', name='Reset', exact=True).click()
             bar.wait_for(state='hidden', timeout=5000)
             page.wait_for_function("() => ![...document.querySelectorAll('.character-card [role=checkbox]')].some(c => c.getAttribute('aria-checked') === 'true')", timeout=5000)
-            self.assertFalse(confirm.is_checked())
+            confirm.wait_for(state='hidden', timeout=5000)
+            page.wait_for_function("() => ![...document.querySelectorAll('.character-card [role=checkbox]')].some(c => c.getAttribute('aria-checked') === 'true')", timeout=5000)
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_world_move_confirmation_shows_only_when_world_changes(self):
+        """UI-25: the world-move checkbox is hidden on open, shown after choosing Annex, hidden after choosing the saved world again."""
+        context, page, errors, card, description = self.open_alice()
+        try:
+            confirm = card.get_by_role('checkbox', name='Confirm moving worlds; ineligible casts will be cleared')
+            self.assertFalse(confirm.is_visible())
+            saved = card.get_by_label('Home world', exact=True).input_value()
+            card.get_by_label('Home world', exact=True).click()
+            page.get_by_role('option', name='Annex', exact=True).click()
+            confirm.wait_for(state='visible', timeout=5000)
+            card.get_by_label('Home world', exact=True).click()
+            page.get_by_role('option', name=saved, exact=True).click()
+            confirm.wait_for(state='hidden', timeout=5000)
+            card.get_by_label('Home world', exact=True).click()
+            page.get_by_role('option', name='Annex', exact=True).click()
+            confirm.wait_for(state='visible', timeout=5000)
+            confirm.click()
+            ticked = "() => [...document.querySelectorAll('.character-card [role=checkbox]')].some(c => c.getAttribute('aria-checked') === 'true')"
+            page.wait_for_function(ticked, timeout=5000)
+            card.get_by_label('Home world', exact=True).click()
+            page.get_by_role('option', name=saved, exact=True).click()
+            confirm.wait_for(state='hidden', timeout=5000)
+            card.get_by_label('Home world', exact=True).click()
+            page.get_by_role('option', name='Annex', exact=True).click()
+            confirm.wait_for(state='visible', timeout=5000)
+            page.wait_for_function('() => ![...document.querySelectorAll(".character-card [role=checkbox]")].some(c => c.getAttribute("aria-checked") === "true")', timeout=5000)
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_more_menu_keeps_card_open_and_archive_restore_round_trip(self):
+        """UI-25: the more-actions button does not collapse the card and lists Archive and Delete character; Archive marks the header and audits, Restore undoes it."""
+        context, page, errors, card, description = self.open_alice()
+        try:
+            self.assertEqual(card.get_by_role('button', name='More actions for Alice', exact=True).get_attribute('aria-label'), 'More actions for Alice')
+            card.get_by_role('button', name='More actions for Alice', exact=True).click()
+            page.get_by_role('menuitem', name='Archive', exact=True).wait_for(timeout=5000)
+            self.assertTrue(page.get_by_role('menuitem', name='Delete character', exact=True).is_visible())
+            self.assertTrue(description.is_visible())
+            page.keyboard.press('Escape')
+            page.get_by_role('menuitem', name='Archive', exact=True).wait_for(state='hidden', timeout=5000)
+            audit_before = len([r for r in self.state()['audit'] if r['action'] == 'character.archive'])
+            self.open_more_item(page, card, 'Alice', 'Archive')
+            archived = page.locator('.character-card').filter(has=page.get_by_text('Alice · Archived', exact=True)).first
+            archived.wait_for(timeout=5000)
+            self.wait_for(lambda: self.alice_row()['archived'])
+            self.assertEqual(len([r for r in self.state()['audit'] if r['action'] == 'character.archive']), audit_before + 1)
+            self.open_more_item(page, archived, 'Alice', 'Restore')
+            page.locator('.character-card').filter(has=page.get_by_text('Alice', exact=True)).first.wait_for(timeout=5000)
+            self.wait_for(lambda: not self.alice_row()['archived'])
+            self.assertEqual(page.get_by_text('Alice · Archived', exact=True).count(), 0)
             self.assertFalse(errors, errors)
         finally:
             context.close()
