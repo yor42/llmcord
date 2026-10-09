@@ -47,7 +47,7 @@ def _strings(value: Any) -> list[str]:
 def normalize_entry(uid: str, entry: dict, *, source_format: str | None = None) -> ImportedEntry:
     content = entry.get("content", "")
     if not isinstance(content, str):
-        raise ValueError(f"Entry {uid} has no text content")
+        raise ValueError(f"Entry {uid} has no text content. Add text or remove the entry.")
     position = entry.get("position", "after_char")
     # Native ST positions: 0 before card, 1 after card, 2 before examples,
     # 3 after examples, 4 at depth; A/N and outlets need ST-only surfaces.
@@ -148,33 +148,33 @@ def export_entry(content: str, rule: dict) -> dict:
 
 def validate_rule(rule: dict, content: str | None = None) -> dict:
     if not isinstance(rule, dict):
-        raise ValueError('Rule must be an object')
+        raise ValueError('Rule must be an object.')
     default = normalize_entry('validation', {}).rule
     unknown = set(rule) - set(default)
     if unknown:
-        raise ValueError('Unknown effective rule fields: ' + ', '.join(sorted(unknown)))
+        raise ValueError('Unknown effective rule fields: ' + ', '.join(sorted(unknown)) + '.')
     effective = {**default, **rule}
     for key, value in default.items():
         actual = effective[key]
         if isinstance(value, bool) and not isinstance(actual, bool):
-            raise ValueError(f'{key} must be true or false')
+            raise ValueError(f'{key} must be true or false.')
         if type(value) is int and type(actual) is not int:
-            raise ValueError(f'{key} must be an integer')
+            raise ValueError(f'{key} must be an integer.')
         if isinstance(value, list) and key != 'unsupported' and (not isinstance(actual, list) or not all(isinstance(x, str) for x in actual)):
-            raise ValueError(f'{key} must be a list of strings')
+            raise ValueError(f'{key} must be a list of strings.')
     for key in ('depth', 'sticky', 'cooldown', 'delay', 'recursion_level', 'group_weight'):
         if effective[key] < 0:
-            raise ValueError(f'{key} cannot be negative')
+            raise ValueError(f'{key} cannot be negative.')
     if effective['scan_depth'] is not None and (type(effective['scan_depth']) is not int or effective['scan_depth'] < 0):
-        raise ValueError('Scan depth must be a nonnegative integer or null')
+        raise ValueError('Scan depth must be a nonnegative integer or null.')
     if effective['regex_enabled'] is not None and type(effective['regex_enabled']) is not bool:
-        raise ValueError('Regex enabled must be true, false, or null')
+        raise ValueError('Regex enabled must be true, false or null.')
     if not 0 <= effective['probability'] <= 100 or effective['selective_logic'] not in range(4):
-        raise ValueError('Invalid probability or secondary matching logic')
+        raise ValueError('Invalid probability or secondary matching logic.')
     if effective['role'] not in {'system', 'user', 'assistant'}:
-        raise ValueError('Invalid message role')
+        raise ValueError('Invalid message role.')
     if not isinstance(effective['original'], dict):
-        raise ValueError('Original import must be an object')
+        raise ValueError('Original import must be an object.')
     # Recompute warnings from the actual effective settings, not stale warnings.
     normalized = normalize_entry('validation', export_entry(
         effective['original'].get('content', '') if content is None else content, effective)).rule
@@ -184,15 +184,15 @@ def validate_rule(rule: dict, content: str | None = None) -> dict:
 
 def parse_lorebook(data: bytes) -> ImportedBook:
     if len(data) > MAX_BOOK_BYTES:
-        raise ValueError("Lorebook exceeds 8 MiB")
+        raise ValueError("Lorebook exceeds 8 MiB. Upload a smaller file.")
     raw = json.loads(data.decode("utf-8-sig"))
     source_format = 'sillytavern'
     if isinstance(raw, dict) and raw.get('type') == 'risu':
         source_format = 'risu'
         if type(raw.get('ver')) is not int or raw['ver'] != 1:
-            raise ValueError('Only RisuAI version-1 lorebook exports are supported')
+            raise ValueError('Only RisuAI version-1 lorebook exports are supported.')
         if not isinstance(raw.get('data'), list):
-            raise ValueError('RisuAI lorebook data must be an entry array')
+            raise ValueError('RisuAI lorebook data must be an entry array.')
         source = []
         for index, item in enumerate(raw['data']):
             ident = item.get('uid', item.get('id')) if isinstance(item, dict) else None
@@ -211,12 +211,12 @@ def parse_lorebook(data: bytes) -> ImportedBook:
         source = [(str(item.get("id", index)) if isinstance(item, dict) else str(index), item)
                   for index, item in enumerate(raw["entries"])]
     else:
-        raise ValueError("Expected an entry array, an object with entries, or a RisuAI version-1 lorebook export")
+        raise ValueError("Expected an entry array, an object with entries, or a RisuAI version-1 lorebook export.")
     if len(source) > MAX_ENTRIES:
-        raise ValueError("Lorebook has too many entries")
+        raise ValueError("Lorebook has too many entries. Split it into smaller books.")
     entries = {}
     for uid, item in source:
         if not isinstance(item, dict) or uid in entries:
-            raise ValueError(f"Invalid or duplicate lorebook entry {uid}")
+            raise ValueError(f"Invalid or duplicate lorebook entry {uid}.")
         entries[uid] = normalize_entry(uid, item, source_format=source_format)
     return ImportedBook(json.dumps(raw, ensure_ascii=False), entries, source_format)

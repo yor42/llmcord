@@ -129,12 +129,12 @@ class AdminStore:
 
     def next_owner_id(self, kind, table):
         if (kind, table) not in {('space', 'spaces'), ('book', 'lorebooks')}:
-            raise ValueError('Invalid owner table')
+            raise ValueError('Invalid owner type.')
         return self.one(f'SELECT COALESCE(MAX(id),0)+1 AS next_id FROM (SELECT id FROM {table} UNION ALL SELECT owner_id FROM owner_revisions WHERE kind=?)', (kind,))['next_id']
 
     def guidelines(self, guild_id, kind, owner_id):
         if kind not in {'space', 'channel'}:
-            raise ValueError('Choose a world, hub, or channel')
+            raise ValueError('Choose a world, hub or channel.')
         self.validate_owner(guild_id, kind, owner_id)
         row = self.one('SELECT * FROM scene_guidelines WHERE guild_id=? AND kind=? AND owner_id=?', (guild_id, kind, owner_id))
         return dict(row) if row else {'guild_id': guild_id, 'kind': kind, 'owner_id': owner_id, 'content': '', 'revision': 0}
@@ -142,7 +142,7 @@ class AdminStore:
     def save_guidelines(self, guild_id, kind, owner_id, content, expected_revision):
         content = content.strip()
         if len(content.encode()) > 6000:
-            raise ValueError('Guidelines exceed 6,000 bytes; shorten them before saving')
+            raise ValueError('Guidelines exceed 6,000 bytes. Shorten them before saving.')
         with self.write_admin():
             current = self.guidelines(guild_id, kind, owner_id)
             if current['revision'] != expected_revision:
@@ -174,7 +174,7 @@ class AdminStore:
             if impact['revision'] != expected_revision:
                 raise ConflictError('World or hub changed; reload before deleting')
             if impact['characters'] or impact['channels']:
-                raise ValueError('Move or delete its home characters and rebind its channels before deleting this world or hub')
+                raise ValueError('Move or delete its home characters and rebind its channels before deleting this world or hub.')
             for entry in self.admin_entries(guild_id, 'space', space_id):
                 self._delete_entry_locked(guild_id, entry)
             self.db.execute("DELETE FROM candidates WHERE guild_id=? AND scope_kind='space' AND scope_id=?", (guild_id, space_id))
@@ -307,7 +307,7 @@ class AdminStore:
         else:
             row = None
         if not row or row['guild_id'] != guild_id:
-            raise ValueError('Choose an owner in this server')
+            raise ValueError('Choose an owner in this server.')
 
     def owner_revision(self, guild_id, kind, owner_id):
         if kind == 'book':
@@ -436,7 +436,7 @@ class AdminStore:
 
     def _selected_entries_locked(self, guild_id, entries):
         if not entries or len(entries) > 2000:
-            raise ValueError('Select between 1 and 2000 lore entries')
+            raise ValueError('Select between 1 and 2000 lore entries.')
         rows, seen = [], set()
         for entry in entries:
             row = self.entry_by_key(guild_id, entry['entry_key'])
@@ -590,7 +590,7 @@ class AdminStore:
     def preview_card(self, guild_id, world_id, card):
         world = self.space_by_id(world_id)
         if not world or world['guild_id'] != guild_id or world['kind'] != 'world':
-            raise ValueError('Choose a home world in this server')
+            raise ValueError('Choose a home world in this server.')
         existing = self.character(guild_id, card.name)
         if not existing:
             return {'character_id': None, 'revision': 0, 'conflicts': [], 'changes': []}
@@ -620,13 +620,13 @@ class AdminStore:
     def create_character(self, guild_id, world_id, name):
         name = name.strip()
         if not name:
-            raise ValueError('Character name cannot be empty')
+            raise ValueError('Character name cannot be empty. Enter a name.')
         with self.write_admin():
             world = self.space_by_id(world_id)
             if not world or world['guild_id'] != guild_id or world['kind'] != 'world':
-                raise ValueError('Choose a home world in this server')
+                raise ValueError('Choose a home world in this server.')
             if self.character(guild_id, name):
-                raise ValueError('This character name already exists')
+                raise ValueError('This character name already exists. Choose another name.')
             card = {'name': name, **{field: '' for field in ('description', 'personality', 'scenario', 'first_mes', 'mes_example', 'system_prompt', 'post_history_instructions')}}
             ident = self._create_character_locked(guild_id, world_id, name, card)
             self.bump_owner(guild_id, 'character', ident)
@@ -687,20 +687,20 @@ class AdminStore:
             return default_bundle()
         row = self.one('SELECT r.* FROM prompt_revisions r JOIN prompt_presets p ON p.id=r.preset_id WHERE p.guild_id=? AND p.id=? AND (? IS NULL OR r.revision=?) ORDER BY r.revision DESC LIMIT 1', (guild_id, preset_id, revision, revision))
         if not row:
-            raise ValueError('Preset revision not found in this server')
+            raise ValueError('Preset revision not found in this server.')
         return json.loads(row['bundle_json'])
 
     def save_preset(self, guild_id, name, bundle, preset_id=None, expected_revision=None):
         from .prompts import validate_bundle
         bundle = validate_bundle(bundle)
         if not name.strip() or len(name) > 80:
-            raise ValueError('Preset name must be 1–80 characters')
+            raise ValueError('Preset name must be 1–80 characters.')
         with self.write_admin():
             if preset_id:
                 rows = self.list_presets(guild_id)
                 current = next((r for r in rows if r['id'] == preset_id), None)
                 if not current:
-                    raise ValueError('Preset not found in this server')
+                    raise ValueError('Preset not found in this server.')
                 if expected_revision != current['revision']:
                     raise ConflictError('Preset changed; reload before saving')
                 revision = current['revision'] + 1
@@ -716,7 +716,7 @@ class AdminStore:
         bundle = self.preset_bundle(guild_id, preset_id, revision)
         problems = compatibility(bundle, providers)
         if problems:
-            raise ValueError('Resolve preset compatibility: ' + '; '.join(problems))
+            raise ValueError('Resolve preset compatibility: ' + '; '.join(problems) + '.')
         with self.write_admin():
             self.db.execute('INSERT INTO guild_settings(guild_id,preset_id,preset_revision) VALUES(?,?,?) ON CONFLICT(guild_id) DO UPDATE SET preset_id=excluded.preset_id,preset_revision=excluded.preset_revision', (guild_id, preset_id, revision))
 
@@ -767,7 +767,7 @@ class AdminStore:
     def delete_preset(self, guild_id, preset_id):
         with self.write_admin():
             if self.one('SELECT guild_id FROM guild_settings WHERE guild_id=? AND preset_id=?', (guild_id, preset_id)):
-                raise ValueError('Select another preset before deleting the active preset')
+                raise ValueError('Select another preset before deleting the active preset.')
             self.db.execute('DELETE FROM prompt_presets WHERE guild_id=? AND id=?', (guild_id, preset_id))
 
     def avatar_slots(self, guild_id, character_id):
@@ -806,7 +806,7 @@ class AdminStore:
             return self._slot_meta(dict(row), keep_image=True)
         if key == 'neutral':
             return self._slot_meta(self._neutral_slot(character_id), keep_image=True)
-        raise ValueError('Avatar slot not found')
+        raise ValueError('Avatar slot not found.')
 
     def _slot_revision(self, guild_id, character_id, key):
         self.validate_owner(guild_id, 'character', character_id)
@@ -815,13 +815,13 @@ class AdminStore:
             return row['revision']
         if key == 'neutral':
             return 0
-        raise ValueError('Avatar slot not found')
+        raise ValueError('Avatar slot not found.')
 
     def save_avatar(self, guild_id, character_id, key, label, description, image=None, expected_revision=None):
         import re
         self.validate_owner(guild_id, 'character', character_id)
         if not re.fullmatch(r'[a-z0-9_-]{1,40}', key) or not label.strip() or len(label) > 80 or len(description) > 500:
-            raise ValueError('Use a stable lowercase key, a label up to 80 characters, and a description up to 500 characters')
+            raise ValueError('Use a stable lowercase key, a label up to 80 characters, and a description up to 500 characters.')
         with self.write_admin():
             current = self.one('SELECT image,revision FROM avatar_slots WHERE character_id=? AND slot_key=?', (character_id, key)) or ({'image': None, 'revision': 0} if key == 'neutral' else None)
             if current and expected_revision is not None and current['revision'] != expected_revision:
@@ -840,7 +840,7 @@ class AdminStore:
 
     def delete_avatar(self, guild_id, character_id, key, expected_revision):
         if key == 'neutral':
-            raise ValueError('The neutral slot is required')
+            raise ValueError('Every character keeps a neutral image; it cannot be removed.')
         with self.write_admin():
             if self._slot_revision(guild_id, character_id, key) != expected_revision:
                 raise ConflictError('Avatar slot changed; reload')

@@ -202,7 +202,7 @@ class OwnersTests(unittest.TestCase):
             self.assertEqual(by("channel"), [(100, "Channel: 100"), (300, "Channel: 300")])
             self.assertEqual(by("guild"), [(1, "Server: Server-wide lore")])
             self.assertEqual(by("book"), [(book, "Lorebook: Tales")])
-            self.assertEqual(by("thread"), [(900, "Archived thread …900")])
+            self.assertEqual(by("thread"), [(900, "Thread …900")])
             kinds = [o["kind"] for o in owners]
             self.assertEqual(kinds, sorted(kinds, key=["space", "character", "channel", "guild", "book", "thread"].index))
         finally:
@@ -239,7 +239,7 @@ class OwnersFromRowsTests(unittest.TestCase):
 
 class OwnersThreadNamesTests(unittest.TestCase):
     def test_thread_owner_labels(self):
-        """UI-03: active threads label as 'Thread #name'; unknown/archived ones as 'Archived thread …NNNN'."""
+        """UI-03: active threads label as 'Thread #name'; missing ones as 'Archived thread …NNNN', and 'Thread …NNNN' when names are unknown (None)."""
         transport, _ = discord_transport(admin_guilds=[1])
         app = create_app(":memory:", "https://pi.test", "client", "secret", "bot",
                          httpx.AsyncClient(transport=transport), enable_dashboard=False,
@@ -254,7 +254,8 @@ class OwnersThreadNamesTests(unittest.TestCase):
             labels = lambda owners: [o["label"] for o in owners if o["kind"] == "thread"]  # noqa: E731
             self.assertEqual(labels(admin.owners(1, thread_names=names)),
                              ["Thread #side-quest", "Archived thread …4321"])
-            self.assertEqual(labels(admin.owners(1)), ["Archived thread …6789", "Archived thread …4321"])
+            self.assertEqual(labels(admin.owners(1)), ["Thread …6789", "Thread …4321"])  # fetch failed: state unknown
+            self.assertEqual(labels(admin.owners(1, thread_names={})), ["Archived thread …6789", "Archived thread …4321"])
         finally:
             store.close()
 

@@ -187,7 +187,7 @@ class Store(AdminStore):
         old_version = self.db.execute("PRAGMA user_version").fetchone()[0]
         if old_version > 5:
             self.db.close()
-            raise ValueError('Database is newer than this application')
+            raise ValueError('The database is newer than this application. Update the application.')
         node_columns = {row[1] for row in self.db.execute('PRAGMA table_info(nodes)')}
         needs_identities = bool(node_columns) and not {'author_label', 'mentions_json'} <= node_columns
         if existing and (old_version < 5 or needs_identities):
@@ -377,7 +377,7 @@ class Store(AdminStore):
 
     def add_lore(self, guild_id: int, scope_kind: str, scope_id: int, content: str, keys: list[str] | None = None, constant: bool = False, order: int = 100, source_id: int | None = None, promoted_from: int | None = None, pinned: bool = False) -> int:
         if scope_kind not in {"character", "space", "channel", "thread"} or not content.strip():
-            raise ValueError("Lore needs text and a valid channel, world or hub.")
+            raise ValueError("Lore needs text and a valid character, channel, thread, world or hub.")
         with self.write_admin():
             ident = self.db.execute("INSERT INTO lore(guild_id,scope_kind,scope_id,content,keys_json,constant,insertion_order,source_message_id,promoted_from,pinned) VALUES(?,?,?,?,?,?,?,?,?,?)", (guild_id, scope_kind, scope_id, content.strip(), json.dumps(keys or []), int(constant), order, source_id, promoted_from, int(pinned))).lastrowid
             self.bump_owner(guild_id, scope_kind, scope_id)
@@ -565,11 +565,11 @@ class Store(AdminStore):
     def create_lorebook(self, guild_id: int, name: str, target_kind: str,
                         target_id: int = 0) -> int:
         if target_kind not in {"guild", "channel"} or not name.strip():
-            raise ValueError("Choose a guild or channel lorebook and a name")
+            raise ValueError("Choose a server or channel lorebook and give it a name.")
         if target_kind == "channel":
             channel = self.channel(target_id)
             if not channel or channel["guild_id"] != guild_id:
-                raise ValueError("Channel is not bound in this server")
+                raise ValueError("Bind that channel to a world or hub in this server first.")
         else:
             target_id = 0
         with self.write_admin():
@@ -589,7 +589,7 @@ class Store(AdminStore):
     def set_lorebook_space(self, guild_id: int, book_id: int, space_id: int, enabled: bool) -> None:
         book, space = self.lorebook(guild_id, book_id), self.space_by_id(space_id)
         if not book or book["target_kind"] != "guild" or not space or space["guild_id"] != guild_id:
-            raise ValueError("Choose a guild book and space in this server")
+            raise ValueError("Choose a server lorebook and a world or hub in this server.")
         with self.write_admin():
             if enabled:
                 self.db.execute("INSERT OR IGNORE INTO lorebook_space_links VALUES(?,?)", (book_id, space_id))
@@ -643,7 +643,7 @@ class Store(AdminStore):
     def archive_character(self, guild_id: int, character_id: int, archived: bool) -> None:
         character = self.character_by_id(character_id)
         if not character or character["guild_id"] != guild_id:
-            raise ValueError("Character not found in this server")
+            raise ValueError("Character not found in this server.")
         with self.db:
             self.db.execute("UPDATE characters SET archived=? WHERE guild_id=? AND id=?",
                 (int(archived), guild_id, character_id))
@@ -694,12 +694,12 @@ class Store(AdminStore):
         with self.write_admin():
             world = self.space_by_id(world_id)
             if not world or world["guild_id"] != guild_id or world["kind"] != "world":
-                raise ValueError("Choose a home world in this server")
+                raise ValueError("Choose a home world in this server.")
             if not name.strip():
-                raise ValueError("Character name cannot be empty")
+                raise ValueError("Character name cannot be empty. Enter a name.")
             previous = self.character_by_id(character_id)
             if not previous or previous["guild_id"] != guild_id:
-                raise ValueError("Character not found in this server")
+                raise ValueError("Character not found in this server.")
             if expected_revision is not None and expected_revision != self.owner_revision(guild_id, 'character', character_id):
                 raise ConflictError('Character changed; reload before saving')
             moved = previous["world_id"] != world_id

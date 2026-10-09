@@ -121,37 +121,37 @@ def default_bundle():
 
 def validate_bundle(value):
     if not isinstance(value, dict) or value.get('format') != 'llmcord-preset' or value.get('version') != 1:
-        raise ValueError('Expected a version 1 llmcord preset')
+        raise ValueError('Expected a version 1 llmcord preset.')
     if not isinstance(value.get('source', {}), dict) or not isinstance(value.get('purposes'), dict) or set(value['purposes']) - set(PURPOSES):
-        raise ValueError('Invalid preset purposes or source metadata')
+        raise ValueError('Invalid preset purposes or source metadata.')
     result = copy.deepcopy(value)
     if len(json.dumps(result, ensure_ascii=False).encode()) > MAX_PRESET_BYTES:
-        raise ValueError('Preset exceeds 8 MiB')
+        raise ValueError('Preset exceeds 8 MiB. Upload a smaller file.')
     fields = set(PromptBlock.__dataclass_fields__)
     for purpose, blocks in result['purposes'].items():
         if not isinstance(blocks, list) or len(blocks) > MAX_BLOCKS:
-            raise ValueError('A purpose can contain at most 200 blocks')
+            raise ValueError('A purpose can contain at most 200 blocks.')
         seen = set()
         for i, item in enumerate(blocks):
             if not isinstance(item, dict) or set(item) - fields:
-                raise ValueError('Invalid prompt block fields')
+                raise ValueError('Invalid prompt block fields.')
             try:
                 item = asdict(PromptBlock(**item))
             except TypeError as error:
-                raise ValueError('Prompt block needs an ID and name') from error
+                raise ValueError('Prompt block needs an ID and name.') from error
             if not isinstance(item['id'], str) or not item['id'] or item['id'] in seen:
-                raise ValueError('Prompt IDs must be nonempty and unique within a purpose')
+                raise ValueError('Prompt IDs must be nonempty and unique within a purpose.')
             seen.add(item['id'])
             if any(not isinstance(item[k], str) for k in ('name', 'source', 'content', 'adaptation')) or type(item['enabled']) is not bool or not isinstance(item['raw'], dict):
-                raise ValueError('Invalid prompt block values')
+                raise ValueError('Invalid prompt block values.')
             if item['role'] not in {'system', 'user', 'assistant'} or item['placement'] not in {'relative', 'in_chat'} or item['adaptation'] not in {'', 'top_system', 'user'}:
-                raise ValueError('Invalid role, placement or provider adaptation')
+                raise ValueError('Invalid role, placement or provider adaptation.')
             if any(type(item[k]) is not int for k in ('depth', 'order', 'priority')) or item['depth'] < 0:
-                raise ValueError('Depth, order and trimming priority must be integers')
+                raise ValueError('Depth, order and trimming priority must be integers.')
             blocks[i] = item
         required = 'history' if purpose == 'dialogue' else 'payload'
         if sum(b['source'] == required and b['enabled'] for b in blocks) != 1:
-            raise ValueError(f'{purpose} needs exactly one enabled {required} input marker')
+            raise ValueError(f'{purpose} needs exactly one enabled {required} input marker.')
     return result
 
 
@@ -193,7 +193,7 @@ def compatibility(bundle, providers):
 
 def substitute(text, values):
     if len(text.encode()) > MAX_PRESET_BYTES:
-        raise ValueError('Prompt block is too large')
+        raise ValueError('Prompt block is too large. Shorten its text.')
     return re.sub(r'\{\{(.*?)\}\}', lambda match: str(values.get(match[1], '')), text, flags=re.S)
 
 
@@ -201,7 +201,7 @@ def compile_prompt(bundle, purpose, values, history, provider, budget, *, contra
     problems = compatibility(bundle, {purpose: provider})
     problems = [p for p in problems if p.startswith(purpose + '/') or p.startswith('Disable')]
     if problems:
-        raise ValueError('; '.join(problems))
+        raise ValueError('; '.join(problems) + '.')
     records, injected, adaptations = [], [], []
     history_start = 0
     history_indices = []
@@ -282,7 +282,7 @@ def compile_prompt(bundle, purpose, values, history, provider, budget, *, contra
         records.remove(r)
         omitted.append(r[0] + (f':{r[4]}' if r[4] is not None else ''))
     if cost() > budget:
-        raise ValueError('Required prompt inputs exceed the model context budget')
+        raise ValueError('Required prompt inputs exceed the model context budget. Shorten them or use a model with a larger context.')
     history_indices = [r[4] for r in records if r[4] is not None]
     included = list(dict.fromkeys(r[0] for r in records))
     included_sources = [b['source'] for b in purpose_blocks(bundle, purpose) if b['id'] in included] + managed_sources
@@ -300,34 +300,34 @@ def compile_prompt(bundle, purpose, values, history, provider, budget, *, contra
 
 def parse_preset(data, order_index=None):
     if len(data) > MAX_PRESET_BYTES:
-        raise ValueError('Preset exceeds 8 MiB')
+        raise ValueError('Preset exceeds 8 MiB. Upload a smaller file.')
     raw = json.loads(data.decode('utf-8-sig'))
     if isinstance(raw, dict) and raw.get('format') == 'llmcord-preset':
         return validate_bundle(raw), []
     if not isinstance(raw, dict) or not isinstance(raw.get('prompts'), list) or not isinstance(raw.get('prompt_order'), list):
-        raise ValueError('Upload a native llmcord or SillyTavern Chat Completion preset')
+        raise ValueError('Upload a native llmcord or SillyTavern Chat Completion preset.')
     orders = raw['prompt_order']
     if len(raw['prompts']) > MAX_BLOCKS or not all(isinstance(x, dict) for x in orders):
-        raise ValueError('Invalid prompt order or too many prompt blocks')
+        raise ValueError('Invalid prompt order or too many prompt blocks.')
     profiles = orders if orders and 'order' in orders[0] else [{'order': orders}]
     if len(profiles) > 1 and order_index is None:
         return None, [{'index': i, 'label': str(p.get('character_id', i))} for i, p in enumerate(profiles)]
     index = 0 if order_index is None else int(order_index)
     if not 0 <= index < len(profiles):
-        raise ValueError('Choose a prompt order profile')
+        raise ValueError('Choose a prompt order profile.')
     prompts = {}
     for p in raw['prompts']:
         if not isinstance(p, dict) or not isinstance(p.get('identifier'), str) or p['identifier'] in prompts:
-            raise ValueError('Invalid or duplicate SillyTavern prompt identifiers')
+            raise ValueError('Invalid or duplicate SillyTavern prompt identifiers.')
         prompts[p['identifier']] = p
     ordered = profiles[index]['order']
     if not isinstance(ordered, list) or not all(isinstance(x, dict) and isinstance(x.get('identifier'), str) for x in ordered):
-        raise ValueError('Invalid prompt order entries')
+        raise ValueError('Invalid prompt order entries.')
     blocks, seen = [], set()
     for item in [*ordered, *[{'identifier': key, 'enabled': False} for key in prompts if key not in {x.get('identifier') for x in ordered}]]:
         ident = item['identifier']
         if ident in seen:
-            raise ValueError('Duplicate prompt in order profile')
+            raise ValueError('Duplicate prompt in order profile.')
         seen.add(ident)
         p = prompts.get(ident, {'identifier': ident, 'marker': True, 'name': ident})
         source = ST_MARKERS.get(ident, 'unsupported:' + ident) if p.get('marker') else 'text'
@@ -364,7 +364,7 @@ def export_preset(bundle, sillytavern=False, omit=()):
         return bundle
     raw = copy.deepcopy(bundle.get('source', {}).get('sillytavern', {}))
     if not isinstance(omit, (list, tuple, set)) or not all(isinstance(x, str) for x in omit):
-        raise ValueError('Omitted blocks must be a JSON string array')
+        raise ValueError('Omitted blocks must be a JSON string array.')
     prompts, order = [], []
     used_ids = set()
     formats = {}
@@ -379,19 +379,19 @@ def export_preset(bundle, sillytavern=False, omit=()):
         p = copy.deepcopy(b['raw'])
         ident = reverse.get(b['source'], b['id'])
         if ident in used_ids:
-            raise ValueError('Multiple blocks map to the same SillyTavern identifier; explicitly omit a duplicate')
+            raise ValueError('Multiple blocks map to the same SillyTavern identifier. Explicitly omit a duplicate.')
         used_ids.add(ident)
         formatting = {'scenario': 'scenario_format', 'personality': 'personality_format', 'lore_before_char': 'wi_format', 'lore_after_char': 'wi_format'}.get(b['source'])
         if formatting and b['enabled']:
             if formatting in formats and formats[formatting] != b['content']:
-                raise ValueError('World Info wrappers differ; use the same wrapper or explicitly omit one block for SillyTavern export')
+                raise ValueError('World Info wrappers differ. Use the same wrapper or explicitly omit one block for SillyTavern export.')
             formats[formatting] = b['content']
         p.update(identifier=ident, name=b['name'], content=b['content'], role=b['role'], marker=b['source'] != 'text',
                  injection_position=1 if b['placement'] == 'in_chat' else 0, injection_depth=b['depth'], injection_order=b['order'])
         prompts.append(p)
         order.append({'identifier': ident, 'enabled': b['enabled']})
     if unsupported:
-        raise ValueError('Explicitly omit nonportable blocks before export: ' + ', '.join(unsupported))
+        raise ValueError('Explicitly omit nonportable blocks before export: ' + ', '.join(unsupported) + '.')
     raw.update(prompts=prompts, prompt_order=[{'character_id': 100001, 'order': order}])
     raw.update(formats)
     return raw

@@ -84,7 +84,7 @@ class Engine:
         cast = [eligible[ident] for ident in self.store.get_cast(scene.channel_id, scene.parent_channel_id) if ident in eligible]
         if scene.forced_character_id is not None:
             if scene.forced_character_id not in eligible:
-                raise ValueError("Character cannot join this space")
+                raise ValueError("That character cannot join this world or hub.")
             forced = eligible[scene.forced_character_id]
             cast = [forced, *[row for row in cast if row["id"] != forced["id"]]]
         if not cast:

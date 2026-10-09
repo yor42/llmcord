@@ -82,7 +82,7 @@ class ChannelNamesTests(unittest.IsolatedAsyncioTestCase):
             raise httpx.ConnectError('down')
         names, notes = await self.load(channels)
         self.assertEqual(names, {})
-        self.assertEqual(notes, [('Discord channels are unavailable', 'negative')])
+        self.assertEqual(notes, [('Discord channels could not be loaded. Showing channel IDs.', 'negative')])
 
     async def test_value_error_leaves_names_empty(self):
         """A rejected channel fetch (ValueError) is notified by run and leaves names empty."""
@@ -100,7 +100,7 @@ class ChannelNamesTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ThreadNamesTests(unittest.IsolatedAsyncioTestCase):
-    async def load(self, scopes, active_threads):
+    async def load(self, scopes, active_threads, channels=None):
         """Return (thread_names, fetch count) after load_thread_names over fake store scopes and avatars."""
         service = FakeService(None)
         async def run(ident, guild_id, operation, action=None, detail=None):
@@ -113,7 +113,10 @@ class ThreadNamesTests(unittest.IsolatedAsyncioTestCase):
             return active_threads(guild_id)
         service.avatars = SimpleNamespace(active_threads=fetch)
         ctx = LiveContext(SimpleNamespace(state=SimpleNamespace(admin=service)), SimpleNamespace(cookies={}, query_params={}), 1, {'csrf': 'x'})
-        with mock.patch('nicegui.ui.notify'):
+        self.notes = []
+        with mock.patch('nicegui.ui.notify', lambda message, **kwargs: self.notes.append((message, kwargs.get('type')))):
+            if channels is not None:
+                ctx.channels_failed = channels
             return await ctx.load_thread_names(), fetches
 
     async def test_no_scopes_makes_no_fetch(self):
@@ -126,14 +129,37 @@ class ThreadNamesTests(unittest.IsolatedAsyncioTestCase):
         names, fetches = await self.load([5], lambda guild_id: [{'id': '5', 'name': 'x'}])
         self.assertEqual((names, fetches), ({5: '#x'}, [1]))
 
-    async def test_failure_leaves_names_empty(self):
-        """UI-03: a failed thread fetch (transport or rejected) leaves the mapping empty."""
+    async def test_failure_sets_names_none_and_labels_neutral(self):
+        """UI-44: a failed thread fetch (transport or rejected) leaves names None, so threads read "Thread ...NNNN"."""
+        from llmcord_core.admin import AdminService
         def down(guild_id):
             raise httpx.ConnectError('down')
-        self.assertEqual((await self.load([5], down))[0], {})
         def rejected(guild_id):
             raise ValueError('Discord threads are unavailable')
-        self.assertEqual((await self.load([5], rejected))[0], {})
+        for fail in (down, rejected):
+            names, _ = await self.load([5], fail)
+            self.assertIsNone(names)
+            self.assertEqual(self.notes, [('Thread names could not be loaded. Showing thread IDs.', 'warning')])
+            self.assertEqual(AdminService.thread_label(1234567, names), "Thread …4567")
+
+    async def test_guard_rejection_is_a_fetch_failure(self):
+        """UI-44: an HTTPException from the auth guard (503/401) does not fail the page; names become None with one toast."""
+        service = FakeService(HTTPException(503, 'Busy'))
+        service.store = SimpleNamespace(thread_lore_scopes=lambda guild_id: [5])
+        ctx = LiveContext(SimpleNamespace(state=SimpleNamespace(admin=service)), SimpleNamespace(cookies={}, query_params={}), 1, {'csrf': 'x'})
+        notes = []
+        with mock.patch('nicegui.ui.notify', lambda message, **kwargs: notes.append((message, kwargs.get('type')))):
+            self.assertEqual(await ctx.load_channel_names(), {})
+            self.assertIsNone(await ctx.load_thread_names())
+        self.assertEqual(notes, [('Discord channels could not be loaded. Showing channel IDs.', 'negative')])
+
+    async def test_double_failure_notifies_once(self):
+        """UI-44: when the channel fetch already failed, the thread failure adds no second toast."""
+        def down(guild_id):
+            raise httpx.ConnectError('down')
+        names, _ = await self.load([5], down, channels=True)
+        self.assertIsNone(names)
+        self.assertEqual(self.notes, [])
 
 
 if __name__ == '__main__':

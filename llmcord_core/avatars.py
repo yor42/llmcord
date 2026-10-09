@@ -22,20 +22,20 @@ def avatar_version(data):
 
 def normalize_avatar(data):
     if len(data) > MAX_AVATAR_BYTES:
-        raise ValueError('Avatar exceeds 8 MiB')
+        raise ValueError('Avatar exceeds 8 MiB. Upload a smaller image.')
     try:
         with Image.open(BytesIO(data)) as image:
             if image.format not in {'PNG', 'JPEG', 'WEBP'} or getattr(image, 'n_frames', 1) != 1:
-                raise ValueError('Upload a static PNG, JPEG or WebP image')
+                raise ValueError('Upload a static PNG, JPEG or WebP image.')
             if image.width * image.height > 16_000_000:
-                raise ValueError('Avatar exceeds 16 megapixels')
+                raise ValueError('Avatar exceeds 16 megapixels. Upload a smaller image.')
             image = ImageOps.exif_transpose(image)
             image.thumbnail((256, 256))
             output = BytesIO()
             image.convert('RGBA').save(output, 'PNG', optimize=True)
             return output.getvalue()
     except (OSError, Image.DecompressionBombError) as error:
-        raise ValueError('Invalid avatar image') from error
+        raise ValueError('That avatar image is invalid. Upload a PNG, JPEG or WebP image.') from error
 
 
 @dataclass(frozen=True)
@@ -107,32 +107,32 @@ class AvatarPublisher:
     async def channels(self, guild_id):
         result = await self.http.get(f'{DISCORD_API}/guilds/{guild_id}/channels', headers={'Authorization': 'Bot ' + self.bot_token})
         if result.status_code != 200:
-            raise ValueError('Discord channels are unavailable')
+            raise ValueError('Discord channels are unavailable. Try again in a moment.')
         return result.json()
 
     async def active_threads(self, guild_id):
         result = await self.http.get(f'{DISCORD_API}/guilds/{guild_id}/threads/active', headers={'Authorization': 'Bot ' + self.bot_token})
         if result.status_code != 200:
-            raise ValueError('Discord threads are unavailable')
+            raise ValueError('Discord threads are unavailable. Try again in a moment.')
         return result.json().get('threads', [])
 
     async def configure(self, guild_id, channel_id):
         channels = await self.channels(guild_id)
         channel = next((c for c in channels if int(c['id']) == channel_id and c['type'] == 0), None)
         if not channel:
-            raise ValueError('Choose an asset text channel in this server')
+            raise ValueError('Choose an asset text channel in this server.')
         everyone = next((x for x in channel.get('permission_overwrites', []) if str(x['id']) == str(guild_id)), None)
         if not everyone or not int(everyone['deny']) & (1 << 10):
-            raise ValueError('The asset channel must explicitly deny View Channel to @everyone')
+            raise ValueError('The asset channel must deny View Channel to @everyone. Change its permissions in Discord, then choose it again.')
         self.store.execute('INSERT INTO guild_settings(guild_id,asset_channel_id) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET asset_channel_id=excluded.asset_channel_id', (guild_id, channel_id))
 
     async def publish(self, guild_id, character_id, slot_key, repair=False):
         slot = self.store.avatar_slot(guild_id, character_id, slot_key)
         if not slot['image']:
-            raise ValueError('Upload an image for this slot first')
+            raise ValueError('Upload an image for this slot first.')
         settings = self.store.one('SELECT asset_channel_id FROM guild_settings WHERE guild_id=?', (guild_id,))
         if not settings or not settings['asset_channel_id']:
-            raise ValueError('Choose an avatar asset channel first')
+            raise ValueError('Choose an avatar asset channel first.')
         image_hash = slot['image_hash']
         asset = self.store.avatar_asset(guild_id, character_id, slot_key, image_hash)
         if asset and asset['image_hash'] == image_hash and not repair:
@@ -142,12 +142,12 @@ class AvatarPublisher:
             data={'payload_json': json.dumps({'content': f'Character {character_id} / {slot_key}', 'allowed_mentions': {'parse': []}})},
             files={'files[0]': (f'{image_hash}.png', slot['image'], 'image/png')})
         if response.status_code >= 400:
-            raise ValueError('Avatar publication failed; check asset-channel permissions')
+            raise ValueError('Avatar publication failed. Check that the bot can send messages and attach files in the asset channel.')
         message = response.json()
         attachment = message['attachments'][0]
         url = urlsplit(attachment['url'])
         if url.scheme != 'https' or url.hostname not in {'cdn.discordapp.com', 'media.discordapp.net'}:
-            raise ValueError('Discord returned an unexpected asset URL')
+            raise ValueError('Discord returned an unexpected asset URL. Try again.')
         canonical = f'{url.scheme}://{url.netloc}{url.path}'
         self.store.execute('INSERT INTO avatar_assets(guild_id,character_id,slot_key,image_hash,channel_id,message_id,url,created_at) VALUES(?,?,?,?,?,?,?,?)',
             (guild_id, character_id, slot_key, image_hash, channel_id, int(message['id']), canonical, time.time()))

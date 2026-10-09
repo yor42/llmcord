@@ -49,9 +49,11 @@ class AdminService:
 
     @staticmethod
     def thread_label(scope_id, thread_names=None):
-        # UI-03: active threads show as "Thread #name"; others (archived/deleted/unknown) keep a distinguishing id tail.
+        # UI-03/UI-44: thread_names None means the fetch failed or was skipped, so the archived state is unknown.
         name = (thread_names or {}).get(scope_id)
-        return f"Thread {name}" if name else f"Archived thread …{str(scope_id)[-4:]}"
+        if name:
+            return f"Thread {name}"
+        return f"Thread …{str(scope_id)[-4:]}" if thread_names is None else f"Archived thread …{str(scope_id)[-4:]}"
 
     def owners_from(self, guild_id, spaces, characters, channels, lorebooks, thread_scopes, channel_names=None, thread_names=None):
         owners = []

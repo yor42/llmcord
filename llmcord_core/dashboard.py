@@ -37,6 +37,7 @@ class LiveContext:
         self.store = self.service.store
         self.lore_owner = request.query_params.get('owner')
         self.channel_names, self.thread_names, self.thread_scopes = {}, {}, None
+        self.channels_failed = False
         self.selector, self.containers, self.builders, self.built = None, {}, {}, set()
         self.savebar = None
 
@@ -44,22 +45,27 @@ class LiveContext:
         # One Discord channel fetch per page render; a failure leaves the mapping empty.
         from nicegui import ui
         try:
-            channels = await self.run(lambda: self.service.avatars.channels(self.guild_id)) or []
-        except httpx.HTTPError:
-            ui.notify('Discord channels are unavailable', type='negative', timeout=8000)
+            channels = await self.service.run(self.ident, self.guild_id, lambda: self.service.avatars.channels(self.guild_id)) or []
+        except (httpx.HTTPError, ValueError, HTTPException):
+            self.channels_failed = True
+            ui.notify('Discord channels could not be loaded. Showing channel IDs.', type='negative', timeout=8000)
             channels = []
         self.channel_names = {int(c['id']): '#' + c['name'] for c in channels if c['type'] == 0}
         return self.channel_names
 
     async def load_thread_names(self):
-        # UI-03: one extra fetch, only when the guild has thread lore scopes; a failure leaves the mapping empty.
+        # UI-03: one extra fetch, only when the guild has thread lore scopes; a failure sets the mapping to None.
         self.thread_scopes = self.store.thread_lore_scopes(self.guild_id)  # snapshot reuses this single read
         if not self.thread_scopes:
             return self.thread_names
+        from nicegui import ui
         try:
-            threads = await self.run(lambda: self.service.avatars.active_threads(self.guild_id)) or []
-        except httpx.HTTPError:
-            threads = []
+            threads = await self.service.run(self.ident, self.guild_id, lambda: self.service.avatars.active_threads(self.guild_id)) or []
+        except (httpx.HTTPError, ValueError, HTTPException):
+            self.thread_names = None  # unknown, not archived: labels fall back to "Thread ...NNNN"
+            if not self.channels_failed:  # a channel failure already toasted; one notice per page load
+                ui.notify('Thread names could not be loaded. Showing thread IDs.', type='warning', timeout=8000)
+            return self.thread_names
         self.thread_names = {int(t['id']): '#' + t['name'] for t in threads}
         return self.thread_names
 
