@@ -18,6 +18,23 @@ CREATE TABLE IF NOT EXISTS model_usage (
  created_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS usage_guild_model_time ON model_usage(guild_id,profile,model,created_at);
+CREATE TABLE IF NOT EXISTS bot_settings (
+ id INTEGER PRIMARY KEY CHECK(id=1),
+ soft_cap_usd REAL CHECK(soft_cap_usd IS NULL OR soft_cap_usd>=0),
+ hard_cap_usd REAL CHECK(hard_cap_usd IS NULL OR hard_cap_usd>=0),
+ reset_day INTEGER NOT NULL DEFAULT 1 CHECK(reset_day BETWEEN 1 AND 28),
+ channel_notice INTEGER NOT NULL DEFAULT 0 CHECK(channel_notice IN (0,1)),
+ revision INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO bot_settings(id) VALUES(1);
+CREATE TABLE IF NOT EXISTS spend_days (
+ day TEXT PRIMARY KEY, cost_usd REAL NOT NULL DEFAULT 0,
+ unpriced_calls INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS budget_notices (
+ period TEXT NOT NULL, kind TEXT NOT NULL, target_id INTEGER NOT NULL, sent_at REAL NOT NULL,
+ PRIMARY KEY(period,kind,target_id)
+);
 CREATE TABLE IF NOT EXISTS scene_guidelines (
  guild_id INTEGER NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('space','channel')),
  owner_id INTEGER NOT NULL, content TEXT NOT NULL, revision INTEGER NOT NULL,
@@ -118,10 +135,12 @@ class ConflictError(ValueError):
 
 class AdminStore:
     def record_model_usage(self, usage):
-        if usage.guild_id is None:
-            return
-        self.execute('INSERT INTO model_usage(guild_id,profile,model,role,input_tokens,output_tokens,cached_tokens,reasoning_tokens,cost_usd,cost_basis,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
-                     (usage.guild_id, usage.profile, usage.model, usage.role, usage.input_tokens, usage.output_tokens, usage.cached_tokens, usage.reasoning_tokens, usage.cost_usd, usage.cost_basis, usage.created_at))
+        with self.db:
+            if usage.guild_id is not None:
+                self.db.execute('INSERT INTO model_usage(guild_id,profile,model,role,input_tokens,output_tokens,cached_tokens,reasoning_tokens,cost_usd,cost_basis,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)',
+                                (usage.guild_id, usage.profile, usage.model, usage.role, usage.input_tokens, usage.output_tokens, usage.cached_tokens, usage.reasoning_tokens, usage.cost_usd, usage.cost_basis, usage.created_at))
+            self.db.execute("INSERT INTO spend_days(day,cost_usd,unpriced_calls) VALUES(strftime('%Y-%m-%d',?,'unixepoch'),?,?) ON CONFLICT(day) DO UPDATE SET cost_usd=cost_usd+excluded.cost_usd,unpriced_calls=unpriced_calls+excluded.unpriced_calls",
+                            (usage.created_at, usage.cost_usd or 0, int(usage.cost_usd is None)))
 
     def model_usage_summary(self, guild_id, profile, model, since=None):
         since = time.time() - 86400 if since is None else since
@@ -290,6 +309,12 @@ class AdminStore:
                 rows.remove(match)
                 self.db.execute('INSERT OR IGNORE INTO import_entries VALUES(?,?,?,?,?,?,?,?)',
                     (character['guild_id'], 'character', character['id'], source.uid, match['entry_key'], json.dumps({'content': source.content, 'rule': source.rule, 'pinned': False}), source.source_hash, 'active'))
+        self.db.commit()
+        with self.db:
+            self.db.execute('BEGIN IMMEDIATE')
+            if self.one('PRAGMA user_version')[0] < 6:
+                self.db.execute("INSERT OR REPLACE INTO spend_days(day,cost_usd,unpriced_calls) SELECT strftime('%Y-%m-%d',created_at,'unixepoch'),SUM(COALESCE(cost_usd,0)),SUM(cost_usd IS NULL) FROM model_usage GROUP BY 1")
+                self.db.execute('PRAGMA user_version=6')
 
     def validate_owner(self, guild_id, kind, owner_id):
         if kind == 'guild':
