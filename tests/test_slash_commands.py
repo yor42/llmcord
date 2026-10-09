@@ -247,6 +247,98 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('"secret" (#unknown-channel, always on)', reply)
         self.assertNotRegex(reply.split("\n")[0], r"#\d")
 
+    async def _context_preset_reply(self, preset, **trace):
+        self.store.record_node(5001, 1, 100, None, None, self.alice, "Hello")
+        self.store.save_trace(5001, {"lore": [], "personal": [1, 2], "encounters": [3], "emotion": "happy", "preset": preset, **trace})
+        interaction = self._context_interaction()
+        await invoke(self.bot, "context", interaction)
+        return interaction.replies[0]
+
+    async def test_context_preset_line_names_the_preset(self):
+        """UI-43: /context shows the preset's name (escaped) and revision, and the glossary's "Personal facts" label."""
+        from llmcord_core.prompts import default_bundle
+        preset_id, _ = self.store.save_preset(1, "Noir *Mix*", default_bundle())
+        reply = await self._context_preset_reply({"id": preset_id, "revision": 1, "blocks": [], "omitted": []})
+        self.assertIn("Preset: Noir \\*Mix\\* (revision 1); emotion: happy", reply)
+        self.assertNotIn(f"#{preset_id}", reply)
+        self.assertIn("Personal facts: 2; character encounters: 1", reply)
+        self.assertNotIn("Personal memories", reply)
+
+    async def test_context_preset_line_built_in_default(self):
+        reply = await self._context_preset_reply({"id": 0, "revision": 0, "blocks": [], "omitted": []})
+        self.assertIn("Preset: Built-in default (revision 0)", reply)
+
+    async def test_context_preset_line_foreign_guild_id_falls_back(self):
+        """UI-43: a preset id belonging to another server is never resolved; the line falls back to #<id>."""
+        from llmcord_core.prompts import default_bundle
+        foreign_id, _ = self.store.save_preset(2, "Other Server Secret", default_bundle())
+        reply = await self._context_preset_reply({"id": foreign_id, "revision": 1, "blocks": [], "omitted": []})
+        self.assertIn(f"Preset: #{foreign_id} (revision 1)", reply)
+        self.assertNotIn("Other Server Secret", reply)
+
+    def _book_entry(self, guild_id, keys, content="body"):
+        import json
+        book = self.store.db.execute("INSERT INTO lorebooks(guild_id,name,target_kind,target_id) VALUES(?,?,?,?)", (guild_id, f"B{guild_id}", "guild", 0)).lastrowid
+        entry = self.store.db.execute("INSERT INTO lorebook_entries(book_id,uid,content,rule_json,source_hash,local_hash) VALUES(?,?,?,?,?,?)",
+                                      (book, "u1", content, json.dumps({"keys": keys}), "a", "b")).lastrowid
+        self.store.db.commit()
+        return book, entry
+
+    async def test_context_lore_line_lorebook_entry_label_for_admins_only(self):
+        """UI-43: administrators see a lorebook entry's first key (guild-scoped lookup); members still see only the matched keyword."""
+        book, entry = self._book_entry(1, ["troll", "ogre"])
+        item = self._item("lorebook", book, entry, f"book:{book}:u1", book_name="B1")
+        self.assertEqual(self._line(self._context_interaction(admin=True), item), '"troll" (lorebook B1, keyword: dragon)')
+        self.assertEqual(self._line(self._context_interaction(), item), '"dragon" (lorebook B1, keyword: dragon)')
+        self.assertNotIn("troll", self._line(self._context_interaction(), self._item("lorebook", book, entry, "x", "always on", book_name="B1")))
+
+    def _server_lore(self, guild_id, keys, content="body"):
+        import json
+        entry = self.store.db.execute("INSERT INTO guild_lore_entries(guild_id,scope_kind,scope_id,content,keys_json,entry_key) VALUES(?,?,?,?,?,?)",
+                                      (guild_id, "guild", guild_id, content, json.dumps(keys), f"g:{guild_id}:{len(content)}{len(keys)}")).lastrowid
+        self.store.db.commit()
+        return entry
+
+    async def test_context_lore_line_server_wide_entry_label_for_admins_only(self):
+        """UI-43: administrators see a server-wide entry's first key (else an excerpt); members and other servers' entries stay unnamed."""
+        entry = self._server_lore(1, ["tavern", "inn"])
+        item = self._item("guild", 1, entry, f"lore:{entry}", "always on")
+        self.assertEqual(self._line(self._context_interaction(admin=True), item), '"tavern" (server-wide lore, always on)')
+        self.assertEqual(self._line(self._context_interaction(), item), "an unnamed entry (server-wide lore, always on)")
+        excerpt = self._server_lore(1, [], "  The   inn is " + "x" * 60)
+        self.assertEqual(self._line(self._context_interaction(admin=True), self._item("guild", 1, excerpt, "k", "always on")),
+                         f'"The inn is {"x" * 29}" (server-wide lore, always on)')
+        foreign = self._server_lore(2, ["secret"])
+        self.assertEqual(self._line(self._context_interaction(admin=True), self._item("guild", 1, foreign, f"lore:{foreign}", "always on")),
+                         "an unnamed entry (server-wide lore, always on)")
+
+    async def test_context_lore_line_caps_first_key_and_survives_bad_rule_json(self):
+        """UI-43: the first key is cut at 40 characters; bad rule JSON falls back to a guild-scoped content excerpt."""
+        admin = self._context_interaction(admin=True)
+        entry = self._server_lore(1, ["k" * 60])
+        self.assertEqual(self._line(admin, self._item("guild", 1, entry, "x", "always on")), f'"{"k" * 40}" (server-wide lore, always on)')
+        book, book_entry = self._book_entry(1, ["b" * 60])
+        self.assertEqual(self._line(admin, self._item("lorebook", book, book_entry, "x", "always on", book_name="B1")),
+                         f'"{"b" * 40}" (lorebook B1, always on)')
+        char_lore = self.store.add_lore(1, "character", self.alice, "body", ["c" * 60])
+        self.assertEqual(self._line(admin, self._item("character", self.alice, char_lore, "x", "always on")),
+                         f'"{"c" * 40}" (character Alice, always on)')
+        bad = self._server_lore(1, [], "Taverns   are loud")
+        self.store.db.execute("UPDATE guild_lore_entries SET rule_json='{bad' WHERE id=?", (bad,))
+        self.store.db.execute("UPDATE lorebook_entries SET rule_json='{bad' WHERE id=?", (book_entry,))
+        self.store.db.commit()
+        self.assertEqual(self._line(admin, self._item("guild", 1, bad, "raw-key", "always on")), '"Taverns are loud" (server-wide lore, always on)')
+        self.assertEqual(self._line(admin, self._item("lorebook", book, book_entry, "raw-key", "always on", book_name="B1")), '"body" (lorebook B1, always on)')
+        foreign = self._server_lore(2, [], "Secret")
+        self.store.db.execute("UPDATE guild_lore_entries SET rule_json='{bad' WHERE id=?", (foreign,))
+        self.store.db.commit()
+        self.assertEqual(self._line(admin, self._item("guild", 1, foreign, f"lore:{foreign}", "always on")), "an unnamed entry (server-wide lore, always on)")
+
+    async def test_context_lore_line_lorebook_entry_from_other_guild_is_not_read(self):
+        book, entry = self._book_entry(2, ["secret"])
+        item = self._item("lorebook", book, entry, f"book:{book}:u1", book_name="B2")
+        self.assertEqual(self._line(self._context_interaction(admin=True), item), "an unnamed entry (lorebook B2, keyword: dragon)")
+
     async def test_context_lore_line_member_label_is_only_the_matched_keyword(self):
         """Regression (UI-07): for a member a constant entry with keys is "an unnamed entry", and a keyword entry
         shows the keyword that matched, not keys[0]."""

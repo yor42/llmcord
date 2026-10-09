@@ -1019,9 +1019,24 @@ def _context_lore_line(bot: SkitBot, interaction: discord.Interaction, item: dic
                 except ValueError:
                     keys = []
                 if isinstance(keys, list) and keys and isinstance(keys[0], str) and keys[0].strip():
-                    label = keys[0].strip()
+                    label = keys[0].strip()[:40]
                 else:
                     label = " ".join(str(row["content"]).split())[:40]
+        if kind in ("lorebook", "guild"):
+            ref, sql = (("book-entry", "SELECT e.content FROM lorebook_entries e JOIN lorebooks b ON b.id=e.book_id WHERE b.guild_id=? AND e.id=?")
+                        if kind == "lorebook" else ("guild-lore", "SELECT content FROM guild_lore_entries WHERE guild_id=? AND id=?"))
+            try:
+                entry = bot.store.admin_entry(guild_id, f"{ref}:{item['id']}")
+                content, rule = entry["content"], entry["rule"]
+            except (ValueError, TypeError, KeyError):
+                # Unreadable rule JSON: still a guild-scoped content excerpt.
+                found = bot.store.one(sql, (guild_id, item["id"]))
+                content, rule = (found["content"] if found else ""), {}
+            keys = rule.get("keys") if isinstance(rule, dict) else None
+            if isinstance(keys, list) and keys and isinstance(keys[0], str) and keys[0].strip():
+                label = keys[0].strip()[:40]
+            else:
+                label = " ".join(str(content).split())[:40]
         if not label:
             key = str(item.get("entry_key") or "")
             label = "" if key.startswith(("lore:", "book:")) else key
@@ -1069,10 +1084,16 @@ def _register_context_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
         text = "Lore: " + (", ".join(lore_lines) or "none")
         text += f"\nBranch messages: {len(trace.get('messages', []))}"
         text += f"; nearby group messages: {len(trace.get('recent', []))}"
-        text += f"\nPersonal memories: {len(trace.get('personal', []))}; character encounters: {len(trace.get('encounters', []))}"
+        text += f"\nPersonal facts: {len(trace.get('personal', []))}; character encounters: {len(trace.get('encounters', []))}"
         preset = trace.get('preset', {})
         if preset:
-            text += f"\nPreset: #{preset['id']} revision {preset['revision']}; emotion: {trace.get('emotion', 'neutral')}"
+            clean = lambda value: discord.utils.escape_mentions(discord.utils.escape_markdown(value))  # noqa: E731
+            if preset['id'] == 0:
+                name = "Built-in default"
+            else:
+                found = next((row for row in bot.store.list_presets(interaction.guild_id) if row['id'] == preset['id']), None)
+                name = clean(found['name']) if found else f"#{preset['id']}"
+            text += f"\nPreset: {name} (revision {preset['revision']}); emotion: {trace.get('emotion', 'neutral')}"
             text += f"\nPrompt blocks: {len(preset.get('blocks', []))}; trimmed blocks: {len(preset.get('omitted', []))}"
             if preset.get('adaptations'):
                 text += '\nProvider adaptations: ' + '; '.join(preset['adaptations'])[:300]

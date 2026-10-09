@@ -6,7 +6,7 @@ Human messages sent to the model include the speaker's Discord display name and 
 
 Recent human chat observed before a bot turn is kept with that branch and included in later replies and summaries, within the configured context and retention limits. Rewinding to an earlier reply excludes later participants and messages. Identity guidance also applies to custom prompt presets; `{{user}}` means the current speaker.
 
-Older saved messages from before this feature retain their user IDs; historical display names that were never recorded cannot be recovered. Speaker names and mention metadata expire with conversation history. Personal memories remain scoped to the consenting user ID and character.
+Older saved messages from before this feature retain their user IDs; historical display names that were never recorded cannot be recovered. Speaker names and mention metadata expire with conversation history. Personal facts remain scoped to the consenting user ID and character.
 
 ## Worlds, hubs and casts
 
