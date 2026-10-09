@@ -1437,6 +1437,50 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def test_ui31_preset_prompt_text_highlights_known_and_unknown_macros(self):
+        """UI-31: the prompt text mirror marks known and unknown {{macros}} live; collapsed blocks are not attached; no CSP violation."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=prompts')
+        try:
+            console = []
+            page.on('console', lambda m: console.append(m.text) if m.type == 'error' else None)
+            page.locator('.prompt-toggle').first.wait_for()
+            self.assertEqual(page.locator('.mh-mirror').count(), 0)
+            page.locator('.prompt-toggle').first.click()
+            field = page.get_by_label('Prompt text / template', exact=True).first
+            field.wait_for(timeout=5000)
+            original = field.input_value()
+            plain = page.get_by_label('Block name', exact=True).first.evaluate('el => getComputedStyle(el).color')  # an unfocused field's normal text colour
+            field.fill('Hi {{user}} {{bogus}}')
+            mirror = page.locator('.mh-mirror')
+            mirror.wait_for(timeout=5000)
+            self.assertEqual(mirror.count(), 1)
+            self.assertEqual(mirror.get_attribute('aria-hidden'), 'true')
+            self.assertTrue(field.evaluate('el => el === document.activeElement'))
+            self.assertEqual(mirror.evaluate('el => getComputedStyle(el).color'), plain)
+            self.assertEqual(field.evaluate('el => getComputedStyle(el).caretColor'), plain)
+            self.assertEqual(mirror.locator('.mh-known').all_inner_texts(), ['{{user}}'])
+            self.assertEqual(mirror.locator('.mh-unknown').all_inner_texts(), ['{{bogus}}'])
+            field.press_sequentially(' {{char}}')
+            page.wait_for_function("() => document.querySelectorAll('.mh-mirror .mh-known').length === 2")
+            field.press_sequentially(' <b>&')
+            self.assertEqual(field.input_value(), 'Hi {{user}} {{bogus}} {{char}} <b>&')
+            self.assertEqual(mirror.text_content(), field.input_value())
+            self.assertEqual(mirror.locator('b').count(), 0)
+            bar = page.get_by_role('region', name='Unsaved changes')
+            bar.wait_for(timeout=5000)
+            bar.get_by_role('button', name='Reset', exact=True).click()
+            bar.wait_for(state='hidden')
+            page.wait_for_function('text => document.querySelector(".ll-macro textarea").value === text && document.querySelector(".mh-mirror")?.textContent === text', arg=original)
+            self.assertEqual(page.locator('.mh-mirror').count(), 1)
+            field.fill('\n'.join(f'line {i} {{{{user}}}}' for i in range(40)))
+            page.wait_for_function('() => document.querySelector(".mh-mirror")?.querySelectorAll(".mh-known").length === 40')
+            field.evaluate('el => { el.scrollTop = 120; }')
+            page.wait_for_function('() => { const t = document.querySelector(".ll-macro textarea"); return t.scrollTop > 0 && document.querySelector(".mh-mirror").scrollTop === t.scrollTop; }')
+            self.assertEqual([m for m in console if 'Content Security Policy' in m], [])
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
     def preset_file(self, marker):
         from llmcord_core.prompts import default_bundle, export_preset
         bundle = default_bundle()

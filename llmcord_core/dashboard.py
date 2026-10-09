@@ -25,6 +25,7 @@ from .avatars import MAX_AVATAR_BYTES, avatar_version, normalize_avatar
 from .cards import parse_card
 from .icons import icon_css, lucide, lucide_button, more_menu
 from .lorebooks import parse_lorebook
+from .macro_highlight import MacroHighlight
 from .prompts import PURPOSES, SOURCES, block, compatibility, default_bundle, ST_MARKERS, export_preset, parse_preset, purpose_blocks
 from .savebar import SaveBar
 from .scene_ui import confirm_dialog, delete_book_dialog, delete_space_dialog, direct_import_dialog, guideline_editor
@@ -210,6 +211,7 @@ THEME_CARD_HOVER, THEME_TILE, THEME_TILE_TEXT = '#35373c', '#404249', '#dbdee1'
 THEME_TEXT_MUTED, THEME_TEXT_FAINT, THEME_BORDER = '#b5bac1', '#949ba4', '#4e5058'
 THEME_PRIMARY, THEME_NEGATIVE = '#5865f2', '#da373c'
 THEME_DIVIDER, THEME_NESTED = '#3f4147', '#313338'
+THEME_MACRO_KNOWN, THEME_MACRO_UNKNOWN, THEME_MACRO_TEXT = '#7983f5', '#f23f43', '#ffffff'
 
 _THEME_CSS = f"""
 body.body--dark, body.body--dark .q-page, body.body--dark .q-layout {{ background: {THEME_BODY}; }}
@@ -287,6 +289,11 @@ body.body--dark .q-tab-panels, body.body--dark .q-tab-panel {{ background: trans
 .ll-block-caret {{ margin: 0 0 0 auto !important; transition: transform .15s; }}
 .ll-block-open .ll-block-caret {{ transform: rotate(180deg); }}
 .ll-collapsed {{ display: none !important; }}
+.mh-mirror {{ position: absolute; pointer-events: none; user-select: none; overflow: hidden; box-sizing: border-box; color: {THEME_MACRO_TEXT}; border: 0; margin: 0; white-space: pre-wrap; overflow-wrap: break-word; }}
+.ll-macro textarea.mh-ta {{ position: relative; z-index: 1; background: transparent; color: transparent; caret-color: {THEME_MACRO_TEXT}; }}
+.ll-macro textarea.mh-ta::selection {{ background: rgba(88, 101, 242, 0.45); color: transparent; }}
+.mh-known {{ background: color-mix(in srgb, {THEME_MACRO_KNOWN} 35%, transparent); border-radius: 3px; }}
+.mh-unknown {{ background: color-mix(in srgb, {THEME_MACRO_UNKNOWN} 25%, transparent); border-radius: 3px; text-decoration: underline wavy {THEME_MACRO_UNKNOWN}; }}
 .q-card {{ border-radius: 12px; }}
 .q-btn, .q-tab {{ text-transform: none; }}
 .q-field--outlined .q-field__control {{ background: {THEME_BODY}; border-radius: 8px; }}
@@ -1355,6 +1362,7 @@ def presets_panel(ctx):
 
     with section('Prompt blocks'):
         purpose = ui.select({p: p.title() for p in PURPOSES}, value='dialogue', label='Purpose')
+        MacroHighlight()
         render_editor = _preset_editor(ctx, state, purpose, collect)
         render_editor()
         rebase(state['label'])
@@ -1535,7 +1543,7 @@ def _preset_editor(ctx, state, purpose, collect):
                             tracked(ui.switch('Enabled')).bind_value(b, 'enabled')
                         sources = _prompt_options({k: PROMPT_SOURCE_LABELS.get(k, k) for k in sorted(SOURCES, key=lambda k: PROMPT_SOURCE_LABELS.get(k, k))}, b['source'])
                         tracked(ui.select(sources, label='Context source')).bind_value(b, 'source').classes('w-full')
-                        tracked(ui.textarea('Prompt text / template')).bind_value(b, 'content').classes('w-full').props('rows=6')
+                        tracked(ui.textarea('Prompt text / template')).bind_value(b, 'content').classes('w-full ll-macro').props('rows=6')
                         with ui.element('div').classes('ll-form-row'):
                             tracked(ui.select(_prompt_options(PROMPT_ROLE_LABELS, b['role']), label='Role')).bind_value(b, 'role')
                             tracked(ui.select(_prompt_options(PROMPT_PLACEMENT_LABELS, b['placement']), label='Placement')).bind_value(b, 'placement')
