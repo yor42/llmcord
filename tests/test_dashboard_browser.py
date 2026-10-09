@@ -303,8 +303,8 @@ class DashboardBrowserTests(unittest.TestCase):
         page.get_by_label('Lorebook name', exact=True).fill('Browser empty book')
         page.get_by_role('button', name='Create lorebook', exact=True).click()
         page.get_by_role('tab', name='Imports', exact=True).click()
-        empty = page.locator('.q-expansion-item').filter(has=page.get_by_text('Browser empty book · server', exact=True)).first
-        empty.get_by_text('Browser empty book · server', exact=True).click()
+        empty = page.locator('.q-expansion-item').filter(has=page.get_by_text('Browser empty book · Server lorebook', exact=True)).first
+        empty.get_by_text('Browser empty book · Server lorebook', exact=True).click()
         empty.get_by_role('button', name='Delete lorebook', exact=True).click()
         dialog.get_by_text('Delete lorebook Browser empty book?', exact=True).wait_for()
         dialog.get_by_role('button', name='Cancel', exact=True).click()
@@ -505,8 +505,8 @@ class DashboardBrowserTests(unittest.TestCase):
         self.wait_for(lambda: any(r['name'] == 'Browser import' for r in self.state()['lorebooks']))
         page.get_by_role('tab', name='Lore', exact=True).click()
         page.get_by_role('button', name='Import lorebook', exact=True).click()
-        book = page.locator('.q-expansion-item').filter(has=page.get_by_text('Browser import · server', exact=True)).first
-        book.get_by_text('Browser import · server', exact=True).click()
+        book = page.locator('.q-expansion-item').filter(has=page.get_by_text('Browser import · Server lorebook', exact=True)).first
+        book.get_by_text('Browser import · Server lorebook', exact=True).click()
         content = json.dumps({'entries': {'1': {'key': ['moon'], 'content': 'Imported lorebook entry', 'enabled': True}}}).encode()
         book.locator('input[type=file]').set_input_files({'name': 'lorebook.json', 'mimeType': 'application/json', 'buffer': content})
         book.get_by_role('button', name='Apply lorebook sync', exact=True).wait_for()
@@ -517,14 +517,14 @@ class DashboardBrowserTests(unittest.TestCase):
         self.wait_for(lambda: any(row['content'] == 'Imported lorebook entry' for row in self.state()['books']))
         page.get_by_role('tab', name='Lore', exact=True).click()
         page.get_by_role('button', name='Import lorebook', exact=True).click()
-        book = page.locator('.q-expansion-item').filter(has=page.get_by_text('Browser import · server', exact=True)).first
-        book.get_by_text('Browser import · server', exact=True).click()
+        book = page.locator('.q-expansion-item').filter(has=page.get_by_text('Browser import · Server lorebook', exact=True)).first
+        book.get_by_text('Browser import · Server lorebook', exact=True).click()
         book.get_by_role('button', name='Enable in World', exact=True).click()
         book.get_by_role('button', name='Enable in World', exact=True).wait_for(state='hidden')  # panel rebuilt in place, expansion collapsed
         page.get_by_role('tab', name='Lore', exact=True).click()
         page.get_by_role('button', name='Import lorebook', exact=True).click()
-        book = page.locator('.q-expansion-item').filter(has=page.get_by_text('Browser import · server', exact=True)).first
-        book.get_by_text('Browser import · server', exact=True).click()
+        book = page.locator('.q-expansion-item').filter(has=page.get_by_text('Browser import · Server lorebook', exact=True)).first
+        book.get_by_text('Browser import · Server lorebook', exact=True).click()
         book.get_by_role('button', name='Disable in World', exact=True).wait_for()
 
         risu = json.dumps({'type': 'risu', 'ver': 1, 'data': [
@@ -1080,8 +1080,8 @@ class DashboardBrowserTests(unittest.TestCase):
         context, page, errors = self.ux_page('/admin/guild/1?tab=imports')
         try:
             book = next(row for row in self.state()['lorebooks'] if row['name'] == 'Test book')
-            expansion = page.locator('.q-expansion-item').filter(has=page.get_by_text('Test book · channel', exact=True)).first
-            expansion.get_by_text('Test book · channel', exact=True).click()
+            expansion = page.locator('.q-expansion-item').filter(has=page.get_by_text('Test book · Channel lorebook · #scene', exact=True)).first
+            expansion.get_by_text('Test book · Channel lorebook · #scene', exact=True).click()
             expansion.get_by_role('button', name='Edit entries in Lore', exact=True).click()
             page.get_by_label('Left owner', exact=True).wait_for(timeout=5000)
             self.assertTrue(self.tab_selected(page, 'Lore'))
@@ -1482,8 +1482,8 @@ class DashboardBrowserTests(unittest.TestCase):
             bar.wait_for(state='visible', timeout=5000)
             dirty_value = description.input_value()
             page.get_by_role('tab', name='Imports', exact=True).click()
-            expansion = page.locator('.q-expansion-item').filter(has=page.get_by_text('Test book · channel', exact=True)).first
-            expansion.get_by_text('Test book · channel', exact=True).click()
+            expansion = page.locator('.q-expansion-item').filter(has=page.get_by_text('Test book · Channel lorebook · #scene', exact=True)).first
+            expansion.get_by_text('Test book · Channel lorebook · #scene', exact=True).click()
             expansion.get_by_role('button', name='Edit entries in Lore', exact=True).click()
             page.get_by_text('Save or reset your changes to Alice first.', exact=True).wait_for(timeout=5000)
             self.assertTrue(self.tab_selected(page, 'Imports'))

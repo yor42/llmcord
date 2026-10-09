@@ -1052,7 +1052,10 @@ def imports_panel(ctx):
             channel.bind_visibility_from(target, 'value', backward=lambda kind: kind == 'channel')
             ctx.button('Create lorebook', lambda: store.create_lorebook(gid, book_name.value or '', target.value, channel.value or 0), 'book.create', then=lambda _: ctx.refresh())
         for book in ctx.snapshot.lorebooks:
-            with ui.expansion(book['name'] + ' · ' + ('server' if book['target_kind'] == 'guild' else book['target_kind'])).classes('w-full'):
+            title = book['name'] + ' · ' + ('Server lorebook' if book['target_kind'] == 'guild' else 'Channel lorebook')
+            if book['target_kind'] == 'channel' and ctx.channel_names.get(book['target_id']):
+                title += ' · ' + ctx.channel_names[book['target_id']]
+            with ui.expansion(title).classes('w-full'):
                 with ui.element('div').classes('ll-stack'):
                     with ui.element('div').classes('ll-form-row'):
                         lucide_button('Edit entries in Lore', 'pencil', on_click=lambda book=book: ctx.refresh('lore', owner=f"book:{book['id']}")).props('outline')
