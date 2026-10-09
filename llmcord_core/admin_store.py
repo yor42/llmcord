@@ -874,6 +874,10 @@ class AdminStore:
         rows = self.db.execute(f"SELECT id,created_at,channel_id,message_id,stage,profile,model,status,reference_id,input_tokens,output_tokens,SUBSTR(CASE WHEN status='error' AND error_detail!='' THEN error_detail ELSE response_text END,1,200) AS preview FROM turn_log WHERE {' AND '.join(where)} ORDER BY id DESC LIMIT ?", (*args, limit)).fetchall()
         return [dict(r) for r in rows]
 
+    def turn_log_channels(self, guild_id):
+        rows = self.db.execute('SELECT DISTINCT channel_id FROM turn_log WHERE guild_id=? AND channel_id IS NOT NULL AND created_at>=? ORDER BY channel_id', (guild_id, self.monitoring_cutoff(guild_id))).fetchall()
+        return [r[0] for r in rows]
+
     def turn_log_entry(self, guild_id, entry_id):
         row = self.one('SELECT * FROM turn_log WHERE guild_id=? AND id=? AND created_at>=?', (guild_id, entry_id, self.monitoring_cutoff(guild_id)))
         return dict(row) if row else None

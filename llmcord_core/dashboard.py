@@ -7,6 +7,7 @@ import functools
 import json
 import logging
 import math
+import re
 import sqlite3
 import time
 import inspect
@@ -309,6 +310,10 @@ body.body--dark .q-card .q-card, body.body--dark .q-card .q-expansion-item {{ ba
 .ll-section > .q-expansion-item, .ll-subpanel {{ border: 1px solid {THEME_DIVIDER}; border-radius: 8px; }}
 .ll-usage .q-table__grid-content {{ gap: 8px; }}
 .ll-usage .q-table__grid-item-card {{ background: {THEME_NESTED}; border: 1px solid {THEME_DIVIDER}; border-radius: 8px; box-shadow: none; }}
+.ll-log-row {{ border: 1px solid {THEME_DIVIDER}; border-radius: 8px; }}
+.ll-log-row.ll-log-error {{ border-left: 3px solid {THEME_NEGATIVE}; }}
+.ll-log-head {{ min-width: 0; flex: 1 1 0; gap: 2px; overflow-wrap: anywhere; }}
+.ll-log-block {{ font-family: ui-monospace, monospace; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 16rem; overflow: auto; width: 100%; box-sizing: border-box; padding: 8px; background: {THEME_BODY}; border-radius: 6px; margin: 0; }}
 .ll-stack {{ width: 100%; box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; gap: 16px; padding: 4px 0 8px; }}
 .ll-stack .q-uploader {{ max-width: min(20rem, 100%); }}
 .q-uploader:not(:has(.q-uploader__file)) .q-uploader__subtitle {{ display: none; }}
@@ -833,6 +838,137 @@ def usage_table(columns, rows, key):
              ).classes('w-full ll-usage').props(':grid="Quasar.Screen.lt.sm" hide-pagination')
 
 
+TURN_LOG_PAGE = 50
+
+
+def normalize_reference(text):
+    """A pasted reference ID: the 6-hex token if there is one ('(ref 06F1EE)' -> '06f1ee'), else the trimmed text, lowercased."""
+    text = (text or '').strip()
+    found = re.search(r'\b[0-9a-fA-F]{6}\b', text)
+    return (found.group(0) if found else text.strip(' \t#[](){}.,:;')).lower()
+
+
+def turn_log_row(entry, zone_name, channel_label):
+    """Display strings for one turn log summary row (time in the server timezone, falling back to UTC)."""
+    try:
+        zone = ZoneInfo(zone_name or 'UTC')
+    except Exception:
+        zone = ZoneInfo('UTC')
+    inputs, outputs = entry['input_tokens'], entry['output_tokens']
+    tokens = '—' if inputs is None and outputs is None else f"{'—' if inputs is None else format(inputs, ',')} in / {'—' if outputs is None else format(outputs, ',')} out"
+    return {'time': datetime.fromtimestamp(entry['created_at'], zone).strftime('%Y-%m-%d %H:%M'), 'channel': channel_label(entry['channel_id']),
+            'stage': entry['stage'] or '—', 'model': entry['model'] or '—', 'tokens': tokens, 'error': entry['status'] == 'error',
+            'status': 'Error' if entry['status'] == 'error' else 'OK', 'reference': entry['reference_id'] or '', 'preview': (entry['preview'] or '').strip()}
+
+
+async def turn_log_section(ctx, channel_label):
+    from nicegui import ui
+    store, gid = ctx.store, ctx.guild_id
+    days = store.turn_log_settings(gid)['days']
+    zone_name = store.guild_timezone(gid)
+    with section('Log'):
+        ui.label('Personal facts are hidden and API keys removed. Entries are kept for ' + ('the current month' if days == 0 else f'{days} days') + ' (Server settings).').classes('ll-muted')
+        known = await ctx.run(lambda: store.turn_log_channels(gid)) or []
+        options = {None: 'All channels', **{c: channel_label(c) for c in known}}
+        with ui.element('div').classes('ll-form-row ll-field-row'):
+            channel = ui.select(options, value=None, label='Channel')
+            errors_only = ui.switch('Errors only')
+            reference = ui.input('Reference ID')
+        off_note = ui.label('Logging is off; showing earlier entries.').classes('ll-muted')
+        off_note.set_visibility(False)
+        body = ui.column().classes('w-full gap-2')
+        more = ui.button('Load more', on_click=lambda: load(False)).props('outline')
+        more.set_visibility(False)
+        state = {'last': None, 'applied': None, 'gen': 0, 'busy': False}
+
+        def filters():
+            return {'channel_id': channel.value, 'errors_only': bool(errors_only.value), 'reference_id': normalize_reference(reference.value) or None}
+
+        async def open_entry(entry_id, holder):
+            result = await ctx.run(lambda: (store.turn_log_entry(gid, entry_id),))
+            holder.clear()
+            if result is None:
+                return False  # the guarded read failed (already notified): let reopening retry
+            full = result[0]
+            with holder:
+                if full is None:
+                    ui.label('This entry is no longer available.').classes('ll-muted')
+                    return True
+                for title, text in (('Request', full['request_text']), ('Response', full['response_text']), ('Error', full['error_detail'])):
+                    if text or title != 'Error':
+                        ui.label(title).classes('ll-subtitle')
+                        ui.label(text or '(empty)').classes('ll-log-block')
+            return True
+
+        def add_row(entry):
+            row = turn_log_row(entry, zone_name, channel_label)
+            with ui.expansion().classes('ll-log-row w-full' + (' ll-log-error' if row['error'] else '')).props('dense') as expansion:
+                with expansion.add_slot('header'):
+                    with ui.column().classes('ll-log-head'):
+                        ui.label(f"{row['time']} · {row['channel']} · {row['stage']}").classes('text-sm')
+                        ui.label(f"{row['model']} · {row['tokens']}").classes('ll-muted text-sm')
+                        if row['error']:
+                            ui.label('Error' + (f" · Ref {row['reference']}" if row['reference'] else '')).classes('text-negative text-sm')
+                        elif row['reference']:
+                            ui.label(f"OK · Ref {row['reference']}").classes('ll-muted text-sm')
+                        else:
+                            ui.label('OK').classes('ll-muted text-sm')
+                        if row['preview']:
+                            ui.label(row['preview']).classes('ll-muted text-sm')
+                holder = ui.column().classes('w-full gap-2 q-pa-sm')
+            built = []
+            async def toggled(event):
+                if event.value and not built:
+                    built.append(True)
+                    if not await open_entry(entry['id'], holder):
+                        built.clear()
+            expansion.on_value_change(toggled)
+
+        async def load(reset):
+            if reset:
+                state['gen'] += 1
+                state['last'] = None
+                state['applied'] = filters()
+            elif state['busy']:
+                return
+            generation, chosen, before = state['gen'], state['applied'], state['last']
+            state['busy'] = True
+            more.disable()
+            try:
+                page = await ctx.run(lambda: (store.turn_log_page(gid, **chosen, before_id=before, limit=TURN_LOG_PAGE), store.turn_log_settings(gid)['enabled']))
+                if generation != state['gen']:
+                    return  # a newer filter was applied while this read ran
+                if page is None:
+                    return
+                entries, enabled = page
+                if reset:
+                    body.clear()
+                    off_note.set_visibility(not enabled and bool(entries))
+                with body:
+                    for entry in entries:
+                        add_row(entry)
+                    if reset and not entries:
+                        filtered = chosen['channel_id'] is not None or chosen['errors_only'] or chosen['reference_id']
+                        ui.label('No entries match these filters.' if filtered else 'No log entries yet.' if enabled
+                                 else 'The turn log is off. Turn it on in Server settings to record model calls.').classes('ll-muted')
+                if entries:
+                    state['last'] = entries[-1]['id']
+                more.set_visibility(len(entries) >= TURN_LOG_PAGE)
+            finally:
+                if generation == state['gen']:
+                    state['busy'] = False
+                    more.enable()
+
+        async def apply(_=None):
+            if filters() != state['applied']:
+                await load(True)
+        channel.on_value_change(apply)
+        errors_only.on_value_change(apply)
+        reference.on('keydown.enter', apply)
+        reference.on('blur', apply)
+        await load(True)
+
+
 async def monitoring_panel(ctx):
     from nicegui import ui
     store, gid = ctx.store, ctx.guild_id
@@ -883,6 +1019,7 @@ async def monitoring_panel(ctx):
                 ui.label('Tracked for this server, including internal model calls. Cost uses list rates or your configured rates; it is not a billing statement.').classes('ll-muted')
         select.on_value_change(lambda _: render())
         render()
+    await turn_log_section(ctx, channel_label)
 
 
 async def setup_panel(ctx):

@@ -56,6 +56,16 @@ def main():
         store.db.execute("INSERT INTO model_usage(guild_id,profile,model,role,input_tokens,output_tokens,cached_tokens,reasoning_tokens,cost_usd,cost_basis,created_at,channel_id,feature) VALUES(?,?,?,'dialogue',?,?,0,0,?,'configured',?,?,?)",
                          (guild, profile, model, inputs, outputs, cost, time.time() - days_ago * 86400, channel, feature))
     store.db.commit()
+    # Turn log viewer data (FEAT-07), inserted directly so the guild-1 log switch stays off for the settings test:
+    # 56 plain replies (oldest), one failure with a reference ID, one summon in a deleted channel (newest); guild 2 holds a canary.
+    now = time.time()
+    log_sql = 'INSERT INTO turn_log(guild_id,channel_id,message_id,stage,profile,model,status,reference_id,error_detail,request_text,response_text,input_tokens,output_tokens,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+    for n in range(1, 57):
+        store.db.execute(log_sql, (1, 100, None, 'reply · dialogue', 'fixture', 'fixture-model', 'ok', '', '', f'Log request {n}', f'Log reply {n}', 100 + n, 20, now - 7200 + n * 10))
+    store.db.execute(log_sql, (1, 100, None, 'reply · failed at dialogue', 'fixture', 'fixture-model', 'error', '06f1ee', 'Provider returned 500 FIXTURE-ERROR-DETAIL', 'FIXTURE-ERROR-REQUEST', '', None, None, now - 3000))
+    store.db.execute(log_sql, (1, 777, None, 'summon · dialogue', 'fixture', 'second-model', 'ok', '', '', 'FIXTURE-REQUEST-TEXT', 'FIXTURE-RESPONSE-TEXT', 12, 34, now - 2000))
+    store.db.execute(log_sql, (2, 100, None, 'reply · dialogue', 'other', 'other-guild-model', 'ok', '', '', 'OTHER-GUILD-CANARY request', 'OTHER-GUILD-CANARY reply', 1, 1, now - 100))
+    store.db.commit()
     world = store.create_space(1, 'World', 'world')
     store.bind_channel(1, 100, world)
     store.add_character(1, world, 'Alice', {'name': 'Alice', 'description': 'A cheerful courier'}, None, [])

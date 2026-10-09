@@ -28,6 +28,15 @@ class TurnLogTests(unittest.TestCase):
         sql = f"SELECT COUNT(*) FROM {table}" + (" WHERE guild_id=%d" % guild if guild else "")
         return self.store.one(sql)[0]
 
+    def test_turn_log_channels_scoped_cut_off_distinct_and_non_null(self):
+        """FEAT-07: turn_log_channels lists each guild-1 channel once, skips NULL, other guilds and rows past retention."""
+        self.on(1, 7); self.on(2, 7)
+        now = time.time()
+        for guild, channel, age in ((1, 5, 0), (1, 5, 100), (1, 3, 0), (1, None, 0), (1, 9, 8 * 86400), (2, 77, 0)):
+            self.store.add_turn_log(guild, channel_id=channel, now=now - age)
+        self.assertEqual(self.store.turn_log_channels(1), [3, 5])
+        self.assertEqual(self.store.turn_log_channels(2), [77])
+
     def test_settings_defaults_and_round_trip(self):
         """FEAT-05: no row means off and 14 days; settings round-trip per guild."""
         self.assertEqual(self.store.turn_log_settings(1), {"enabled": False, "days": 14})

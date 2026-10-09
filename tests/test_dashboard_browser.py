@@ -949,6 +949,87 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def log_rows(self, page):
+        return page.locator('.ll-log-row')
+
+    def open_log(self, width=None):
+        context, page, errors = self.ux_page('/admin/guild/1?tab=monitoring')
+        if width:
+            page.set_viewport_size({'width': width, 'height': 844})
+        page.get_by_text('Personal facts are hidden and API keys removed.', exact=False).wait_for(timeout=5000)
+        self.log_rows(page).first.wait_for(timeout=5000)
+        return context, page, errors
+
+    def test_turn_log_lists_this_server_newest_first(self):
+        """FEAT-07: the Log section shows 50 guild-1 entries newest first with channel, model and tokens, and never the guild-2 canary."""
+        context, page, errors = self.open_log()
+        try:
+            self.assertEqual(self.log_rows(page).count(), 50)
+            self.assertIn('summon · dialogue', self.log_rows(page).first.inner_text())
+            self.assertIn('Deleted channel', self.log_rows(page).first.inner_text())
+            self.assertIn('12 in / 34 out', self.log_rows(page).first.inner_text())
+            self.assertRegex(self.log_rows(page).nth(2).inner_text(), r'\d{4}-\d\d-\d\d \d\d:\d\d · #scene · reply · dialogue')
+            page.get_by_text('Entries are kept for', exact=False).wait_for()
+            self.assertEqual(page.get_by_text('OTHER-GUILD-CANARY', exact=False).count(), 0)
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_turn_log_filters(self):
+        """FEAT-07: Errors only, Channel and Reference ID (with a pasted 'ref ' prefix) each narrow the list; no match says so."""
+        context, page, errors = self.open_log()
+        try:
+            page.get_by_role('switch', name='Errors only').click()
+            self.wait_for(lambda: self.log_rows(page).count() == 1)
+            self.assertIn('Ref 06f1ee', self.log_rows(page).first.inner_text())
+            page.get_by_role('switch', name='Errors only').click()
+            self.wait_for(lambda: self.log_rows(page).count() == 50)
+            page.get_by_label('Reference ID', exact=True).fill('(ref 06F1EE)')
+            page.get_by_label('Reference ID', exact=True).press('Enter')
+            self.wait_for(lambda: self.log_rows(page).count() == 1)
+            page.get_by_label('Reference ID', exact=True).fill('NOPE')
+            page.get_by_label('Reference ID', exact=True).press('Enter')
+            page.get_by_text('No entries match these filters.', exact=True).wait_for(timeout=5000)
+            page.get_by_label('Reference ID', exact=True).fill('')
+            page.get_by_label('Reference ID', exact=True).press('Enter')
+            self.wait_for(lambda: self.log_rows(page).count() == 50)
+            page.get_by_label('Channel', exact=True).click()
+            page.get_by_role('option', name='Deleted channel', exact=True).click()
+            self.wait_for(lambda: self.log_rows(page).count() == 1)
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_turn_log_expand_and_load_more(self):
+        """FEAT-07: expanding an entry loads its request, response and error text; Load more appends the 8 older entries and then hides."""
+        context, page, errors = self.open_log()
+        try:
+            self.log_rows(page).first.click()
+            page.locator('.ll-log-block', has_text='FIXTURE-REQUEST-TEXT').wait_for(timeout=5000)
+            page.locator('.ll-log-block', has_text='FIXTURE-RESPONSE-TEXT').wait_for()
+            self.log_rows(page).nth(1).click()
+            page.locator('.ll-log-block', has_text='FIXTURE-ERROR-REQUEST').wait_for(timeout=5000)
+            page.locator('.ll-log-block', has_text='Provider returned 500 FIXTURE-ERROR-DETAIL').wait_for()
+            page.get_by_role('button', name='Load more').click()
+            self.wait_for(lambda: self.log_rows(page).count() == 58)
+            self.wait_for(lambda: not page.get_by_role('button', name='Load more').is_visible())
+            self.assertIn('Log reply 1', self.log_rows(page).last.inner_text())
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_turn_log_fits_phone_width(self):
+        """FEAT-07: at 390 px the log, including an expanded entry, causes no horizontal page scroll."""
+        context, page, errors = self.open_log(390)
+        try:
+            self.log_rows(page).nth(1).click()
+            page.locator('.ll-log-block', has_text='FIXTURE-ERROR-REQUEST').wait_for(timeout=5000)
+            page.wait_for_timeout(300)
+            self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'))
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
     def test_server_turn_log_settings_persist(self):
         """D22 step 4: the Keep a turn log switch and retention save together as one settings.turn_log audit row."""
         context, page, errors = self.ux_page('/admin/guild/1')
