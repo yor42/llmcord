@@ -2122,18 +2122,47 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
-    def test_lore_editor_checkboxes_share_one_row_on_phones(self):
-        """UI-45: at 390 px Enabled, Always active and Pinned stay on one row without horizontal scroll."""
+    def test_lore_editor_checkboxes_stay_inside_card_on_phones(self):
+        """UI-45/UI-50: at 390 px each of Enabled, Always active and Pinned lies inside its card with its label on one line; the row wraps whole checkboxes (Pinned drops below at 390 px, all share a line at 1000 px)."""
         context, page, errors = self.ux_page('/admin/guild/1?tab=lore')
         try:
             page.set_viewport_size({'width': 390, 'height': 844})
             page.get_by_role('button', name='New entry', exact=True).first.wait_for(timeout=5000)
             page.get_by_role('button', name='New entry', exact=True).first.click()
-            tops = [page.get_by_role('checkbox', name=name, exact=True).bounding_box()['y'] for name in ('Enabled', 'Always active', 'Pinned')]
-            self.assertEqual(len({round(top) for top in tops}), 1, tops)
+            card = page.locator('.q-card').filter(has=page.get_by_text('Create lore', exact=True)).last
+            card.wait_for(timeout=5000)
+            card_right = card.bounding_box()['x'] + card.bounding_box()['width']
+            heights = {}
+            for name in ('Enabled', 'Always active', 'Pinned'):
+                box = page.get_by_role('checkbox', name=name, exact=True).bounding_box()
+                self.assertLessEqual(box['x'] + box['width'], card_right + 0.5, (name, box, card_right))
+                rects = page.evaluate("""(name) => {
+                    const label = [...document.querySelectorAll('.q-checkbox__label')].filter(e => e.textContent.trim() === name).pop();
+                    return {rects: label.getClientRects().length, height: label.getBoundingClientRect().height};
+                }""", name)
+                self.assertEqual(rects['rects'], 1, (name, rects))
+                heights[name] = rects['height']
+            for name, height in heights.items():
+                self.assertAlmostEqual(height, heights['Enabled'], delta=2, msg=(name, heights))
+            tops = self.checkbox_tops(page)
+            self.assertGreater(tops['Pinned'], tops['Enabled'] + 2, tops)  # Pinned wrapped to a second line
+            self.assertAlmostEqual(tops['Always active'], tops['Enabled'], delta=2, msg=tops)
             self.assertFalse(page.evaluate('() => document.documentElement.scrollWidth > innerWidth'))
+            page.set_viewport_size({'width': 1000, 'height': 844})
+            page.wait_for_function(
+                '''() => { const t = ['Enabled', 'Always active', 'Pinned'].map(n => [...document.querySelectorAll('.q-checkbox')]
+                    .filter(e => e.textContent.trim() === n).pop().getBoundingClientRect().top);
+                    return Math.max(...t) - Math.min(...t) <= 2; }''', timeout=5000)
+            tops = self.checkbox_tops(page)
+            self.assertLessEqual(max(tops.values()) - min(tops.values()), 2, tops)
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
         finally:
             context.close()
+
+    @staticmethod
+    def checkbox_tops(page):
+        return {name: page.get_by_role('checkbox', name=name, exact=True).bounding_box()['y']
+                for name in ('Enabled', 'Always active', 'Pinned')}
 
     CLIPPED_SELECT_LABELS_JS = """() => [...document.querySelectorAll('.q-select')].flatMap(select => {
         const label = select.querySelector('.q-field__label');

@@ -1032,10 +1032,10 @@ def entry_editor(ctx, entry, owners, refresh):
                 if (text) getElement({element_id}).add(text, true);
             }}""")
         controls['order'] = ui.number('Order', value=rule['order'], precision=0).props('hint="Higher values appear later"')
-        with ui.row().classes('gap-x-3 gap-y-0 no-wrap'):
-            controls['enabled'] = ui.checkbox('Enabled', value=rule['enabled'])
-            controls['constant'] = ui.checkbox('Always active', value=rule['constant'])
-            pinned = ui.checkbox('Pinned', value=entry['pinned'])
+        with ui.row().classes('gap-x-3 gap-y-0'):
+            controls['enabled'] = ui.checkbox('Enabled', value=rule['enabled']).classes('whitespace-nowrap')
+            controls['constant'] = ui.checkbox('Always active', value=rule['constant']).classes('whitespace-nowrap')
+            pinned = ui.checkbox('Pinned', value=entry['pinned']).classes('whitespace-nowrap')
         with ui.expansion('Advanced activation and placement rules').classes('w-full ll-subpanel'), ui.element('div').classes('ll-stack px-4'):
             for key, value in rule.items():
                 if key in controls or key == 'unsupported':
