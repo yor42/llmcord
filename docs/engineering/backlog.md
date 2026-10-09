@@ -46,6 +46,7 @@
 | MNT-31 | Model client lifecycle (D24 step 3 review): `ModelGateway.retired` keeps every client replaced by a profile change until shutdown; `close()` stops at the first client whose close raises, so later clients stay open. Close retired clients once no call uses them, and close every client even if one fails. | D24 review | later |
 | MNT-32 | D24 test and display gaps: the `/catchup` `pin()` has no test; the server Monitoring tab's role badges read the raw `config.yaml` roles, not the dashboard roles; the profile editor's "Test connection" has no test for closing the dialog mid-test or a real provider timeout; the model gateway's "not set in the bot's environment" message is worded for the bot even when the probe passes its own environment (unreachable today). | D24 reviews | later |
 | MNT-33 | D24 nits: `save_model_profile` bumps `model_roles.version` twice per save (harmless); stray blank lines in `admin_store.py`. Optional (step 5 review): refuse loopback and link-local base URLs for key-less "Test connection" probes (accepted risk, operator-only, documented in `docs/admin-console.md`). | D24 reviews | later |
+| MNT-34 | `scripts/verify.sh` does not run Gitleaks, so fake keys in tests first fail in CI's Repository security job (D24: four `sk-…` test values, allowlisted in `.gitleaksignore`). Add an optional local `gitleaks git --redact` step when the binary is present. | CI 2026-10-10 | next |
 
 ## UI polish
 

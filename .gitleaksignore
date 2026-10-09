@@ -1,0 +1,6 @@
+# Gitleaks findings reviewed and accepted: fake keys in offline tests (see the test files).
+# Format: commit:file:rule:line (gitleaks fingerprints). Add new entries only after checking the value is fake.
+34b1dc011a981cdc485afe3a81a25bba48d3f302:tests/test_connection_test.py:generic-api-key:17
+eabe0b165598b39dd9d024f25e89161eaa7c61a2:tests/test_model_backend_store.py:generic-api-key:141
+eabe0b165598b39dd9d024f25e89161eaa7c61a2:tests/test_model_backend_store.py:generic-api-key:192
+eabe0b165598b39dd9d024f25e89161eaa7c61a2:tests/test_model_backend_store.py:generic-api-key:391
