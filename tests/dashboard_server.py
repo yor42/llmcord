@@ -52,7 +52,8 @@ def main():
     store.add_lore(1, 'channel', 100, 'The moon is red', ['moon'])
     book_id = store.create_lorebook(1, 'Test book', 'channel', 100)
     from llmcord_core.lorebooks import parse_lorebook
-    store.sync_lorebook(1, book_id, parse_lorebook(json.dumps({'entries': {str(i): {'key': ['fixture'], 'content': f'Fixture entry {i}'} for i in range(75)}}).encode()), {}, 0)
+    # Zero-padded uids: the import sorts entries by uid as strings, so this keeps the book in numeric order (1, 2, ... 10).
+    store.sync_lorebook(1, book_id, parse_lorebook(json.dumps({'entries': {f'{i:02d}': {'key': ['fixture'], 'content': f'Fixture entry {i}'} for i in range(75)}}).encode()), {}, 0)
     # PERF-05: a guild-target book (named to sort before 'Test book', which the lore board picks as the default right owner) and a second space, so lorebook_links is observably once per book (not books x spaces).
     store.create_space(1, 'Annex', 'world')
     store.create_lorebook(1, 'Guild book', 'guild')
@@ -166,6 +167,26 @@ def main():
         row = store.entry_by_key(1, value['key'])
         store.save_entry(1, row['owner_kind'], row['owner_id'], value['content'], row['rule'],
                          ref=row['ref'], expected_revision=row['revision'])
+        return {'ok': True}
+
+    @app.post('/_test/set-lore-enabled')
+    async def set_lore_enabled(request: Request):
+        # Enable or disable one lore entry (by its content) through the real store API (UI-40 Disabled pill test).
+        value = await request.json()
+        row = next(r for r in store.all('SELECT entry_key FROM lore WHERE guild_id = 1 AND content = ?', (value['content'],)))
+        entry = store.entry_by_key(1, row['entry_key'])
+        store.save_entry(1, entry['owner_kind'], entry['owner_id'], entry['content'], {**entry['rule'], 'enabled': bool(value['enabled'])},
+                         ref=entry['ref'], expected_revision=entry['revision'])
+        return {'ok': True}
+
+    @app.post('/_test/delete-lore')
+    async def delete_lore(request: Request):
+        # Delete guild-1 lore rows whose content exactly matches one of `contents` (browser tests clean up the entries they create).
+        contents = (await request.json())['contents']
+        for content in contents:
+            for row in store.all('SELECT entry_key FROM lore WHERE guild_id = 1 AND content = ?', (content,)):
+                entry = store.entry_by_key(1, row['entry_key'])
+                store.delete_entry(1, entry['ref'], entry['revision'])
         return {'ok': True}
 
     @app.post('/_test/change-character')

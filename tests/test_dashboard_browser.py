@@ -1146,6 +1146,15 @@ class DashboardBrowserTests(unittest.TestCase):
         except Exception as exc:
             print(f'warning: /_test/cleanup-ui09 failed: {exc!r}', file=sys.stderr)
 
+    def delete_lore(self, *contents):
+        """Best-effort removal of lore entries a test created (by exact content)."""
+        try:
+            response = self.context.request.post(self.url + '/_test/delete-lore', data={'contents': list(contents)})
+            if response.status != 200:
+                print(f'warning: /_test/delete-lore returned {response.status}', file=sys.stderr)
+        except Exception as exc:
+            print(f'warning: /_test/delete-lore failed: {exc!r}', file=sys.stderr)
+
     def png(self, color):
         from io import BytesIO
         from PIL import Image
@@ -1473,6 +1482,77 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertFalse(errors, (errors, getattr(page, 'network', [])))
         finally:
             context.close()
+
+    def test_disabled_lore_entry_shows_the_disabled_pill(self):
+        """UI-40: a disabled lore entry's row carries the 'Disabled' pill (ll-pill ll-pill-off); an enabled entry's row does not."""
+        from playwright.sync_api import expect
+        context, page, errors = self.ux_page('/admin/guild/1?tab=lore')
+        try:
+            page.get_by_role('button', name='New entry', exact=True).first.wait_for(timeout=5000)
+            for content in ('Pill enabled entry', 'Pill disabled entry'):
+                page.get_by_role('button', name='New entry', exact=True).first.click()
+                page.get_by_label('Content', exact=True).fill(content)
+                page.get_by_role('button', name='Save lore', exact=True).click()
+                self.wait_for(lambda: any(r['content'] == content for r in self.state()['lore']))
+            enabled_row = page.locator('.lore-drop-left .lore-entry').filter(has_text='Pill enabled entry')
+            disabled_row = page.locator('.lore-drop-left .lore-entry').filter(has_text='Pill disabled entry')
+            expect(disabled_row).to_be_visible()
+            expect(disabled_row.locator('.ll-pill-off')).to_have_count(0)
+            self.assertEqual(self.context.request.post(self.url + '/_test/set-lore-enabled', data={'content': 'Pill disabled entry', 'enabled': False}).status, 200)
+            try:
+                self.load(page, self.url + '/admin/guild/1?tab=lore')
+                expect(disabled_row.locator('.ll-pill.ll-pill-off')).to_have_text('Disabled')
+                expect(enabled_row).to_be_visible()
+                expect(enabled_row.locator('.ll-pill-off')).to_have_count(0)
+                expect(enabled_row.get_by_text('Disabled', exact=True)).to_have_count(0)
+            finally:
+                self.context.request.post(self.url + '/_test/set-lore-enabled', data={'content': 'Pill disabled entry', 'enabled': True})
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+            self.delete_lore('Pill enabled entry', 'Pill disabled entry')
+
+    def test_lore_move_item_is_disabled_when_both_panels_show_the_same_owner(self):
+        """UI-40: with the same owner in both panels, the entry menu's Move item is disabled; with different owners it is enabled."""
+        import re
+        from playwright.sync_api import expect
+        context, page, errors = self.ux_page('/admin/guild/1?tab=lore')
+        original_page = self.page
+        self.page = page
+        try:
+            page.get_by_role('button', name='New entry', exact=True).first.wait_for(timeout=5000)
+            page.get_by_role('button', name='New entry', exact=True).first.click()
+            page.get_by_label('Content', exact=True).fill('Same owner entry')
+            page.get_by_role('button', name='Save lore', exact=True).click()
+            self.wait_for(lambda: any(r['content'] == 'Same owner entry' for r in self.state()['lore']))
+            entry = page.locator('.lore-drop-left .lore-entry').filter(has_text='Same owner entry')
+            entry.wait_for(timeout=5000)
+            menuitem = page.get_by_role('menuitem', name='Move right', exact=True)
+
+            def open_menu():
+                entry.get_by_role('button', name='More actions for entry', exact=True).click()
+                menuitem.wait_for(timeout=5000)
+
+            open_menu()
+            expect(menuitem).not_to_have_class(re.compile('disabled'))
+            page.keyboard.press('Escape')
+            expect(menuitem).to_have_count(0)
+            # Point the right panel at whatever owner the left one shows (its kind and id are on the drop zone).
+            left_zone = page.locator('.lore-drop-left')
+            kind, ident = left_zone.get_attribute('data-owner-kind'), left_zone.get_attribute('data-owner-id')
+            self.choose_lore_owner('right', page.get_by_label('Left owner', exact=True).input_value(), kind, int(ident))
+            entry = page.locator('.lore-drop-left .lore-entry').filter(has_text='Same owner entry')
+            entry.wait_for(timeout=5000)
+            open_menu()
+            expect(menuitem).to_have_class(re.compile('disabled'))
+            before = self.state()
+            menuitem.click(force=True)
+            self.assertEqual(self.state()['lore'], before['lore'])
+            self.assertFalse(errors, errors)
+        finally:
+            self.page = original_page
+            context.close()
+            self.delete_lore('Same owner entry')
 
     def test_lore_entry_delete_goes_through_the_dialog(self):
         """UX-05: deleting a lore entry from its editor opens a confirmation dialog (no checkbox); Cancel keeps it."""
