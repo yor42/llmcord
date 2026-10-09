@@ -7,6 +7,7 @@ import functools
 import json
 import math
 import sqlite3
+import time
 import inspect
 import types
 import zoneinfo
@@ -161,6 +162,17 @@ def rejection_notice(error):
     if error.status_code == 401:
         return 'Your Discord sign-in expired. Sign in again.'
     return str(error.detail or 'This action was rejected')
+
+
+NOTICE_WINDOW = 8.0  # seconds; matches the 8000 ms toast timeout
+
+
+def should_notify(last, notice, now, window=NOTICE_WINDOW):
+    """UI-04: show a rejection notice unless the same text was shown to this client within the toast lifetime.
+
+    `last` is the client's previous (notice, time) or None.
+    """
+    return last is None or last[0] != notice or now - last[1] >= window
 
 
 # Discord-like style tokens (UI-28, D20). Later steps reuse these names.
@@ -358,8 +370,12 @@ def _install_socket_auth(app):
             original_event(sid, message)
         elif client is not None and (notice := rejection_notice(error)):
             # The event itself is still dropped; only the bound client is told why.
-            with client:
-                ui.notify(notice, type='negative', timeout=8000)
+            now = time.monotonic()
+            last = getattr(client, 'llmcord_last_notice', None)  # lives and dies with the client
+            if should_notify(last, notice, now):
+                client.llmcord_last_notice = (notice, now)
+                with client:
+                    ui.notify(notice, type='negative', timeout=8000)
 
     original_connect = core.sio.handlers['/']['connect']
     @core.sio.on('connect')
