@@ -104,6 +104,8 @@ The **Monitoring** tab shows this server's model usage and, when it is on, the t
 
 The log records nothing until a server admin turns on **Keep a turn log**. It then records every model call for this server: the director, each speaker, image descriptions, memory extraction, scene summaries and `/catchup`, plus every failed turn with its reference ID. Before saving, the bot hides known personal facts (as `[personal fact hidden]`) and removes API keys and tokens, and caps very long text. Limits to know: only exact copies of stored facts are hidden (case aside), so a paraphrase can remain; the memory extraction request still contains the member's own recent messages, which is what the model reads to find facts; and requests contain the channel's recent conversation, as the model saw it. Only this server's admins can see its log. When a turn or command fails and the log is on, the notice members see points admins here and carries the reference ID to search for.
 
+Operators also see one read-only line at the top of this tab, "Bot-wide spending: $X of $Y hard cap this period" (or "$X this period; no hard cap set"), with an **Open Bot settings** link. Other server admins never see it, and nothing there can be changed from the server page.
+
 Generation status shows the dialogue model and its tracked input-plus-output tokens over a rolling 24 hours for the current server, including director, memory, summary, and image calls using that same profile/model.
 
 ## Reply footer and cost estimates
@@ -115,6 +117,10 @@ For Google's `gemini-3.8-flash` endpoint, estimates use [standard paid list rate
 ## Bot settings and spending caps
 
 Operators are the people who run the bot itself, listed by Discord user ID in `LLMCORD_OPERATOR_IDS` (see [live testing](live-testing-pi.md)). They are separate from server admins. An operator sees **Bot settings** in the account menu; for anyone else that page does not exist. Every save there checks the operator list again and is recorded in the audit log.
+
+Bot settings has two tabs, **Spending** (the caps below) and **Usage by server**. Add `?tab=usage` to open the second directly.
+
+**Usage by server** lists every server's model calls: requests, input and output tokens, estimated USD and calls without a cost estimate, costliest first, with a total row. Choose a **Period**: This spending period (from the reset day, UTC; the default), Last 7 days or Last 30 days. A server appears by its Discord name when the operator's own Discord account can see it, otherwise as "Server (ID …1234)" with the last four digits; calls with no server show as "No server". Each server keeps usage only for its own period (**Keep usage and log for** in its Server settings), so this table can show less than the Spending tab. The table is read-only.
 
 **Spending caps** apply to the whole bot, across every server, and use the same estimated USD cost as the reply footer:
 

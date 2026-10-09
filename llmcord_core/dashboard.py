@@ -49,6 +49,11 @@ class OperatorContext:
             ui.notify(error.detail if isinstance(error, HTTPException) else str(error), type='negative', timeout=8000)
             return False, error
 
+    async def read(self, operation):
+        """A guarded read: the result, or None after a notified failure."""
+        ok, result = await self._attempt(operation)
+        return result if ok else None
+
     def button(self, text, operation, action=None, detail=None, then=None, success=None, conflict=None, **kwargs):
         from nicegui import ui
         async def clicked():
@@ -114,9 +119,58 @@ def budget_panel(ctx):
     render()
 
 
+OPERATOR_USAGE_PERIODS = {'period': 'This spending period', '7': 'Last 7 days', '30': 'Last 30 days'}
+
+
+def operator_usage_since(key, reset_day, now):
+    from . import budget
+    if key == 'period':
+        return datetime.combine(budget.period_start(now, reset_day), datetime.min.time(), tzinfo=ZoneInfo('UTC')).timestamp()
+    return now - int(key) * 86400
+
+
+def server_usage_label(guild_id, names):
+    if not guild_id:
+        return 'No server'
+    return names.get(str(guild_id)) or f'Server (ID …{str(guild_id)[-4:]})'
+
+
+async def usage_by_server_panel(ctx, guild_names):
+    from nicegui import ui
+    try:  # names come from the operator's own Discord guild list; any failure falls back to the server ID
+        names = {str(g.get('id')): str(g.get('name', '')) for g in await guild_names() if g.get('name')}
+    except (httpx.HTTPError, ValueError, HTTPException):
+        names = {}
+    with section('Usage by server'):
+        select = ui.select(OPERATOR_USAGE_PERIODS, value='period', label='Period')
+        body = ui.column().classes('w-full gap-4')
+
+        async def render():
+            now = time.time()
+            report = await ctx.read(lambda: ctx.store.usage_by_guild(operator_usage_since(select.value, ctx.store.budget_settings()['reset_day'], now), now))
+            body.clear()
+            if report is None:
+                return
+            with body:
+                if not report['rows']:
+                    ui.label('No model calls in this period.')
+                    return
+                def cells(label, r):
+                    return {'key': label, 'server': label, 'requests': f"{r['requests']:,}", 'input': f"{r['input_tokens']:,}", 'output': f"{r['output_tokens']:,}",
+                            'cost': format_usd(r['cost_usd']), 'unpriced': r['unpriced']}
+                rows = [cells(server_usage_label(r['guild_id'], names), r) | {'key': str(r['guild_id'])} for r in report['rows']]
+                usage_table([('server', 'Server'), ('requests', 'Requests'), ('input', 'Input tokens'), ('output', 'Output tokens'), ('cost', 'Estimated USD'), ('unpriced', 'Without cost estimate')],
+                            [*rows, cells('Total', report['totals']) | {'key': 'total'}], 'key')
+                ui.label('Each server keeps usage for its own period (Server settings), so this table can show less than the Spending tab.').classes('ll-muted')
+                ui.label('Cost uses list rates or your configured rates; it is not a billing statement.').classes('ll-muted')
+        select.on_value_change(render)
+        await render()
+
+
 class LiveContext:
     def __init__(self, app, request, guild_id, session):
         self.app, self.guild_id = app, guild_id
+        self.is_operator = False  # set by the page, which knows the session's role
         self.ident = request.cookies.get('llmcord_session', '')
         self.csrf = session['csrf']
         self.service = app.state.admin
@@ -611,7 +665,7 @@ def _register_pages(app):
                             ui.label(server_initials(guild['name'])).classes('ll-server-tile').props('aria-hidden=true')
                         ui.label(str(guild['name'])).classes('ll-server-name')
 
-    @ui.page('/operator')
+    @ui.page('/operator', response_timeout=30)
     async def operator(request: Request):
         try:
             session = await app.state.auth.guard_operator(request.cookies.get('llmcord_session', ''), origin=request.headers.get('origin'))
@@ -626,7 +680,33 @@ def _register_pages(app):
         with ui.column().classes('ll-page'):
             ui.label('Bot settings').classes('text-3xl font-bold')
             ui.label('Bot-wide settings. Only operators can see this page.').classes('ll-muted')
-            budget_panel(OperatorContext(app, request))
+            ctx = OperatorContext(app, request)
+            selected_tab = request.query_params.get('tab')
+            if selected_tab not in ('spending', 'usage'):
+                selected_tab = 'spending'
+            with ui.tabs().classes('w-full ll-tabs').props('align=left outside-arrows mobile-arrows') as tabs:
+                spending = ui.tab('spending', 'Spending')
+                usage = ui.tab('usage', 'Usage by server')
+            built = set()
+            async def build(tab):
+                if tab in built:
+                    return
+                built.add(tab)
+                try:
+                    with panels[tab]:
+                        if tab == 'spending':
+                            budget_panel(ctx)
+                        else:
+                            await usage_by_server_panel(ctx, lambda: app.state.auth.guilds(session))
+                except BaseException:
+                    built.discard(tab)
+                    raise
+            async def changed(event):
+                ui.run_javascript(f'const u = new URL(location.href); u.searchParams.set("tab", {json.dumps(event.value)}); history.replaceState(history.state, "", u);')
+                await build(event.value)
+            with ui.tab_panels(tabs, value=selected_tab, on_change=changed).classes('w-full'):
+                panels = {'spending': ui.tab_panel(spending), 'usage': ui.tab_panel(usage)}
+            await build(selected_tab)
 
     @ui.page('/guild/{guild_id}', response_timeout=30)
     async def guild(request: Request, guild_id: int):
@@ -634,6 +714,7 @@ def _register_pages(app):
         session = await app.state.auth.require_admin(request, guild_id)
         ui.context.client.llmcord_binding = (request.cookies['llmcord_session'], guild_id)
         ctx = LiveContext(app, request, guild_id, session)
+        ctx.is_operator = app.state.auth.is_operator(session)
         try:  # cached by require_admin; the header must not fail the page if a refetch does
             current = next((g for g in await app.state.auth.guilds(session) if str(g.get('id')) == str(guild_id)), None)
         except HTTPException:
@@ -1000,6 +1081,17 @@ async def monitoring_panel(ctx):
         return f"Deleted channel (ID …{digits[-4:]})"
     def money(row):
         return format_usd(row['cost_usd'])
+    if ctx.is_operator:  # re-checked per build; the number is bot-wide, so it is read through the operator guard
+        from . import budget
+        try:
+            state = await ctx.service.run_operator(ctx.ident, lambda: budget.state(store))
+        except HTTPException:
+            state = None
+        if state:
+            with ui.element('div').classes('ll-form-row'):
+                ui.label(f'Bot-wide spending: {format_usd(state.spent_usd)} of {format_usd(state.hard_cap_usd)} hard cap this period' if state.hard_cap_usd is not None
+                         else f'Bot-wide spending: {format_usd(state.spent_usd)} this period; no hard cap set').classes('ll-muted')
+                ui.link('Open Bot settings', '/operator')  # ui.link adds the /admin mount prefix
     with section('Usage'):
         select = ui.select({k: USAGE_RANGES[k][0] for k in keys}, value='7', label='Period')
         if len(keys) < len(USAGE_RANGES):

@@ -1426,6 +1426,115 @@ class DashboardBrowserTests(unittest.TestCase):
             finally:
                 context.close()
 
+    def operator_page(self, path, width=1000):
+        context = self.browser.new_context(ignore_https_errors=True, viewport={'width': width, 'height': 900})
+        context.add_cookies([{'name': 'llmcord_session', 'value': 'browser-operator-session', 'url': self.url,
+                              'secure': True, 'httpOnly': True, 'sameSite': 'Lax'}])
+        page = context.new_page()
+        errors = []
+        self.watch(page, errors)
+        page.goto(self.url + path)
+        return context, page, errors
+
+    def test_operator_bot_settings_tabs_and_usage_by_server(self):
+        """FEAT-13: Bot settings has Spending and Usage by server tabs; the table names known servers, falls back to the ID, sorts by cost and follows the period."""
+        from playwright.sync_api import expect
+        context, page, errors = self.operator_page('/admin/operator')
+        try:
+            expect(page.get_by_role('tab', name='Spending')).to_be_visible()
+            expect(page.get_by_role('tab', name='Usage by server')).to_be_visible()
+            expect(page.get_by_text('Spending caps', exact=True)).to_be_visible()
+            page.get_by_role('tab', name='Usage by server').click()
+            expect(page.get_by_role('combobox', name='Period')).to_have_value('This spending period')
+            expect(page.get_by_text('Each server keeps usage for its own period (Server settings), so this table can show less than the Spending tab.')).to_be_visible()
+            rows = page.locator('tbody tr')
+            expect(rows.first).to_contain_text('Server (ID …2)')
+            expect(rows.first).to_contain_text('$5.00')
+            expect(page.locator('tbody tr', has_text='Test server')).to_have_count(1)
+            self.assertIn('tab=usage', page.url)
+            page.get_by_label('Period').click()
+            page.get_by_role('option', name='Last 7 days').click()
+            expect(page.locator('tbody tr', has_text='Total')).to_contain_text('$5.02')
+            expect(page.locator('tbody tr', has_text='Server (ID …3)')).to_have_count(0)
+            page.get_by_label('Period').click()
+            page.get_by_role('option', name='Last 30 days').click()
+            expect(page.locator('tbody tr', has_text='Server (ID …3)')).to_have_count(1)
+            expect(page.locator('tbody tr', has_text='Total')).to_contain_text('$5.27')
+            page.get_by_role('tab', name='Spending').click()
+            expect(page.get_by_label('Soft cap (USD)')).to_be_visible()
+            page.goto(self.url + '/admin/operator?tab=usage')
+            expect(page.get_by_text('Each server keeps usage for its own period')).to_be_visible()
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_operator_usage_by_server_fits_phone_width(self):
+        """FEAT-13: at 390 px the Usage by server tab shows its servers and does not scroll sideways."""
+        from playwright.sync_api import expect
+        context, page, errors = self.operator_page('/admin/operator?tab=usage', 390)
+        try:
+            expect(page.get_by_text('Each server keeps usage for its own period')).to_be_visible()
+            page.get_by_label('Period').click()
+            page.get_by_role('option', name='Last 7 days').click()
+            expect(page.get_by_text('Server (ID …2)')).to_be_visible()
+            page.wait_for_timeout(500)
+            self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'))
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_monitoring_bot_wide_spending_line_for_operators_only(self):
+        """FEAT-13: an operator sees the bot-wide spending line and an Open Bot settings link on a server's Monitoring tab; a plain server admin gets neither in the page."""
+        import re
+        from playwright.sync_api import expect
+        context, page, errors = self.operator_page('/admin/guild/1?tab=monitoring')
+        try:
+            line = page.get_by_text(re.compile(r'Bot-wide spending: \$\S+ (of \$\S+ hard cap this period|this period; no hard cap set)'))
+            expect(line).to_be_visible()
+            page.get_by_role('link', name='Open Bot settings').click()
+            page.wait_for_url('**/admin/operator')
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+        context = self.browser.new_context(ignore_https_errors=True, viewport={'width': 1000, 'height': 900})
+        context.add_cookies([{'name': 'llmcord_session', 'value': 'browser-plain-session', 'url': self.url,
+                              'secure': True, 'httpOnly': True, 'sameSite': 'Lax'}])
+        page = context.new_page()
+        try:
+            page.goto(self.url + '/admin/guild/1?tab=monitoring')
+            expect(page.get_by_text('By feature', exact=True)).to_be_visible()
+            content = page.content()
+            self.assertNotIn('Bot-wide spending', content)
+            self.assertNotIn('Open Bot settings', content)
+            self.assertNotIn('hard cap this period', content)
+            self.assertNotIn('no hard cap set', content)
+            self.assertNotIn('$5.02', content)  # the all-servers total
+        finally:
+            context.close()
+
+    def test_monitoring_spending_line_goes_when_the_operator_is_removed(self):
+        """FEAT-13: the operator check is repeated when Monitoring is rebuilt, so a viewer removed from the operator list loses the bot-wide line without reloading."""
+        import re
+        from playwright.sync_api import expect
+        before = self.state()['turn_log']
+        self.set_turn_log(False, 14)
+        context, page, errors = self.operator_page('/admin/guild/1?tab=monitoring')
+        try:
+            expect(page.get_by_text(re.compile(r'Bot-wide spending: '))).to_be_visible()
+            self.post_hook('/_test/operators', {'ids': []})
+            page.get_by_role('tab', name='Server setup', exact=True).click()
+            page.get_by_label('Keep usage and log for', exact=True).click()
+            page.get_by_role('option', name='7 days', exact=True).click()
+            page.get_by_role('tab', name='Monitoring', exact=True).click()
+            page.get_by_role('region', name='Unsaved changes').get_by_role('button', name='Save changes', exact=True).click()
+            expect(page.get_by_text('Usage is kept for 7 days (Server settings).', exact=True)).to_be_visible()
+            expect(page.get_by_text('Bot-wide spending')).to_have_count(0)
+            expect(page.get_by_text('Open Bot settings')).to_have_count(0)
+        finally:
+            self.post_hook('/_test/operators', {'ids': [6]})
+            self.set_turn_log(before['enabled'], before['days'])
+            context.close()
+
     def test_account_menu_profile_lines_avatar_and_position(self):
         """UI-37: global_name and @username lines, the avatar image src, and the menu opening below the header at both widths."""
         from playwright.sync_api import expect

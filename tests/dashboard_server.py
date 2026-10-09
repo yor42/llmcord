@@ -52,7 +52,7 @@ def main():
             (1, 0.1, 'fixture', 'fixture-model', 100, 'reply', 1000, 200, 0.002), (1, 0.2, 'fixture', 'fixture-model', 100, 'ambient', 500, 100, 0.001),
             (1, 1.5, 'fixture', 'fixture-model', 777, 'summon', 2000, 300, 0.004), (1, 2.5, 'fixture', 'second-model', 100, 'memory', 3000, 400, None),
             (1, 2.6, 'fixture', 'second-model', 100, 'catchup', 4000, 500, 0.01), (1, 3.5, 'fixture', 'fixture-model', None, '', 700, 70, 0.0005),
-            (2, 0.04, 'other', 'other-guild-model', 100, 'reply', 999999, 888888, 5.0)):
+            (2, 0.04, 'other', 'other-guild-model', 100, 'reply', 999999, 888888, 5.0), (3, 20, 'third', 'third-model', 100, 'reply', 10, 5, 0.25)):  # guild 2 and 3 are not in the operator's Discord list (FEAT-13 ID fallback; 3 is only in the 30-day period)
         store.db.execute("INSERT INTO model_usage(guild_id,profile,model,role,input_tokens,output_tokens,cached_tokens,reasoning_tokens,cost_usd,cost_basis,created_at,channel_id,feature) VALUES(?,?,?,'dialogue',?,?,0,0,?,'configured',?,?,?)",
                          (guild, profile, model, inputs, outputs, cost, time.time() - days_ago * 86400, channel, feature))
     store.db.commit()
@@ -65,6 +65,9 @@ def main():
     store.db.execute(log_sql, (1, 100, None, 'reply · failed at dialogue', 'fixture', 'fixture-model', 'error', '06f1ee', 'Provider returned 500 FIXTURE-ERROR-DETAIL', 'FIXTURE-ERROR-REQUEST', '', None, None, now - 3000))
     store.db.execute(log_sql, (1, 777, None, 'summon · dialogue', 'fixture', 'second-model', 'ok', '', '', 'FIXTURE-REQUEST-TEXT', 'FIXTURE-RESPONSE-TEXT', 12, 34, now - 2000))
     store.db.execute(log_sql, (2, 100, None, 'reply · dialogue', 'other', 'other-guild-model', 'ok', '', '', 'OTHER-GUILD-CANARY request', 'OTHER-GUILD-CANARY reply', 1, 1, now - 100))
+    store.db.commit()
+    # FEAT-13: keep the spending period's start about two weeks from today so the period-bound assertions cannot flake around midnight UTC on the reset day.
+    store.db.execute('UPDATE bot_settings SET reset_day=? WHERE id=1', ((time.gmtime().tm_mday + 13) % 28 + 1,))
     store.db.commit()
     world = store.create_space(1, 'World', 'world')
     store.bind_channel(1, 100, world)
@@ -301,6 +304,12 @@ def main():
     @app.post('/_test/expire')
     async def expire(session: str = 'browser-test-session'):
         app.state.sessions[session]['expires'] = 0
+        return {'ok': True}
+
+    @app.post('/_test/operators')
+    async def operators(request: Request):
+        # FEAT-13: replace the operator allowlist at runtime (a test removes the operator mid-session, then restores it).
+        app.state.operator_ids = frozenset(int(i) for i in (await request.json())['ids'])
         return {'ok': True}
 
     @app.post('/_test/budget-unpriced')

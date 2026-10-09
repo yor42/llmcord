@@ -214,6 +214,14 @@ class AdminStore:
                 'by_channel': listed('channel', lambda k: {'channel_id': k}),
                 'by_feature': listed('feature', lambda k: {'feature': k})}
 
+    def usage_by_guild(self, since, now=None):
+        """Read-only, operator view: model usage per server for [since, now), costliest first; guild 0 is calls with no server. Each server's own retention can leave older periods incomplete."""
+        now = time.time() if now is None else now
+        rows = [dict(r) for r in self.db.execute('SELECT COALESCE(guild_id,0) AS guild_id,COUNT(*) AS requests,COALESCE(SUM(input_tokens),0) AS input_tokens,COALESCE(SUM(output_tokens),0) AS output_tokens,COALESCE(SUM(cost_usd),0) AS cost_usd,COALESCE(SUM(cost_usd IS NULL),0) AS unpriced FROM model_usage WHERE created_at>=? AND created_at<? GROUP BY COALESCE(guild_id,0)', (since, now))]
+        rows.sort(key=lambda r: (-r['cost_usd'], -r['requests'], r['guild_id']))
+        totals = {field: sum(r[field] for r in rows) for field in ('requests', 'input_tokens', 'output_tokens', 'cost_usd', 'unpriced')}
+        return {'rows': rows, 'totals': totals}
+
     def next_owner_id(self, kind, table):
         if (kind, table) not in {('space', 'spaces'), ('book', 'lorebooks')}:
             raise ValueError('Owner type must be a world, hub or lorebook. Reload the page and try again.')

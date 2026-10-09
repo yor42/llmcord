@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from llmcord_core.dashboard import USAGE_RANGES, USAGE_UNKNOWN, usage_feature_rows, usage_range_keys, usage_since
+from llmcord_core.dashboard import USAGE_RANGES, USAGE_UNKNOWN, operator_usage_since, server_usage_label, usage_feature_rows, usage_range_keys, usage_since
 from llmcord_core.store import Store
 from llmcord_core.usage import ModelUsage
 
@@ -102,3 +102,38 @@ class MonitoringHelperTests(unittest.TestCase):
         unknown = by['Unknown feature']
         self.assertEqual((unknown['requests'], unknown['input_tokens'], unknown['output_tokens'], unknown['cost_usd'], unknown['unpriced'], unknown['unreported']), (5, 50, 5, 0.25, 3, 1))
         self.assertEqual(by[USAGE_UNKNOWN]['requests'], 2)
+
+
+class UsageByGuildTests(unittest.TestCase):
+    def test_aggregates_every_server_for_the_window(self):
+        """FEAT-13: per-server totals over [since, now), costliest first, unpriced calls counted, rows outside the bounds ignored."""
+        store = Store()
+        since = NOW - 86400
+        add(store, 1, NOW - 100, inputs=100, outputs=10, cost=0.01)
+        add(store, 1, NOW - 200, inputs=50, outputs=5, cost=None)
+        add(store, 2, NOW - 300, inputs=1, outputs=1, cost=0.5)
+        add(store, 3, NOW - 400, inputs=7, outputs=3, cost=0.5)
+        add(store, 2, since - 1, cost=9.0)
+        add(store, 2, NOW, cost=9.0)
+        add(store, 0, NOW - 500, inputs=2, outputs=2, cost=0.0)
+        report = store.usage_by_guild(since, NOW)
+        self.assertEqual([r['guild_id'] for r in report['rows']], [2, 3, 1, 0])
+        by = {r['guild_id']: r for r in report['rows']}
+        self.assertEqual((by[1]['requests'], by[1]['input_tokens'], by[1]['output_tokens'], by[1]['cost_usd'], by[1]['unpriced']), (2, 150, 15, 0.01, 1))
+        self.assertEqual((by[2]['requests'], by[2]['cost_usd']), (1, 0.5))
+        self.assertEqual(report['totals']['requests'], 5)
+        self.assertEqual(report['totals']['unpriced'], 1)
+        self.assertAlmostEqual(report['totals']['cost_usd'], 1.01)
+
+    def test_empty_window(self):
+        """FEAT-13: no calls in the window gives no rows and zero totals."""
+        report = Store().usage_by_guild(NOW - 86400, NOW)
+        self.assertEqual((report['rows'], report['totals']['requests'], report['totals']['cost_usd']), ([], 0, 0))
+
+    def test_labels_and_period_start(self):
+        """FEAT-13: known names win, unknown servers show the last 4 digits, guild 0 is 'No server'; the spending period starts at the reset day, UTC."""
+        names = {'111': 'Known'}
+        self.assertEqual((server_usage_label(111, names), server_usage_label(1234567890, names), server_usage_label(0, names)), ('Known', 'Server (ID …7890)', 'No server'))
+        self.assertEqual(operator_usage_since('period', 5, NOW), datetime(2026, 10, 5, tzinfo=timezone.utc).timestamp())
+        self.assertEqual(operator_usage_since('period', 15, NOW), datetime(2026, 9, 15, tzinfo=timezone.utc).timestamp())
+        self.assertEqual(operator_usage_since('7', 1, NOW), NOW - 7 * 86400)
