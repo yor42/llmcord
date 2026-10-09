@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 import math
 import uuid
 from datetime import datetime
@@ -9,6 +10,8 @@ import time
 from zoneinfo import ZoneInfo
 from contextlib import contextmanager
 
+from .backend import ROLES as MODEL_ROLES
+from .config import PROFILE_KEYS, check_key_pin, key_hosts_from_env, profile_from_mapping, validate_profile_name
 from .errors import mask_facts, redact
 from .lorebooks import normalize_entry, parse_lorebook
 
@@ -103,6 +106,14 @@ CREATE TABLE IF NOT EXISTS avatar_assets (
  slot_key TEXT NOT NULL, image_hash TEXT NOT NULL, channel_id INTEGER NOT NULL,
  message_id INTEGER NOT NULL, url TEXT NOT NULL, created_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS model_profiles (
+ name TEXT PRIMARY KEY, data_json TEXT NOT NULL, revision INTEGER NOT NULL, updated_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS model_roles (
+ id INTEGER PRIMARY KEY CHECK(id=1), dialogue TEXT, director TEXT, memory TEXT,
+ revision INTEGER NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO model_roles(id) VALUES(1);
 """
 
 
@@ -139,7 +150,78 @@ class ConflictError(ValueError):
 TURN_LOG_DAYS = (0, 7, 14, 30)
 
 
+
+
 class AdminStore:
+    def model_profile_rows(self):
+        rows = []
+        for row in self.db.execute('SELECT name, data_json, revision, updated_at FROM model_profiles ORDER BY name'):
+            try:
+                data = json.loads(row['data_json'])
+            except ValueError:
+                data = None
+            rows.append({'name': row['name'], 'data': data if isinstance(data, dict) else None, 'revision': row['revision'], 'updated_at': row['updated_at']})
+        return rows
+
+    def model_roles(self):
+        row = self.db.execute('SELECT dialogue, director, memory, revision, version FROM model_roles WHERE id=1').fetchone()
+        return dict(row)
+
+    def model_backend_version(self):
+        return self.db.execute('SELECT version FROM model_roles WHERE id=1').fetchone()[0]
+
+    def save_model_profile(self, name, data, expected_revision, now=None):
+        validate_profile_name(name)
+        profile = profile_from_mapping(name, data, source='dashboard')
+        check_key_pin(profile, key_hosts_from_env())
+        stored = json.dumps({key: value for key, value in asdict(profile).items() if key in PROFILE_KEYS and value is not None}, sort_keys=True)
+        now = time.time() if now is None else now
+        with self.write_admin():
+            row = self.db.execute('SELECT revision FROM model_profiles WHERE name=?', (name,)).fetchone()
+            if expected_revision is None:
+                if row:
+                    raise ConflictError(f'Profile {name} already exists.')
+                self.db.execute('UPDATE model_roles SET version=version+1 WHERE id=1')
+                revision = self.model_backend_version()
+                self.db.execute('INSERT INTO model_profiles(name, data_json, revision, updated_at) VALUES(?,?,?,?)', (name, stored, revision, now))
+            else:
+                if not row or row['revision'] != expected_revision:
+                    raise ConflictError(f'Profile {name} changed or was removed. Reload and try again.')
+                self.db.execute('UPDATE model_roles SET version=version+1 WHERE id=1')
+                revision = self.model_backend_version()
+                self.db.execute('UPDATE model_profiles SET data_json=?, revision=?, updated_at=? WHERE name=?', (stored, revision, now, name))
+            self.db.execute('UPDATE model_roles SET version=version+1 WHERE id=1')
+        return revision
+
+    def delete_model_profile(self, name, expected_revision, config_names):
+        validate_profile_name(name)
+        with self.write_admin():
+            row = self.db.execute('SELECT revision FROM model_profiles WHERE name=?', (name,)).fetchone()
+            if not row or row['revision'] != expected_revision:
+                raise ConflictError(f'Profile {name} changed or was removed. Reload and try again.')
+            roles = self.db.execute('SELECT dialogue, director, memory FROM model_roles WHERE id=1').fetchone()
+            if name not in config_names:
+                for role in MODEL_ROLES:
+                    if roles[role] == name:
+                        raise ValueError(f'{name} is assigned to the {role} role; assign another profile first.')
+            self.db.execute('DELETE FROM model_profiles WHERE name=?', (name,))
+            self.db.execute('UPDATE model_roles SET version=version+1 WHERE id=1')
+
+    def save_model_roles(self, roles, expected_revision, config_names):
+        for role in MODEL_ROLES:
+            if roles.get(role) is not None:
+                validate_profile_name(roles[role])
+        with self.write_admin():
+            for role in MODEL_ROLES:
+                value = roles.get(role)
+                if value is not None and value not in config_names and not self.db.execute('SELECT 1 FROM model_profiles WHERE name=?', (value,)).fetchone():
+                    raise ValueError(f'Profile {value} for the {role} role does not exist.')
+            row = self.db.execute('SELECT revision FROM model_roles WHERE id=1').fetchone()
+            if row['revision'] != expected_revision:
+                raise ConflictError('Model roles changed. Reload and try again.')
+            self.db.execute('UPDATE model_roles SET dialogue=?, director=?, memory=?, revision=revision+1, version=version+1 WHERE id=1',
+                            (roles.get('dialogue'), roles.get('director'), roles.get('memory')))
+
     def record_model_usage(self, usage):
         with self.db:
             if usage.guild_id is not None:

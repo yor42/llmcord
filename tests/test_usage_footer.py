@@ -83,7 +83,7 @@ class SchemaV4Tests(unittest.TestCase):
         """UX-08 (D2): a new database is created at the current schema version (5) with the column."""
         store = Store()
         try:
-            self.assertEqual(store.one("PRAGMA user_version")[0], 8)
+            self.assertEqual(store.one("PRAGMA user_version")[0], 9)
             self.assertIn("usage_footer", {row[1] for row in store.all("PRAGMA table_info(guild_settings)")})
         finally:
             store.close()
@@ -95,7 +95,7 @@ class SchemaV4Tests(unittest.TestCase):
             path = self.v3_file(folder)
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 8)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 9)
                 row = store.one("SELECT * FROM guild_settings WHERE guild_id=1")
                 self.assertEqual((row["preset_id"], row["preset_revision"], row["asset_channel_id"], row["usage_footer"]),
                                  (7, 3, 55, 1))
@@ -112,11 +112,11 @@ class SchemaV4Tests(unittest.TestCase):
             self.assertEqual(len(list(Path(folder).glob("*.pre-v4-*.sqlite3"))), 1)
 
     def test_newer_database_is_still_rejected(self):
-        """UX-08 (D2): opening a v9 database raises 'newer than this application'."""
+        """UX-08 (D2): opening a v10 database raises 'newer than this application'."""
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "new.sqlite3"
             with closing(sqlite3.connect(path)) as connection, connection:
-                connection.execute("PRAGMA user_version=9")
+                connection.execute("PRAGMA user_version=10")
             with self.assertRaisesRegex(ValueError, "newer than this application"):
                 Store(path)
 

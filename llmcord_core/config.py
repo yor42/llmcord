@@ -215,6 +215,8 @@ def profile_from_mapping(name: str, value: dict, *, source: str = 'config') -> M
             raise ValueError(f'model in {name} must be a name of 1 to 200 characters')
         if type(tokens) is not int:
             raise ValueError(f'context_tokens in {name} must be a whole number of at least 1')
+        if any(key in value and type(value[key]) is not bool for key in ('supports_images', 'structured_outputs', 'stream_usage')):
+            raise ValueError(f'supports_images, structured_outputs and stream_usage in {name} must be true or false')
         if api_key_env is not None and (not isinstance(api_key_env, str) or not KEY_REF_RE.fullmatch(api_key_env)):
             raise ValueError(f'api_key_env in {name} must be a variable ending in _API_KEY')
         if base_url is not None:
