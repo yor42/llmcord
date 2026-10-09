@@ -1529,6 +1529,29 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def test_ui31_character_description_highlights_known_and_unknown_macros(self):
+        """UI-31 step 3: a character card field is mirrored with known and unknown {{macros}}; collapsed character cards have no mirror."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=characters')
+        try:
+            console = []
+            page.on('console', lambda m: console.append(m.text) if m.type == 'error' else None)
+            card = page.locator('.character-card').filter(has=page.get_by_text('Alice', exact=True)).first
+            card.get_by_text('Alice', exact=True).first.wait_for(timeout=5000)
+            self.assertEqual(page.locator('.mh-mirror').count(), 0)
+            card.get_by_text('Alice', exact=True).first.click()
+            description = card.get_by_label('Description', exact=True)
+            description.wait_for()
+            description.fill('{{char}} greets {{user}} {{bogus}}')
+            mirror = description.locator('xpath=preceding-sibling::div[contains(@class, "mh-mirror")]')
+            page.wait_for_function("() => document.querySelectorAll('.character-card .mh-mirror .mh-known').length === 2")
+            self.assertEqual(mirror.locator('.mh-known').all_inner_texts(), ['{{char}}', '{{user}}'])
+            self.assertEqual(mirror.locator('.mh-unknown').all_inner_texts(), ['{{bogus}}'])
+            self.assertEqual(mirror.text_content(), description.input_value())
+            self.assertEqual([m for m in console if 'Content Security Policy' in m], [])
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
     def preset_file(self, marker):
         from llmcord_core.prompts import default_bundle, export_preset
         bundle = default_bundle()

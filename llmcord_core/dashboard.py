@@ -851,6 +851,7 @@ def characters_panel(ctx):
         dialog.on('hide', dialog.delete)
         dialog.open()
     rows = ctx.snapshot.characters
+    MacroHighlight()
     with section('Characters'):
         lucide_button('Create character', 'plus', on_click=new_character).set_enabled(bool(worlds))
         if not worlds:
@@ -889,7 +890,7 @@ def character_card(ctx, row, worlds):
             with ui.element('div').classes('ll-form-row'):
                 name = ui.input('Name', value=row['name'])
                 world = ui.select(worlds, value=row['world_id'], label='Home world')
-            fields = {field: ui.textarea(label, value=card.get(field, '')).classes('w-full') for field, label in
+            fields = {field: ui.textarea(label, value=card.get(field, '')).classes('w-full ll-macro') for field, label in
                 [('description', 'Description'), ('personality', 'Personality'), ('scenario', 'Scenario'), ('first_mes', 'Opening line'), ('mes_example', 'Example dialogue'), ('system_prompt', 'Card instructions'), ('post_history_instructions', 'Card post-history instructions')]}
             confirm = ui.checkbox('Confirm moving worlds; ineligible casts will be cleared')
             confirm.bind_visibility_from(world, 'value', backward=lambda value, saved=row['world_id']: value != saved)
