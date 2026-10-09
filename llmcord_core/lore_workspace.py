@@ -188,9 +188,12 @@ class _LoreWorkspace:
             if page_number > last_page:
                 page_number = last_page
                 visible, total = ctx.store.admin_entries_page(ctx.guild_id, kind, ident, query.value, 50, (page_number - 1) * 50)
-            ui.label(f'{total} entries · page {page_number}').classes('owner-heading ll-muted')
+            count = f'{total} entry' if total == 1 else f'{total} entries'
             if total > 50:
-                pagination = ui.select(list(range(1, last_page + 1)), value=page_number, label='Page').classes('owner-heading w-32')
+                count += f' · page {page_number} of {last_page}'
+            ui.label(count).classes('owner-heading ll-muted')
+            if total > 50:
+                pagination = ui.select(list(range(1, last_page + 1)), value=page_number, label='Page').classes('owner-heading w-40 min-w-40')
                 async def page_changed(event, page_key=page_key):
                     async with self.operation_lock:
                         if await ctx.run(lambda: True):

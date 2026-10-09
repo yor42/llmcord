@@ -330,6 +330,11 @@ class DashboardBrowserTests(unittest.TestCase):
 
         page.get_by_role('tab', name='Lore', exact=True).click()
         page.get_by_label('Page', exact=True).wait_for()
+        # UI-19: the multi-page count line names the page, and the wider Page select shows its whole label.
+        page.locator('.lore-panel-right').get_by_text('75 entries · page 1 of 2', exact=True).wait_for()
+        page_select = page.locator('.lore-panel-right .q-select').filter(has=page.get_by_label('Page', exact=True)).first
+        label = page_select.locator('.q-field__label')
+        self.assertLessEqual(label.evaluate('el => el.scrollWidth'), label.evaluate('el => el.clientWidth'))
         # Defaults use World on the left and the named book on the right.
         page.get_by_role('button', name='New entry', exact=True).first.click()
         page.get_by_label('Content', exact=True).fill('Browser lore')
@@ -658,7 +663,7 @@ class DashboardBrowserTests(unittest.TestCase):
             tiles = left.locator('.lore-entry').all_inner_texts()
             self.assertEqual(len(tiles), 2, tiles)
             self.assertFalse(any('Lightning storms' in tile for tile in tiles), tiles)
-            page.locator('.lore-panel-left').get_by_text('2 entries · page 1', exact=True).wait_for()
+            page.locator('.lore-panel-left').get_by_text('2 entries', exact=True).wait_for()
             self.assertEqual(page.locator('.lore-drop-right .lore-entry').count(), 0)
             self.assertFalse(errors, errors)
 
