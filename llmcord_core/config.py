@@ -93,7 +93,7 @@ def operator_ids_from_env(environ=os.environ) -> frozenset[int]:
         entry = entry.strip()
         if not entry:
             continue
-        if len(entry) > 20 or not (entry.isascii() and entry.isdigit()):
+        if len(entry) > 20 or not (entry.isascii() and entry.isdigit() and int(entry)):
             shown = entry if len(entry) <= 24 else entry[:24] + "…"
             raise ValueError(f"LLMCORD_OPERATOR_IDS must be comma-separated Discord user IDs; bad entry: {shown!r}")
         ids.add(int(entry))

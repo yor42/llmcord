@@ -11,6 +11,8 @@ from .config import prompt_provider
 from .models import TurnMessage
 from .prompts import compile_prompt, time_values
 
+OPERATOR_AUDIT_GUILD = 0  # no Discord snowflake is 0; operator actions have no server
+
 
 class AdminService:
     def __init__(self, app, config_path='config.yaml'):
@@ -40,6 +42,19 @@ class AdminService:
             if callable(detail):  # detail may be derived from the operation result
                 detail = detail(result)
             self.store.audit(guild_id, int(session['user']['id']), action, detail or {})
+        return result
+
+    async def run_operator(self, ident, operation, action=None, detail=None):
+        # Live (socket.io) calls carry no per-request CSRF/origin: the boundary is the socket's cookie-to-client
+        # binding plus socket.io CORS (cors_allowed_origins, dashboard.mount_dashboard), and this per-action operator guard.
+        session = await self.auth.guard_operator(ident)
+        result = operation()
+        if inspect.isawaitable(result):
+            result = await result
+        if action:
+            if callable(detail):
+                detail = detail(result)
+            self.store.audit(OPERATOR_AUDIT_GUILD, int(session['user']['id']), action, detail or {})
         return result
 
     def owners(self, guild_id, channel_names=None, thread_names=None):

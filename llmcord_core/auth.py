@@ -210,5 +210,20 @@ class AuthService:
             raise HTTPException(403, 'Server administrator permission required')
         return session
 
+    async def guard_operator(self, ident, csrf=None, origin=None):
+        session = await self.session(ident)
+        self.check_origin(origin)
+        if csrf is not None and not secrets.compare_digest(str(csrf), session['csrf']):
+            raise HTTPException(403, 'Invalid form token')
+        if self.app.state.sessions.get(ident) is not session or session['expires'] < time.time():
+            raise HTTPException(401, 'Discord session expired')
+        try:
+            operator = int(session['user']['id']) in self.app.state.operator_ids
+        except (KeyError, TypeError, ValueError):
+            operator = False
+        if not operator:
+            raise HTTPException(403, 'Operator permission required')
+        return session
+
     async def require_admin(self, request, guild_id):
         return await self.guard(request.cookies.get('llmcord_session', ''), guild_id, None, request.headers.get('origin'))

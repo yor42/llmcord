@@ -25,7 +25,7 @@ class OperatorIdTests(unittest.TestCase):
         self.assertEqual(parse('111,222'), frozenset({111, 222}))
 
     def test_malformed_entries_raise_naming_variable(self):
-        for bad in ('abc', '-5', '12x', '1 2', '+3', '1,x', '１２', '²', '١٢', '1_000'):
+        for bad in ('abc', '-5', '12x', '1 2', '+3', '1,x', '１２', '²', '١٢', '1_000', '0', '000'):
             with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, 'LLMCORD_OPERATOR_IDS'):
                 parse(bad)
 
