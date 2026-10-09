@@ -178,6 +178,23 @@ def main():
                                expected_revision=store.owner_revision(1, 'character', row['id']))
         return {'ok': True}
 
+    @app.post('/_test/cleanup-ui09')
+    async def cleanup_ui09():
+        # Best-effort reset after the UI-09 tests (even when one failed midway): drop their extra emotions and hub, put #scene back
+        # on World, and clear Alice's fallback avatar (the fixture starts without one; this leaves avatar_manual=1 and a newer
+        # owner revision, which no test depends on). Reads use raw SQL to leave the PERF counters alone.
+        alice = next(r for r in store.all('SELECT id FROM characters WHERE name = ?', ('Alice',)))
+        for slot in store.avatar_slots(1, alice['id']):
+            if slot['slot_key'] in ('testy', 'vtest'):
+                store.delete_avatar(1, alice['id'], slot['slot_key'], slot['revision'])
+        for hub in store.all("SELECT id FROM spaces WHERE guild_id = 1 AND name = 'Audit hub'"):
+            for linked in store.allowed_worlds(hub['id']):
+                store.unlink_world(1, hub['id'], linked)
+            store.delete_space(1, hub['id'], store.space_delete_impact(1, hub['id'])['revision'])
+        store.bind_channel(1, 100, world)
+        store.save_static_avatar(1, alice['id'], None, store.owner_revision(1, 'character', alice['id']))
+        return {'ok': True}
+
     @app.post('/_test/delay-permission')
     async def delay_permission():
         state['permission_delay'] = 0.5

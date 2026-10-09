@@ -1119,6 +1119,188 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def audit_mark(self):
+        """Highest audit id so far; pass it to audit_rows so a test sees only rows it caused (the fixture DB is shared)."""
+        return max((r['id'] for r in self.state()['audit']), default=0)
+
+    def audit_rows(self, action, after=0):
+        return [r for r in self.state()['audit'] if r['action'] == action and r['id'] > after]
+
+    def alice_slot(self, page, label):
+        """Alice's card with the emotion `label` expanded (the characters tab rebuilds after writes, so this re-opens only what is closed)."""
+        card = page.locator('.character-card').filter(has=page.get_by_text('Alice', exact=True)).first
+        header = card.locator('.q-item').filter(has=page.get_by_text(label, exact=True)).first
+        if not header.is_visible():
+            card.get_by_text('Alice', exact=True).first.click()
+            header.wait_for(state='visible')
+        if header.get_attribute('aria-expanded') != 'true':
+            header.click()
+        return card, card.locator('.q-expansion-item').filter(has=page.get_by_text(label, exact=True)).last
+
+    def ui09_cleanup(self):
+        """Best-effort reset of what the UI-09 tests change (extra emotions, 'Audit hub', #scene binding, Alice's fallback avatar)."""
+        try:
+            response = self.context.request.post(self.url + '/_test/cleanup-ui09')
+            if response.status != 200:
+                print(f'warning: /_test/cleanup-ui09 returned {response.status}', file=sys.stderr)
+        except Exception as exc:
+            print(f'warning: /_test/cleanup-ui09 failed: {exc!r}', file=sys.stderr)
+
+    def png(self, color):
+        from io import BytesIO
+        from PIL import Image
+        buffer = BytesIO()
+        Image.new('RGB', (50, 50), color).save(buffer, 'PNG')
+        return {'name': f'{color}.png', 'mimeType': 'image/png', 'buffer': buffer.getvalue()}
+
+    def test_emotion_removal_dialogs_cancel_confirm_and_audit(self):
+        """UI-09: 'Remove emotion image' and 'Remove emotion' each ask first; Cancel keeps the data, the confirm button removes it and audits avatar.image.delete / avatar.slot.delete."""
+        context, page, errors, card, _ = self.open_alice()
+        mark = self.audit_mark()
+        try:
+            alice = self.alice_row()
+            def slot():
+                return next((s for s in self.state()['slots'] if s['character_id'] == alice['id'] and s['slot_key'] == 'testy'), None)
+            card.get_by_label('New emotion key', exact=True).fill('testy')
+            card.get_by_label('Emotion label', exact=True).fill('Testy')
+            card.get_by_role('button', name='Add emotion', exact=True).click()
+            self.wait_for(lambda: slot() is not None)
+            card, emotion = self.alice_slot(page, 'Testy')
+            emotion.locator('input[type=file]').set_input_files(self.png('red'))
+            page.get_by_text('Emotion image saved', exact=True).wait_for(timeout=5000)
+            self.wait_for(lambda: slot()['has_image'])
+            dialog = page.get_by_role('dialog')
+            # Remove emotion image: Cancel keeps the image.
+            card, emotion = self.alice_slot(page, 'Testy')
+            self.open_dialog(emotion.get_by_role('button', name='Remove emotion image', exact=True), dialog)
+            dialog.get_by_text('Remove the image from Testy?', exact=True).wait_for()
+            dialog.get_by_role('button', name='Cancel', exact=True).click()
+            dialog.wait_for(state='hidden')
+            self.assertTrue(slot()['has_image'])
+            self.assertEqual(self.audit_rows('avatar.image.delete', mark), [])
+            # Confirm removes only the image and audits it.
+            self.open_dialog(emotion.get_by_role('button', name='Remove emotion image', exact=True), dialog)
+            dialog.get_by_role('button', name='Remove emotion image', exact=True).click()
+            self.wait_for(lambda: slot() and not slot()['has_image'])
+            self.assertEqual([json.loads(r['detail_json']) for r in self.audit_rows('avatar.image.delete', mark)], [{'character': alice['id'], 'slot': 'testy'}])
+            # Remove emotion: Cancel keeps the slot.
+            card, emotion = self.alice_slot(page, 'Testy')
+            self.assertEqual(emotion.get_by_role('button', name='Remove emotion image', exact=True).count(), 0)
+            self.open_dialog(emotion.get_by_role('button', name='Remove emotion', exact=True), dialog)
+            dialog.get_by_text('Remove emotion Testy?', exact=True).wait_for()
+            dialog.get_by_role('button', name='Cancel', exact=True).click()
+            dialog.wait_for(state='hidden')
+            self.assertIsNotNone(slot())
+            self.assertEqual(self.audit_rows('avatar.slot.delete', mark), [])
+            # Confirm deletes the slot and audits it.
+            self.open_dialog(emotion.get_by_role('button', name='Remove emotion', exact=True), dialog)
+            dialog.get_by_role('button', name='Remove emotion', exact=True).click()
+            self.wait_for(lambda: slot() is None)
+            self.assertEqual(len(self.audit_rows('avatar.slot.delete', mark)), 1)
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+            self.ui09_cleanup()
+
+    def test_avatar_image_urls_carry_a_version_that_changes_with_the_image(self):
+        """UI-09: the emotion and fallback avatar <img> sources end in ?v=<12 hex> and the value changes when the image changes."""
+        context, page, errors, card, _ = self.open_alice()
+        try:
+            alice = self.alice_row()
+            card.get_by_label('New emotion key', exact=True).fill('vtest')
+            card.get_by_label('Emotion label', exact=True).fill('Vtest')
+            card.get_by_role('button', name='Add emotion', exact=True).click()
+            self.wait_for(lambda: any(s['slot_key'] == 'vtest' and s['character_id'] == alice['id'] for s in self.state()['slots']))
+            def emotion_src(expected_count):
+                card, emotion = self.alice_slot(page, 'Vtest')
+                image = emotion.locator('img')
+                self.wait_for(lambda: image.count() == expected_count)
+                return image.first.get_attribute('src')
+            card, emotion = self.alice_slot(page, 'Vtest')
+            self.assertEqual(emotion.locator('img').count(), 0)
+            emotion.locator('input[type=file]').set_input_files(self.png('red'))
+            page.get_by_text('Emotion image saved', exact=True).wait_for(timeout=5000)
+            first = emotion_src(1)
+            self.assertRegex(first, rf'/characters/{alice["id"]}/avatars/vtest\?v=[0-9a-f]{{12}}$')
+            card, emotion = self.alice_slot(page, 'Vtest')
+            emotion.locator('input[type=file]').set_input_files(self.png('blue'))
+            self.wait_for(lambda: emotion_src(1) != first)
+            second = emotion_src(1)
+            self.assertRegex(second, r'\?v=[0-9a-f]{12}$')
+            self.assertNotEqual(first.split('?v=')[1], second.split('?v=')[1])
+            # The fallback avatar uses the same scheme.
+            def fallback_src():
+                card = page.locator('.character-card').filter(has=page.get_by_text('Alice', exact=True)).first
+                if not card.get_by_text('Fallback static avatar', exact=True).is_visible():
+                    card.get_by_text('Alice', exact=True).first.click()
+                fallback = card.locator('.fallback-avatar')
+                if not fallback.get_by_text('Used when the selected emotion', exact=False).is_visible():
+                    card.get_by_text('Fallback static avatar', exact=True).click()
+                return card, fallback
+            card, fallback = fallback_src()
+            fallback.locator('input[type=file]').set_input_files(self.png('green'))
+            page.get_by_text('Fallback avatar saved', exact=True).wait_for(timeout=5000)
+            card, fallback = fallback_src()
+            fallback.locator('img').first.wait_for(timeout=5000)
+            one = fallback.locator('img').first.get_attribute('src')
+            self.assertRegex(one, rf'/characters/{alice["id"]}/avatar\?v=[0-9a-f]{{12}}$')
+            fallback.locator('input[type=file]').set_input_files(self.png('yellow'))
+            self.wait_for(lambda: fallback_src()[1].locator('img').first.get_attribute('src') != one)
+            two = fallback_src()[1].locator('img').first.get_attribute('src')
+            self.assertRegex(two, rf'/characters/{alice["id"]}/avatar\?v=[0-9a-f]{{12}}$')
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+            self.ui09_cleanup()
+
+    def test_hub_link_unlink_and_bind_channel_write_audit_rows(self):
+        """UI-09: Link, Unlink and Bind channel each write one audit row ('hub.link', 'hub.unlink', 'channel.bind') carrying the ids acted on."""
+        context, page, errors = self.ux_page('/admin/guild/1')
+        mark = self.audit_mark()
+        try:
+            world = next(r for r in self.state()['spaces'] if r['name'] == 'World')
+            annex = next(r for r in self.state()['spaces'] if r['name'] == 'Annex')
+            worlds = _worlds_section(page)
+            worlds.get_by_label('Name', exact=True).fill('Audit hub')
+            worlds.get_by_label('Kind', exact=True).click()
+            page.get_by_role('option', name='hub', exact=True).click()
+            worlds.get_by_role('button', name='Create', exact=True).click()
+            self.wait_for(lambda: any(r['name'] == 'Audit hub' for r in self.state()['spaces']))
+            hub = next(r for r in self.state()['spaces'] if r['name'] == 'Audit hub')
+            links = _section(page, 'Hub links')
+            def choose(section, label, option):
+                section.get_by_label(label, exact=True).click()
+                page.get_by_role('option', name=option, exact=True).click()
+            choose(links, 'Hub', 'Audit hub')
+            choose(links, 'World', 'World')
+            links.get_by_role('button', name='Link', exact=True).click()
+            self.wait_for(lambda: len(self.audit_rows('hub.link', mark)) == 1)
+            self.assertEqual(json.loads(self.audit_rows('hub.link', mark)[0]['detail_json']), {'hub': hub['id'], 'world': world['id'], 'enabled': True, 'pruned': 0})
+            links = _section(page, 'Hub links')
+            choose(links, 'Hub', 'Audit hub')
+            choose(links, 'World', 'World')
+            links.get_by_role('button', name='Unlink', exact=True).click()
+            self.wait_for(lambda: len(self.audit_rows('hub.unlink', mark)) == 1)
+            self.assertEqual(json.loads(self.audit_rows('hub.unlink', mark)[0]['detail_json']), {'hub': hub['id'], 'world': world['id'], 'enabled': False, 'pruned': 0})
+            self.assertEqual(len(self.audit_rows('hub.link', mark)), 1)
+            # Bind #scene (100) to Annex and back to World: one row each.
+            def bind(option):
+                channels = _section(page, 'Channels and casts')
+                choose(channels, 'Discord text channel', '#scene')
+                choose(channels, 'World or hub', option)
+                channels.get_by_role('button', name='Bind channel', exact=True).click()
+            before = len(self.audit_rows('channel.bind', mark))
+            bind('Annex (world)')
+            self.wait_for(lambda: len(self.audit_rows('channel.bind', mark)) == before + 1)
+            bind('World (world)')
+            self.wait_for(lambda: len(self.audit_rows('channel.bind', mark)) == before + 2)
+            details = [json.loads(r['detail_json']) for r in self.audit_rows('channel.bind', mark)[before:]]
+            self.assertEqual(details, [{'channel': 100, 'space': annex['id'], 'dropped': []}, {'channel': 100, 'space': world['id'], 'dropped': []}])
+            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+            self.ui09_cleanup()
+
     def test_delete_preset_asks_for_confirmation(self):
         """UX-05: 'Delete preset' opens a dialog; Cancel keeps the preset and the red confirm button deletes it."""
         context, page, errors = self.ux_page('/admin/guild/1?tab=prompts')
