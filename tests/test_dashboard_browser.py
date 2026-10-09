@@ -2086,3 +2086,27 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertFalse(errors, errors)
         finally:
             context.close()
+    def test_more_menu_hides_tooltip_and_keyboard_returns_focus(self):
+        """UI-39: no "More actions" tooltip stays over the open menu; Tab, Enter opens it, Escape closes it and focus returns to the button."""
+        context, page, errors, card, description = self.open_alice()
+        try:
+            button = card.get_by_role('button', name='More actions for Alice', exact=True)
+            button.hover()
+            page.locator('.q-tooltip', has_text='More actions').wait_for(state='visible', timeout=5000)
+            button.click()
+            page.get_by_role('menuitem', name='Archive', exact=True).wait_for(timeout=5000)
+            page.wait_for_timeout(500)
+            self.assertEqual(page.locator('.q-tooltip:visible', has_text='More actions').count(), 0)
+            page.keyboard.press('Escape')
+            page.get_by_role('menuitem', name='Archive', exact=True).wait_for(state='hidden', timeout=5000)
+            page.mouse.move(0, 0)
+            button.focus()
+            page.keyboard.press('Enter')
+            page.get_by_role('menuitem', name='Archive', exact=True).wait_for(timeout=5000)
+            page.keyboard.press('Escape')
+            page.get_by_role('menuitem', name='Archive', exact=True).wait_for(state='hidden', timeout=5000)
+            self.assertEqual(page.evaluate('() => document.activeElement && document.activeElement.getAttribute("aria-label")'), 'More actions for Alice')
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+

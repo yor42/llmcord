@@ -40,6 +40,8 @@ def icon_css() -> str:
              # normal buttons and looks large there, so shrink only icons without an explicit size.
              '.q-btn[style*="font-size: 8px"] .ll-icon:not([style]), .q-btn[style*="font-size: 10px"] .ll-icon:not([style])'
              ' { width: %s; height: %s; margin-right: 6px; }' % (SMALL_BUTTON_SIZE, SMALL_BUTTON_SIZE),
+             # Quasar q-item menu entries match the account menu's ll-menu-item padding.
+             '.ll-menu .q-item { padding: 10px 16px; min-height: 0; }',
              # Windows high contrast: a mask filled with currentColor can be forced to a background colour; keep it text-coloured.
              '@media (forced-colors: active) { .ll-icon { background-color: CanvasText; forced-color-adjust: none; } }']
     rules += [f'.ll-i-{name} {{ --ll-mask: url("{_data_url(name)}"); }}' for name in available()]
@@ -80,5 +82,7 @@ def more_menu(name: str):
     button.on('click', js_handler=stop).on('keyup', js_handler=stop)
     with button:
         lucide('ellipsis', '1.4em').classes('ll-icon-solo')
-        ui.tooltip('More actions')
-        return ui.menu().classes('ll-menu')
+        tooltip = ui.tooltip('More actions')
+        menu = ui.menu().classes('ll-menu')
+    menu.on('before-show', js_handler=f'() => getElement({tooltip.id}).hide()')  # the tooltip would stay over the open menu
+    return menu
