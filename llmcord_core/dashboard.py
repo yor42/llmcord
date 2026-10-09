@@ -1018,7 +1018,7 @@ def entry_editor(ctx, entry, owners, refresh):
             destination = ui.select(owners, label='Destination', with_input=True).classes('w-full')
             def transfer(copy):
                 if not destination.value:
-                    raise ValueError('Choose a destination')
+                    raise ValueError('Choose where to move or copy the entry.')
                 kind, ident = destination.value.split(':', 1)
                 return ctx.store.transfer_entry(ctx.guild_id, entry['ref'], kind, int(ident), entry['revision'], copy=copy)
             def delete():
@@ -1089,7 +1089,7 @@ def imports_panel(ctx):
             destination = ui.select(owners, label='Destination owner')
             def import_into_owner():
                 if destination.value not in owners:
-                    raise ValueError('Choose a destination owner')
+                    raise ValueError('Choose a destination owner.')
                 kind, ident = destination.value.split(':', 1)
                 direct_import_dialog(ctx, kind, int(ident))
             lucide_button('Import entries into selected owner', 'upload', on_click=import_into_owner)
@@ -1490,7 +1490,7 @@ def _preset_import(ctx, state, imported):
                     order = ui.select({p['index']: 'SillyTavern order ' + p['label'] for p in profiles}, label='Choose an order profile')
                     def choose():
                         if order.value is None:
-                            raise ValueError('Choose an order profile')
+                            raise ValueError('Choose a prompt order profile.')
                         return parse_preset(data, order.value)[0]
                     ctx.button('Preview selected profile', choose, then=imported)
             else:

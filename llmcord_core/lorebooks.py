@@ -170,9 +170,9 @@ def validate_rule(rule: dict, content: str | None = None) -> dict:
     if effective['regex_enabled'] is not None and type(effective['regex_enabled']) is not bool:
         raise ValueError('Regex enabled must be true, false or null.')
     if not 0 <= effective['probability'] <= 100 or effective['selective_logic'] not in range(4):
-        raise ValueError('Invalid probability or secondary matching logic.')
+        raise ValueError('Probability must be 0 to 100 and secondary matching logic 0 to 3. Fix these values and try again.')
     if effective['role'] not in {'system', 'user', 'assistant'}:
-        raise ValueError('Invalid message role.')
+        raise ValueError('Message role must be system, user or assistant. Choose one of these.')
     if not isinstance(effective['original'], dict):
         raise ValueError('Original import must be an object.')
     # Recompute warnings from the actual effective settings, not stale warnings.

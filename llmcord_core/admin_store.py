@@ -129,7 +129,7 @@ class AdminStore:
 
     def next_owner_id(self, kind, table):
         if (kind, table) not in {('space', 'spaces'), ('book', 'lorebooks')}:
-            raise ValueError('Invalid owner type.')
+            raise ValueError('Owner type must be a world, hub or lorebook. Reload the page and try again.')
         return self.one(f'SELECT COALESCE(MAX(id),0)+1 AS next_id FROM (SELECT id FROM {table} UNION ALL SELECT owner_id FROM owner_revisions WHERE kind=?)', (kind,))['next_id']
 
     def guidelines(self, guild_id, kind, owner_id):
@@ -716,7 +716,7 @@ class AdminStore:
         bundle = self.preset_bundle(guild_id, preset_id, revision)
         problems = compatibility(bundle, providers)
         if problems:
-            raise ValueError('Resolve preset compatibility: ' + '; '.join(problems) + '.')
+            raise ValueError('Resolve preset compatibility: ' + '; '.join(p.rstrip('.') for p in problems) + '.')
         with self.write_admin():
             self.db.execute('INSERT INTO guild_settings(guild_id,preset_id,preset_revision) VALUES(?,?,?) ON CONFLICT(guild_id) DO UPDATE SET preset_id=excluded.preset_id,preset_revision=excluded.preset_revision', (guild_id, preset_id, revision))
 
@@ -806,7 +806,7 @@ class AdminStore:
             return self._slot_meta(dict(row), keep_image=True)
         if key == 'neutral':
             return self._slot_meta(self._neutral_slot(character_id), keep_image=True)
-        raise ValueError('Avatar slot not found.')
+        raise ValueError('That avatar no longer exists. Reload the page.')
 
     def _slot_revision(self, guild_id, character_id, key):
         self.validate_owner(guild_id, 'character', character_id)
@@ -815,7 +815,7 @@ class AdminStore:
             return row['revision']
         if key == 'neutral':
             return 0
-        raise ValueError('Avatar slot not found.')
+        raise ValueError('That avatar no longer exists. Reload the page.')
 
     def save_avatar(self, guild_id, character_id, key, label, description, image=None, expected_revision=None):
         import re
@@ -825,7 +825,7 @@ class AdminStore:
         with self.write_admin():
             current = self.one('SELECT image,revision FROM avatar_slots WHERE character_id=? AND slot_key=?', (character_id, key)) or ({'image': None, 'revision': 0} if key == 'neutral' else None)
             if current and expected_revision is not None and current['revision'] != expected_revision:
-                raise ConflictError('Avatar slot changed; reload')
+                raise ConflictError('This avatar changed in another tab. Reload the page and try again.')
             blob = image if image is not None else current['image'] if current else None
             self.db.execute('INSERT INTO avatar_slots VALUES(?,?,?,?,?,1) ON CONFLICT(character_id,slot_key) DO UPDATE SET label=excluded.label,description=excluded.description,image=excluded.image,revision=revision+1',
                 (character_id, key, label.strip(), description, blob))
@@ -834,7 +834,7 @@ class AdminStore:
     def clear_avatar_image(self, guild_id, character_id, key, expected_revision):
         with self.write_admin():
             if self._slot_revision(guild_id, character_id, key) != expected_revision:
-                raise ConflictError('Avatar slot changed; reload')
+                raise ConflictError('This avatar changed in another tab. Reload the page and try again.')
             self.db.execute('UPDATE avatar_slots SET image=NULL,revision=revision+1 WHERE character_id=? AND slot_key=?', (character_id, key))
             self.bump_owner(guild_id, 'character', character_id)
 
@@ -843,7 +843,7 @@ class AdminStore:
             raise ValueError('Every character keeps a neutral image; it cannot be removed.')
         with self.write_admin():
             if self._slot_revision(guild_id, character_id, key) != expected_revision:
-                raise ConflictError('Avatar slot changed; reload')
+                raise ConflictError('This avatar changed in another tab. Reload the page and try again.')
             self.db.execute('DELETE FROM avatar_slots WHERE character_id=? AND slot_key=?', (character_id, key))
             self.bump_owner(guild_id, 'character', character_id)
 

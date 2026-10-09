@@ -264,6 +264,12 @@ class SlashCommandTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Personal facts: 2; character encounters: 1", reply)
         self.assertNotIn("Personal memories", reply)
 
+    async def test_context_adaptations_are_escaped_after_truncation(self):
+        reply = await self._context_preset_reply({"id": 0, "revision": 0, "blocks": [], "omitted": [], "adaptations": ["**@everyone** " + "x" * 400]})
+        line = next(row for row in reply.split("\n") if row.startswith("Provider adaptations:"))
+        self.assertIn("\\*\\*@\u200beveryone\\*\\* ", line)
+        self.assertNotIn("@everyone", line)
+
     async def test_context_preset_line_built_in_default(self):
         reply = await self._context_preset_reply({"id": 0, "revision": 0, "blocks": [], "omitted": []})
         self.assertIn("Preset: Built-in default (revision 0)", reply)

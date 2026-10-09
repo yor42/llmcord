@@ -71,7 +71,7 @@ async def delete_book_dialog(ctx, book):
 def direct_import_dialog(ctx, kind, owner_id, on_saved=None):
     owner = next((owner for owner in ctx.service.owners(ctx.guild_id, ctx.channel_names, ctx.thread_names) if (owner['kind'], owner['id']) == (kind, owner_id)), None)
     if owner is None:
-        raise ValueError('Choose an owner in this server')
+        raise ValueError('Choose an owner in this server.')
     with ui.dialog() as dialog, ui.card().classes('w-full max-w-4xl'):
         ui.label('Import entries into ' + owner['label']).classes('text-xl font-bold')
         ui.label('Adds entries directly to this owner. Existing lore stays in place; identical entries are skipped. No new lorebook is created.').classes('ll-muted')

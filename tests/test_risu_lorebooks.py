@@ -15,6 +15,12 @@ def risu(entries, **metadata):
 
 
 class RisuLorebookTests(unittest.TestCase):
+    def test_validate_rule_texts_say_what_to_do(self):
+        with self.assertRaisesRegex(ValueError, 'Fix these values and try again'):
+            validate_rule({'probability': 101})
+        with self.assertRaisesRegex(ValueError, 'Choose one of these'):
+            validate_rule({'role': 'bogus'})
+
     def test_supplied_export_preserves_all_records_and_folder_metadata(self):
         data = (Path(__file__).parent / 'fixtures/risu-lorebook.json').read_bytes()
         raw = json.loads(data)

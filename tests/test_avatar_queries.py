@@ -102,9 +102,13 @@ class AvatarQueryTests(unittest.TestCase):
         self.assertIsNone(row['image'])
         self.assertFalse(row['has_image'])
 
+    def test_next_owner_id_rejects_unknown_owner_type_with_next_step(self):
+        with self.assertRaisesRegex(ValueError, 'world, hub or lorebook. Reload the page'):
+            self.store.next_owner_id('x', 'y')
+
     def test_slot_unknown_key_and_other_guild_raise(self):
         self.fill()
-        with self.assertRaisesRegex(ValueError, 'Avatar slot not found'):
+        with self.assertRaisesRegex(ValueError, 'avatar no longer exists'):
             self.store.avatar_slot(1, self.character, 'missing')
         with self.assertRaises(ValueError):
             self.store.avatar_slot(1, self.foreign, 'neutral')

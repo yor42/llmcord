@@ -997,13 +997,16 @@ def _register_scene_commands(bot: SkitBot, ctx: SimpleNamespace, admin_scene: ap
     bot.tree.add_command(scene)
 
 
+def _clean(value: str) -> str:
+    return discord.utils.escape_mentions(discord.utils.escape_markdown(value))
+
+
 def _context_lore_line(bot: SkitBot, interaction: discord.Interaction, item: dict) -> str:
     """One /context lore entry as words: its first key (a content excerpt for administrators only) and its owner, never a raw id."""
     kind, scope_id, guild_id = item["scope"], item["scope_id"], interaction.guild_id
     is_admin = bool(getattr(getattr(interaction, "permissions", None), "administrator", False))
 
-    def clean(value: str) -> str:
-        return discord.utils.escape_mentions(discord.utils.escape_markdown(value))
+    clean = _clean
 
     label = ""
     reason = str(item.get("reason") or "")
@@ -1087,7 +1090,7 @@ def _register_context_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
         text += f"\nPersonal facts: {len(trace.get('personal', []))}; character encounters: {len(trace.get('encounters', []))}"
         preset = trace.get('preset', {})
         if preset:
-            clean = lambda value: discord.utils.escape_mentions(discord.utils.escape_markdown(value))  # noqa: E731
+            clean = _clean
             if preset['id'] == 0:
                 name = "Built-in default"
             else:
@@ -1096,7 +1099,7 @@ def _register_context_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
             text += f"\nPreset: {name} (revision {preset['revision']}); emotion: {trace.get('emotion', 'neutral')}"
             text += f"\nPrompt blocks: {len(preset.get('blocks', []))}; trimmed blocks: {len(preset.get('omitted', []))}"
             if preset.get('adaptations'):
-                text += '\nProvider adaptations: ' + '; '.join(preset['adaptations'])[:300]
+                text += '\nProvider adaptations: ' + clean('; '.join(preset['adaptations'])[:300])
         await interaction.response.send_message(text[:1900], ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
 
