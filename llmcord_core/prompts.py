@@ -71,7 +71,7 @@ WEEKDAYS = ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 
 
 def time_values(message_id, zone_name):
     zone = zone_name or 'UTC'
-    moment = datetime.fromtimestamp(((message_id >> 22) + 1420070400000) / 1000, timezone.utc).astimezone(ZoneInfo(zone))
+    moment = datetime.fromtimestamp(((abs(message_id) >> 22) + 1420070400000) / 1000, timezone.utc).astimezone(ZoneInfo(zone))
     clock = f"{moment.hour % 12 or 12}:{moment.minute:02d} {'AM' if moment.hour < 12 else 'PM'}"
     date, weekday = f'{MONTHS[moment.month - 1]} {moment.day}, {moment.year}', WEEKDAYS[moment.weekday()]
     return {'time': clock, 'date': date, 'weekday': weekday, 'isotime': f'{moment.hour:02d}:{moment.minute:02d}',
@@ -259,7 +259,8 @@ def compile_prompt(bundle, purpose, values, history, provider, budget, *, contra
         records.append(['speaker_identity', TurnMessage('system', identity), 1000000, True, None, None, None])
         managed_sources.append('speaker_identity')
     if purpose == 'dialogue':
-        for key, label in (('world_guidelines', 'World / hub guidelines'), ('channel_guidelines', 'Channel guidelines (take precedence over world guidelines when they conflict)')):
+        for key, label in (('world_guidelines', 'World / hub guidelines'), ('channel_guidelines', 'Channel guidelines (take precedence over world guidelines when they conflict)'),
+                           ('table_state', 'Game table (private to you; only your own hand is shown)')):
             text = str(values.get(key, '')).strip()
             if text:
                 records.append([key, TurnMessage('system', label + ':\n' + text), 1000000, True, None, None, None])

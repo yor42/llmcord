@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 import weakref
 from dataclasses import dataclass, field
@@ -104,6 +105,7 @@ class _Table:
     sent: dict = field(default_factory=dict)  # newest delivered number per message kind
     talk: int = 0  # member messages in the thread since the turn message was posted
     deadlines: dict = field(default_factory=dict)  # lobby / turn / window -> unix time
+    one_card: bool = False  # a seat already reached its last card (that event is sent once)
 
 
 @dataclass
@@ -120,6 +122,7 @@ class _Out:
     final: tuple | None = None  # (result text, lobby text, turn text)
     advanced: bool = False  # a move was made: the turn message may be moved to the bottom
     seq: int = 0
+    talk: tuple | None = None  # (public text, is the game's end): the event turn for the characters at the table
 
 
 def _cards(n: int) -> str:
@@ -139,6 +142,7 @@ class DoubtTables:
     RETRY_SECONDS = 5
     BUMP_AFTER = 8
     MODEL_SECONDS = 20
+    EVENT_COOLDOWN_SECONDS = 20
 
     def __init__(self, bot, clock=time.time):
         self.bot, self.clock = bot, clock
@@ -146,6 +150,9 @@ class DoubtTables:
         self.timers: dict[tuple[int, int, str], asyncio.Task] = {}
         self.tables: dict[tuple[int, int], _Table] = {}
         self.threads: dict[int, tuple[int, int]] = {}  # thread id -> (guild, table) of the tables being played
+        self.banter: dict[int, tuple[int, int]] = {}  # thread id -> (guild, table) of finished games, until the archive timer
+        self.event_at: dict[tuple[int, int], float] = {}  # table -> clock time of its last event turn
+        self.event_tasks: set[asyncio.Task] = set()
         self.dirty: set[tuple[int, int]] = set()
         self.board_tasks: dict[tuple[int, int], asyncio.Task] = {}
         self.closed = False
@@ -206,7 +213,7 @@ class DoubtTables:
 
     async def close(self) -> None:
         self.closed = True
-        tasks = [*self.timers.values(), *self.board_tasks.values()]
+        tasks = [*self.timers.values(), *self.board_tasks.values(), *self.event_tasks]
         self.timers.clear()
         self.board_tasks.clear()
         for task in tasks:
@@ -218,6 +225,7 @@ class DoubtTables:
         for kind in ("lobby", "window", "turn", "character"):
             self.disarm(key, kind)
         self.threads = {thread: k for thread, k in self.threads.items() if k != key}
+        self.event_at.pop(key, None)
         self.dirty.discard(key)
 
     def _after(self, key, snap) -> None:
@@ -413,14 +421,15 @@ class DoubtTables:
         buttons.add_item(DoubtButton("hand", key[1], snap["round_id"], snap["moves"], "My hand", discord.ButtonStyle.primary))
         return "\n".join(lines), buttons
 
-    def _reveal_text(self, snap, pile_before: int) -> str:
+    def _reveal_text(self, snap, pile_before: int, names=None) -> str:
         rev = snap["view"]["history"][-1]
         cards = ", ".join(f"{rank}{suit}" for rank, suit in rev["cards"])
-        claimer, doubter = self._who(snap, rev["claimer"]), self._who(snap, rev["doubter"])
+        who = (lambda s, i: names[i]) if names else self._who
+        claimer, doubter = who(snap, rev["claimer"]), who(snap, rev["doubter"])
         head = f"Doubt! {doubter} doubted {claimer}'s {_claim(len(rev['cards']), rev['rank'])}. They were {cards}"
         if not rev["bluff"] and snap["view"]["finished"]:
             return head + f" — the claim was true, and {claimer} played their last cards."
-        taker = self._who(snap, rev["claimer"] if rev["bluff"] else rev["doubter"])
+        taker = who(snap, rev["claimer"] if rev["bluff"] else rev["doubter"])
         return head + f" — {taker} takes the pile ({_cards(pile_before)})."
 
     def _result(self, key, snap) -> tuple[str, str, str]:
@@ -482,15 +491,28 @@ class DoubtTables:
             out.events.append(self._reveal_text(new, before["view"]["pile"]))
         if move == "forfeit":
             out.events.append(f"{self._who(before, seat)} forfeits and is out of the game.")
+        table = self.table(key)
         if new["status"] == "settled":
             out.final = self._result(key, new)
+            if self.talk_allowed(key[0]):
+                out.talk = (f"Game over — {self._talk_names(key[0], new)[new['view']['winner']]} won the game.", True)
             self.store.close_table(*key)
             self._forget(key)
+            if (row := self._row(key)) is not None and row["thread_id"] is not None:
+                self.banter[row["thread_id"]] = key
             self.arm(key, "archive", self.ARCHIVE_SECONDS)
         else:
             self._after(key, new)
             out.turn = self.render_turn(key, new)
             out.board = True
+            low = [i for i, n in enumerate(new["view"]["counts"]) if n == 1 and new["view"]["active"][i]]
+            if (move == "doubt" or (low and not table.one_card)) and self.clock() - self.event_at.get(key, float("-inf")) >= self.EVENT_COOLDOWN_SECONDS \
+                    and self.talk_allowed(key[0]):
+                names = self._talk_names(key[0], new)
+                text = self._reveal_text(new, before["view"]["pile"], names) if move == "doubt" else f"{names[low[0]]} is down to one card."
+                self.event_at[key] = self.clock()
+                table.one_card = table.one_card or move != "doubt"
+                out.talk = (text, False)
         return self._seal(key, out)
 
     async def _publish(self, key, out: _Out | None) -> None:
@@ -511,12 +533,14 @@ class DoubtTables:
             if out.final:
                 result, lobby, turn = out.final
                 await self._post(thread_id, result)
+                self._talk_event(thread_id, out)
                 await self._edit(thread_id, row["turn_message_id"], content=turn, view=None)
                 self.dirty.discard(key)
                 await self._edit_board(key)
                 await self._edit(channel_id, row["message_id"], content=lobby, view=None)
                 self.tables.pop(key, None)
                 return
+            self._talk_event(thread_id, out)
             if out.lobby and out.seq > table.sent.get("lobby", 0):
                 table.sent["lobby"] = out.seq
                 await self._edit(channel_id, row["message_id"], content=out.lobby[0], view=out.lobby[1])
@@ -525,6 +549,25 @@ class DoubtTables:
                 await self._turn_message(key, out, row)
             if out.board:
                 self._mark_board(key)
+
+    def _talk_event(self, thread_id, out) -> None:
+        """Fire and forget: the characters at the table react to a public event. A move never waits for it."""
+        if out.talk is None or thread_id is None or self.closed:
+            return
+        text = out.talk[0]
+        out.talk = None
+
+        async def run():
+            try:
+                await self.bot.run_table_event(await self._channel(thread_id), text)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logging.exception("I Doubt It event turn failed (thread %s)", thread_id)
+
+        task = asyncio.create_task(run(), name=f"doubt-event-{thread_id}")
+        self.event_tasks.add(task)
+        task.add_done_callback(self.event_tasks.discard)
 
     async def _turn_message(self, key, out, row) -> None:
         table, thread_id, old = self.table(key), row["thread_id"], row["turn_message_id"]
@@ -1178,6 +1221,7 @@ class DoubtTables:
         self.tables.pop(key, None)
 
     async def on_archive_timer(self, guild_id, table_id) -> None:
+        self.banter = {thread: k for thread, k in self.banter.items() if k != (guild_id, table_id)}
         row = self._row((guild_id, table_id))
         if row is None or row["status"] == "open" or row["thread_id"] is None:
             return
@@ -1186,6 +1230,89 @@ class DoubtTables:
             await thread.edit(archived=True, locked=True)
         except Exception as error:
             logging.warning("Could not archive the I Doubt It thread (%s)", type(error).__name__)
+
+    # --- table talk (FEAT-21 C) --------------------------------------------------------------
+
+    def _talk_key(self, guild_id, thread_id):
+        key = self.threads.get(thread_id) or self.banter.get(thread_id)
+        return key if key is not None and key[0] == guild_id else None
+
+    def _talk_names(self, guild_id, snap) -> list:
+        """One prompt-safe name per seat, shared by the table block and the event texts: characters by name, members by their guild
+        display name (Player N when unknown); no mentions, no ids, no markdown."""
+        guild, names, players = self.bot.get_guild(guild_id), [], 0
+        for seat in snap["seats"]:
+            if seat["kind"] == "character":
+                name = seat["name"]
+            else:
+                players += 1
+                member = guild.get_member(seat["ref_id"]) if guild is not None else None
+                name = getattr(member, "display_name", None) or f"Player {players}"
+            names.append(re.sub(r"[*_~`|>@<\\]", "", name).strip() or f"Player {len(names) + 1}")
+        return names
+
+    def talk_allowed(self, guild_id) -> bool:
+        """Table talk is on and the daily limit (model calls plus failed move attempts) is not reached."""
+        return self._talk_budget(guild_id) > 0
+
+    def table_talk_context(self, guild_id, thread_id) -> dict | None:
+        """The table whose thread this is (while it is joining or played, and during the banter after the game until it is archived), else None."""
+        key = self._talk_key(guild_id, thread_id)
+        if key is None:
+            return None
+        try:
+            snap = self.store.latest_round(*key)
+        except GameError:
+            return None
+        return {"table_id": key[1], "round_id": snap["round_id"], "status": snap["status"],
+                "seated_character_ids": [s["ref_id"] for s in snap["seats"] if s["kind"] == "character"]}
+
+    def table_block(self, guild_id, thread_id, character_id) -> str | None:
+        """What one seated character may know of the table: the public state and its own hand, never another seat's cards."""
+        key = self._talk_key(guild_id, thread_id)
+        if key is None:
+            return None
+        try:
+            snap = self.store.latest_round(*key)
+        except GameError:
+            return None
+        mine = next((s for s in snap["seats"] if s["kind"] == "character" and s["ref_id"] == character_id), None)
+        if mine is None:
+            return None
+        names, view = self._talk_names(key[0], snap), snap["view"]
+        lines = ["You are sitting at a table of I Doubt It (a card game of bluffing: players claim the rank to play, add cards face down, and anyone may doubt)."]
+        if not view:
+            lines.append("The game has not started yet. Seated: " + ", ".join(names) + ".")
+            return "\n".join(lines)
+
+        def who(i):
+            return names[i] + (" (you)" if i == mine["index"] else "")
+        if view["finished"]:
+            lines.append(f"The game is over. {who(view['winner'])} won.")
+        else:
+            lines.append(f"Rank to claim now: {view['rank']}. Pile: {_cards(view['pile'])}.")
+        for i, n in enumerate(view["counts"]):
+            lines.append(f"- {who(i)}: {_cards(n)}" + ("" if view["active"][i] else " (forfeited)") + (" (on turn)" if view["turn"] == i and not view["finished"] else ""))
+        if view["window"]:
+            w = view["window"]
+            lines.append(f"Open claim: {names[w['claimer']]} claimed {_claim(w['count'], w['rank'])}; it can still be doubted.")
+        recent = []
+        for item in view["history"][-6:]:
+            if item["kind"] == "reveal":
+                cards = ", ".join(f"{r}{su}" for r, su in item["cards"])
+                recent.append(f"{names[item['doubter']]} doubted {names[item['claimer']]}'s {_claim(len(item['cards']), item['rank'])}; they were {cards} ({'a bluff' if item['bluff'] else 'true'})")
+            else:
+                recent.append(f"{names[item['seat']]} claimed {_claim(item['count'], item['rank'])}")
+        if recent:
+            lines.append("Recent play: " + "; ".join(recent) + ".")
+        if snap["status"] == "playing" and view["active"][mine["index"]]:
+            try:
+                hand = self.store.seat_view(key[0], snap["round_id"], mine["index"]).hand or ()
+            except GameError:
+                hand = ()
+            lines.append("Keep your hand secret unless you choose to bluff about it.")
+            lines.append("Your hand: " + (", ".join(f"{r}{su}" for r, su in hand) or "(no cards)"))
+        return "\n".join(lines)
 
     # --- thread chat ------------------------------------------------------------------------
 
@@ -1223,6 +1350,7 @@ class DoubtTables:
                 logging.exception("Could not close I Doubt It table %s on restart", table_id)
                 continue
             self._forget((guild_id, table_id))
+            self.banter = {thread: k for thread, k in self.banter.items() if k != (guild_id, table_id)}
             text = "This table closed when the bot restarted." + notes.get((guild_id, table_id), "").replace("are", "were")
             await self._edit(channel_id, message_id, content=text, view=None)
             await self._post(thread_id, text)

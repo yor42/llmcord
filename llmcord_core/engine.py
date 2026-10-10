@@ -48,12 +48,17 @@ class SceneContext:
     guidelines: dict | None = None
     mentioned_users: list[dict] = field(default_factory=list)
     speaker_ids: tuple = ()
+    allowed_ids: tuple | None = None  # table thread: only these characters may speak (None: unrestricted)
+    usage_feature: str | None = None  # overrides the ambient/summon/reply usage label of the turn
+    event: bool = False  # a table event turn: the ambient cheap gate never silences it
 
 
 class Engine:
     def __init__(self, store: Store, models: ModelGateway, settings):
         self.store, self.models = store, models
         self.source = settings_source(settings)
+        self.talk_failed = None  # (guild_id) -> counts a failed table-talk attempt toward the daily limit; set by the bot
+        self.table_block = None  # (guild_id, thread_id, character_id) -> per-speaker table text or None; set by the bot
 
     @property
     def settings(self) -> Settings:
@@ -64,12 +69,14 @@ class Engine:
         self.source = settings_source(value)
 
     def eligible(self, scene: SceneContext) -> list:
-        return self.store.eligible_characters(scene.guild_id, scene.space_id)
+        rows = self.store.eligible_characters(scene.guild_id, scene.space_id)
+        return rows if scene.allowed_ids is None else [row for row in rows if row['id'] in scene.allowed_ids]
 
     def eligible_with_archived(self, scene: SceneContext) -> dict:
         """Eligible characters plus the author's own archived favorites (FEAT-26): for lookups of speakers already chosen for this author, never for casts."""
         rows = {row["id"]: row for row in self.eligible(scene)}
-        rows.update({row["id"]: row for row in self.store.archived_favorite_rows(scene.guild_id, scene.user_id, scene.space_id)})
+        if scene.allowed_ids is None:
+            rows.update({row["id"]: row for row in self.store.archived_favorite_rows(scene.guild_id, scene.user_id, scene.space_id)})
         return rows
 
     def compile(self, scene, purpose, values, history=None, contract='', images=None, max_tokens=None, protected_history_index=None, lore_injections=()):
@@ -122,15 +129,16 @@ class Engine:
 
     async def speakers(self, scene: SceneContext) -> list:
         eligible = {row["id"]: row for row in self.eligible(scene)}
-        cast = [eligible[ident] for ident in self.store.get_cast(scene.channel_id, scene.parent_channel_id) if ident in eligible]
+        restricted = scene.allowed_ids is not None
+        cast = [eligible[ident] for ident in (scene.allowed_ids if restricted else self.store.get_cast(scene.channel_id, scene.parent_channel_id)) if ident in eligible]
         if scene.forced_character_id is not None:
             if scene.forced_character_id not in eligible:
                 raise ValueError("That character cannot join this world or hub.")
             forced = eligible[scene.forced_character_id]
             cast = [forced, *[row for row in cast if row["id"] != forced["id"]]]
-        archived = {row['id']: row for row in self.store.archived_favorite_rows(scene.guild_id, scene.user_id, scene.space_id)}
+        archived = {} if restricted else {row['id']: row for row in self.store.archived_favorite_rows(scene.guild_id, scene.user_id, scene.space_id)}
         pool = {**eligible, **archived}
-        favorites = [f for f in self.store.favorites(scene.guild_id, scene.user_id) if f['character_id'] in pool] if scene.user_id else []
+        favorites = [f for f in self.store.favorites(scene.guild_id, scene.user_id) if f['character_id'] in pool] if scene.user_id and not restricted else []
         favorite_ids = {f['character_id'] for f in favorites}
         step_in = bool(favorites) and self.store.favorites_mode(scene.guild_id, scene.user_id) == 'step_in'
         in_cast = {row['id'] for row in cast}
@@ -141,7 +149,7 @@ class Engine:
         options_rows = list(cast) + [pool[ident] for ident in extra[:self.store.cast_limits(scene.guild_id)['max_favorites']]]
         allowed = {row['id'] for row in options_rows}
         # A cheap deterministic gate avoids a model call for ambient messages with no invitation.
-        if scene.ambient:
+        if scene.ambient and not scene.event:
             lower = " ".join([*(part.get("text", "") for part in scene.recent[-2:]), scene.text]).casefold()
             if not any(row["name"].casefold() in lower for row in options_rows) and not any(
                 phrase in lower for phrase in ("what do you think", "join us", "come over", "your turn")
@@ -165,6 +173,8 @@ class Engine:
             return [pool[ident] for ident in ids[:self.settings.limits["max_speakers"]]]
         except Exception as error:
             logging.error("Director failed: %s", error_detail(error))
+            if scene.usage_feature == 'game' and self.talk_failed:
+                self.talk_failed(scene.guild_id)
             return [] if scene.ambient else [options_rows[0]]
 
     def record_user(self, scene: SceneContext, stored_text: str | None = None) -> int:
@@ -290,7 +300,9 @@ class Engine:
             # Recent chat is carried once in labelled history, so imported
             # presets with only a history marker still receive every speaker.
             'recent': '',
-            'speaker_identity': self.identities(scene, self.store.ancestors(scene.user_message_id))}
+            'speaker_identity': self.identities(scene, self.store.ancestors(scene.user_message_id)),
+            # Table thread only: this speaker's own view of the game (public state + own hand), never saved or sent anywhere else.
+            'table_state': (self.table_block(scene.guild_id, scene.channel_id, character['id']) or '') if scene.allowed_ids is not None and self.table_block else ''}
         guidelines = scene.guidelines if scene.guidelines is not None else self.store.scene_guidelines(scene.guild_id, scene.space_id, scene.parent_channel_id or scene.channel_id)
         values.update({key: row['content'] for key, row in guidelines.items()})
         zone, _ = self.store.resolve_timezone(scene.guild_id, scene.user_id)

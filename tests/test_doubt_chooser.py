@@ -653,6 +653,7 @@ class TriageTests(ModelCase):
         self.record_usage = True
         self.answers["doubt"] = lambda name, schema: asyncio.sleep(0.01 if name == self.names[min(self.selected)] else 0.2, {"doubt": True})
         before = self.doubt._talk_budget(G)
+        self.bot.run_table_event = lambda *args, **kwargs: asyncio.sleep(0)  # the reveal's event turn (FEAT-21 C) is not what is counted here
         await self.fire()
         self.assertEqual(self.doubt._talk_budget(G), before - 2)  # one usage row for the answer, one failure for the dropped call
 

@@ -367,7 +367,7 @@ class CharacterTurnTests(SeatCase):
 
     async def test_table_talk_usage_has_a_label(self):
         from llmcord_core.dashboard import USAGE_FEATURES
-        self.assertEqual(USAGE_FEATURES["game"], "Blackjack table talk")
+        self.assertEqual(USAGE_FEATURES["game"], "Game table talk")
 
     async def test_line_cleaning(self):
         self.assertEqual(game_chooser.clean_line("  hi\n there  "), "hi there")

@@ -8,6 +8,7 @@ import sqlite3
 import time
 import re
 import hashlib
+import itertools
 import json
 from collections import OrderedDict
 from dataclasses import replace
@@ -101,6 +102,14 @@ class LruDict(OrderedDict):
             self.popitem(last=False)
 
 
+_EVENT_COUNTER = itertools.count()
+
+
+def _event_id() -> int:
+    """A synthetic node id for a table event: negative (never a real Discord id), snowflake-shaped so the prompt's time is now."""
+    return -(((int(time.time() * 1000) - 1420070400000) << 22) | (next(_EVENT_COUNTER) & 0x3FFFFF))
+
+
 class LockPool(dict):
     """Per-key asyncio locks; past ``cap`` the oldest idle locks are dropped, never one held or awaited."""
 
@@ -151,6 +160,8 @@ class SkitBot(commands.Bot):
         self.note_tasks: set[asyncio.Task] = set()
         self.games = GameTables(self)
         self.doubt = DoubtTables(self)
+        self.engine.table_block = self.doubt.table_block
+        self.engine.talk_failed = self.doubt._note_failure
         register_commands(self)
 
     async def setup_hook(self):
@@ -224,6 +235,9 @@ class SkitBot(commands.Bot):
         parent_id, binding = self.location(message.channel)
         if not binding:
             return
+        table = self.doubt.table_talk_context(message.guild.id, message.channel.id)
+        if table is not None and not self._table_talk_open(message.guild.id, table):
+            return  # the table's characters are silent (talk off, daily limit, spending cap); members still chat
         reference_id = message.reference.message_id if message.reference else None
         referenced = self.store.node(reference_id)
         if referenced and (referenced["guild_id"] != message.guild.id or referenced["channel_id"] != message.channel.id):
@@ -280,9 +294,47 @@ class SkitBot(commands.Bot):
         scene = SceneContext(message.guild.id, message.channel.id, parent_id,
             binding["space_id"], message.author.id, message.id, text,
             reference_id if referenced else None, recent, images, ambient=not explicit, user_label=message.author.display_name,
-            mentioned_users=[discord_identity(user) for user in message.mentions if not user.bot])
+            mentioned_users=[discord_identity(user) for user in message.mentions if not user.bot], **self._table_fields(table))
         async with self.channel_locks.lock(message.channel.id):
             await self.run_scene(scene, message.channel)
+
+    def _table_talk_open(self, guild_id, table) -> bool:
+        """May the characters of this table thread speak: someone is seated, table talk is on, the daily limit and the spending cap allow it."""
+        # The limit is checked once per turn: a turn that passes with one call left may use up to 1 + max_speakers calls
+        # (the director plus one dialogue per speaker). The overshoot is bounded and accepted.
+        if not table['seated_character_ids'] or not self.doubt.talk_allowed(guild_id):
+            return False
+        state = self._budget_check()
+        return not (state and state.hard_reached)
+
+    @staticmethod
+    def _table_fields(table) -> dict:
+        return {} if table is None else {'allowed_ids': tuple(table['seated_character_ids']), 'usage_feature': 'game'}
+
+    async def run_table_event(self, thread, text, speaker_hint=None):
+        """One ambient character turn in a table thread after a public game event (a reveal, a seat down to one card, the game's end).
+        Never waits: skipped when the thread is busy or the table's characters may not talk. The event is saved as a user node
+        by the table (a synthetic negative message id, author = the bot) so it sits in the scene history like a narration line."""
+        guild = getattr(thread, 'guild', None)
+        if guild is None or not isinstance(thread, discord.Thread):
+            return
+        table = self.doubt.table_talk_context(guild.id, thread.id)
+        parent_id, binding = self.location(thread)
+        if table is None or not binding or not self._table_talk_open(guild.id, table):
+            return
+        lock = self.channel_locks.lock(thread.id)
+        if lock.locked():
+            return
+        async with lock:
+            recent = []
+            try:
+                cutoff = discord.utils.utcnow() - timedelta(seconds=self.base_settings.limits["recent_window_seconds"])
+                recent = await recent_human_lines(thread, self.base_settings.limits, cutoff, self.store.scene_reset_at(thread.id))
+            except Exception as error:
+                logging.warning('Table event could not read recent chat: %s', error_detail(error))
+            scene = SceneContext(guild.id, thread.id, parent_id, binding["space_id"], self.user.id if self.user else 0, _event_id(), text,
+                None, recent, [], ambient=True, user_label='Table events', event=True, **self._table_fields(table))
+            await self.run_scene(scene, thread)
 
     @staticmethod
     def _webhook_key(channel, character):
@@ -421,7 +473,7 @@ class SkitBot(commands.Bot):
             if pending:
                 logging.warning('Memory task for channel %s still running after %ss; continuing without it',
                                 channel.id, MEMORY_WAIT_SECONDS)
-        with self.backend.pin(), budget.admit(), log_scope(scene.user_message_id), capture_usage(scene.guild_id, scene.channel_id, 'ambient' if scene.ambient else 'summon' if scene.forced_character_id is not None else 'reply'):
+        with self.backend.pin(), budget.admit(), log_scope(scene.user_message_id), capture_usage(scene.guild_id, scene.channel_id, scene.usage_feature or ('ambient' if scene.ambient else 'summon' if scene.forced_character_id is not None else 'reply')):
             return await self._run_scene(scene, channel, interaction)
 
     def _log_entry(self, guild_id, channel_id, message_id, facts, **fields):
@@ -529,7 +581,8 @@ class SkitBot(commands.Bot):
             await progress.clear('Reply sent.')
             if scene.ambient:
                 self.store.mark_ambient_response(scene.channel_id)
-            self._schedule_memory(channel.id, scene, completed, preceding, root_id, parent_message_id)
+            if scene.allowed_ids is None:  # table-thread talk is neither remembered nor summarized
+                self._schedule_memory(channel.id, scene, completed, preceding, root_id, parent_message_id)
         except Exception as error:
             await self._report_scene_failure(error, stage.name, progress, channel, interaction)
         finally:
@@ -635,6 +688,8 @@ class SkitBot(commands.Bot):
         logging.error('Scene failed during %s [ref %s]: %s\n%s', stage, ref, error_detail(error), error_stack(error))
         self._log_failure(error, ref, stage)
         pointer = self._failure_pointer(log_attribution()['guild_id'])
+        if log_attribution()['feature'] == 'game':
+            self.doubt._note_failure(log_attribution()['guild_id'])
         failure = f"The character couldn't reply (ref {ref}). {pointer}"
         try:
             if progress.message:
@@ -1006,6 +1061,14 @@ def _register_summon_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
     async def summon(interaction: discord.Interaction, character: str, prompt: str):
         parent_id, binding = await binding_for(interaction)
         row = eligible_character(interaction, binding, character)
+        table = bot.doubt.table_talk_context(interaction.guild_id, interaction.channel.id)
+        if table is not None:
+            if row["id"] not in table["seated_character_ids"]:
+                await interaction.response.send_message("Only the characters seated at this table can speak in its thread.", ephemeral=True)
+                return
+            if not bot.doubt.talk_allowed(interaction.guild_id):
+                await interaction.response.send_message("The table's characters aren't talking right now (table talk is off or today's limit is reached).", ephemeral=True)
+                return
         state = bot._budget_check()
         if state and state.hard_reached:
             await interaction.response.send_message(_hard_cap_notice(state), ephemeral=True)
@@ -1024,7 +1087,8 @@ def _register_summon_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
             binding["space_id"], interaction.user.id, invitation.id, prompt,
             parent_message_id, recent, [], forced_character_id=row["id"], user_label=interaction.user.display_name,
             mentioned_users=[discord_identity(member) for ident in re.findall(r'<@!?(\d+)>', prompt)
-                             if (member := interaction.guild.get_member(int(ident))) and not member.bot])
+                             if (member := interaction.guild.get_member(int(ident))) and not member.bot],
+            **bot._table_fields(table))
         async with bot.channel_locks.lock(interaction.channel.id):
             await bot.run_scene(scene, interaction.channel, interaction)
 
