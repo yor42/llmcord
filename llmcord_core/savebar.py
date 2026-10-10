@@ -31,13 +31,14 @@ class SaveBar:
         self.bar.set_visibility(False)
 
     def track(self, name, controls, save=None, action=None, detail=None, then=None, success=None, on_reset=None,
-              dirty=None, reset=None, save_label=_SAVE_LABEL, parts=None, reload=None):
+              dirty=None, reset=None, save_label=_SAVE_LABEL, parts=None, reload=None, enabled=None):
         """Register an editor: controls maps each tracked control to its saved value; save runs guarded/audited on Save.
 
         dirty: optional callable replacing the per-control comparison (an exception counts as dirty).
         reset: optional callable used by Reset instead of restoring control values (on_reset still runs after).
         save_label: the bar's Save button text while this editor is active.
         reload: optional async callable used by Reload after a save conflict (default: refresh the current tab).
+        enabled: optional callable(control) -> bool; settle() re-enables a control of this editor only when it returns true (otherwise it stays disabled).
         Writes made through ctx._attempt (not ctx.run/button) are never refused, so an editor may run its own
         write (e.g. Save as new) that way and then call settle().
 
@@ -65,7 +66,7 @@ class SaveBar:
             controls.update(part.controls)
         editor = types.SimpleNamespace(name=name, controls=[], save=save, action=action, detail=detail, then=then,
                                        success=success, on_reset=on_reset, dirty=dirty, reset=reset, save_label=save_label,
-                                       parts=[], reload=reload, stale=False)
+                                       parts=[], reload=reload, stale=False, enabled=enabled)
         self.editors.append(editor)
         self.retrack(editor, controls)
         editor.parts = parts
@@ -114,7 +115,7 @@ class SaveBar:
             self.settle()
 
     def settle(self):
-        """Hide the bar and re-enable every tracked field."""
+        """Hide the bar and re-enable every tracked field its editor's `enabled` predicate allows."""
         was_active, self.active = self.active, None
         self.bar.set_visibility(False)
         self.save_button.set_text(_SAVE_LABEL)
@@ -122,7 +123,10 @@ class SaveBar:
         for editor in self.editors:
             editor.stale = False
             for control, _ in editor.controls:
-                control.enable()
+                if editor.enabled is None or editor.enabled(control):
+                    control.enable()
+                else:
+                    control.disable()
         if was_active is not None:
             self.ctx.selector.client.run_javascript('window.onbeforeunload = null;')
 

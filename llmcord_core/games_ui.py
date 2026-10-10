@@ -65,7 +65,8 @@ def all_games_section(ctx):
         ui.label('Members play with /blackjack in game channels. Bets are taken when a member joins and paid when the round ends. Turning a channel off closes its open table and refunds the bets.').classes('ll-muted')
 
         rounds = {'value': store.game_summary_rounds(gid)}
-        rounds_field = ui.number('Rounds in the end-of-table summary', value=rounds['value'], min=1, max=20, precision=0, format='%d')
+        with ui.element('div').classes('ll-form-row ll-field-row'):
+            rounds_field = ui.number('Rounds in the end-of-table summary', value=rounds['value'], min=1, max=20, precision=0, format='%d').classes('ll-wide')
         ui.label('When a table closes, its message lists this many of the last rounds.').classes('ll-muted')
         def save_rounds():
             rounds['value'] = store.set_game_summary_rounds(gid, whole(rounds_field.value), rounds['value'])
@@ -108,7 +109,6 @@ def blackjack_section(ctx):
         soft = ui.switch('Dealer hits soft 17', value=rules['value']['hit_soft_17'])
         insurance = ui.switch('Insurance and even money', value=rules['value']['insurance'])
         surrender = ui.switch('Late surrender', value=rules['value']['surrender'])
-        soft.enable = lambda: soft.set_enabled(stand_on.value == 17)  # the save bar re-enables every tracked control; soft 17 only exists when the dealer stands on 17
         controls = (stand_on, soft, pays, tie, insurance, surrender)
         def current():
             return {'stand_on': stand_on.value, 'hit_soft_17': bool(soft.value) and stand_on.value == 17, 'blackjack_pays': pays.value, 'ties': tie.value,
@@ -133,7 +133,8 @@ def blackjack_section(ctx):
                 control.set_value(saved[key])
         ctx.savebar.track('Blackjack rules', {c: rules['value'][k] for c, k in zip(controls, ('stand_on', 'hit_soft_17', 'blackjack_pays', 'ties', 'insurance', 'surrender'))},
                           save=save_rules, action='games.blackjack_rules', detail=lambda result: dict(result), success='Blackjack rules saved',
-                          dirty=lambda: current() != rules['value'], reset=reset_rules, then=lambda result: refresh())
+                          dirty=lambda: current() != rules['value'], reset=reset_rules, then=lambda result: refresh(),
+                          enabled=lambda control: control is not soft or stand_on.value == 17)  # soft 17 only exists when the dealer stands on 17
 
 
 async def games_panel(ctx):

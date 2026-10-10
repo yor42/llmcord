@@ -113,6 +113,22 @@ class SaveBarLogicTests(unittest.TestCase):
         kept.set_value('b')
         self.assertEqual(checks, [editor])
 
+    def test_enabled_predicate_gates_settle_reenable(self):
+        bar, a, b, other = make(), Control('a'), Control('b'), Control('x')
+        gate = {'on': False}
+        bar.track('P', {a: 'a', b: 'b'}, save=None, enabled=lambda control: control is a or gate['on'])
+        bar.track('Q', {other: 'x'}, save=None)
+        a.set_value('z')
+        self.assertTrue(other.disabled)
+        b.disable()
+        bar.reset()
+        self.assertFalse(other.disabled)
+        self.assertFalse(a.disabled)
+        self.assertTrue(b.disabled)
+        gate['on'] = True
+        bar.settle()
+        self.assertFalse(b.disabled)
+
     def test_save_label_follows_active_editor(self):
         bar, field = make(), Control('a')
         bar.track('P', {field: 'a'}, save=None, save_label='Save draft')
