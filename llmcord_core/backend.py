@@ -151,7 +151,7 @@ async def test_profile_connection(name, mapping, key_hosts, environ=os.environ) 
                 return _failure(f"{profile.api_key_env} is not set in the dashboard's environment.")
         profile = replace(profile, timeout_seconds=min(profile.timeout_seconds, 20), max_retries=0)
         settings = Settings('', None, Path(':memory:'), 0, {name: profile}, name, name, name, {})
-        gateway = ModelGateway(_ProbeSource(settings, key_hosts, environ))
+        gateway = ModelGateway(_ProbeSource(settings, key_hosts, environ), environment='the dashboard')
         started = time.perf_counter()
         try:
             await asyncio.wait_for(gateway.text('dialogue', 'Reply with the word OK.', [TurnMessage('user', 'OK?')], max_tokens=16), PROBE_TIMEOUT_SECONDS)

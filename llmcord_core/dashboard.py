@@ -1376,17 +1376,22 @@ async def turn_log_section(ctx, channel_label):
         await load(True)
 
 
+def usage_role_labels(backend_roles):
+    """Profile name -> the roles it serves; a role without its own profile uses dialogue's."""
+    roles = {}
+    for role in ('dialogue', 'director', 'memory'):
+        ident = backend_roles.get(role, backend_roles.get('dialogue'))
+        if ident:
+            roles.setdefault(ident, []).append(role)
+    return roles
+
+
 async def monitoring_panel(ctx):
     from nicegui import ui
     store, gid = ctx.store, ctx.guild_id
     days = store.turn_log_settings(gid)['days']
     keys = usage_range_keys(days)
-    models = ctx.service.model_config
-    roles = {}
-    for role in ('dialogue', 'director', 'memory'):
-        ident = models.get(role, models.get('dialogue'))
-        if ident:
-            roles.setdefault(ident, []).append(role)
+    roles = usage_role_labels(ctx.service.effective_backend().roles)
     thread_names = ctx.thread_names or {}
     def channel_label(cid):
         if cid is None:

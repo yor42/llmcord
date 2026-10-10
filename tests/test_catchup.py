@@ -472,5 +472,32 @@ class CatchupUsageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(tuple(row), (1, "memory", 120, 30))
 
 
+class CatchupPinTests(unittest.IsolatedAsyncioTestCase):
+    async def test_profile_saved_between_model_calls_does_not_reach_the_second_call(self):
+        """MNT-32: everything inside one /catchup sees one backend snapshot; a profile saved mid-call applies to the next /catchup only."""
+        bot = SkitBot(make_settings())
+        self.addCleanup(bot.store.close)
+        world = bot.store.create_space(1, "Harbor", "world")
+        bot.store.bind_channel(1, 100, world)
+        data = {"provider": "compatible", "model": "m1", "context_tokens": 16000, "base_url": "http://localhost/v1"}
+        bot.store.save_model_profile("fast", data, None)
+        bot.store.save_model_roles({"dialogue": None, "director": None, "memory": "fast"}, bot.store.model_roles()["revision"], {"test", "fast"})
+        seen = []
+
+        class SavingModels(RecordingModels):
+            async def text(self, role, system, messages, max_tokens=None):
+                seen.append(bot.backend.current().profile("memory").model)
+                if len(seen) == 1:
+                    bot.store.save_model_profile("fast", {**data, "model": "m2"}, bot.store.model_profile_rows()[0]["revision"])
+                seen.append(bot.backend.current().profile("memory").model)
+                return "ok"
+
+        bot.models = SavingModels()
+        channel = FakeChannel(100, [recent(1, "hello", uid=5)])
+        await invoke(bot, "catchup", granted(FakeInteraction(channel=channel)))
+        self.assertEqual(seen, ["m1", "m1"])
+        self.assertEqual(bot.backend.current().profile("memory").model, "m2")
+
+
 if __name__ == "__main__":
     unittest.main()

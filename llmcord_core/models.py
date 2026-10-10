@@ -64,9 +64,10 @@ def AsyncAnthropic(**kwargs):
 
 
 class ModelGateway:
-    def __init__(self, settings, usage_sink=None, budget_gate=None, log_sink=None):
+    def __init__(self, settings, usage_sink=None, budget_gate=None, log_sink=None, environment='the bot'):
         """`settings` is a Settings or a BackendResolver (anything with `.current()`)."""
         self.source = settings_source(settings)
+        self.environment = environment
         self.fingerprints: dict[str, tuple] = {}
         self.retired: list[Any] = []
         self.log_sink = log_sink
@@ -139,7 +140,7 @@ class ModelGateway:
             except ValueError as error:
                 raise ModelConfigError(f'Profile {profile_name}: {error}') from None
             if profile.api_key_env and not environ.get(profile.api_key_env):
-                raise ModelConfigError(f"{profile.api_key_env} is not set in the bot's environment (profile {profile_name})")
+                raise ModelConfigError(f"{profile.api_key_env} is not set in {self.environment}'s environment (profile {profile_name})")
         fingerprint = (profile.provider, profile.base_url, profile.api_key_env, profile.timeout_seconds, profile.max_retries, profile.source)
         if profile_name in self.clients and self.fingerprints.get(profile_name, fingerprint) == fingerprint:
             return self.clients[profile_name]

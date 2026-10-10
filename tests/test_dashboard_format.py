@@ -7,7 +7,7 @@ Behavior: 0 -> '$0.00'; 0.001 -> '$0.001'; 0.0004 -> '$0.0004'; 0.00004 -> '<$0.
 """
 import unittest
 
-from llmcord_core.dashboard import format_usd
+from llmcord_core.dashboard import format_usd, usage_role_labels
 
 
 class FormatUsdTests(unittest.TestCase):
@@ -34,6 +34,15 @@ class FormatUsdTests(unittest.TestCase):
         for value, expected in test_cases:
             with self.subTest(input=value):
                 self.assertEqual(format_usd(value), expected)
+
+
+class UsageRoleLabelsTests(unittest.TestCase):
+    def test_roles_map_to_effective_profiles_with_dialogue_fallback(self):
+        """MNT-32: the Monitoring 'Used for' badges follow the effective roles; a missing role uses dialogue's profile."""
+        self.assertEqual(usage_role_labels({'dialogue': 'a', 'director': 'b', 'memory': 'a'}), {'a': ['dialogue', 'memory'], 'b': ['director']})
+        self.assertEqual(usage_role_labels({'dialogue': 'a'}), {'a': ['dialogue', 'director', 'memory']})
+        self.assertEqual(usage_role_labels({'dialogue': 'a', 'memory': 'dash'}), {'a': ['dialogue', 'director'], 'dash': ['memory']})
+        self.assertEqual(usage_role_labels({}), {})
 
 
 if __name__ == '__main__':

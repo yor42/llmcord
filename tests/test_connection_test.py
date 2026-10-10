@@ -129,6 +129,42 @@ class ProbeTests(ProbeCase):
         self.assertIn('did not respond in time', result.message)
         self.assertEqual([client.closed for client in FakeOpenAI.created], [True])
 
+    async def test_provider_timeout_exception_maps_to_timeout_message_and_closes_client(self):
+        """MNT-32: the SDK's own timeout error (not the overall limit) gives the same failure line and still closes the client."""
+        import httpx
+        original = FakeOpenAI.__init__
+
+        def init(client, **kwargs):
+            original(client, **kwargs)
+
+            async def boom(**request):
+                raise httpx.ReadTimeout('timed out')
+            client.responses.create = boom
+            client.chat.completions.create = boom
+        with patch.object(FakeOpenAI, '__init__', init):
+            result = await probe('cloud', OPENAI, HOSTS, ENV)
+        self.assertFalse(result.ok)
+        self.assertIsNone(result.latency_ms)
+        self.assertIn('did not respond in time', result.message)
+        self.assertEqual([client.closed for client in FakeOpenAI.created], [True])
+
+    async def test_gateway_names_its_environment_when_the_variable_is_missing(self):
+        """MNT-32: the gateway's missing-variable error names the process it runs in; the default stays 'the bot'."""
+        from llmcord_core.backend import _ProbeSource
+        from llmcord_core.config import Settings, profile_from_mapping
+        from llmcord_core.errors import ModelConfigError
+        from llmcord_core.models import TurnMessage
+        from pathlib import Path
+        profile = profile_from_mapping('cloud', OPENAI, source='dashboard')
+        settings = Settings('', None, Path(':memory:'), 0, {'cloud': profile}, 'cloud', 'cloud', 'cloud', {})
+        for kwargs, where in (({}, "the bot's environment"), ({'environment': 'the dashboard'}, "the dashboard's environment")):
+            with self.subTest(where=where):
+                gateway = ModelGateway(_ProbeSource(settings, HOSTS, {}), **kwargs)
+                with self.assertRaises(ModelConfigError) as caught:
+                    await gateway.text('dialogue', '', [TurnMessage('user', 'hi')])
+                self.assertIn(f'OPENAI_API_KEY is not set in {where}', str(caught.exception))
+                await gateway.close()
+
     async def test_no_usage_budget_or_log_hooks(self):
         """FEAT-11: the probe gateway has no usage sink, budget gate or turn log sink."""
         seen, original = [], ModelGateway.__init__

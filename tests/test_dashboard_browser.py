@@ -1784,6 +1784,30 @@ class DashboardBrowserTests(unittest.TestCase):
             self.post_hook('/_test/backend-tester', {'mode': 'ok'})
             context.close()
 
+    def test_operator_backend_test_connection_survives_closing_the_dialog(self):
+        """MNT-32: closing the editor while a test is still running leaves no error, no stray toast, and a usable page once the tester answers."""
+        from playwright.sync_api import expect
+        context, page, errors = self.operator_page('/admin/operator?tab=backend')
+        try:
+            self.post_hook('/_test/backend-tester', {'mode': 'ok', 'hold': True})
+            page.get_by_role('button', name='Add profile').click()
+            dialog = self.fill_profile_editor(page, 'tmp-closed', 'closed-model', 1000, base='https://closed.example/v1')
+            dialog.get_by_role('button', name='Test connection').click()
+            expect(dialog.get_by_role('button', name='Test connection')).to_be_disabled()
+            dialog.get_by_role('button', name='Cancel').click()
+            expect(page.get_by_role('dialog')).to_have_count(0)
+            self.post_hook('/_test/backend-tester-release')
+            page.wait_for_timeout(800)
+            self.assertEqual(page.locator('.q-notification').count(), 0)
+            page.get_by_role('button', name='Add profile').click()
+            expect(page.get_by_role('dialog')).to_be_visible()
+            expect(page.get_by_role('dialog').get_by_role('status')).to_have_count(0)
+            page.get_by_role('dialog').get_by_role('button', name='Cancel').click()
+            self.assertFalse(errors, errors)
+        finally:
+            self.post_hook('/_test/backend-tester', {'mode': 'ok'})
+            context.close()
+
     def test_operator_backend_test_connection_rejects_invalid_name_without_audit(self):
         """D24 step 5 (FEAT-11): an invalid profile name in the Add form is refused before the tester runs and writes no backend.test audit row."""
         context, page, errors = self.operator_page('/admin/operator?tab=backend')
