@@ -642,11 +642,13 @@ class Store(AdminStore):
         self.execute("INSERT INTO admin_audit(guild_id,actor_id,action,detail_json,created_at) VALUES(?,?,?,?,?)",
             (guild_id, actor_id, action, json.dumps(detail), time.time()))
 
-    def archive_character(self, guild_id: int, character_id: int, archived: bool) -> None:
-        character = self.character_by_id(character_id)
-        if not character or character["guild_id"] != guild_id:
-            raise ValueError("Character not found in this server.")
-        with self.db:
+    def archive_character(self, guild_id: int, character_id: int, archived: bool, expected_revision: int | None = None) -> None:
+        with self.write_admin():
+            character = self.character_by_id(character_id)
+            if not character or character["guild_id"] != guild_id:
+                raise ValueError("Character not found in this server.")
+            if expected_revision is not None and self.owner_revision(guild_id, 'character', character_id) != expected_revision:
+                raise ConflictError(f"Character changed; reload before {'archiving' if archived else 'restoring'}")
             self.db.execute("UPDATE characters SET archived=? WHERE guild_id=? AND id=?",
                 (int(archived), guild_id, character_id))
             if archived:

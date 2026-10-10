@@ -12,6 +12,7 @@ from discord.ext import commands
 from helpers import FakeModels, make_settings
 
 from llmcord_core.discord_bot import SkitBot
+from llmcord_core.admin_store import ConflictError
 from llmcord_core.engine import Engine
 from llmcord_core.store import Store
 
@@ -125,9 +126,41 @@ class StoreLifecycleTests(unittest.TestCase):
         self.store.set_cast(100, None, [self.alice], default=True)
         self.store.set_cast(101, 100, [self.alice])
         self.store.db.execute("UPDATE characters SET archived=1 WHERE id=?", (self.alice,))
+        self.store.db.commit()
         with self.assertRaises(ValueError):
             self.store.archive_character(2, self.alice, True)
         self.assertEqual(self.store.get_cast(101, 100), [self.alice])
+
+    def test_archive_with_stale_revision_conflicts_and_changes_nothing(self):
+        """MNT-05: a stale expected_revision raises ConflictError, leaves archived unchanged and the casts unpruned."""
+        self.store.set_cast(100, None, [self.alice], default=True)
+        stale = self.store.owner_revision(1, "character", self.alice)
+        self.store.bump_owner(1, "character", self.alice)
+        self.store.db.commit()
+        with self.assertRaisesRegex(ConflictError, "archiving"):
+            self.store.archive_character(1, self.alice, True, stale)
+        self.assertEqual(self.store.character_by_id(self.alice)["archived"], 0)
+        self.assertEqual(self.store.get_cast(100), [self.alice])
+        with self.assertRaisesRegex(ConflictError, "restoring"):
+            self.store.archive_character(1, self.alice, False, stale)
+
+    def test_archive_with_matching_revision_archives_and_bumps(self):
+        """MNT-05: a matching expected_revision archives and bumps the owner revision."""
+        before = self.store.owner_revision(1, "character", self.alice)
+        self.store.archive_character(1, self.alice, True, before)
+        self.assertEqual(self.store.character_by_id(self.alice)["archived"], 1)
+        self.assertEqual(self.store.owner_revision(1, "character", self.alice), before + 1)
+
+    def test_archive_runs_inside_write_admin(self):
+        """MNT-05: the archive happens inside write_admin (admin lock held, transaction open)."""
+        seen = []
+        original = self.store.bump_owner
+        def spy(*args):
+            seen.append(self.store.db.in_transaction)
+            return original(*args)
+        with patch.object(self.store, "bump_owner", spy):
+            self.store.archive_character(1, self.alice, True)
+        self.assertEqual(seen, [True])
 
     def test_archive_unknown_character_raises(self):
         """SEC-06: an unknown character id raises the same not-found error."""

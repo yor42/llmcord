@@ -1681,11 +1681,14 @@ def character_card(ctx, row, worlds):
         with card_panel.add_slot('header'), ui.element('div').classes('ll-card-header'):
             ui.label(row['name'] + (' · Archived' if row['archived'] else '')).classes('ll-card-title')
             with more_menu(row['name']):
-                async def archive_item(row=row):
+                async def archive_item(row=row, revision=revision):
+                    if ctx.savebar and ctx.savebar.refuse():
+                        return
                     def archive():
-                        store.archive_character(gid, row['id'], not row['archived'])
+                        store.archive_character(gid, row['id'], not row['archived'], revision)
                         return True
-                    if await ctx.run(archive, 'character.archive', {'id': row['id']}):
+                    ok, result = await ctx._attempt(archive, 'character.archive', {'id': row['id']})
+                    if ok or isinstance(getattr(result, 'error', None), ConflictError):
                         await ctx.refresh('characters')
                 ui.menu_item('Restore' if row['archived'] else 'Archive', on_click=archive_item).props('role=menuitem')
                 ui.separator()
