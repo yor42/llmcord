@@ -23,6 +23,14 @@ def _worlds_section(page):
     return _section(page, 'Worlds and hubs')
 
 
+def unexpected_page_errors(errors, failed_assets):
+    """MNT-37: the page errors that should fail a test. The cssRules SecurityError is dropped only when a /_nicegui/ asset
+    request failed on that page (the condition ``load()`` retries on); every other error is always kept."""
+    if not failed_assets:
+        return list(errors)
+    return [e for e in errors if "Failed to read the 'cssRules'" not in e]
+
+
 @unittest.skipUnless(os.environ.get('LLMCORD_BROWSER_TESTS') == '1', 'Set LLMCORD_BROWSER_TESTS=1 to run browser integration tests')
 class DashboardBrowserTests(unittest.TestCase):
     SLOW_SERVER_POLLS = 300  # poll count (x 100 ms = 30 s): publishing an emotion image can take seconds on a busy machine
@@ -75,6 +83,11 @@ class DashboardBrowserTests(unittest.TestCase):
         cls.process.wait(timeout=20)
         cls.log.close()
         cls.temp.cleanup()
+
+    def setUp(self):
+        # MNT-23: the shared page's error and failed-asset lists are per test, so an earlier test's error cannot fail or block this one.
+        self.errors.clear()
+        self.page.failed_assets.clear()
 
     def state(self):
         return self.context.request.get(self.url + '/_test/state').json()
@@ -574,7 +587,7 @@ class DashboardBrowserTests(unittest.TestCase):
         _worlds_section(page).get_by_role('button', name='Create', exact=True).click(force=True)
         page.wait_for_timeout(300)
         self.assertFalse(any(r['name'] == 'Forbidden' for r in self.state()['spaces']))
-        self.assertFalse(self.errors, self.errors)
+        self.assertFalse(self.page_errors(self.page), self.errors)
 
     def test_rejected_live_event_notifies_bound_client(self):
         """PERF-01 (fixed): a live event rejected by the permission check is dropped but the user is told why.
@@ -625,7 +638,7 @@ class DashboardBrowserTests(unittest.TestCase):
             create.click(force=True)
             expect(page.get_by_text(re.compile('sign in', re.I)).first).to_be_visible(timeout=4000)
             self.assertFalse(created())
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             self.page = original_page
             context.request.post(self.url + '/_test/restore')
@@ -684,7 +697,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertFalse(any('Lightning storms' in tile for tile in tiles), tiles)
             page.locator('.lore-panel-left').get_by_text('2 entries', exact=True).wait_for()
             self.assertEqual(page.locator('.lore-drop-right .lore-entry').count(), 0)
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
 
             # Debounce: at most two board renders (two admin_entries_page calls each) for the whole burst.
             self.assertLessEqual(renders, 4, f'admin_entries_page called {renders} times while typing 10 characters')
@@ -718,7 +731,7 @@ class DashboardBrowserTests(unittest.TestCase):
             _worlds_section(page).get_by_label('Name', exact=True).wait_for()
             page.wait_for_timeout(300)
             counters = context.request.get(self.url + '/_test/counters').json()
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
             got = {name: counters.get('store:' + name, 0) for name in
                    ('list_spaces', 'list_characters', 'list_channels', 'list_lorebooks', 'thread_lore_scopes', 'lorebook_links')}
             self.assertEqual({k: v for k, v in got.items() if k != 'lorebook_links'},
@@ -767,6 +780,11 @@ class DashboardBrowserTests(unittest.TestCase):
         page.watched_errors, page.failed_assets = errors, []
         page.on('requestfailed', lambda r: page.failed_assets.append(r.url) if '/_nicegui/' in r.url and 'ERR_ABORTED' not in (r.failure or '') else None)
 
+    @staticmethod
+    def page_errors(page):
+        """MNT-37: the watched page errors minus a dropped-asset cssRules error that surfaced after ``load()`` returned."""
+        return unexpected_page_errors(page.watched_errors, page.failed_assets)
+
     def load(self, page, url, before_each=None):
         """goto + live-socket wait. Chromium sometimes fails a NiceGUI static asset itself (net::ERR_TOO_MANY_RETRIES, the request
         never reaches the server) and nicegui.js then throws a cssRules SecurityError. Only that pair (every page error is that
@@ -808,10 +826,10 @@ class DashboardBrowserTests(unittest.TestCase):
         try:
             page.get_by_role('tab', name='Prompt presets', exact=True).wait_for()
             self.assertTrue(self.tab_selected(page, 'Prompt presets'))
-            page.goto(self.url + '/admin/guild/1?tab=bogus')
+            self.load(page, self.url + '/admin/guild/1?tab=bogus')
             page.get_by_role('tab', name='Server setup', exact=True).wait_for()
             self.assertTrue(self.tab_selected(page, 'Server setup'))
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -830,7 +848,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.get_by_role('tab', name='Lore', exact=True).click()
             page.wait_for_url('**tab=lore*')
             self.assertIn('owner=channel', page.url)
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -843,7 +861,7 @@ class DashboardBrowserTests(unittest.TestCase):
             card.get_by_role('switch', name='Ambient participation', exact=True).click()
             page.get_by_role('region', name='Unsaved changes').get_by_role('button', name='Save changes', exact=True).click()
             page.get_by_text('Channel settings saved', exact=True).wait_for(timeout=5000)
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -862,7 +880,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.wait_for(lambda: self.state()['guild_timezone'] == 'Asia/Seoul')
             rows = [r for r in self.state()['audit'] if r['action'] == 'settings.timezone']
             self.assertEqual([json.loads(r['detail_json']) for r in rows], [{'old': '', 'new': 'Asia/Seoul'}])
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -879,7 +897,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.get_by_text('Server settings saved', exact=True).wait_for(timeout=5000)
             rows = [r for r in self.state()['audit'] if r['action'] == 'settings.footer']
             self.assertEqual([json.loads(r['detail_json']) for r in rows], [{'enabled': not was}])
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -897,7 +915,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.wait_for(lambda: self.state()['catchup_anywhere'] is True)
             rows = [r for r in self.state()['audit'] if r['action'] == 'settings.catchup']
             self.assertEqual([json.loads(r['detail_json']) for r in rows], [{'enabled': True}])
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -926,7 +944,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.get_by_role('tab', name='Server setup', exact=True).click()
             _worlds_section(page).get_by_label('Name', exact=True).wait_for()
             self.assertEqual(page.get_by_text('Models and usage', exact=False).count(), 0)
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -947,7 +965,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.keyboard.press('Escape')
             if shown < 5:
                 page.get_by_text(f'Usage is kept for {days} days (Server settings).' if days else 'Usage is kept for the current month (Server settings).').wait_for()
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -961,7 +979,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'))
             box = page.locator('canvas').first.bounding_box()
             self.assertTrue(0 < box['width'] <= 390 and box['height'] > 100, box)
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -987,7 +1005,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertRegex(self.log_rows(page).nth(2).inner_text(), r'\d{4}-\d\d-\d\d \d\d:\d\d · #scene · reply · dialogue')
             page.get_by_text('Entries are kept for', exact=False).wait_for()
             self.assertEqual(page.get_by_text('OTHER-GUILD-CANARY', exact=False).count(), 0)
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -1012,7 +1030,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.get_by_label('Channel', exact=True).click()
             page.get_by_role('option', name='Deleted channel (ID …777)', exact=True).click()
             self.wait_for(lambda: self.log_rows(page).count() == 1)
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -1030,7 +1048,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.wait_for(lambda: self.log_rows(page).count() == 58)
             self.wait_for(lambda: not page.get_by_role('button', name='Load more').is_visible())
             self.assertIn('Log reply 1', self.log_rows(page).last.inner_text())
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -1042,7 +1060,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.locator('.ll-log-block', has_text='FIXTURE-ERROR-REQUEST').wait_for(timeout=5000)
             page.wait_for_timeout(300)
             self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'))
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -1064,7 +1082,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.wait_for(lambda: self.state()['turn_log'] == {'enabled': True, 'days': 30})
             rows = settings_rows()[earlier_rows:]
             self.assertEqual([json.loads(r['detail_json']) for r in rows], [{'enabled': True, 'days': 30}])
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -1085,7 +1103,7 @@ class DashboardBrowserTests(unittest.TestCase):
                 page.get_by_text('Logging is off; showing earlier entries.', exact=True).wait_for(timeout=5000)
                 self.assertEqual(self.log_rows(page).count(), 50)
                 self.assertEqual(page.get_by_text('The turn log is off.', exact=False).count(), 0)
-                self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+                self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
             finally:
                 context.close()
         finally:
@@ -1262,7 +1280,7 @@ class DashboardBrowserTests(unittest.TestCase):
             guidelines.fill('Discarded edit.')
             bar.get_by_role('button', name='Reset', exact=True).click()
             expect(guidelines).to_have_value('Second edit.')
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -1290,7 +1308,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.get_by_label('Sample channel (optional)', exact=True).click()
             page.get_by_role('option', name='#scene', exact=True).wait_for()
             self.assertEqual(page.get_by_role('option', name='100', exact=True).count(), 0)
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -1304,7 +1322,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.wait_for_timeout(300)
             calls = context.request.get(self.url + '/_test/metrics').json()
             self.assertEqual(calls.get('GET /guilds/1/channels', 0), 1, calls)
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -1316,7 +1334,7 @@ class DashboardBrowserTests(unittest.TestCase):
         context, page, errors = self.ux_page('/admin/')
         try:
             self.assertEqual(context.request.post(self.url + '/_test/guild-name', data={'name': name}).status, 200)
-            page.goto(self.url + '/admin/')
+            self.load(page, self.url + '/admin/')
             card = page.get_by_role('link', name=name, exact=True)
             expect(card).to_have_count(1)
             self.assertEqual(page.locator('a.ll-server-card').count(), 1)
@@ -1331,7 +1349,7 @@ class DashboardBrowserTests(unittest.TestCase):
             expect(crumb.locator('.ll-crumb-tile')).to_have_text(initials)
             self.assertEqual(crumb.locator('b').count(), 0)
             expect(page.get_by_role('link', name='llmcord / Servers', exact=True)).to_have_count(1)
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.request.post(self.url + '/_test/guild-name', data={'name': 'Test server'})
             context.close()
@@ -1346,11 +1364,11 @@ class DashboardBrowserTests(unittest.TestCase):
         errors = []
         self.watch(page, errors)
         try:
-            page.goto(self.url + '/admin/')
+            self.load(page, self.url + '/admin/')
             expect(page.get_by_role('link', name='llmcord / Servers', exact=True)).to_be_visible()
             expect(page.get_by_role('button', name='Account menu')).to_be_visible()
             expect(page.get_by_text('Sign out')).to_have_count(0)
-            page.goto(self.url + '/admin/guild/1')
+            self.load(page, self.url + '/admin/guild/1')
             button = page.get_by_role('button', name='Account menu')
             expect(button).to_be_visible()
             button.click()
@@ -1366,7 +1384,7 @@ class DashboardBrowserTests(unittest.TestCase):
             sign_out.click()
             page.wait_for_url(lambda url: not url.rstrip('/').endswith('/guild/1'))
             expect(page.get_by_text('Sign in with Discord')).to_be_visible()
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -1382,7 +1400,7 @@ class DashboardBrowserTests(unittest.TestCase):
         def settings():
             return context.request.get(self.url + '/_test/budget').json()
         try:
-            page.goto(self.url + '/admin/operator')
+            self.load(page, self.url + '/admin/operator')
             expect(page.get_by_text('$0.001 spent since')).to_be_visible()
             expect(page.get_by_text('(UTC).')).to_be_visible()
             expect(page.get_by_label('Soft cap (USD)')).to_have_value('')
@@ -1426,7 +1444,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.set_viewport_size({'width': 390, 'height': 900})
             expect(page.get_by_role('button', name='Save')).to_be_visible()
             self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth'), 390)
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -1443,7 +1461,7 @@ class DashboardBrowserTests(unittest.TestCase):
         errors = []
         self.watch(page, errors)
         try:
-            page.goto(self.url + '/admin/guild/1')
+            self.load(page, self.url + '/admin/guild/1')
             page.get_by_role('button', name='Account menu').click()
             item = page.locator('.ll-menu').get_by_role('link', name='Bot settings')
             expect(item).to_be_visible()
@@ -1452,7 +1470,7 @@ class DashboardBrowserTests(unittest.TestCase):
             expect(page.get_by_text('Bot-wide settings. Only operators can see this page.')).to_be_visible()
             expect(page.get_by_text('Spending caps', exact=True)).to_be_visible()
             self.assertEqual(page.title(), 'Bot settings')
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
         for session in ('browser-plain-session', None):
@@ -1479,7 +1497,7 @@ class DashboardBrowserTests(unittest.TestCase):
         page = context.new_page()
         errors = []
         self.watch(page, errors)
-        page.goto(self.url + path)
+        self.load(page, self.url + path)
         return context, page, errors
 
     def test_operator_bot_settings_tabs_and_usage_by_server(self):
@@ -1508,9 +1526,9 @@ class DashboardBrowserTests(unittest.TestCase):
             expect(page.locator('tbody tr', has_text='Total')).to_contain_text('$5.27')
             page.get_by_role('tab', name='Spending').click()
             expect(page.get_by_label('Soft cap (USD)')).to_be_visible()
-            page.goto(self.url + '/admin/operator?tab=usage')
+            self.load(page, self.url + '/admin/operator?tab=usage')
             expect(page.get_by_text('Each server keeps usage for its own period')).to_be_visible()
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -1525,7 +1543,7 @@ class DashboardBrowserTests(unittest.TestCase):
             expect(page.get_by_text('Server (ID …2)')).to_be_visible()
             page.wait_for_timeout(500)
             self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'))
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -1572,7 +1590,7 @@ class DashboardBrowserTests(unittest.TestCase):
             expect(page.get_by_role('button', name='Edit cfg-main')).to_be_visible()
             expect(page.get_by_role('button', name='Delete cfg-main')).to_have_count(0)
             expect(page.get_by_role('button', name='Reset to config.yaml for cfg-main')).to_have_count(0)
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -1642,7 +1660,7 @@ class DashboardBrowserTests(unittest.TestCase):
             save.click(trial=True)
             dialog.get_by_role('button', name='Cancel').click()
             expect(page.get_by_role('dialog')).to_have_count(0)
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             # Leave the shared fixture clean: Director back to config.yaml, then drop the profile. If the UI cleanup fails, fall back to the store.
             try:
@@ -1681,7 +1699,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertEqual(len(after['audit']), len(before['audit']))
             dialog.get_by_role('button', name='Cancel').click()
             expect(self.backend_row(page, 'tmp-evil')).to_have_count(0)
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -1716,7 +1734,7 @@ class DashboardBrowserTests(unittest.TestCase):
             actions = [(r['action'], json.loads(r['detail_json'])) for r in self.state()['audit'][before:] if r['action'].startswith('backend.')]
             self.assertEqual([a for a, _ in actions], ['backend.profile', 'backend.profile_delete'])
             self.assertEqual(actions[1][1], {'name': 'cfg-second'})
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -1735,7 +1753,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertEqual((after['model_profiles'], after['model_roles']), (before['model_profiles'], before['model_roles']))
             self.assertEqual(len(after['audit']), len(before['audit']))
             dialog.get_by_role('button', name='Cancel').click()
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -1753,7 +1771,7 @@ class DashboardBrowserTests(unittest.TestCase):
             expect(page.get_by_role('dialog')).to_have_count(0)
             expect(self.backend_row(page, 'tmp-stale')).to_contain_text('newer-model')
             self.assertEqual([r['name'] for r in self.state()['model_profiles']], ['tmp-stale'])
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             self.post_hook('/_test/backend-reset')
             context.close()
@@ -1791,7 +1809,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertEqual(tests, [(0, {'name': 'tmp-probe', 'ok': True}), (0, {'name': 'tmp-probe', 'ok': False})])
             self.assertFalse([r for r in after['audit'][len(before['audit']):] if r['action'] != 'backend.test'])
             dialog.get_by_role('button', name='Cancel').click()
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             self.post_hook('/_test/backend-tester', {'mode': 'ok'})
             context.close()
@@ -1812,7 +1830,7 @@ class DashboardBrowserTests(unittest.TestCase):
             expect(dialog.get_by_role('status')).to_have_text('Connected. slow-model replied in 42 ms.')
             expect(button).to_be_enabled()
             dialog.get_by_role('button', name='Cancel').click()
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             self.post_hook('/_test/backend-tester', {'mode': 'ok'})
             context.close()
@@ -1836,7 +1854,7 @@ class DashboardBrowserTests(unittest.TestCase):
             expect(page.get_by_role('dialog')).to_be_visible()
             expect(page.get_by_role('dialog').get_by_role('status')).to_have_count(0)
             page.get_by_role('dialog').get_by_role('button', name='Cancel').click()
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             self.post_hook('/_test/backend-tester', {'mode': 'ok'})
             context.close()
@@ -1882,7 +1900,7 @@ class DashboardBrowserTests(unittest.TestCase):
             expect(line).to_be_visible()
             page.get_by_role('link', name='Open Bot settings').click()
             page.wait_for_url('**/admin/operator')
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
         context = self.browser.new_context(ignore_https_errors=True, viewport={'width': 1000, 'height': 900})
@@ -1936,7 +1954,7 @@ class DashboardBrowserTests(unittest.TestCase):
             errors = []
             self.watch(page, errors)
             try:
-                page.goto(self.url + '/admin/')
+                self.load(page, self.url + '/admin/')
                 button = page.get_by_role('button', name='Account menu')
                 expect(button).to_be_visible()
                 src = button.locator('img.ll-avatar').get_attribute('src')
@@ -1953,7 +1971,7 @@ class DashboardBrowserTests(unittest.TestCase):
                 self.assertGreaterEqual(box['x'], 0, box)
                 self.assertLessEqual(box['x'] + box['width'], width, box)
                 self.assertLessEqual(box['y'] + box['height'], height, box)
-                self.assertFalse(errors, errors)
+                self.assertFalse(self.page_errors(page), errors)
             finally:
                 context.close()
 
@@ -1989,7 +2007,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.get_by_text('By model', exact=True).wait_for()
             page.wait_for_timeout(300)
             self.assertEqual(self.panel_reads(context), {**built, 'usage_report': 1})
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -2011,7 +2029,7 @@ class DashboardBrowserTests(unittest.TestCase):
             calls = context.request.get(self.url + '/_test/metrics').json()
             self.assertEqual(calls.get('GET /guilds/1/channels', 0), 0, calls)
             self.assertTrue(self.tab_selected(page, 'Server setup'))
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -2028,7 +2046,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.get_by_role('dialog').get_by_label('Home world', exact=True).click()
             page.get_by_role('option', name='Fresh world', exact=True).wait_for()
             page.keyboard.press('Escape')
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -2042,7 +2060,7 @@ class DashboardBrowserTests(unittest.TestCase):
             _section(page, 'Named lorebooks').get_by_label('Kind', exact=True).wait_for(timeout=5000)
             self.assertTrue(self.tab_selected(page, 'Imports'))
             page.wait_for_url('**tab=imports*')
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -2060,7 +2078,7 @@ class DashboardBrowserTests(unittest.TestCase):
                 "([kind, ident]) => { const left = document.querySelector('.lore-drop-left'); "
                 "return left && left.dataset.ownerKind === kind && left.dataset.ownerId === ident; }",
                 arg=['book', str(book['id'])], timeout=5000)
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -2086,7 +2104,7 @@ class DashboardBrowserTests(unittest.TestCase):
             character.get_by_text('Alice', exact=True).first.click()
             character.get_by_text('Fallback static avatar', exact=True).click()
             character.locator('.fallback-avatar img').first.wait_for(timeout=5000)
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -2188,7 +2206,7 @@ class DashboardBrowserTests(unittest.TestCase):
             dialog.get_by_role('button', name='Remove emotion', exact=True).click()
             self.wait_for(lambda: slot() is None)
             self.assertEqual(len(self.audit_rows('avatar.slot.delete', mark)), 1)
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
             self.ui09_cleanup()
@@ -2245,7 +2263,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.wait_for(lambda: fallback_src()[1].locator('img').first.get_attribute('src') != one)
             two = fallback_src()[1].locator('img').first.get_attribute('src')
             self.assertRegex(two, rf'/characters/{alice["id"]}/avatar\?v=[0-9a-f]{{12}}$')
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
             self.ui09_cleanup()
@@ -2293,7 +2311,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.wait_for(lambda: len(self.audit_rows('channel.bind', mark)) == before + 2)
             details = [json.loads(r['detail_json']) for r in self.audit_rows('channel.bind', mark)[before:]]
             self.assertEqual(details, [{'channel': 100, 'space': annex['id'], 'dropped': []}, {'channel': 100, 'space': world['id'], 'dropped': []}])
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
             self.ui09_cleanup()
@@ -2317,7 +2335,7 @@ class DashboardBrowserTests(unittest.TestCase):
             dialog.wait_for(timeout=5000)
             dialog.get_by_role('button', name='Delete preset', exact=True).click()
             self.wait_for(lambda: not any(r['name'] == 'Doomed preset' for r in self.state()['presets']))
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -2367,7 +2385,7 @@ class DashboardBrowserTests(unittest.TestCase):
             dialog.wait_for(timeout=5000)
             dialog.get_by_role('button', name='Delete preset', exact=True).click()
             self.wait_for(lambda: not any(r['name'] == 'Bar preset' for r in self.state()['presets']))
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -2411,7 +2429,7 @@ class DashboardBrowserTests(unittest.TestCase):
             field.evaluate('el => { el.scrollTop = 120; }')
             page.wait_for_function('() => { const t = document.querySelector(".ll-macro textarea"); return t.scrollTop > 0 && document.querySelector(".mh-mirror").scrollTop === t.scrollTop; }')
             self.assertEqual([m for m in console if 'Content Security Policy' in m], [])
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -2432,7 +2450,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertEqual(mirror.locator('.mh-known').all_inner_texts(), ['{{char}}', '{{user}}'])
             self.assertEqual(mirror.locator('.mh-unknown').all_inner_texts(), ['{{bogus}}'])
             self.assertEqual(mirror.text_content(), field.input_value())
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -2459,7 +2477,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.wait_for_function("() => document.querySelectorAll('.mh-mirror .mh-known').length === 2")
             self.assertEqual(page.locator('.mh-mirror').count(), 1)
             self.assertEqual([m for m in console if 'Content Security Policy' in m], [])
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -2482,7 +2500,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertEqual(mirror.locator('.mh-unknown').all_inner_texts(), ['{{bogus}}'])
             self.assertEqual(mirror.text_content(), description.input_value())
             self.assertEqual([m for m in console if 'Content Security Policy' in m], [])
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -2542,7 +2560,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertIn('Second imported marker', Path(download.value.path()).read_text(encoding='utf-8'))
             bar.get_by_role('button', name='Reset', exact=True).click()
             bar.wait_for(state='hidden')
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -2630,7 +2648,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.wait_for(lambda: 'UI41 saved import' in names(), self.SLOW_SERVER_POLLS)
             bar.wait_for(state='hidden', timeout=30000)
             self.wait_for(lambda: library.input_value() == 'UI41 saved import · draft 1', self.SLOW_SERVER_POLLS)
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
             try:
@@ -2697,7 +2715,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.open_more_item(page, added, added_name, 'Remove block')
             expect(cards).to_have_count(count)
             bar.wait_for(timeout=5000)
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -2732,7 +2750,7 @@ class DashboardBrowserTests(unittest.TestCase):
             expect(page.get_by_role('menuitem', name='Move up', exact=True)).to_be_enabled()
             page.keyboard.press('Escape')
             self.assertFalse(page.get_by_role('region', name='Unsaved changes').count())
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -2756,7 +2774,7 @@ class DashboardBrowserTests(unittest.TestCase):
             bar.wait_for(state='hidden')
             self.wait_for(lambda: self.block_names(page) == original)
             self.assertEqual(self.state()['presets'], before_presets)
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -2775,7 +2793,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertGreaterEqual(handle['width'], 39.5, handle)
             self.assertGreaterEqual(handle['height'], 39.5, handle)
             self.assertTrue(page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'))
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -2814,7 +2832,7 @@ class DashboardBrowserTests(unittest.TestCase):
             left_out = export()
             self.assertNotIn('Character Voice', [p['name'] for p in left_out['prompts']])
             self.assertEqual(len(left_out['prompts']), len(names) - 1)
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -2842,7 +2860,7 @@ class DashboardBrowserTests(unittest.TestCase):
                 expect(enabled_row.get_by_text('Disabled', exact=True)).to_have_count(0)
             finally:
                 self.context.request.post(self.url + '/_test/set-lore-enabled', data={'content': 'Pill disabled entry', 'enabled': True})
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
             self.delete_lore('Pill enabled entry', 'Pill disabled entry')
@@ -2883,7 +2901,7 @@ class DashboardBrowserTests(unittest.TestCase):
             before = self.state()
             menuitem.click(force=True)
             self.assertEqual(self.state()['lore'], before['lore'])
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             self.page = original_page
             context.close()
@@ -2915,7 +2933,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.get_by_role('button', name='Save lore', exact=True).click()
             self.wait_for(lambda: any(r['content'] == 'UI46 placement entry' and json.loads(r['rule_json']).get('position') == 'after_examples'
                                       for r in self.state()['lore']))
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
             self.delete_lore('UI46 placement entry')
@@ -2942,7 +2960,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertNotRegex(adaptations.inner_text(), r'(top_system|:\d)')
             titles = page.locator('.q-expansion-item__container .q-item__label').all_inner_texts()
             self.assertTrue({'System', 'User', 'Assistant'} & {t.strip() for t in titles}, titles)
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -2977,7 +2995,7 @@ class DashboardBrowserTests(unittest.TestCase):
             editor.get_by_role('button', name='Delete', exact=True).click()
             dialog.get_by_role('button', name=re.compile('^Delete')).click()
             self.wait_for(lambda: not any(r['content'] == 'Doomed lore entry' for r in self.state()['lore']))
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -3006,7 +3024,7 @@ class DashboardBrowserTests(unittest.TestCase):
                 page.wait_for_timeout(500)
                 self.assertEqual(page.evaluate(dialogs), 0, close)
             self.assertTrue(any(r['content'] == 'Dialog cleanup entry' for r in self.state()['lore']))
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -3042,7 +3060,7 @@ class DashboardBrowserTests(unittest.TestCase):
             editor = page.locator('.q-card').filter(has=page.get_by_text('Edit lore', exact=True)).last
             for chip in ('old key', '/a,b/', 'second'):
                 editor.locator('.q-chip').filter(has_text=chip).wait_for(timeout=5000)
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -3060,7 +3078,7 @@ class DashboardBrowserTests(unittest.TestCase):
             row = next(r for r in self.state()['lore'] if r['content'] == 'Pending chip entry')
             self.assertEqual(json.loads(row['keys_json']), ['pending'])
             self.assertEqual(json.loads(row['rule_json'])['secondary_keys'], ['/x,y/'])
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -3077,7 +3095,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.wait_for(lambda: any(r['content'] == 'Tab away entry' for r in self.state()['lore']))
             row = next(r for r in self.state()['lore'] if r['content'] == 'Tab away entry')
             self.assertEqual(json.loads(row['keys_json']), ['tabbed'])
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -3134,7 +3152,7 @@ class DashboardBrowserTests(unittest.TestCase):
                     return Math.max(...t) - Math.min(...t) <= 2; }''', timeout=5000)
             tops = self.checkbox_tops(page)
             self.assertLessEqual(max(tops.values()) - min(tops.values()), 2, tops)
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -3175,7 +3193,7 @@ class DashboardBrowserTests(unittest.TestCase):
                                 for item in labels if item['scrollWidth'] > item['clientWidth']]
             self.assertGreater(measured, 5)
             self.assertEqual({tab: items for tab, items in clipped.items() if items}, {})
-            self.assertFalse(errors, (errors, getattr(page, 'network', [])))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             context.close()
 
@@ -3207,7 +3225,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertEqual(bar.get_by_text('Alice has unsaved changes.', exact=True).count(), 1)
             description.fill(original)
             bar.wait_for(state='hidden', timeout=5000)
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -3228,7 +3246,7 @@ class DashboardBrowserTests(unittest.TestCase):
             after = self.state()
             self.assertEqual(after['characters'], before['characters'])
             self.assertEqual(after['audit'], before['audit'])
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -3247,7 +3265,7 @@ class DashboardBrowserTests(unittest.TestCase):
             rows = [r for r in self.state()['audit'] if r['action'] == 'character.edit']
             self.assertEqual(len(rows), audit_before + 1)
             self.assertEqual(json.loads(rows[-1]['detail_json']), {'id': self.alice_row()['id']})
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
             self.restore_alice(original)
@@ -3267,7 +3285,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertTrue(bar.is_visible())
             self.assertEqual(description.input_value(), 'My edit that will conflict')
             self.assertEqual(json.loads(self.alice_row()['card'])['description'], 'Another admin was here')
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
             self.restore_alice(original)
@@ -3297,7 +3315,7 @@ class DashboardBrowserTests(unittest.TestCase):
             bar.get_by_role('button', name='Save changes', exact=True).click()
             bar.wait_for(state='hidden', timeout=5000)
             self.wait_for(lambda: json.loads(self.alice_row()['card'])['description'] == 'Edited after reload')
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
             self.restore_alice(original)
@@ -3321,7 +3339,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertEqual(after['characters'], before['characters'])
             self.assertEqual(after['audit'], before['audit'])
             self.assertTrue(bar.is_visible())
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -3339,7 +3357,7 @@ class DashboardBrowserTests(unittest.TestCase):
             bar.get_by_role('button', name='Reset', exact=True).click()
             bar.wait_for(state='hidden', timeout=5000)
             self.wait_for(lambda: footer.is_enabled())
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -3366,7 +3384,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.wait_for_function("() => document.querySelector('[role=tab][aria-selected=true]')?.textContent.includes('Characters')", timeout=5000)
             self.assertTrue(bar.is_visible())
             self.assertEqual(description.input_value(), dirty_value)
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -3398,7 +3416,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.open_more_item(page, entry, 'entry', 'Delete')
             page.get_by_role('button', name='Delete 1 entry', exact=True).click()
             self.wait_for(lambda: not any(r['content'] == 'Savebar guarded lore' for r in self.state()['lore']))
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -3419,7 +3437,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertTrue(bar.is_visible())
             page.get_by_role('tab', name='Characters', exact=True).click()
             self.assertEqual(description.input_value(), dirty_value)
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -3441,7 +3459,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.wait_for_function("() => ![...document.querySelectorAll('.character-card [role=checkbox]')].some(c => c.getAttribute('aria-checked') === 'true')", timeout=5000)
             confirm.wait_for(state='hidden', timeout=5000)
             page.wait_for_function("() => ![...document.querySelectorAll('.character-card [role=checkbox]')].some(c => c.getAttribute('aria-checked') === 'true')", timeout=5000)
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -3471,7 +3489,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.get_by_role('option', name='Annex', exact=True).click()
             confirm.wait_for(state='visible', timeout=5000)
             page.wait_for_function('() => ![...document.querySelectorAll(".character-card [role=checkbox]")].some(c => c.getAttribute("aria-checked") === "true")', timeout=5000)
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -3496,7 +3514,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.locator('.character-card').filter(has=page.get_by_text('Alice', exact=True)).first.wait_for(timeout=5000)
             self.wait_for(lambda: not self.alice_row()['archived'])
             self.assertEqual(page.get_by_text('Alice · Archived', exact=True).count(), 0)
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -3519,7 +3537,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.open_more_item(page, alice, 'Alice', 'Archive')
             page.get_by_text('Alice · Archived', exact=True).wait_for(timeout=5000)
             self.wait_for(lambda: self.alice_row()['archived'])
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
             if self.alice_row()['archived']:
@@ -3552,7 +3570,7 @@ class DashboardBrowserTests(unittest.TestCase):
             page.keyboard.press('Escape')
             page.get_by_role('menuitem', name='Archive', exact=True).wait_for(state='hidden', timeout=5000)
             self.assertEqual(page.evaluate('() => document.activeElement && document.activeElement.getAttribute("aria-label")'), 'More actions for Alice')
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -3568,7 +3586,7 @@ class DashboardBrowserTests(unittest.TestCase):
             bar.get_by_role('button', name='Reset', exact=True).click()
             bar.wait_for(state='hidden', timeout=5000)
             self.assertEqual(name.input_value(), 'Alice')
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -3587,7 +3605,7 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertEqual(self.alice_row(), before)
             bar.get_by_role('button', name='Reset', exact=True).click()
             bar.wait_for(state='hidden', timeout=5000)
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
 
@@ -3607,6 +3625,6 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertGreaterEqual(box['x'], 0)
             self.assertLessEqual(box['x'] + box['width'], width)
             self.assertLessEqual(box['y'] + box['height'], height)
-            self.assertFalse(errors, errors)
+            self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
