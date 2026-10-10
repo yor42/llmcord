@@ -442,9 +442,9 @@ class SkitBot(commands.Bot):
                 stage.name = 'preparing character prompt'
                 request, sources = await self.engine.prepare_dialogue(scene, character, preceding)
                 line, outgoing, chunks, emotion, chosen_avatar, usage = await self._stream_speaker(
-                    scene, channel, character, request, progress, stage, name, model_label)
-                parent_message_id = self._record_reply(scene, character, sources, outgoing, chunks, emotion,
-                                                       chosen_avatar, usage, parent_message_id, stage)
+                    scene, channel, character, request, progress=progress, stage=stage, name=name, model_label=model_label)
+                parent_message_id = self._record_reply(scene, character, sources=sources, outgoing=outgoing, chunks=chunks,
+                    emotion=emotion, chosen_avatar=chosen_avatar, usage=usage, parent_message_id=parent_message_id, stage=stage)
                 preceding.append((character["name"], line))
                 completed.append(character)
             await progress.clear('Reply sent.')
@@ -456,7 +456,7 @@ class SkitBot(commands.Bot):
         finally:
             await progress.clear()
 
-    async def _stream_speaker(self, scene, channel, character, request, progress, stage, name, model_label):
+    async def _stream_speaker(self, scene, channel, character, request, *, progress, stage, name, model_label):
         """Post one character's reply through its webhook, streaming into a placeholder; returns
         (line, outgoing messages, chunks, emotion, chosen avatar, usage)."""
         stage.name = 'webhook setup'
@@ -524,7 +524,7 @@ class SkitBot(commands.Bot):
             raise
         return line, outgoing, chunks, emotion, chosen_avatar, usage
 
-    def _record_reply(self, scene, character, sources, outgoing, chunks, emotion, chosen_avatar, usage,
+    def _record_reply(self, scene, character, *, sources, outgoing, chunks, emotion, chosen_avatar, usage,
                       parent_message_id, stage):
         for posted, chunk in zip(outgoing, chunks):
             stage.name = 'saving character reply'

@@ -292,6 +292,44 @@ class TurnFailureTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("avatar lookup", private)
         self.assertNotIn("avatar boom", private)
 
+    async def assert_stage_failure(self, stage):
+        private, line = await self.summon_internal_failure()
+        self.assertIn(f"failed during {stage}", private)
+        self.assertIn(stage, line)
+        self.assertIn("stage boom", line)
+
+    async def test_speaker_selection_failure_names_stage(self):
+        """MNT-09: a failure while choosing speakers is reported and logged as 'speaker selection'."""
+        async def speakers(_scene):
+            raise RuntimeError("stage boom")
+
+        self.bot.engine.speakers = speakers
+        await self.assert_stage_failure("speaker selection")
+
+    async def test_image_description_failure_names_stage(self):
+        """MNT-09: a failure while describing images is reported and logged as 'image description'."""
+        async def describe_images(_scene):
+            raise RuntimeError("stage boom")
+
+        self.bot.engine.describe_images = describe_images
+        await self.assert_stage_failure("image description")
+
+    async def test_prompt_preparation_failure_names_stage(self):
+        """MNT-09: a failure while building a character's prompt is reported and logged as 'preparing character prompt'."""
+        async def prepare_dialogue(*_args):
+            raise RuntimeError("stage boom")
+
+        self.bot.engine.prepare_dialogue = prepare_dialogue
+        await self.assert_stage_failure("preparing character prompt")
+
+    async def test_webhook_setup_failure_names_stage(self):
+        """MNT-09: a failure creating the character webhook is reported and logged as 'webhook setup'."""
+        async def webhook(*_args):
+            raise RuntimeError("stage boom")
+
+        self.bot._webhook = webhook
+        await self.assert_stage_failure("webhook setup")
+
     def direct_turn(self, interaction):
         """A scene run directly through ``run_scene`` with an interaction (so an escaping exception is visible to
         the test instead of being swallowed by ``invoke``)."""
