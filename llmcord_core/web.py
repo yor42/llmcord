@@ -17,7 +17,8 @@ from starlette.datastructures import MutableHeaders
 from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES, GZipMiddleware
 
 from .store import Store
-from .auth import DISCORD_API, AuthService
+from .auth import AuthService
+from .discord_api import DISCORD_API
 from .admin import AdminService
 from .config import profiles_from_models
 

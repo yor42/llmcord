@@ -11,7 +11,8 @@ import time
 import httpx
 from fastapi import HTTPException
 
-DISCORD_API = 'https://discord.com/api/v10'
+from .discord_api import DISCORD_API
+
 ADMINISTRATOR = 1 << 3
 GUILD_CACHE_TTL = 300  # seconds a session's guild list is reused (roadmap D1)
 DISCORD_CDN = 'https://cdn.discordapp.com'

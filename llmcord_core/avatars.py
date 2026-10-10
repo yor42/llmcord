@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 from PIL import Image, ImageOps
 
-from .auth import DISCORD_API
+from .discord_api import DISCORD_API
 
 DEFAULT_SLOTS = ('neutral', 'happy', 'sad', 'angry', 'surprised', 'embarrassed')
 MAX_AVATAR_BYTES = 8 * 1024 * 1024

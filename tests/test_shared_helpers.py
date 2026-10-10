@@ -1,9 +1,13 @@
 """Shared helpers consolidated by ARCH-03."""
+import subprocess
+import sys
 import unittest
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace as NS
 
-from llmcord_core.auth import ADMINISTRATOR, DISCORD_API, is_server_admin
+from llmcord_core import auth
+from llmcord_core.auth import ADMINISTRATOR, is_server_admin
 from llmcord_core.discord_bot import recent_human_lines
 
 
@@ -16,10 +20,24 @@ class ServerAdminTests(unittest.TestCase):
         self.assertFalse(is_server_admin({}))
 
     def test_single_api_base(self):
-        """ARCH-03: web and avatars reuse auth.DISCORD_API."""
-        from llmcord_core import avatars, web
-        self.assertIs(web.DISCORD_API, DISCORD_API)
-        self.assertIs(avatars.DISCORD_API, DISCORD_API)
+        """ARCH-03: web, avatars and auth expose the one leaf DISCORD_API value."""
+        from llmcord_core import avatars, discord_api, web
+        for module in (web, avatars, auth):
+            self.assertEqual(module.DISCORD_API, discord_api.DISCORD_API)
+
+    def test_api_literal_defined_once(self):
+        """ARCH-03: the Discord API URL literal lives only in discord_api.py."""
+        root = Path(__file__).resolve().parent.parent / 'llmcord_core'
+        hits = [p.name for p in root.glob('*.py') if 'discord.com/api' in p.read_text(encoding='utf-8')]
+        self.assertEqual(hits, ['discord_api.py'])
+
+    def test_avatars_import_skips_auth_and_fastapi(self):
+        """ARCH-03: the bot-side avatars module does not pull in auth or FastAPI."""
+        root = Path(__file__).resolve().parent.parent
+        result = subprocess.run(
+            [sys.executable, '-c', "import sys, llmcord_core.avatars; print('llmcord_core.auth' in sys.modules, 'fastapi' in sys.modules)"],
+            cwd=root, capture_output=True, text=True, timeout=60)
+        self.assertEqual(result.stdout.strip(), 'False False', result.stderr)
 
 
 class FakeChannel:
