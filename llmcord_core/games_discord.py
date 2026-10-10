@@ -3,6 +3,12 @@
 Rules, money and persistence live in ``games`` and the store (part A and B). This module only turns
 presses into store calls and store snapshots into messages. Every table runs under its own lock (never
 the channel skit lock); timers re-check the stored state under that lock, so a stale timer does nothing.
+
+No Discord HTTP happens while a table lock is held (MNT-39): a handler does its store work under the lock
+and builds a ``Paint`` (the new message text and buttons, numbered by a per-table sequence); the paint and
+any reply are sent after the lock is released. Button presses are acknowledged (``defer()``) before the lock
+is taken. Paints of one table are sent one at a time, and a paint older than the last one sent is dropped,
+so a slow older edit can never overwrite a newer one.
 """
 from __future__ import annotations
 
@@ -22,11 +28,42 @@ from .games import DefaultPolicy, blackjack
 STALE = "That table has moved on — use the latest buttons."
 OFF_HERE = "Games are off in this channel."
 BUSY = "A round is being played; join the next one with /blackjack when it ends."
+LEAVE_BUSY = "You can leave when this round ends."
 NOT_SEATED = "You're not seated at this table."
 NOT_YOUR_TURN = "It's not your turn."
+CLOSED_OFF = "Table closed: games were turned off here."
+CLOSED = "Table closed."
 MAX_BET = 100_000
 PREFIX = "llmcord:bj"
 NO_MENTIONS = discord.AllowedMentions.none()
+
+
+@dataclass(eq=False)
+class _Sender:
+    """Orders the message edits of one table: ``issued`` numbers paints under the table lock, ``sent`` is the newest delivered."""
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    issued: int = 0
+    sent: int = 0
+
+
+@dataclass
+class Paint:
+    """A table message computed under the table lock and sent after it."""
+    key: tuple
+    sender: _Sender
+    seq: int
+    content: str
+    view: discord.ui.View | None = None
+    closing: bool = False
+
+
+@dataclass
+class _Out:
+    """What a locked step decided: an ephemeral reply, table repaints, and whether the table message still has to be posted."""
+    say: str | None = None
+    paints: list = field(default_factory=list)
+    opened: bool = False
+    joined: bool = False
 
 
 @dataclass
@@ -36,6 +73,7 @@ class _Table:
     deadline: float | None = None
     join_round: int | None = None  # round whose join timer is armed
     timeouts: set = field(default_factory=set)  # (round id, seat index)
+    sender: _Sender | None = None
 
 
 class GameButton(discord.ui.DynamicItem[discord.ui.Button], template=PREFIX + r":(?P<action>[a-z]+):(?P<table>\d+):(?P<round>\d+):(?P<moves>\d+)"):
@@ -71,12 +109,15 @@ class GameTables:
     TURN_SECONDS = 60
     IDLE_SECONDS = 120
     RETRY_SECONDS = 5
+    SWEEP_SECONDS = 30
 
     def __init__(self, bot, clock=time.time):
         self.bot, self.clock = bot, clock
         self.locks: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
+        self.senders: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
         self.timers: dict[tuple[int, int], asyncio.Task] = {}
         self.tables: dict[tuple[int, int], _Table] = {}
+        self.sweeper: asyncio.Task | None = None
         self.closed = False
 
     @property
@@ -89,8 +130,18 @@ class GameTables:
             lock = self.locks[key] = asyncio.Lock()
         return lock
 
+    def sender(self, key) -> _Sender:
+        sender = self.senders.get(key)
+        if sender is None:
+            sender = self.senders[key] = _Sender()
+        return sender
+
     def table(self, key) -> _Table:
-        return self.tables.setdefault(key, _Table())
+        table = self.tables.get(key)
+        if table is None:
+            table = self.tables[key] = _Table(sender=self.sender(key))
+            self._ensure_sweeper()
+        return table
 
     # --- timers -----------------------------------------------------------------------------
 
@@ -108,6 +159,9 @@ class GameTables:
         if old is not None and old is not asyncio.current_task():
             old.cancel()
 
+    def _current(self, key) -> bool:
+        return not self.closed and self.timers.get(key) is asyncio.current_task()
+
     async def _timer(self, key, kind, round_id, moves, delay) -> None:
         await asyncio.sleep(delay)
         for attempt in (1, 2):  # one retry, so held bets do not wait for a restart after a transient failure
@@ -124,12 +178,19 @@ class GameTables:
             except Exception:
                 logging.exception("Blackjack %s timer failed (table %s, attempt %d)", kind, key[1], attempt)
                 if attempt == 1:
-                    await asyncio.sleep(self.RETRY_SECONDS)
+                    if not self._current(key):  # replaced, disarmed or closed: the retry would be untracked
+                        return
+                    await asyncio.sleep(self.RETRY_SECONDS)  # still the table's timer, so disarm, _forget and close() cancel it
+                    if not self._current(key):
+                        return
 
     async def close(self) -> None:
         self.closed = True
         tasks = list(self.timers.values())
         self.timers.clear()
+        if self.sweeper is not None:
+            tasks.append(self.sweeper)
+            self.sweeper = None
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -152,6 +213,106 @@ class GameTables:
     def _forget(self, key) -> None:
         self.disarm(key)
         self.tables.pop(key, None)
+
+    # --- dashboard closes (no IPC: the dashboard closes tables in the shared database) -------
+
+    def _ensure_sweeper(self) -> None:
+        if self.closed or not self.tables or (self.sweeper is not None and not self.sweeper.done()):
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self.sweeper = asyncio.create_task(self._sweep_loop(), name="blackjack-sweep")
+
+    async def _sweep_loop(self) -> None:
+        while True:
+            await asyncio.sleep(self.SWEEP_SECONDS)
+            if not self.tables:  # nothing in memory: stay idle until a table appears
+                self.sweeper = None
+                return
+            try:
+                await self.sweep()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logging.exception("Blackjack table sweep failed")
+
+    async def sweep(self) -> None:
+        """Cleans up tables the dashboard closed in the store while the bot still holds them in memory."""
+        for key in list(self.tables):
+            if self._is_open(key):
+                continue
+            async with self.lock(key):
+                _, paint = self._closed(key)
+            if paint is not None:
+                await self._deliver(paint)
+
+    def _table_row(self, key):
+        return self.store.one("SELECT status,channel_id,message_id FROM game_tables WHERE id=? AND guild_id=?", (key[1], key[0]))
+
+    def _is_open(self, key) -> bool:
+        row = self._table_row(key)
+        return row is not None and row["status"] == "open"
+
+    def _closed(self, key, repaint=False) -> tuple[bool, Paint | None]:
+        """Under the table lock: is the table closed in the store? If the bot still holds it, forget it and return the paint that closes its message.
+        ``repaint`` (a button press) also returns a one-off closing paint for a table the bot no longer holds, e.g. one closed while it was down."""
+        if self._is_open(key):
+            return False, None
+        if key not in self.tables:
+            if not repaint:
+                return True, None
+            row = self._table_row(key)
+            if row is None:
+                return True, None
+            return True, self._closing(key, CLOSED if row["channel_id"] in self.store.game_channels(key[0]) else CLOSED_OFF)
+        paint = self._closing(key, CLOSED_OFF)
+        self._forget(key)
+        return True, paint
+
+    def _if_closed(self, key, text: str | None = None, repaint=False) -> _Out | None:
+        """A refusal for a closed table. Without ``text``: "Games are off here" if the channel no longer allows games, else "Table closed."."""
+        closed, paint = self._closed(key, repaint)
+        if not closed:
+            return None
+        if text is None:
+            row = self._table_row(key)
+            text = STALE if row is None else CLOSED if row["channel_id"] in self.store.game_channels(key[0]) else OFF_HERE
+        return _Out(text, [paint] if paint else [])
+
+    # --- painting ---------------------------------------------------------------------------
+
+    def _paint(self, key, snap) -> Paint:
+        """Call under the table lock: the content is computed from the state the lock protects and numbered."""
+        sender = self.table(key).sender
+        sender.issued += 1
+        return Paint(key, sender, sender.issued, self.render(snap), self.buttons(snap))
+
+    def _closing(self, key, text: str) -> Paint:
+        sender = self.sender(key)
+        sender.issued += 1
+        return Paint(key, sender, sender.issued, text, None, True)
+
+    async def _deliver(self, paint: Paint, via=None) -> None:
+        """Sends a paint (one at a time per table). A paint older than the last one sent is dropped; a table closed in the store takes only its closing paint."""
+        sender = paint.sender
+        async with sender.lock:
+            if paint.seq <= sender.sent:
+                return
+            row = self._table_row(paint.key)
+            if row is None or (row["status"] != "open" and not paint.closing):
+                return
+            sender.sent = paint.seq
+            if via is not None:
+                try:
+                    await via.edit_original_response(content=paint.content, view=paint.view, allowed_mentions=NO_MENTIONS)
+                    return
+                except discord.HTTPException as error:
+                    logging.warning("Blackjack press edit failed (%s); editing the table message", type(error).__name__)
+                except Exception:
+                    logging.exception("Blackjack press edit failed; editing the table message")
+            await self.edit(row["channel_id"], row["message_id"], paint.content, paint.view)
 
     # --- rendering --------------------------------------------------------------------------
 
@@ -229,29 +390,38 @@ class GameTables:
         except Exception:
             logging.exception("Could not edit blackjack message %s in channel %s", message_id, channel_id)
 
-    async def refresh(self, snap) -> None:
-        await self.edit(snap["channel_id"], snap["message_id"], self.render(snap), self.buttons(snap))
-
-    async def _respond(self, interaction, snap) -> None:
-        """Answer a button press by editing the message the button is on; if Discord refuses, edit it by channel so it is never left stale."""
-        try:
-            await interaction.response.edit_message(content=self.render(snap), view=self.buttons(snap), allowed_mentions=NO_MENTIONS)
-        except discord.HTTPException as error:
-            logging.warning("Blackjack press response failed (%s); refreshing the table message", type(error).__name__)
-            await self.refresh(snap)
-
-    async def _respond_closed(self, interaction, snap) -> None:
-        try:
-            await interaction.response.edit_message(content="Table closed.", view=None, allowed_mentions=NO_MENTIONS)
-        except discord.HTTPException as error:
-            logging.warning("Blackjack press response failed (%s); editing the table message", type(error).__name__)
-            await self.edit(snap["channel_id"], snap["message_id"], "Table closed.", None)
-
     async def _say(self, interaction, text: str) -> None:
+        """An ephemeral reply: the first response, or a followup once the interaction was acknowledged."""
         try:
-            await interaction.response.send_message(text, ephemeral=True, allowed_mentions=NO_MENTIONS)
+            if interaction.response.is_done():
+                await interaction.followup.send(text, ephemeral=True, allowed_mentions=NO_MENTIONS)
+            else:
+                await interaction.response.send_message(text, ephemeral=True, allowed_mentions=NO_MENTIONS)
         except discord.HTTPException as error:
             logging.warning("Blackjack reply failed: %s", type(error).__name__)
+
+    async def _ack(self, interaction) -> None:
+        try:
+            await interaction.response.defer()  # a component defer updates the message in place, no "thinking" state
+        except discord.HTTPException as error:
+            logging.warning("Blackjack could not acknowledge the press: %s", type(error).__name__)
+
+    async def _finish(self, interaction, out: _Out, via=None) -> None:
+        """After the table lock is released. An unacknowledged interaction (/blackjack) is answered first, so a slow edit
+        cannot make it miss Discord's 3 seconds; an acknowledged one (a press) repaints first, then replies."""
+        say, first = out.say, not interaction.response.is_done()
+        if first and say:
+            if out.joined and not self._is_open(out.paints[0].key):
+                say = OFF_HERE  # the table was closed (and the bet refunded) after the join
+            await self._say(interaction, say)
+            say = None
+        for paint in out.paints:
+            await self._deliver(paint, via)
+        if say:
+            await self._say(interaction, say)
+
+    async def send_paint(self, paint: Paint) -> None:
+        await self._deliver(paint)
 
     # --- table life -------------------------------------------------------------------------
 
@@ -261,22 +431,39 @@ class GameTables:
 
     async def set_channel(self, guild_id, channel_id, enabled: bool) -> bool:
         """Turns games on or off in a channel. Returns True when an open table was closed (and refunded)."""
-        table = None if enabled else self.store.open_table_for(guild_id, channel_id)
-        if table is None:
-            self.store.set_game_channel(guild_id, channel_id, enabled)
-            return False
-        async with self.lock((guild_id, table["id"])):
-            current = self.store.open_table_for(guild_id, channel_id) or table
-            closed = self.store.set_game_channel(guild_id, channel_id, False)["closed_table"]
-            if closed is not None:
-                self._forget((guild_id, closed))
-                message_id = current["message_id"] if current["id"] == closed else table["message_id"]
-                await self.edit(channel_id, message_id, "Table closed: games were turned off here.", None)
-        return closed is not None
+        closed, paint = await self.switch_channel(guild_id, channel_id, enabled)
+        if paint is not None:
+            await self._deliver(paint)
+        return closed
+
+    async def switch_channel(self, guild_id, channel_id, enabled: bool) -> tuple[bool, Paint | None]:
+        """Like ``set_channel`` but returns the closing paint unsent (``send_paint``), so the caller can reply first."""
+        if enabled:
+            self.store.set_game_channel(guild_id, channel_id, True)
+            return False, None
+        paint = closed = None
+        for attempt in range(3):
+            table = self.store.open_table_for(guild_id, channel_id)
+            if table is None:
+                closed = self.store.set_game_channel(guild_id, channel_id, False)["closed_table"]
+                break
+            async with self.lock((guild_id, table["id"])):
+                current = self.store.open_table_for(guild_id, channel_id)
+                if current is not None and current["id"] != table["id"] and attempt < 2:
+                    continue  # a newer table opened meanwhile: release this lock and close it under its own
+                closed = self.store.set_game_channel(guild_id, channel_id, False)["closed_table"]
+                if closed is not None:
+                    paint = self._closing((guild_id, closed), CLOSED_OFF)
+                    self._forget((guild_id, closed))
+            break
+        return closed is not None, paint
 
     # --- /blackjack -------------------------------------------------------------------------
 
     async def play_command(self, interaction: discord.Interaction, bet: int) -> None:
+        # Not deferred: the first opener's table message is the public response, which an ephemeral defer would
+        # make impossible. The table lock is held for store work only (no HTTP), and `_finish` answers before any
+        # table edit goes out, so the response does not wait for the edit queue or the channel HTTP.
         guild_id = interaction.guild_id
         channel_id = getattr(interaction, "channel_id", None) or interaction.channel.id
         if interaction.user.bot:
@@ -296,43 +483,62 @@ class GameTables:
             table = {"id": opened["table_id"]}
         key = (guild_id, table["id"])
         async with self.lock(key):
-            try:
-                snap = self.store.latest_round(*key)
-                if snap["status"] == "playing":
-                    await self._say(interaction, BUSY)
-                    return
-                fresh = snap["status"] != "joining"
-                if fresh:
-                    snap = self.store.next_round(*key)
-                try:
-                    snap = self.store.join_round(guild_id, snap["round_id"], interaction.user.id, bet)
-                except GameError:
-                    if fresh and opened is None:
-                        self.store.cancel_round(guild_id, snap["round_id"], "nobody joined")
-                    raise
-            except GameError as error:
-                if opened is not None:
-                    self._close_in_store(key)
-                await self._say(interaction, str(error))
-                return
-            self.table(key).bets[interaction.user.id] = bet
-            self.table(key).present.add(interaction.user.id)
-            self._after(key, snap)
-            name = self.store.currency_name(guild_id)
-            if opened is not None:
-                await self._open_message(interaction, key, snap)
-            else:
-                await self._say(interaction, f"You joined the table with {bet:,} {name}.")
-                await self.refresh(snap)
+            out = self._join(interaction.user.id, key, bet, opened)
+        if out.opened:
+            await self._open_message(interaction, key, out.paints[0])
+        else:
+            await self._finish(interaction, out)
 
-    async def _open_message(self, interaction, key, snap) -> None:
+    def _join(self, user_id, key, bet, opened) -> _Out:
+        guild_id = key[0]
+        if opened is None and (out := self._if_closed(key, OFF_HERE)) is not None:
+            return out
         try:
-            await interaction.response.send_message(self.render(snap), view=self.buttons(snap), allowed_mentions=NO_MENTIONS)
-            message = await interaction.original_response()
-            self.store.set_table_message(*key, message.id)
-        except Exception:
-            self._close_in_store(key)  # refunds; no table without a message
-            raise
+            snap = self.store.latest_round(*key)
+            if snap["status"] == "playing":
+                return _Out(BUSY)
+            fresh = snap["status"] != "joining"
+            if fresh:
+                snap = self.store.next_round(*key)
+            try:
+                snap = self.store.join_round(guild_id, snap["round_id"], user_id, bet)
+            except GameError:
+                if fresh and opened is None:
+                    self.store.cancel_round(guild_id, snap["round_id"], "nobody joined")
+                raise
+        except GameError as error:
+            if opened is not None:
+                self._close_in_store(key)
+            return _Out(str(error))
+        self.table(key).bets[user_id] = bet
+        self.table(key).present.add(user_id)
+        self._after(key, snap)
+        paint = self._paint(key, snap)
+        if opened is not None:
+            return _Out(paints=[paint], opened=True)
+        return _Out(f"You joined the table with {bet:,} {self.store.currency_name(guild_id)}.", [paint], joined=True)
+
+    async def _open_message(self, interaction, key, paint: Paint) -> None:
+        """Posts the table message (the public response). Edits of this table wait behind it, so none is lost to a missing message id."""
+        async with paint.sender.lock:
+            try:
+                await interaction.response.send_message(paint.content, view=paint.view, allowed_mentions=NO_MENTIONS)
+                message = await interaction.original_response()
+                self.store.set_table_message(*key, message.id)
+            except Exception:
+                async with self.lock(key):
+                    self._close_in_store(key)  # refunds; no table without a message
+                raise
+            paint.sender.sent = max(paint.sender.sent, paint.seq)
+        fresh = None
+        async with self.lock(key):
+            if paint.sender.issued > paint.seq and key in self.tables and self._is_open(key):
+                try:
+                    fresh = self._paint(key, self.store.latest_round(*key))  # someone joined before the message existed
+                except GameError:
+                    pass
+        if fresh is not None:
+            await self._deliver(fresh)
 
     # --- buttons ----------------------------------------------------------------------------
 
@@ -341,73 +547,76 @@ class GameTables:
         if guild_id is None or interaction.user.bot:
             await self._say(interaction, STALE)
             return
+        await self._ack(interaction)
         key = (guild_id, table_id)
         async with self.lock(key):
-            try:
-                snap = self.store.round_snapshot(guild_id, round_id)
-            except GameError:
-                await self._say(interaction, STALE)
-                return
-            if snap["table_id"] != table_id:
-                await self._say(interaction, STALE)
-                return
-            seat = next((s["index"] for s in snap["seats"] if s["kind"] == "member" and s["ref_id"] == interaction.user.id), None)
-            if seat is None:
-                await self._say(interaction, NOT_SEATED)
-                return
-            try:
-                if action in ("hit", "stand", "double"):
-                    await self._move(interaction, key, snap, seat, action, moves)
-                elif action == "deal":
-                    await self._deal(interaction, key, snap)
-                elif action == "leave":
-                    await self._leave(interaction, key, snap)
-                elif action == "again":
-                    await self._again(interaction, key, interaction.user.id)
-                elif action == "close":
-                    await self._leave_table(interaction, key, snap)
-                else:
-                    await self._say(interaction, STALE)
-            except ConflictError:
-                await self._say(interaction, STALE)
-            except GameError as error:
-                await self._say(interaction, str(error))
+            out = self._press(interaction.user.id, key, action, round_id, moves)
+        await self._finish(interaction, out, via=interaction)
 
-    async def _move(self, interaction, key, snap, seat, move, moves) -> None:
+    def _press(self, user_id, key, action, round_id, moves) -> _Out:
+        """Store work for one button press, under the table lock. Returns what to send afterwards."""
+        guild_id = key[0]
+        if (out := self._if_closed(key, repaint=True)) is not None:
+            return out
+        try:
+            snap = self.store.round_snapshot(guild_id, round_id)
+        except GameError:
+            return _Out(STALE)
+        if snap["table_id"] != key[1]:
+            return _Out(STALE)
+        seat = next((s["index"] for s in snap["seats"] if s["kind"] == "member" and s["ref_id"] == user_id), None)
+        if seat is None:
+            return _Out(NOT_SEATED)
+        try:
+            if action in ("hit", "stand", "double"):
+                return self._move(key, snap, seat, action, moves)
+            if action == "deal":
+                return self._deal(key, snap)
+            if action == "leave":
+                return self._leave(key, snap, user_id)
+            if action == "again":
+                return self._again(key, user_id)
+            if action == "close":
+                return self._leave_table(key, user_id)
+            return _Out(STALE)
+        except ConflictError:
+            return _Out(STALE)
+        except GameError as error:
+            return _Out(str(error))
+
+    def _move(self, key, snap, seat, move, moves) -> _Out:
         if snap["status"] != "playing" or snap["moves"] != moves:
-            await self._say(interaction, STALE)
-            return
+            return _Out(STALE)
         if seat not in snap["legal"]:
-            await self._say(interaction, NOT_YOUR_TURN)
-            return
+            return _Out(NOT_YOUR_TURN)
         snap = self.store.play(key[0], snap["round_id"], seat, move, "member", moves)
         self._after(key, snap)
-        await self._respond(interaction, snap)
+        return _Out(paints=[self._paint(key, snap)])
 
-    async def _deal(self, interaction, key, snap) -> None:
+    def _deal(self, key, snap) -> _Out:
         snap = self.store.deal(key[0], snap["round_id"])
         self._after(key, snap)
-        await self._respond(interaction, snap)
+        return _Out(paints=[self._paint(key, snap)])
 
-    async def _leave(self, interaction, key, snap) -> None:
-        snap = self.store.leave_round(key[0], snap["round_id"], interaction.user.id)
-        self.table(key).bets.pop(interaction.user.id, None)
+    def _leave(self, key, snap, user_id) -> _Out:
+        snap = self.store.leave_round(key[0], snap["round_id"], user_id)
+        self.table(key).bets.pop(user_id, None)
         if not snap["seats"]:
-            self._close_in_store(key)
-            await self._respond_closed(interaction, snap)
-            return
-        await self._respond(interaction, snap)
+            return self._close_empty(key)
+        return _Out(paints=[self._paint(key, snap)])
 
-    async def _again(self, interaction, key, user_id) -> None:
+    def _close_empty(self, key) -> _Out:
+        self._close_in_store(key)
+        return _Out(paints=[self._closing(key, CLOSED)])
+
+    def _again(self, key, user_id) -> _Out:
         guild_id, table = key[0], self.table(key)
         snap = self.store.latest_round(*key)
         if snap["status"] == "playing":
-            await self._say(interaction, BUSY)
-            return
+            return _Out(BUSY)
         bet = table.bets.get(user_id)
         if bet is None:
-            await self._say(interaction, STALE)
-            return
+            return _Out(STALE)
         fresh = snap["status"] != "joining"
         if fresh:
             snap = self.store.next_round(*key)
@@ -419,64 +628,72 @@ class GameTables:
             raise
         table.present.add(user_id)
         self._after(key, snap)
-        await self._respond(interaction, snap)
+        return _Out(paints=[self._paint(key, snap)])
 
-    async def _leave_table(self, interaction, key, snap) -> None:
-        user_id, table = interaction.user.id, self.table(key)
+    def _leave_table(self, key, user_id) -> _Out:
+        table = self.table(key)
         latest = self.store.latest_round(*key)
         seated = any(seat["kind"] == "member" and seat["ref_id"] == user_id for seat in latest["seats"])
         if latest["status"] == "playing" and seated:
-            await self._say(interaction, BUSY)
-            return
+            return _Out(LEAVE_BUSY)
+        paints = []
         if latest["status"] == "joining" and seated:
             latest = self.store.leave_round(key[0], latest["round_id"], user_id)  # refunds the bet
             if not latest["seats"]:
-                self._close_in_store(key)
-                await self._respond_closed(interaction, latest)
-                return
-            await self.refresh(latest)
+                return self._close_empty(key)
+            paints.append(self._paint(key, latest))
         table.present.discard(user_id)
         table.bets.pop(user_id, None)
         if table.present or latest["status"] in ("joining", "playing"):
-            await self._say(interaction, "You left the table.")
-            return
-        self._close_in_store(key)
-        await self._respond_closed(interaction, latest)
+            return _Out("You left the table.", paints)
+        return self._close_empty(key)
 
     # --- timers' work -----------------------------------------------------------------------
 
     async def on_join_timer(self, guild_id, table_id, round_id) -> None:
-        key = (guild_id, table_id)
+        key, paint = (guild_id, table_id), None
         async with self.lock(key):
-            snap = self.store.round_snapshot(guild_id, round_id)
-            if snap["status"] != "joining" or not snap["seats"]:
-                return
-            snap = self.store.deal(guild_id, round_id)
-            self._after(key, snap)
-            await self.refresh(snap)
+            closed, paint = self._closed(key)
+            if not closed:
+                snap = self.store.round_snapshot(guild_id, round_id)
+                if snap["status"] != "joining" or not snap["seats"]:
+                    return
+                snap = self.store.deal(guild_id, round_id)
+                self._after(key, snap)
+                paint = self._paint(key, snap)
+        if paint is not None:
+            await self._deliver(paint)
 
     async def on_turn_timer(self, guild_id, table_id, round_id, moves) -> None:
-        key = (guild_id, table_id)
+        key, paint = (guild_id, table_id), None
         async with self.lock(key):
-            snap = self.store.round_snapshot(guild_id, round_id)
-            if snap["status"] != "playing" or snap["moves"] != moves or not snap["legal"]:
-                return
-            seat, legal = next(iter(snap["legal"].items()))
-            move = DefaultPolicy.pick(SimpleNamespace(total=blackjack.hand_total(snap["view"]["hands"][seat])[0]), legal)
-            snap = self.store.play(guild_id, round_id, seat, move, "timeout", moves)
-            self.table(key).timeouts.add((round_id, seat))
-            self._after(key, snap)
-            await self.refresh(snap)
+            closed, paint = self._closed(key)
+            if not closed:
+                snap = self.store.round_snapshot(guild_id, round_id)
+                if snap["status"] != "playing" or snap["moves"] != moves or not snap["legal"]:
+                    return
+                seat, legal = next(iter(snap["legal"].items()))
+                move = DefaultPolicy.pick(SimpleNamespace(total=blackjack.hand_total(snap["view"]["hands"][seat])[0]), legal)
+                snap = self.store.play(guild_id, round_id, seat, move, "timeout", moves)
+                self.table(key).timeouts.add((round_id, seat))
+                self._after(key, snap)
+                paint = self._paint(key, snap)
+        if paint is not None:
+            await self._deliver(paint)
 
     async def on_idle_timer(self, guild_id, table_id, round_id) -> None:
-        key = (guild_id, table_id)
+        key, paint = (guild_id, table_id), None
         async with self.lock(key):
-            snap = self.store.latest_round(guild_id, table_id)
-            open_table = self.store.open_table_for(guild_id, snap["channel_id"])
-            if open_table is None or open_table["id"] != table_id or snap["status"] in ("joining", "playing"):
-                return
-            self._close_in_store(key)
-            await self.edit(snap["channel_id"], snap["message_id"], "Table closed.", None)
+            closed, paint = self._closed(key)
+            if not closed:
+                snap = self.store.latest_round(guild_id, table_id)
+                open_table = self.store.open_table_for(guild_id, snap["channel_id"])
+                if open_table is None or open_table["id"] != table_id or snap["status"] in ("joining", "playing"):
+                    return
+                self._close_in_store(key)
+                paint = self._closing(key, CLOSED)
+        if paint is not None:
+            await self._deliver(paint)
 
     # --- restart ----------------------------------------------------------------------------
 
@@ -526,9 +743,13 @@ def register_game_commands(bot, ctx: SimpleNamespace, admin_games: app_commands.
         require_guild(interaction)
         channel_id = channel.id if channel else getattr(interaction, "channel_id", None) or interaction.channel.id
         where = channel.mention if channel else f"<#{channel_id}>"
-        closed = await bot.games.set_channel(interaction.guild_id, channel_id, enabled)
+        closed, paint = await bot.games.switch_channel(interaction.guild_id, channel_id, enabled)
         text = f"Games are now {'on' if enabled else 'off'} in {where}."
-        await reply(interaction, text + (" The open table was closed and bets were refunded." if closed else ""))
+        try:
+            await reply(interaction, text + (" The open table was closed and bets were refunded." if closed else ""))
+        finally:
+            if paint is not None:
+                await bot.games.send_paint(paint)
 
     @admin_games.command(name="bets", description="Set the smallest and largest bet")
     @app_commands.describe(min="Smallest bet", max="Largest bet")

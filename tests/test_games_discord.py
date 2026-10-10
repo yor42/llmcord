@@ -21,19 +21,38 @@ def shoe(*ranks, tail="2"):
     return tuple(bj.RANKS.index(r) for r in ranks) + (bj.RANKS.index(tail),) * 100
 
 
-class Response(FakeResponse):
-    def __init__(self):
-        super().__init__()
-        self.edited = []
+GAMES = None  # the GameTables under test, so fake Discord calls can tell whether a table lock is held
+HTTP = []  # (kind, a table lock was held) for every fake Discord call
 
-    async def edit_message(self, **kwargs):
-        await asyncio.sleep(0)  # a real response yields, so concurrent presses overlap
-        self.edited.append(kwargs)
-        self._done = True
+
+def http(kind):
+    HTTP.append((kind, any(lock.locked() for lock in list(GAMES.locks.values()))))
+
+
+class Response(FakeResponse):
+    def __init__(self, events=None):
+        super().__init__()
+        self.edited, self.events = [], events if events is not None else []
+
+    async def defer(self, **kwargs):
+        http("defer")
+        self.events.append("defer")
+        await super().defer(**kwargs)
 
     async def send_message(self, content=None, **kwargs):
-        await asyncio.sleep(0)
+        http("send_message")
+        await asyncio.sleep(0)  # a real response yields, so concurrent presses overlap
         await super().send_message(content, **kwargs)
+
+
+class Followup:
+    def __init__(self, sent):
+        self.sent = sent
+
+    async def send(self, content=None, **kwargs):
+        http("followup")
+        await asyncio.sleep(0)
+        self.sent.append((content, kwargs))
 
 
 class Partial:
@@ -41,6 +60,8 @@ class Partial:
         self.channel, self.id = channel, message_id
 
     async def edit(self, **kwargs):
+        http("edit")
+        await asyncio.sleep(0)
         if self.id in self.channel.deleted:
             raise discord.NotFound(SimpleNamespace(status=404, reason="Not Found"), "gone")
         self.channel.edits.append((self.id, kwargs))
@@ -55,15 +76,24 @@ class Channel:
 
 
 class Click(FakeInteraction):
-    def __init__(self, bot, user_id, guild_id=G, channel_id=CH):
+    def __init__(self, bot, user_id, guild_id=G, channel_id=CH, events=None):
         super().__init__(guild_id=guild_id, channel_id=channel_id, user_id=user_id)
-        self.channel_id, self.client, self.response = channel_id, bot, Response()
+        self.channel_id, self.client, self.response = channel_id, bot, Response(events)
+        self.followup = Followup(self.followup.sent)
+
+    async def edit_original_response(self, **kwargs):
+        http("edit_original_response")
+        await asyncio.sleep(0)  # a real edit yields, so concurrent presses overlap
+        self.response.edited.append(kwargs)
 
 
 class GameCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.bot = SkitBot(make_settings())
         self.store, self.games = self.bot.store, self.bot.games
+        global GAMES
+        GAMES = self.games
+        HTTP.clear()
         self.games.JOIN_SECONDS = self.games.TURN_SECONDS = self.games.IDLE_SECONDS = 3600
         self.channel = Channel()
         self.bot.get_channel = lambda channel_id: self.channel if channel_id == CH else None
@@ -331,7 +361,7 @@ class PlayTests(GameCase):
         for user, text in ((CARA, NOT_SEATED), (BOB, NOT_YOUR_TURN)):
             click = await self.press(user, "Hit")
             self.assertEqual(click.replies, [text])
-            self.assertTrue(click.response.sent[0][1]["ephemeral"])
+            self.assertTrue(click.followup.sent[0][1]["ephemeral"])  # acknowledged on entry, so the refusal is a followup
         self.assertEqual(self.latest()["moves"], before)
         click = await self.press(ALICE, "Stand")
         self.assertEqual(self.latest()["moves"], before + 1)
@@ -591,7 +621,7 @@ class ReviewFixTests(GameCase):
 
         async def broken(**kwargs):
             raise discord.HTTPException(SimpleNamespace(status=500, reason="x"), "boom")
-        click.response.edit_message = broken
+        click.edit_original_response = broken
         snap = self.latest()
         with self.assertLogs(level="WARNING"):
             await GameButton("deal", snap["table_id"], snap["round_id"], 0).callback(click)
@@ -618,7 +648,7 @@ class ReviewFixTests(GameCase):
         await self.press(ALICE, "Deal now")
         click = Click(self.bot, ALICE)
         await GameButton("close", settled["table_id"], settled["round_id"], settled["moves"]).callback(click)
-        self.assertIn("A round is being played", click.replies[0])
+        self.assertEqual(click.replies, ["You can leave when this round ends."])
         self.assertEqual(self.latest()["status"], "playing")
         self.assertIn(ALICE, self.games.table((G, settled["table_id"])).present)
 
@@ -655,6 +685,391 @@ class ReviewFixTests(GameCase):
                     break
         self.assertEqual(len(calls), 2)
         self.assertEqual(self.latest()["status"], "playing")
+
+
+class HardeningTests(GameCase):
+    """MNT-39 / MNT-40: no Discord HTTP under a table lock, ordered edits, tracked retries, newer-table close, dashboard close."""
+
+    async def test_a_press_is_acknowledged_before_the_table_lock_and_the_store_work(self):
+        self.rig("5", "10", "3", "7")
+        await self.bet(ALICE, 10)
+        events = []
+        real = self.store.round_snapshot
+
+        def spy(*args):
+            events.append("store")
+            return real(*args)
+        click = Click(self.bot, ALICE, events=events)
+        snap = self.latest()
+        with mock.patch.object(self.store, "round_snapshot", side_effect=spy):
+            async with self.games.lock((G, snap["table_id"])):
+                task = asyncio.create_task(GameButton("deal", snap["table_id"], snap["round_id"], 0).callback(click))
+                await asyncio.sleep(0.01)
+                self.assertEqual(events, ["defer"])  # acknowledged while the lock is still taken by someone else
+                self.assertFalse(task.done())
+            await task
+        self.assertEqual(events[:2], ["defer", "store"])
+        self.assertEqual(len(click.response.edited), 1)
+        self.assertEqual(click.response.sent, [])
+
+    async def test_no_discord_call_is_made_while_a_table_lock_is_held(self):
+        self.rig("9", "10", "6", "7", "9", "10", "6", "7")
+        await self.bet(ALICE, 10)
+        await self.bet(BOB, 10)  # a join: reply and edit
+        await self.press(CARA, "Leave")  # a refusal after the acknowledgement
+        await self.press(BOB, "Leave")
+        await self.press(ALICE, "Deal now")
+        await self.press(ALICE, "Stand")
+        await self.press(ALICE, "Leave table")  # last one out: table closed
+        self.rig("9", "10", "6", "7")
+        await self.bet(ALICE, 10)
+        snap = self.latest()
+        await self.games.on_join_timer(G, snap["table_id"], snap["round_id"])
+        await self.games.on_turn_timer(G, snap["table_id"], snap["round_id"], 0)
+        await self.games.on_idle_timer(G, snap["table_id"], snap["round_id"])
+        await self.games.set_channel(G, CH, False)
+        self.store.set_game_channel(G, CH, True)
+        await self.bet(ALICE, 10)
+        self.store.set_game_channels(G, set())  # the dashboard closes it; the sweep edits the message
+        await self.games.sweep()
+        self.assertEqual(self.texts()[-1], "Table closed: games were turned off here.")
+        self.assertEqual({kind for kind, _ in HTTP}, {"defer", "send_message", "followup", "edit", "edit_original_response"})
+        self.assertEqual([kind for kind, held in HTTP if held], [])
+
+    async def test_an_older_paint_never_overwrites_a_newer_one(self):
+        await self.bet(ALICE, 10)
+        key = (G, self.latest()["table_id"])
+        async with self.games.lock(key):
+            older = self.games._paint(key, self.latest())
+            newer = self.games._paint(key, self.latest())
+        newer.content = "newer"
+        older.content = "older"
+        await self.games._deliver(newer)
+        await self.games._deliver(older)
+        await self.games._deliver(older)
+        self.assertEqual(self.texts(), ["newer"])
+
+    async def test_slow_edits_are_sent_one_at_a_time_in_order(self):
+        self.rig("5", "10", "3", "7")
+        await self.bet(ALICE, 10)
+        gate = asyncio.Event()
+        first = Click(self.bot, ALICE)
+        real = first.edit_original_response
+
+        async def slow(**kwargs):
+            await gate.wait()
+            await real(**kwargs)
+        first.edit_original_response = slow
+        snap = self.latest()
+        task = asyncio.create_task(GameButton("deal", snap["table_id"], snap["round_id"], 0).callback(first))
+        await asyncio.sleep(0.01)
+        snap = self.latest()  # dealt: the store already moved on while the first edit is in flight
+        second = Click(self.bot, ALICE)
+        second_task = asyncio.create_task(GameButton("stand", snap["table_id"], snap["round_id"], snap["moves"]).callback(second))
+        await asyncio.sleep(0.01)
+        self.assertEqual(second.response.edited, [])  # waits behind the older edit
+        gate.set()
+        await asyncio.gather(task, second_task)
+        self.assertIn("On turn", first.response.edited[0]["content"])
+        self.assertIn("Seed:", second.response.edited[0]["content"])  # the settled paint came second
+
+    async def test_a_failed_press_edit_still_repaints_the_table(self):
+        self.rig("9", "10", "6", "7")
+        await self.bet(ALICE, 10)
+        click = Click(self.bot, ALICE)
+
+        async def broken(**kwargs):
+            raise discord.HTTPException(SimpleNamespace(status=429, reason="x"), "slow down")
+        click.edit_original_response = broken
+        snap = self.latest()
+        with self.assertLogs(level="WARNING"):
+            await GameButton("deal", snap["table_id"], snap["round_id"], 0).callback(click)
+        self.assertEqual(self.latest()["status"], "playing")
+        self.assertIn("On turn:", self.texts()[-1])
+        self.assertEqual(self.channel.edits[-1][1]["allowed_mentions"].to_dict(), discord.AllowedMentions.none().to_dict())
+
+    async def test_a_failed_acknowledgement_still_applies_and_repaints(self):
+        self.rig("9", "10", "6", "7")
+        await self.bet(ALICE, 10)
+        click = Click(self.bot, ALICE)
+
+        async def expired(**kwargs):
+            raise discord.NotFound(SimpleNamespace(status=404, reason="x"), "unknown interaction")
+        click.response.defer = expired
+        click.edit_original_response = expired
+        snap = self.latest()
+        with self.assertLogs(level="WARNING"):
+            await GameButton("deal", snap["table_id"], snap["round_id"], 0).callback(click)
+        self.assertEqual(self.latest()["status"], "playing")
+        self.assertIn("On turn:", self.texts()[-1])
+
+    async def test_a_retry_replaced_by_a_new_timer_does_not_sleep_or_run(self):
+        self.rig("9", "10", "6", "7")
+        self.games.JOIN_SECONDS = 0.01
+        self.games.RETRY_SECONDS = 3600
+        calls = []
+
+        async def replaced_then_failing(guild_id, table_id, round_id):
+            calls.append(1)
+            self.games.IDLE_SECONDS = 3600
+            self.games.arm((guild_id, table_id), "idle", round_id)  # the step re-armed the table, then failed
+            raise RuntimeError("database is locked")
+        self.games.on_join_timer = replaced_then_failing
+        with self.assertLogs(level="ERROR"):
+            await self.bet(ALICE, 10)
+            old = next(iter(self.games.timers.values()))
+            await asyncio.wait_for(asyncio.shield(old), 1)
+        self.assertTrue(old.done())
+        self.assertEqual(calls, [1])
+        self.assertEqual(len(self.games.timers), 1)
+        await self.games.close()
+        self.assertEqual(self.games.timers, {})
+        self.assertEqual([t for t in asyncio.all_tasks() if t.get_name().startswith("blackjack-") and not t.done()], [])
+
+    async def test_close_during_a_pending_retry_stops_it_and_leaves_no_task(self):
+        self.games.JOIN_SECONDS = 0.01
+        self.games.RETRY_SECONDS = 3600
+        calls = []
+
+        async def failing(*args):
+            calls.append(1)
+            raise RuntimeError("database is locked")
+        self.games.on_join_timer = failing
+        with self.assertLogs(level="ERROR"):
+            await self.bet(ALICE, 10)
+            task = next(iter(self.games.timers.values()))
+            for _ in range(100):
+                await asyncio.sleep(0.01)
+                if calls:
+                    break
+        self.assertFalse(task.done())  # sleeping before its retry, still the table's timer
+        await self.games.close()
+        self.assertTrue(task.cancelled())
+        self.assertEqual(calls, [1])
+        self.assertEqual([t for t in asyncio.all_tasks() if t.get_name().startswith("blackjack-") and not t.done()], [])
+
+    async def test_disarm_and_forget_cancel_a_pending_retry(self):
+        self.games.JOIN_SECONDS = 0.01
+        self.games.RETRY_SECONDS = 3600
+        calls = []
+
+        async def failing(*args):
+            calls.append(1)
+            raise RuntimeError("database is locked")
+        self.games.on_join_timer = failing
+        with self.assertLogs(level="ERROR"):
+            await self.bet(ALICE, 10)
+            task = next(iter(self.games.timers.values()))
+            for _ in range(100):
+                await asyncio.sleep(0.01)
+                if calls:
+                    break
+        self.games._forget((G, self.latest()["table_id"]))
+        await asyncio.sleep(0)
+        self.assertTrue(task.cancelled())
+
+    async def test_set_channel_closes_a_newer_table_under_its_own_lock(self):
+        await self.bet(ALICE, 10)
+        old = self.latest()
+        used = []
+        real = self.games.lock
+        self.games.lock = lambda key: used.append(key) or real(key)
+        async with real((G, old["table_id"])):
+            task = asyncio.create_task(self.games.set_channel(G, CH, False))
+            await asyncio.sleep(0.01)  # it found the old table and waits for its lock
+            self.games._close_in_store((G, old["table_id"]))
+            opened = self.store.open_table(G, CH, "blackjack", BOB)
+            self.store.join_round(G, opened["round_id"], BOB, 20)
+            self.store.set_table_message(G, opened["table_id"], 7002)
+        self.assertTrue(await task)
+        self.assertEqual(used, [(G, old["table_id"]), (G, opened["table_id"])])
+        self.assertIsNone(self.store.open_table_for(G, CH))
+        self.assertEqual((self.balance(ALICE), self.balance(BOB)), (100, 100))
+        self.assertEqual([(i, kw["content"]) for i, kw in self.channel.edits], [(7002, "Table closed: games were turned off here.")])
+
+    async def test_leaving_during_play_says_the_round_must_end_first(self):
+        self.rig("5", "10", "3", "7")
+        await self.bet(ALICE, 10)
+        await self.press(ALICE, "Deal now")
+        snap = self.latest()
+        click = Click(self.bot, ALICE)
+        await GameButton("close", snap["table_id"], snap["round_id"], snap["moves"]).callback(click)
+        self.assertEqual(click.replies, ["You can leave when this round ends."])
+        joiner = await self.bet(BOB, 10)
+        self.assertEqual(joiner.replies, ["A round is being played; join the next one with /blackjack when it ends."])
+
+    async def test_sweep_closes_a_dashboard_closed_table_once_and_forgets_it(self):
+        await self.bet(ALICE, 10)
+        await self.bet(BOB, 20)
+        snap = self.latest()
+        key = (G, snap["table_id"])
+        self.assertIn(key, self.games.tables)
+        before = len(self.channel.edits)
+        await self.games.sweep()
+        self.assertEqual(len(self.channel.edits), before)  # an open table is left alone
+        self.assertEqual(self.store.set_game_channels(G, set())["closed_tables"], [key[1]])  # the dashboard, another process
+        self.assertEqual((self.balance(ALICE), self.balance(BOB)), (100, 100))
+        await self.games.sweep()
+        await self.games.sweep()
+        self.assertEqual(len(self.channel.edits), before + 1)
+        message_id, kwargs = self.channel.edits[-1]
+        self.assertEqual((message_id, kwargs["content"], kwargs["view"]), (snap["message_id"], "Table closed: games were turned off here.", None))
+        self.assertEqual(kwargs["allowed_mentions"].to_dict(), discord.AllowedMentions.none().to_dict())
+        self.assertNotIn(key, self.games.tables)
+        self.assertEqual(self.games.timers, {})
+
+    async def test_sweep_is_idle_without_tables(self):
+        with mock.patch.object(self.store, "one", side_effect=AssertionError("no store read")):
+            await self.games.sweep()
+        self.games.SWEEP_SECONDS = 0.01
+        self.games._ensure_sweeper()
+        self.assertIsNone(self.games.sweeper)  # started only by a table in memory
+
+    async def test_sweeper_runs_only_while_tables_are_held(self):
+        self.games.SWEEP_SECONDS = 0.01
+        await self.bet(ALICE, 10)
+        self.assertIsNotNone(self.games.sweeper)
+        await self.press(ALICE, "Leave")  # last one out closes the table
+        for _ in range(100):
+            await asyncio.sleep(0.01)
+            if self.games.sweeper is None:
+                break
+        self.assertIsNone(self.games.sweeper)
+
+    async def test_the_sweeper_loop_cleans_up_a_dashboard_close(self):
+        self.games.SWEEP_SECONDS = 0.01
+        await self.bet(ALICE, 10)
+        self.store.set_game_channels(G, set())
+        for _ in range(100):
+            await asyncio.sleep(0.01)
+            if self.channel.edits:
+                break
+        await asyncio.sleep(0.05)
+        self.assertEqual([kw["content"] for _, kw in self.channel.edits], ["Table closed: games were turned off here."])
+
+    async def test_close_stops_the_sweeper(self):
+        await self.bet(ALICE, 10)
+        sweeper = self.games.sweeper
+        await self.games.close()
+        self.assertTrue(sweeper.cancelled())
+        self.assertIsNone(self.games.sweeper)
+
+    async def test_a_press_on_a_dashboard_closed_table_cleans_up_once(self):
+        await self.bet(ALICE, 10)
+        snap = self.latest()
+        self.store.set_game_channels(G, set())
+        click = await self.press(ALICE, "Deal now", snap)
+        self.assertEqual(click.replies, ["Games are off in this channel."])
+        again = await self.press(ALICE, "Leave", snap)
+        self.assertEqual(again.replies, ["Games are off in this channel."])
+        closed = [("Table closed: games were turned off here.", None)]
+        self.assertEqual([(kw["content"], kw["view"]) for kw in click.response.edited], closed)
+        self.assertEqual([(kw["content"], kw["view"]) for kw in again.response.edited], closed)  # no longer in memory: a one-off, idempotent repaint
+        self.assertEqual(self.channel.edits, [])
+        self.assertNotIn((G, snap["table_id"]), self.games.tables)
+
+    async def test_a_timer_on_a_dashboard_closed_table_cleans_up_once(self):
+        await self.bet(ALICE, 10)
+        snap = self.latest()
+        self.store.set_game_channels(G, set())
+        await self.games.on_join_timer(G, snap["table_id"], snap["round_id"])
+        await self.games.on_join_timer(G, snap["table_id"], snap["round_id"])
+        await self.games.on_idle_timer(G, snap["table_id"], snap["round_id"])
+        self.assertEqual([kw["content"] for _, kw in self.channel.edits], ["Table closed: games were turned off here."])
+        self.assertEqual(self.games.timers, {})
+
+    async def test_a_joiner_is_answered_before_a_slow_table_edit(self):
+        await self.bet(ALICE, 10)
+        gate = asyncio.Event()
+        real = Partial.edit
+
+        async def slow(partial, **kwargs):
+            await gate.wait()
+            await real(partial, **kwargs)
+        click = Click(self.bot, BOB)
+        with mock.patch.object(Partial, "edit", slow):
+            task = asyncio.create_task(invoke(self.bot, "blackjack", click, bet=25))
+            await asyncio.sleep(0.05)
+            self.assertEqual(click.replies, ["You joined the table with 25 coins."])  # answered while the edit is still blocked
+            self.assertFalse(task.done())
+            gate.set()
+            await task
+        self.assertIn(f"<@{BOB}> bet 25 coins", self.texts()[-1])
+
+    async def test_the_admin_reply_comes_before_the_closing_edit(self):
+        await self.bet(ALICE, 10)
+        gate = asyncio.Event()
+        real = Partial.edit
+
+        async def slow(partial, **kwargs):
+            await gate.wait()
+            await real(partial, **kwargs)
+        admin = FakeInteraction(admin=True)
+        with mock.patch.object(Partial, "edit", slow):
+            task = asyncio.create_task(invoke(self.bot, "admin games channel", admin, enabled=False))
+            await asyncio.sleep(0.05)
+            self.assertEqual(admin.replies, ["Games are now off in <#100>. The open table was closed and bets were refunded."])
+            self.assertEqual(self.channel.edits, [])
+            gate.set()
+            await task
+        self.assertEqual(self.texts(), ["Table closed: games were turned off here."])
+
+    async def test_the_closing_edit_is_sent_even_if_the_admin_reply_fails(self):
+        await self.bet(ALICE, 10)
+        admin = FakeInteraction(admin=True)
+
+        real = admin.response.send_message
+        calls = []
+
+        async def expired(*args, **kwargs):
+            if calls:
+                return await real(*args, **kwargs)  # the tree's error handler answers normally
+            calls.append(1)
+            raise discord.NotFound(SimpleNamespace(status=404, reason="x"), "unknown interaction")
+        admin.response.send_message = expired
+        await invoke(self.bot, "admin games channel", admin, enabled=False)
+        self.assertIsNone(self.store.open_table_for(G, CH))
+        self.assertEqual(self.texts(), ["Table closed: games were turned off here."])
+
+    async def test_a_joiner_of_a_table_closed_in_the_gap_is_not_told_they_joined(self):
+        await self.bet(ALICE, 10)
+        real = self.games._join
+
+        def join_then_close(user_id, key, bet, opened):
+            out = real(user_id, key, bet, opened)
+            self.games._close_in_store(key)  # the opener's post failed after this join
+            return out
+        with mock.patch.object(self.games, "_join", join_then_close):
+            click = await self.bet(BOB, 25)
+        self.assertEqual(click.replies, ["Games are off in this channel."])
+        self.assertEqual((self.balance(ALICE), self.balance(BOB)), (100, 100))
+
+    async def test_a_press_on_a_table_closed_while_the_bot_was_down_repaints_it(self):
+        await self.bet(ALICE, 10)
+        snap = self.latest()
+        self.store.set_game_channels(G, set())
+        self.games._forget((G, snap["table_id"]))  # a restarted bot holds nothing
+        click = await self.press(ALICE, "Deal now", snap)
+        self.assertEqual(click.replies, ["Games are off in this channel."])
+        self.assertEqual([(kw["content"], kw["view"]) for kw in click.response.edited], [("Table closed: games were turned off here.", None)])
+
+    async def test_a_press_on_an_idle_closed_table_says_so(self):
+        await self.bet(ALICE, 10)
+        snap = self.latest()
+        self.games._forget((G, snap["table_id"]))
+        self.store.close_table(G, snap["table_id"])  # games are still on here
+        click = await self.press(ALICE, "Deal now", snap)
+        self.assertEqual(click.replies, ["Table closed."])
+        self.assertEqual([(kw["content"], kw["view"]) for kw in click.response.edited], [("Table closed.", None)])
+
+    async def test_a_paint_in_flight_cannot_land_after_the_table_closed(self):
+        await self.bet(ALICE, 10)
+        key = (G, self.latest()["table_id"])
+        async with self.games.lock(key):
+            paint = self.games._paint(key, self.latest())
+        self.store.set_game_channels(G, set())
+        await self.games._deliver(paint)
+        self.assertEqual(self.channel.edits, [])
 
 
 class RecoveryTests(GameCase):
