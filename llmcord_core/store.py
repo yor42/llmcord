@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS channels (
  last_ambient REAL NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS thread_casts (
- thread_id INTEGER PRIMARY KEY, cast TEXT NOT NULL
+ thread_id INTEGER PRIMARY KEY, cast TEXT NOT NULL, guild_id INTEGER, parent_id INTEGER
 );
 CREATE TABLE IF NOT EXISTS ambient_activity (
  channel_id INTEGER PRIMARY KEY, message_count INTEGER NOT NULL DEFAULT 0,
@@ -185,13 +185,13 @@ class Store(AdminStore):
         self.db.execute("PRAGMA busy_timeout=5000")
         self.db.execute("PRAGMA journal_mode=WAL")
         old_version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if old_version > 9:
+        if old_version > 10:
             self.db.close()
             raise ValueError('The database is newer than this application. Update the application.')
         node_columns = {row[1] for row in self.db.execute('PRAGMA table_info(nodes)')}
         needs_identities = bool(node_columns) and not {'author_label', 'mentions_json'} <= node_columns
-        if existing and (old_version < 9 or needs_identities):
-            upgrade = 'v3' if old_version < 3 else 'identities' if needs_identities else 'v4' if old_version == 3 else 'v5' if old_version == 4 else 'v6' if old_version == 5 else 'v7' if old_version == 6 else 'v8' if old_version == 7 else 'v9'
+        if existing and (old_version < 10 or needs_identities):
+            upgrade = 'v3' if old_version < 3 else 'identities' if needs_identities else 'v4' if old_version == 3 else 'v5' if old_version == 4 else 'v6' if old_version == 5 else 'v7' if old_version == 6 else 'v8' if old_version == 7 else 'v9' if old_version == 8 else 'v10'
             backup = Path(str(path) + f".pre-{upgrade}-{time.time_ns()}.sqlite3")
             with closing(sqlite3.connect(backup)) as target:
                 backup.chmod(0o600)
@@ -209,10 +209,32 @@ class Store(AdminStore):
             for name, spec in {'author_label': "TEXT NOT NULL DEFAULT ''", 'mentions_json': "TEXT NOT NULL DEFAULT '[]'"}.items():
                 if name not in columns:
                     self.db.execute(f'ALTER TABLE nodes ADD COLUMN {name} {spec}')
+        if old_version < 10:
+            with self.db:
+                self.db.execute('BEGIN IMMEDIATE')
+                columns = {row[1] for row in self.db.execute('PRAGMA table_info(thread_casts)')}
+                for name in ('guild_id', 'parent_id'):
+                    if name not in columns:
+                        self.db.execute(f'ALTER TABLE thread_casts ADD COLUMN {name} INTEGER')
+                self._backfill_thread_cast_guilds()
         self.admin_lock = threading.RLock()
         self.migrate_admin()
-        self.db.execute("PRAGMA user_version=9")
+        self.db.execute("PRAGMA user_version=10")
         self.db.commit()
+
+    def _backfill_thread_cast_guilds(self) -> None:
+        """v10: guild_id = the one guild of the characters a cast references; NULL when none or ambiguous (parent stays NULL)."""
+        for row in self.db.execute('SELECT thread_id,"cast" FROM thread_casts WHERE guild_id IS NULL').fetchall():
+            try:
+                ids = [int(ident) for ident in json.loads(row["cast"])]
+            except (TypeError, ValueError):
+                continue
+            guilds = {r[0] for r in self.db.execute(
+                f"SELECT guild_id FROM characters WHERE id IN ({','.join('?' for _ in ids)})", ids)} if ids else set()
+            if len(guilds) > 1:
+                log.warning("thread_casts row for thread %s references characters in several guilds; guild left unset", row["thread_id"])
+            elif guilds:
+                self.db.execute("UPDATE thread_casts SET guild_id=? WHERE thread_id=?", (guilds.pop(), row["thread_id"]))
 
     def close(self) -> None:
         self.db.close()
@@ -255,8 +277,8 @@ class Store(AdminStore):
         self.execute("INSERT OR IGNORE INTO hub_worlds VALUES(?,?)", (hub_id, world_id))
 
     def unlink_world(self, guild_id: int, hub_id: int, world_id: int) -> int:
-        """Unlink and prune now-ineligible characters from the hub's channel casts; returns the entries removed.
-        Thread casts are not pruned (no parent column)."""
+        """Unlink and prune now-ineligible characters from the hub's channel casts and its threads' casts; returns the
+        channel-cast entries removed (thread casts with no recorded parent, from before v10, are not found)."""
         hub, world = self.space_by_id(hub_id), self.space_by_id(world_id)
         if not hub or not world or hub["guild_id"] != guild_id or world["guild_id"] != guild_id or hub["kind"] != "hub":
             raise ValueError("Choose a hub and world in this server.")
@@ -270,7 +292,9 @@ class Store(AdminStore):
 
     def _prune_binding_casts(self, binding, eligible: set[int], space_id: int | None = None) -> list[int]:
         """Keep only ``eligible`` ids (order kept) in both casts, optionally moving the binding; returns dropped ids
-        (one per id removed from one list). Caller holds the transaction."""
+        (one per id removed from one list). Threads under the channel are pruned to ``eligible`` too (not counted).
+        Caller holds the transaction."""
+        self._prune_thread_casts(binding["guild_id"], binding["channel_id"], eligible)
         casts, dropped = {}, []
         for field in ("default_cast", "active_cast"):
             cast = json.loads(binding[field])
@@ -281,6 +305,14 @@ class Store(AdminStore):
                 (space_id or binding["space_id"], json.dumps(casts["default_cast"]), json.dumps(casts["active_cast"]),
                  binding["channel_id"]))
         return dropped
+
+    def _prune_thread_casts(self, guild_id: int, channel_id: int, eligible: set[int], only: int | None = None) -> None:
+        """Drop ineligible ids (or just ``only`` if ineligible) from casts of threads whose parent is ``channel_id``."""
+        for row in self.all('SELECT thread_id,"cast" FROM thread_casts WHERE guild_id=? AND parent_id=?', (guild_id, channel_id)):
+            cast = json.loads(row["cast"])
+            cleaned = [ident for ident in cast if ident in eligible or (only is not None and ident != only)]
+            if cleaned != cast:
+                self.db.execute('UPDATE thread_casts SET "cast"=? WHERE thread_id=?', (json.dumps(cleaned), row["thread_id"]))
 
     def allowed_worlds(self, hub_id: int) -> set[int]:
         return {row["world_id"] for row in self.all("SELECT world_id FROM hub_worlds WHERE hub_id=?", (hub_id,))}
@@ -368,7 +400,7 @@ class Store(AdminStore):
         if not set(cast) <= eligible:
             raise ValueError("That character is not available in this world or hub.")
         if parent_id and not default:
-            self.execute("INSERT INTO thread_casts(thread_id,cast) VALUES(?,?) ON CONFLICT(thread_id) DO UPDATE SET cast=excluded.cast", (channel_id, json.dumps(cast)))
+            self.execute("INSERT INTO thread_casts(thread_id,cast,guild_id,parent_id) VALUES(?,?,?,?) ON CONFLICT(thread_id) DO UPDATE SET cast=excluded.cast,guild_id=excluded.guild_id,parent_id=excluded.parent_id", (channel_id, json.dumps(cast), binding["guild_id"], parent_id))
         else:
             col = "default_cast" if default else "active_cast"
             self.execute(f"UPDATE channels SET {col}=? WHERE channel_id=?", (json.dumps(cast), binding["channel_id"]))
@@ -678,15 +710,19 @@ class Store(AdminStore):
                 if cleaned != cast:
                     self.db.execute(f"UPDATE channels SET {field}=? WHERE channel_id=?",
                         (json.dumps(cleaned), binding["channel_id"]))
+            self._prune_thread_casts(guild_id, binding["channel_id"], eligible, only=character_id)
         if not character or character["archived"]:
             self._remove_from_thread_casts(guild_id, character_id)
 
     def _remove_from_thread_casts(self, guild_id: int, character_id: int) -> None:
-        # thread_casts has no guild column; character ids are global, so ownership of the character is the scope
+        # character ids are global, so ownership is checked first. Rows with a NULL guild_id are
+        # the ones the v10 backfill could not place (empty casts, or only deleted ids — ids are
+        # never reused); they hold no live characters and are skipped. A cross-guild row (should be
+        # impossible) would also be NULL; the upgrade logs it and it needs manual repair.
         character = self.character_by_id(character_id)
         if character and character["guild_id"] != guild_id:
             return
-        rows = self.all('SELECT thread_id,"cast" FROM thread_casts')
+        rows = self.all('SELECT thread_id,"cast" FROM thread_casts WHERE guild_id=?', (guild_id,))
         for row in rows:
             cast = json.loads(row["cast"])
             if character_id in cast:

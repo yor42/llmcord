@@ -39,7 +39,7 @@ class SpendDaysTests(unittest.TestCase):
         """FEAT-16: a new database is v8 with one default bot_settings row and empty spend tables."""
         store = Store()
         try:
-            self.assertEqual(store.one("PRAGMA user_version")[0], 9)
+            self.assertEqual(store.one("PRAGMA user_version")[0], 10)
             row = store.one("SELECT * FROM bot_settings")
             self.assertEqual((row["id"], row["soft_cap_usd"], row["hard_cap_usd"], row["reset_day"], row["channel_notice"], row["revision"]), (1, None, None, 1, 0, 0))
             self.assertEqual(store.one("SELECT COUNT(*) FROM bot_settings")[0], 1)
@@ -54,7 +54,7 @@ class SpendDaysTests(unittest.TestCase):
             path = self.v5_file(folder)
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 9)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 10)
                 self.assertEqual(spend(store), {"2023-11-14": (0.5, 1), "2023-11-15": (1.5, 0)})
             finally:
                 store.close()
@@ -128,7 +128,7 @@ class SpendDaysTests(unittest.TestCase):
             store = Store(path)
             try:
                 self.assertEqual(spend(store), {"2023-11-14": (0.5, 1), "2023-11-15": (1.5, 0)})
-                self.assertEqual(store.one("PRAGMA user_version")[0], 9)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 10)
             finally:
                 store.close()
 
@@ -157,12 +157,12 @@ class SpendDaysTests(unittest.TestCase):
         finally:
             store.close()
 
-    def test_v10_file_is_rejected(self):
-        """FEAT-16: a version 10 file raises 'newer than this application'."""
+    def test_v11_file_is_rejected(self):
+        """FEAT-16: a version 11 file raises 'newer than this application'."""
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "new.sqlite3"
             with closing(sqlite3.connect(path)) as connection, connection:
-                connection.execute("PRAGMA user_version=10")
+                connection.execute("PRAGMA user_version=11")
             with self.assertRaisesRegex(ValueError, "newer than this application"):
                 Store(path)
 
@@ -197,7 +197,7 @@ class SpendDaysTests(unittest.TestCase):
             self.downgrade(path, 6)
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 9)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 10)
                 self.assertFalse(store.catchup_anywhere(1))
                 self.assertFalse(store.usage_footer_enabled(1))
                 self.assertEqual(store.one("SELECT catchup_anywhere FROM guild_settings WHERE guild_id=1")[0], 0)
@@ -219,7 +219,7 @@ class SpendDaysTests(unittest.TestCase):
             self.downgrade(path, 5)
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 9)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 10)
                 self.assertEqual(spend(store), {"2023-11-14": (0.5, 1), "2023-11-15": (1.5, 0)})
                 self.assertFalse(store.catchup_anywhere(1))
             finally:

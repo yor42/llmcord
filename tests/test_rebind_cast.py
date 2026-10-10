@@ -11,7 +11,8 @@ Target behavior:
   list). ``/admin space unlink_world`` mentions that number. Other spaces and other guilds are untouched.
 - The dashboard's bind/unlink buttons call the same store methods (the legacy web routes were retired in SEC-02).
 
-Out of scope (gap): thread casts (``thread_casts`` has no parent column), pinned below as a characterization.
+Thread casts carry ``parent_id`` (schema v10): unlinking prunes the casts of threads under the hub's channels. Legacy rows
+with a NULL parent are left alone (characterization below).
 Seams: store methods and slash commands via ``helpers.invoke``.
 """
 import json
@@ -186,10 +187,27 @@ class StoreUnlinkTests(World, unittest.TestCase):
             self.store.unlink_world(1, self.harbor, self.forest)
         self.assertEqual(self.casts(101), ([self.alice], [self.alice]))
 
-    def test_unlink_world_leaves_thread_casts(self):
-        """Characterization (UX-03, gap): thread casts are not pruned by ``unlink_world`` because ``thread_casts`` has no
-        parent column to find the hub's threads; a Plaza thread keeps Alice after Harbor is unlinked."""
+    def test_unlink_world_prunes_thread_casts_with_a_parent(self):
+        """UX-03 / MNT-05 (fixed): a thread under a Plaza channel loses Alice when Harbor is unlinked; threads under other
+        channels or guilds are untouched, and the returned count still covers channel casts only."""
         self.store.set_cast(250, 200, [self.alice, self.carol])
+        self.store.set_cast(251, 100, [self.alice])
+        self.store.set_cast(252, 300, [self.alice])
+        pruned = self.store.unlink_world(1, self.plaza, self.harbor)
+        self.assertEqual(self.store.get_cast(250, 200), [self.carol])
+        self.assertEqual(self.store.get_cast(251, 100), [self.alice])
+        self.assertEqual(self.store.get_cast(252, 300), [self.alice])
+        self.assertEqual(pruned, 3)
+
+    def test_rebind_prunes_thread_casts_with_a_parent(self):
+        """MNT-05: rebinding a channel to a narrower space prunes its threads' casts too."""
+        self.store.set_cast(250, 200, [self.alice, self.carol])
+        self.store.bind_channel(1, 200, self.harbor)
+        self.assertEqual(self.store.get_cast(250, 200), [self.alice])
+
+    def test_unlink_world_leaves_legacy_thread_casts_without_a_parent(self):
+        """Characterization (UX-03, MNT-05): a pre-v10 thread cast row (NULL parent) is not found by the hub prune."""
+        self.store.execute("INSERT INTO thread_casts(thread_id,cast,guild_id) VALUES(250,?,1)", (json.dumps([self.alice, self.carol]),))
         self.store.unlink_world(1, self.plaza, self.harbor)
         self.assertEqual(self.store.get_cast(250, 200), [self.alice, self.carol])
 
