@@ -1324,7 +1324,7 @@ class OutsideCloseTests(DoubtCase):
         snap = self.snap()
         self.store.set_game_channels(G, {CH2})
         self.doubt.arm((G, tid), "turn", 0, snap["round_id"], snap["moves"])  # replaces the table's real turn timer with an immediate one
-        await self.doubt.runtime.timers[((G, tid), "turn")]
+        await asyncio.wait_for(self.doubt.runtime.timers[((G, tid), "turn")], 5)  # a failing hook would otherwise retry only after runtime.retry_seconds (3600 here)
         self.assert_cleaned(tid, lobby, thread, turn, "games were turned off here.")
 
     async def test_a_game_that_ends_normally_is_not_repainted_by_the_sweeper(self):

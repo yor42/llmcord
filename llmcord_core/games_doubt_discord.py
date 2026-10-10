@@ -141,7 +141,7 @@ class DoubtTables:
     CHARACTER_SECONDS = 2
     ARCHIVE_SECONDS = 600
     BOARD_DEBOUNCE_SECONDS = 1
-    RETRY_SECONDS = 5
+    RETRY_SECONDS = 5  # read once at construction (TableRuntime.retry_seconds); tests set runtime.retry_seconds
     BUMP_AFTER = 8
     MODEL_SECONDS = 20
     EVENT_COOLDOWN_SECONDS = 20

@@ -125,7 +125,7 @@ class GameTables:
     CHARACTER_SECONDS = 2
     MODEL_SECONDS = 20
     POST_SECONDS = 10
-    RETRY_SECONDS = 5
+    RETRY_SECONDS = 5  # read once at construction (TableRuntime.retry_seconds); tests set runtime.retry_seconds
     SWEEP_SECONDS = 30
     DEALER_STEP_SECONDS = 1.5  # 0 turns the paced dealer play off
 
