@@ -89,19 +89,8 @@ DOUBT_SYSTEM = ("You are {name}, playing I Doubt It at a table in a roleplay ser
 RECENT = 5
 
 
-def _held(cards) -> dict:
-    counts = {}
-    for card in cards:
-        counts[card[0]] = counts.get(card[0], 0) + 1
-    return {rank: counts[rank] for rank in doubt.RANKS if rank in counts}
-
-
-def _cards(n: int) -> str:
-    return f"{n} card{'s' if n != 1 else ''}"
-
-
 def doubt_play_schema(view) -> dict:
-    held = _held(view.hand)
+    held = doubt.held_counts(view.hand)
     return {"type": "object", "properties": {rank: {"type": "integer", "enum": list(range(min(n, doubt.MAX_PLAY) + 1))} for rank, n in held.items()},
             "required": list(held), "additionalProperties": False}
 
@@ -111,11 +100,11 @@ def doubt_doubt_schema() -> dict:
 
 
 def doubt_table_text(view, names, purpose) -> str:
-    lines = ["Your hand: " + ", ".join(f"{rank} x{n}" for rank, n in _held(view.hand).items()), f"Rank to claim: {view.rank}"]
+    lines = ["Your hand: " + ", ".join(f"{rank} x{n}" for rank, n in doubt.held_counts(view.hand).items()), f"Rank to claim: {view.rank}"]
     for i, count in enumerate(view.counts):
         if i != view.seat:
-            lines.append(f"{names[i]}: {_cards(count)}" + ("" if view.active[i] else " (out of the game)"))
-    lines.append(f"Pile: {_cards(view.pile)}")
+            lines.append(f"{names[i]}: {doubt.cards_text(count)}" + ("" if view.active[i] else " (out of the game)"))
+    lines.append(f"Pile: {doubt.cards_text(view.pile)}")
     for item in view.history[-RECENT:]:
         if item.kind == "play":
             lines.append(f"{names[item.seat]} claimed {item.count} {item.rank}")

@@ -1509,5 +1509,20 @@ class OutsideCloseTests(DoubtCase):
         self.assertIn("Doubt window open.", content)
 
 
+class FallbackMovesTests(DoubtCase):
+    async def test_fallback_moves_are_policy_then_timeout_then_forfeit(self):
+        """Characterization (MNT-49): _fallback_moves lists the policy play, the timeout play, then forfeit, all for the same seat."""
+        await self.playing()
+        snap = self.snap()
+        seen = self.store.seat_view(G, snap["round_id"], 0)
+        moves = self.doubt._fallback_moves(G, snap, 0, seen)
+        self.assertEqual([seat for seat, _ in moves], [0, 0, 0])
+        self.assertEqual(moves[2][1], "forfeit")
+        self.assertTrue(moves[0][1].startswith("play:"))
+        seed = self.store.policy_seed(G, snap["round_id"], f"{snap['moves']}/0/fallback")
+        self.assertEqual(moves[1][1], doubt.timeout_move_for_view(seen, seed))
+        self.assertEqual(moves, self.doubt._fallback_moves(G, snap, 0, seen))  # deterministic
+
+
 if __name__ == "__main__":
     unittest.main()

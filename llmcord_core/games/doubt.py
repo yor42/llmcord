@@ -163,11 +163,22 @@ def new(seed, seats: Sequence[Seat], rules=None):
                  rank_idx=0, turn=0)
 
 
+def held_counts(hand):
+    """{rank: how many} for a hand of (rank, suit) cards, in rank order."""
+    counts = {}
+    for card in hand:
+        counts[card[0]] = counts.get(card[0], 0) + 1
+    return {rank: counts[rank] for rank in RANKS if rank in counts}
+
+
+def cards_text(n):
+    """Count with its noun: "1 card", "3 cards"."""
+    return f"{n} card{'s' if n != 1 else ''}"
+
+
 def _plays(hand):
     """Every canonical play of 1..4 cards from a hand, as (move, ranks-counts) in a stable order."""
-    held = {}
-    for c in hand:
-        held[c[0]] = held.get(c[0], 0) + 1
+    held = held_counts(hand)
     ranks = [r for r in RANKS if r in held]
     out = []
 
@@ -192,7 +203,7 @@ def _can_play(state, seat):
 
 
 def legal_moves(state, seat):
-    """Moves the seat may make now. ``forfeit`` is always allowed for an active seat but is not listed."""
+    """(Only tests call this; the bot and the store do not.) Moves the seat may make now. ``forfeit`` is always allowed for an active seat but is not listed."""
     if state.finished or type(seat) is not int or not 0 <= seat < len(state.seats) or not state.active[seat]:
         return ()
     moves = []
@@ -345,7 +356,7 @@ def timeout_move_for_view(view, seed):
 
 
 def timeout_move(state, seat, seed):
-    """The same from a full state."""
+    """The same from a full state. (Only tests call this; the bot uses ``timeout_move_for_view``.)"""
     if not _can_play(state, seat):
         raise IllegalMove("that seat is not on turn")
     return timeout_move_for_view(view(state, seat), seed)

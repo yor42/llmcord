@@ -913,5 +913,34 @@ class ShuffleContractTests(unittest.TestCase):
         self.assertNotEqual([hand(mk(3, "q"), i) for i in range(3)], [hand(mk(3, "r"), i) for i in range(3)])
 
 
+class HeldCountsTests(unittest.TestCase):
+    def test_empty_hand_is_empty(self):
+        """Characterization (MNT-49): no cards, no ranks."""
+        self.assertEqual(doubt.held_counts([]), {})
+
+    def test_counts_are_ordered_by_rank_not_by_hand_order(self):
+        """Characterization (MNT-49): keys follow doubt.RANKS whatever order the cards come in."""
+        cards = [("K", "S"), ("3", "H"), ("K", "D"), ("A", "C"), ("10", "S"), ("3", "D"), ("K", "H")]
+        held = doubt.held_counts(cards)
+        self.assertEqual(held, {"A": 1, "3": 2, "10": 1, "K": 3})
+        self.assertEqual(list(held), ["A", "3", "10", "K"])
+
+    def test_matches_the_old_chooser_formatting(self):
+        """Characterization (MNT-49): same result as the removed game_chooser._held."""
+        def old_held(cards):
+            counts = {}
+            for card in cards:
+                counts[card[0]] = counts.get(card[0], 0) + 1
+            return {rank: counts[rank] for rank in doubt.RANKS if rank in counts}
+
+        state = mk(3, "h")
+        for i in range(3):
+            self.assertEqual(list(doubt.held_counts(hand(state, i)).items()), list(old_held(hand(state, i)).items()))
+
+    def test_cards_text_singular_and_plural(self):
+        """Characterization (MNT-49): exactly one is singular; zero and many are plural."""
+        self.assertEqual([doubt.cards_text(n) for n in (0, 1, 2, 13)], ["0 cards", "1 card", "2 cards", "13 cards"])
+
+
 if __name__ == "__main__":
     unittest.main()

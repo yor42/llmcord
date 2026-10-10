@@ -127,10 +127,6 @@ class _Out:
     closed: bool = False  # the table is over: forget it once this is delivered
 
 
-def _cards(n: int) -> str:
-    return f"{n} card{'s' if n != 1 else ''}"
-
-
 def _claim(count: int, rank: str) -> str:
     return f"{WORDS.get(count, count)} {rank}{'s' if count != 1 else ''}"
 
@@ -445,14 +441,14 @@ class DoubtTables:
             if not view["active"][i]:
                 state = "forfeited"
             elif view["finished"] and view["winner"] == i:
-                state = f"{_cards(view['counts'][i])} · winner"
+                state = f"{doubt.cards_text(view['counts'][i])} · winner"
             else:
-                state = _cards(view["counts"][i]) + (" · on turn" if view["turn"] == i else "")
+                state = doubt.cards_text(view["counts"][i]) + (" · on turn" if view["turn"] == i else "")
             lines.append(f"{i + 1}. {GameTables._who(seat)} — {state}")
         if view["finished"]:
             lines.append("Game over.")
         else:
-            lines.append(f"Pile: {_cards(view['pile'])} · Rank to claim: {view['rank']}")
+            lines.append(f"Pile: {doubt.cards_text(view['pile'])} · Rank to claim: {view['rank']}")
         lines.append("-# " + doubt.rules_text(snap["rules"]))
         lines.append(f"-# Seed: {snap['seed']} (hash {snap['seed_hash'][:12]})" if snap["seed"] else f"-# Seed hash: {snap['seed_hash'][:12]}")
         return "\n".join(lines)
@@ -467,7 +463,7 @@ class DoubtTables:
         else:
             taker = last["claimer"] if last["bluff"] else last["doubter"]
             lines = [f"{self._who(snap, taker)} took the pile after a doubt."]
-        lines.append(f"Pile: {_cards(view['pile'])}.")
+        lines.append(f"Pile: {doubt.cards_text(view['pile'])}.")
         turn = view["turn"]
         if turn is not None:
             stamp = self._stamp(key, "turn")
@@ -490,7 +486,7 @@ class DoubtTables:
         if not rev["bluff"] and snap["view"]["finished"]:
             return head + f" — the claim was true, and {claimer} played their last cards."
         taker = who(snap, rev["claimer"] if rev["bluff"] else rev["doubter"])
-        return head + f" — {taker} takes the pile ({_cards(pile_before)})."
+        return head + f" — {taker} takes the pile ({doubt.cards_text(pile_before)})."
 
     def _result(self, key, snap) -> tuple[str, str, str]:
         """(thread result, one-line lobby text, final turn text) for a settled round."""
@@ -976,10 +972,8 @@ class DoubtTables:
         if snap["status"] != "playing":
             return "This game is over.", None
         view = self.store.seat_view(guild_id, snap["round_id"], seat)
-        held = {}
-        for rank, _ in view.hand:
-            held[rank] = held.get(rank, 0) + 1
-        lines = [f"**Your hand** ({_cards(len(view.hand))})"]
+        held = doubt.held_counts(view.hand)
+        lines = [f"**Your hand** ({doubt.cards_text(len(view.hand))})"]
         lines += [f"{rank}: " + " ".join(f"{r}{s}" for r, s in view.hand if r == rank) for rank in doubt.RANKS if rank in held]
         window = view.window
         playable = view.turn == seat and view.hand and not (window and view.counts[window.claimer] == 0)
@@ -1014,9 +1008,7 @@ class DoubtTables:
             return _Out(MOVED_ON)
         if snap["view"]["turn"] != seat:
             return _Out(NOT_YOUR_TURN)
-        parts, held = [], {}
-        for rank, _ in self.store.seat_view(key[0], round_id, seat).hand:
-            held[rank] = held.get(rank, 0) + 1
+        parts, held = [], doubt.held_counts(self.store.seat_view(key[0], round_id, seat).hand)
         if not isinstance(counts, dict) or any(not isinstance(n, int) or isinstance(n, bool) or n < 0 for n in counts.values()):
             return _Out(f"Pick 1 to {doubt.MAX_PLAY} cards to play.")
         for rank in doubt.RANKS:
@@ -1037,7 +1029,7 @@ class DoubtTables:
             return _Out(MOVED_ON)
         except GameError as error:
             return _Out(str(error))
-        out.say, out.ok = f"You play {_cards(total)} and claim {_claim(total, snap['view']['rank'])}.", True
+        out.say, out.ok = f"You play {doubt.cards_text(total)} and claim {_claim(total, snap['view']['rank'])}.", True
         return out
 
     # --- timers' work -----------------------------------------------------------------------
@@ -1180,6 +1172,12 @@ class DoubtTables:
             out = await (self._decide_doubts(key, snap, plan, budget) if window else self._decide_play(key, snap, plan))
         await self._publish(key, None if out is _STALE else out)
 
+    def _fallback_moves(self, guild_id, snap, seat, seen) -> list:
+        """The seat's policy play, then the timeout play, then forfeit: the order the store is asked to accept them in."""
+        seed = lambda kind: self.store.policy_seed(guild_id, snap["round_id"], f"{snap['moves']}/{seat}/{kind}")
+        return [(seat, doubt.policy_play(seen, doubt.tendencies(snap["seats"][seat]["ref_id"]), seed("play"))),
+                (seat, doubt.timeout_move_for_view(seen, seed("fallback"))), (seat, "forfeit")]
+
     def _policy_step(self, key, snap):
         """The fallback policy's step. Call under the table lock."""
         guild_id, round_id, moves = key[0], snap["round_id"], snap["moves"]
@@ -1198,8 +1196,7 @@ class DoubtTables:
         playable = turn is not None and seats[turn]["kind"] == "character" and not window
         if not tried and playable:
             seen = self.store.seat_view(guild_id, round_id, turn)
-            tried = [(turn, doubt.policy_play(seen, doubt.tendencies(seats[turn]["ref_id"]), seed(turn, "play"))),
-                     (turn, doubt.timeout_move_for_view(seen, seed(turn, "fallback"))), (turn, "forfeit")]
+            tried = self._fallback_moves(guild_id, snap, turn, seen)
         return self._apply_chain(key, snap, tried)
 
     def _play_plan(self, key, snap):
@@ -1223,9 +1220,7 @@ class DoubtTables:
     @staticmethod
     def _model_play(result, seen):
         """The canonical play move for a valid model answer (every held rank, counts within what is held, 1 to 4 cards in all), else None."""
-        held = {}
-        for card in seen.hand:
-            held[card[0]] = held.get(card[0], 0) + 1
+        held = doubt.held_counts(seen.hand)
         if not isinstance(result, dict) or set(result) != set(held):
             return None
         picks, total = [], 0
@@ -1242,7 +1237,6 @@ class DoubtTables:
     async def _decide_play(self, key, snap, plan):
         guild_id, round_id, moves = key[0], snap["round_id"], snap["moves"]
         turn, character, seen, names = plan
-        seed = lambda kind: self.store.policy_seed(guild_id, round_id, f"{moves}/{turn}/{kind}")
         tried = []
         if character is not None:
             try:
@@ -1258,8 +1252,7 @@ class DoubtTables:
                 logging.warning("I Doubt It character play fell back to the policy (%s)", type(error).__name__)
             if move is None:
                 self._note_failure(guild_id)
-        tried += [(turn, doubt.policy_play(seen, doubt.tendencies(snap["seats"][turn]["ref_id"]), seed("play"))),
-                  (turn, doubt.timeout_move_for_view(seen, seed("fallback"))), (turn, "forfeit")]
+        tried += self._fallback_moves(guild_id, snap, turn, seen)
         return await self._apply_fresh(key, round_id, moves, tried)
 
     async def _doubt_one(self, key, snap, seat, character, seen, tend, names, bound) -> tuple:
@@ -1372,9 +1365,9 @@ class DoubtTables:
         if view["finished"]:
             lines.append(f"The game is over. {who(view['winner'])} won.")
         else:
-            lines.append(f"Rank to claim now: {view['rank']}. Pile: {_cards(view['pile'])}.")
+            lines.append(f"Rank to claim now: {view['rank']}. Pile: {doubt.cards_text(view['pile'])}.")
         for i, n in enumerate(view["counts"]):
-            lines.append(f"- {who(i)}: {_cards(n)}" + ("" if view["active"][i] else " (forfeited)") + (" (on turn)" if view["turn"] == i and not view["finished"] else ""))
+            lines.append(f"- {who(i)}: {doubt.cards_text(n)}" + ("" if view["active"][i] else " (forfeited)") + (" (on turn)" if view["turn"] == i and not view["finished"] else ""))
         if view["window"]:
             w = view["window"]
             lines.append(f"Open claim: {names[w['claimer']]} claimed {_claim(w['count'], w['rank'])}; it can still be doubted.")
