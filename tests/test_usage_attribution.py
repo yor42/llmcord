@@ -184,7 +184,7 @@ class CatchupAttributionTests(unittest.IsolatedAsyncioTestCase):
                     return await super().text(role, system, messages, max_tokens)
 
             bot.models = Models()
-            channel = test_catchup.FakeChannel(100, [test_catchup.recent(2, 'Duel at dawn', uid=5)])
+            channel = FakeTextChannel(100, [test_catchup.recent(2, 'Duel at dawn', uid=5)])
             it = test_catchup.granted(test_catchup.FakeInteraction(channel_id=100, channel=channel, user_id=test_catchup.ME))
             await test_catchup.invoke(bot, 'catchup', it)
             self.assertEqual(seen, [(it.guild_id, 100, 'catchup')])

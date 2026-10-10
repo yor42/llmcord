@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import discord
 
-from helpers import FakeInteraction, FakeThread, invoke, make_settings
+from helpers import FakeInteraction, FakeTextChannel, FakeThread, invoke, make_settings
 from llmcord_core import catchup
 from llmcord_core.discord_bot import SkitBot
 
@@ -148,20 +148,9 @@ class TranscriptTests(unittest.TestCase):
             self.assertIn(needle, catchup.SYSTEM)
 
 
-class FakeChannel:
-    def __init__(self, ident, messages=(), error=None):
-        self.id, self.messages, self.error, self.calls = ident, list(messages), error, 0
-
+class SlowChannel(FakeTextChannel):
     def history(self, **kwargs):
-        self.calls += 1
-        if self.error:
-            raise self.error
-        return stream(self.messages)
-
-
-class SlowChannel(FakeChannel):
-    def history(self, **kwargs):
-        self.calls += 1
+        self.history_calls.append(kwargs)
 
         async def slow():
             for m in self.messages:
@@ -216,7 +205,7 @@ class CatchupCommandTests(unittest.IsolatedAsyncioTestCase):
 
     def interaction(self, channel_id=100, messages=None, error=None, user_id=ME):
         messages = [recent(2, "Duel at dawn", uid=5), recent(3, "who is going?", uid=6, name="Kim")] if messages is None else messages
-        channel = FakeChannel(channel_id, messages, error)
+        channel = FakeTextChannel(channel_id, messages, error)
         return granted(FakeInteraction(channel_id=channel_id, channel=channel, user_id=user_id)), channel
 
     async def test_character_channel_uses_memory_role_and_replies_privately(self):
@@ -253,7 +242,7 @@ class CatchupCommandTests(unittest.IsolatedAsyncioTestCase):
             "/catchup works only in character channels on this server. "
             "A server admin can allow it in other channels under Server settings in the dashboard."])
         self.assertIs(it.response.sent[0][1]["ephemeral"], True)
-        self.assertEqual((self.models.calls, channel.calls), ([], 0))
+        self.assertEqual((self.models.calls, len(channel.history_calls)), ([], 0))
         self.assertEqual(self.bot.catchup_used, {})
 
     async def test_unbound_channel_works_when_switch_on(self):
@@ -304,7 +293,7 @@ class CatchupCommandTests(unittest.IsolatedAsyncioTestCase):
         await invoke(self.bot, "catchup", it)
         self.assertTrue(it.replies[0].startswith("Catch-ups are paused: "), it.replies[0])
         self.assertIs(it.response.sent[0][1]["ephemeral"], True)
-        self.assertEqual((self.models.calls, channel.calls), ([], 0))
+        self.assertEqual((self.models.calls, len(channel.history_calls)), ([], 0))
 
     async def test_gateway_hard_cap_during_call_is_a_private_notice(self):
         from llmcord_core import budget
@@ -323,7 +312,7 @@ class CatchupCommandTests(unittest.IsolatedAsyncioTestCase):
             it2, channel2 = self.interaction()
             await invoke(self.bot, "catchup", it2)
             self.assertEqual(it2.replies, ["You can use /catchup here again in 3 minutes."])
-            self.assertEqual((len(self.models.calls), channel2.calls), (1, 0))
+            self.assertEqual((len(self.models.calls), len(channel2.history_calls)), (1, 0))
             self.assertIs(it2.response.sent[0][1]["ephemeral"], True)
             clock[0] += 120
             it3, _ = self.interaction()
@@ -384,14 +373,14 @@ class CatchupCommandTests(unittest.IsolatedAsyncioTestCase):
         await invoke(self.bot, "catchup", it)
         self.assertEqual(it.replies, ["You can't read this channel's message history, so I can't summarize it."])
         self.assertIs(it.response.sent[0][1]["ephemeral"], True)
-        self.assertEqual((self.models.calls, channel.calls, self.bot.catchup_used), ([], 0, {}))
+        self.assertEqual((self.models.calls, len(channel.history_calls), self.bot.catchup_used), ([], 0, {}))
 
     async def test_administrator_without_read_history_is_allowed(self):
         it, channel = self.interaction()
         it.permissions = discord.Permissions(administrator=True)
         await invoke(self.bot, "catchup", it)
         self.assertNotIn("can't read this channel's message history", "".join(it.replies))
-        self.assertEqual(channel.calls, 1)
+        self.assertEqual(len(channel.history_calls), 1)
 
     async def test_permission_checked_before_cooldown_and_hard_cap(self):
         rev = self.store.budget_settings()['revision']
@@ -464,7 +453,7 @@ class CatchupUsageTests(unittest.IsolatedAsyncioTestCase):
                                    choices=[SimpleNamespace(message=SimpleNamespace(content="Summary."))])
 
         bot.models.clients["test"] = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
-        channel = FakeChannel(100, [recent(1, "hello", uid=5)])
+        channel = FakeTextChannel(100, [recent(1, "hello", uid=5)])
         it = granted(FakeInteraction(channel=channel))
         await invoke(bot, "catchup", it)
         self.assertEqual(it.replies, ["Summary."])
@@ -493,7 +482,7 @@ class CatchupPinTests(unittest.IsolatedAsyncioTestCase):
                 return "ok"
 
         bot.models = SavingModels()
-        channel = FakeChannel(100, [recent(1, "hello", uid=5)])
+        channel = FakeTextChannel(100, [recent(1, "hello", uid=5)])
         await invoke(bot, "catchup", granted(FakeInteraction(channel=channel)))
         self.assertEqual(seen, ["m1", "m1"])
         self.assertEqual(bot.backend.current().profile("memory").model, "m2")

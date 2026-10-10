@@ -9,14 +9,14 @@ from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from helpers import FakeChannel, FakeInteraction, FakeWebhook, core_settings, drain_memory_tasks, invoke
+from helpers import FakeChannel, FakeInteraction, FakeTextChannel, FakeWebhook, core_settings, drain_memory_tasks, invoke
 from llmcord_core.config import ModelProfile
 from llmcord_core.discord_bot import SkitBot
 from llmcord_core.engine import SceneContext
 from llmcord_core.models import ImageInput, ModelGateway, TurnMessage
 from llmcord_core import budget
 from llmcord_core.usage import capture_usage, log_attribution
-from test_catchup import ME, FakeChannel as HistoryChannel, granted, recent
+from test_catchup import ME, granted, recent
 
 KEY = 'sk-test-abcdefghijklmnop'
 FACT = 'secretly afraid of herons'
@@ -155,7 +155,7 @@ class RecordingTurnTests(TurnLogBase):
         self.store.add_personal(1, ME, self.alice, FACT, 1)
         self.create.side_effect = None
         self.create.return_value = completion('You missed a duel.')
-        it = granted(FakeInteraction(channel=HistoryChannel(100, [recent(1, 'hello', uid=5)]), user_id=ME))
+        it = granted(FakeInteraction(channel=FakeTextChannel(100, [recent(1, 'hello', uid=5)]), user_id=ME))
         it.id = 777
         await invoke(self.bot, 'catchup', it)
         self.assertEqual(it.replies, ['You missed a duel.'])
@@ -176,7 +176,7 @@ class RecordingTurnTests(TurnLogBase):
             self.store.add_personal(1, ME, self.alice, fact, 1)
         self.create.side_effect = None
         self.create.return_value = completion('ok')
-        it = granted(FakeInteraction(channel=HistoryChannel(100, [recent(1, 'hello', uid=5)]), user_id=ME))
+        it = granted(FakeInteraction(channel=FakeTextChannel(100, [recent(1, 'hello', uid=5)]), user_id=ME))
         await invoke(self.bot, 'catchup', it)
         sent = json.dumps(self.create.call_args.kwargs['messages'])
         self.assertIn('likes tea with lemon', sent)
@@ -191,7 +191,7 @@ class RecordingTurnTests(TurnLogBase):
         self.store.record_node(1, 1, 100, None, ME, None, 'earlier')
         self.store.add_personal(1, ME, self.alice, FACT, 1)
         self.create.side_effect = RuntimeError(f'provider echoed {FACT}')
-        it = granted(FakeInteraction(channel=HistoryChannel(100, [recent(1, 'hello', uid=5)]), user_id=ME))
+        it = granted(FakeInteraction(channel=FakeTextChannel(100, [recent(1, 'hello', uid=5)]), user_id=ME))
         await invoke(self.bot, 'catchup', it)
         rows = self.rows()
         self.assertEqual(len(rows), 2)
@@ -262,7 +262,7 @@ class RecordingTurnTests(TurnLogBase):
         """FEAT-06: a failed /catchup logs an error entry with the ref shown to the member."""
         self.store.set_turn_log(1, True, 14)
         self.create.side_effect = RuntimeError('nope')
-        it = granted(FakeInteraction(channel=HistoryChannel(100, [recent(1, 'hello', uid=5)]), user_id=ME))
+        it = granted(FakeInteraction(channel=FakeTextChannel(100, [recent(1, 'hello', uid=5)]), user_id=ME))
         it.id = 5
         await invoke(self.bot, 'catchup', it)
         ref = it.replies[0].split('ref ')[1].rstrip(')')

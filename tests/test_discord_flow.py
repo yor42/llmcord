@@ -1,19 +1,14 @@
 import unittest
 import asyncio
-from pathlib import Path
 
-from llmcord_core.config import ModelProfile, Settings
 from llmcord_core.discord_bot import SkitBot, split_discord
 from llmcord_core.engine import SceneContext
-from helpers import FakeChannel, FakeMessage, FakeWebhook, FlowFakeModels, drain_memory_tasks
+from helpers import FakeChannel, make_settings, FakeMessage, FakeWebhook, FlowFakeModels, drain_memory_tasks
 
 
 class DiscordFlowTests(unittest.IsolatedAsyncioTestCase):
     async def test_turn_keeps_preset_snapshot_and_emotion_across_chunks(self):
-        profile = ModelProfile('compatible', 'test', 16000, False, base_url='http://localhost/v1')
-        settings = Settings('token', None, ':memory:', 90, {'test': profile}, 'test', 'test', 'test',
-            {'max_input_tokens': 12000, 'max_output_tokens': 3000, 'max_images': 3, 'max_attachment_bytes': 8388608,
-             'max_speakers': 3, 'recent_messages': 12, 'recent_window_seconds': 600, 'ambient_cooldown_seconds': 120})
+        settings = make_settings(max_output_tokens=3000)
         bot = SkitBot(settings)
         world = bot.store.create_space(1, 'W', 'world')
         bot.store.bind_channel(1, 100, world)
@@ -57,14 +52,7 @@ class DiscordFlowTests(unittest.IsolatedAsyncioTestCase):
             bot.store.close()
 
     async def test_sequential_webhook_lines_and_parent_recovery(self):
-        profile = ModelProfile("compatible", "test", 16000, False,
-            base_url="http://localhost/v1")
-        settings = Settings("token", None, Path(":memory:"), 90,
-            {"test": profile}, "test", "test", "test",
-            {"max_input_tokens": 12000, "max_output_tokens": 700,
-             "max_images": 3, "max_attachment_bytes": 8388608,
-             "max_speakers": 3, "recent_messages": 12,
-             "recent_window_seconds": 600, "ambient_cooldown_seconds": 120})
+        settings = make_settings()
         bot = SkitBot(settings)
         world = bot.store.create_space(1, "World", "world")
         bot.store.bind_channel(1, 100, world)
@@ -105,9 +93,7 @@ class DiscordFlowTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(" ".join(chunks).split(), ("word " * 800).split())
 
     async def test_failure_reports_stage_and_preserves_original_cleanup_error(self):
-        profile = ModelProfile('compatible', 'test', 16000, False, base_url='http://localhost/v1')
-        settings = Settings('token', None, ':memory:', 90, {'test': profile}, 'test', 'test', 'test',
-            {'max_input_tokens': 12000, 'max_output_tokens': 700, 'max_speakers': 3})
+        settings = make_settings()
         bot = SkitBot(settings)
         world = bot.store.create_space(1, 'World', 'world')
         bot.store.bind_channel(1, 100, world)
@@ -144,9 +130,7 @@ class DiscordFlowTests(unittest.IsolatedAsyncioTestCase):
             bot.store.close()
 
     async def test_status_appears_before_slow_director_and_clears_for_no_cast(self):
-        profile = ModelProfile('compatible', 'test', 16000, False, base_url='http://localhost/v1')
-        settings = Settings('token', None, ':memory:', 90, {'test': profile}, 'test', 'test', 'test',
-                            {'max_input_tokens': 12000, 'max_output_tokens': 700, 'max_speakers': 3})
+        settings = make_settings()
         bot = SkitBot(settings)
         world = bot.store.create_space(1, 'World', 'world')
         channel = FakeChannel(100)
@@ -173,9 +157,7 @@ class DiscordFlowTests(unittest.IsolatedAsyncioTestCase):
             bot.store.close()
 
     async def test_silent_ambient_turn_does_not_post_status(self):
-        profile = ModelProfile('compatible', 'test', 16000, False, base_url='http://localhost/v1')
-        settings = Settings('token', None, ':memory:', 90, {'test': profile}, 'test', 'test', 'test',
-                            {'max_input_tokens': 12000, 'max_output_tokens': 700, 'max_speakers': 3})
+        settings = make_settings()
         bot = SkitBot(settings)
         world = bot.store.create_space(1, 'World', 'world')
         channel = FakeChannel(100)
@@ -188,9 +170,7 @@ class DiscordFlowTests(unittest.IsolatedAsyncioTestCase):
     async def test_ambient_turn_with_speaker_posts_status_after_director_and_marks_response(self):
         """Characterization (ARCH-01): an ambient turn that has a speaker posts the "Generating a reply…" status
         only after the director returned, clears it at the end, and records the ambient response."""
-        profile = ModelProfile('compatible', 'test', 16000, False, base_url='http://localhost/v1')
-        settings = Settings('token', None, ':memory:', 90, {'test': profile}, 'test', 'test', 'test',
-                            {'max_input_tokens': 12000, 'max_output_tokens': 700, 'max_speakers': 3})
+        settings = make_settings()
         bot = SkitBot(settings)
         world = bot.store.create_space(1, 'World', 'world')
         bot.store.bind_channel(1, 100, world)

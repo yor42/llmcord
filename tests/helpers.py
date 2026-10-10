@@ -34,10 +34,16 @@ def make_settings(model: str = "test", **limits) -> Settings:
 
 
 class CompiledAdapter:
-    """Adapts compiled requests to the fakes' (system, messages) signature. Splits system messages out like the Anthropic path; production passes them inline for other providers (models.compiled_input)."""
+    """Adapts compiled requests to the fakes' (system, messages) signature, mirroring ModelGateway.compiled_input.
 
-    @staticmethod
-    def _split(request):
+    ``provider = 'anthropic'`` (default) splits system messages into the system string; any other value
+    ('openai', 'compatible') mirrors that path: empty system, messages passed through inline."""
+
+    provider = 'anthropic'
+
+    def _split(self, request):
+        if self.provider != 'anthropic':
+            return '', request.messages
         return '\n\n'.join(m.text for m in request.messages if m.role == 'system'), [m for m in request.messages if m.role != 'system']
 
     async def text_compiled(self, role, request, max_tokens=None):
@@ -387,10 +393,12 @@ class FakeTextChannel(discord.TextChannel):
     ``doom(hook)`` models a webhook deleted on Discord right before the bot's next touch: the next
     ``webhooks()`` listing still includes it (then it dies), and any ``send``/``edit`` on it raises ``NotFound``.
     ``create_error`` is raised by ``create_webhook``; ``dead_on_create`` makes new hooks already deleted.
-    ``fetch_message`` raises ``NotFound`` for ids in ``missing`` and counts calls in ``fetches``."""
+    ``fetch_message`` raises ``NotFound`` for ids in ``missing`` and counts calls in ``fetches``.
+    ``history(**kwargs)`` yields ``messages`` (or raises ``error`` when called) and records kwargs in ``history_calls``."""
 
-    def __init__(self, ident=100):  # deliberately skips discord.TextChannel.__init__
+    def __init__(self, ident=100, messages=(), error=None):  # deliberately skips discord.TextChannel.__init__
         self.id = ident
+        self.messages, self.error, self.history_calls = list(messages), error, []
         self.hooks, self.doomed, self.sent, self.missing = [], set(), [], set()
         self.listings = self.creates = self.fetches = 0
         self.create_error, self.dead_on_create = None, False
@@ -436,10 +444,16 @@ class FakeTextChannel(discord.TextChannel):
         self.sent.append(message)
         return message
 
-    async def history(self, **kwargs):
-        """Empty channel history (``/summon`` scans it for recent context)."""
-        return
-        yield
+    def history(self, **kwargs):
+        """Channel history (``/summon`` scans it for recent context); empty unless ``messages`` is given."""
+        self.history_calls.append(kwargs)
+        if self.error:
+            raise self.error
+        return self._replay()
+
+    async def _replay(self):
+        for message in self.messages:
+            yield message
 
     async def fetch_message(self, ident):
         self.fetches += 1

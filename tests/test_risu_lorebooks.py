@@ -6,7 +6,7 @@ from pathlib import Path
 from llmcord_core.lorebooks import digest, export_entry, parse_lorebook, validate_rule
 from llmcord_core.store import Store
 from llmcord_core.world_info import evaluate
-from llmcord_core.config import ModelProfile, Settings
+from helpers import make_settings
 from llmcord_core.engine import Engine, SceneContext
 
 
@@ -132,9 +132,7 @@ class RisuLorebookTests(unittest.TestCase):
                 {'key': 'moon', 'content': 'LOW_PRIORITY_LORE', 'insertorder': 0},
             ]))
             store.sync_lorebook(1, ident, incoming, {}, 0)
-            profile = ModelProfile('compatible', 'test', 16000, False, base_url='http://localhost/v1')
-            settings = Settings('token', None, ':memory:', 90, {'test': profile}, 'test', 'test', 'test',
-                                {'max_input_tokens': 12000, 'max_output_tokens': 700})
+            settings = make_settings()
             scene = SceneContext(1, 100, None, world, 9, 1000, 'moon', None, [], [])
             request, _ = asyncio.run(Engine(store, None, settings).prepare_dialogue(scene, store.character_by_id(character), []))
             context = '\n'.join(message.text for message in request.messages)

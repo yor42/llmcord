@@ -6,6 +6,7 @@ from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace as NS
 
+from helpers import FakeTextChannel
 from llmcord_core import auth
 from llmcord_core.auth import ADMINISTRATOR, is_server_admin
 from llmcord_core.discord_bot import recent_human_lines
@@ -40,16 +41,6 @@ class ServerAdminTests(unittest.TestCase):
         self.assertEqual(result.stdout.strip(), 'False False', result.stderr)
 
 
-class FakeChannel:
-    def __init__(self, messages):
-        self.messages, self.calls = messages, []
-
-    async def history(self, **kwargs):
-        self.calls.append(kwargs)
-        for m in self.messages:
-            yield m
-
-
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
@@ -62,7 +53,7 @@ class RecentHistoryTests(unittest.IsolatedAsyncioTestCase):
     limits = {'recent_messages': 3}
 
     async def run_h(self, messages, floor=0.0, before=None):
-        channel = FakeChannel(messages)
+        channel = FakeTextChannel(messages=messages)
         cutoff = NOW - timedelta(seconds=100)
         return await recent_human_lines(channel, self.limits, cutoff, floor, before=before), channel
 
@@ -71,7 +62,7 @@ class RecentHistoryTests(unittest.IsolatedAsyncioTestCase):
         out, channel = await self.run_h([msg(1, 1), msg(2, 2, bot=True), msg(3, 3, webhook=9), msg(4, 4, ''),
                                          msg(5, 5), msg(6, 6), msg(7, 7)])
         self.assertEqual([m['message_id'] for m in out], [6, 5, 1])
-        self.assertEqual(channel.calls, [{'limit': 15}])
+        self.assertEqual(channel.history_calls, [{'limit': 15}])
 
     async def test_stops_at_cutoff_and_floor(self):
         """ARCH-03: stop at the first message older than cutoff or before the floor."""
@@ -85,7 +76,7 @@ class RecentHistoryTests(unittest.IsolatedAsyncioTestCase):
         """ARCH-03: before is forwarded only when given."""
         anchor = object()
         _, channel = await self.run_h([], before=anchor)
-        self.assertEqual(channel.calls, [{'limit': 15, 'before': anchor}])
+        self.assertEqual(channel.history_calls, [{'limit': 15, 'before': anchor}])
 
 
 if __name__ == '__main__':
