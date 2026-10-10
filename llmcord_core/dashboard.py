@@ -1503,11 +1503,25 @@ def worlds_hubs_section(ctx):
         for space in ctx.snapshot.spaces:
             with ui.expansion(f"{space['name']} · {space['kind']}").classes('space-card w-full rounded-lg'):
                 guideline_editor(ctx, 'space', space['id'], 'World guidelines' if space['kind'] == 'world' else 'Hub guidelines')
+                if space['kind'] == 'hub':
+                    hub_tone_editor(ctx, space)
                 lucide_button('Delete ' + space['kind'], 'trash-2', color='negative', on_click=lambda space=space: delete_space_dialog(ctx, space))
         with ui.element('div').classes('ll-form-row ll-field-row'):
             name = ui.input('Name')
             kind = ui.select(['world', 'hub'], value='world', label='Kind')
             ctx.button('Create', lambda: store.create_space(gid, name.value or '', kind.value), 'space.create', then=lambda _: ctx.refresh())
+
+
+HUB_TONES = {'in_character': 'In character', 'off_duty': 'Off duty'}
+
+
+def hub_tone_editor(ctx, space):
+    from nicegui import ui
+    store, gid, ident, saved = ctx.store, ctx.guild_id, space['id'], space['hub_tone']
+    tone = ui.select(HUB_TONES, value=saved, label='Tone').classes('w-full')
+    ui.label("Off duty: characters keep their personality but chat casually and don't push their world's plot. World channels are always in character.").classes('ll-muted')
+    ctx.button('Save hub tone', lambda: store.set_hub_tone(gid, ident, tone.value, saved), 'space.hub_tone',
+               lambda result: {'id': ident, 'tone': result}, then=lambda _: ctx.refresh())
 
 
 def hub_links_section(ctx):

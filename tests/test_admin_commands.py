@@ -19,7 +19,7 @@ ADMIN_BIT = str(discord.Permissions(administrator=True).value)  # "8"
 
 # D11: admin subgroup -> subcommands.
 ADMIN_SURFACE = {
-    "space": {"create", "bind", "link_world", "unlink_world"},
+    "space": {"create", "bind", "link_world", "unlink_world", "tone"},
     "character": {"import"},
     "cast": {"default"},
     "ambient": {"on", "off"},
@@ -56,6 +56,7 @@ ADMIN_OPTIONS = {
     "admin space bind": ["channel", "space"],
     "admin space link_world": ["hub", "world"],
     "admin space unlink_world": ["hub", "world"],
+    "admin space tone": ["hub", "tone"],
     "admin character import": ["world", "attachment"],
     "admin cast default": ["characters"],
     "admin ambient on": [],
@@ -101,8 +102,8 @@ class AdminSurfaceTests(unittest.TestCase):
         self.bot.store.close()
 
     def test_surface_table_matches_d11(self):
-        """Guard for the tests below: the expected tables have the 20 admin and 27 member (plus the admin-only /context) commands D11 lists."""
-        self.assertEqual(len(ADMIN_PATHS), 20)
+        """Guard for the tests below: the expected tables have the 21 admin and 27 member (plus the admin-only /context) commands D11 lists."""
+        self.assertEqual(len(ADMIN_PATHS), 21)
         self.assertEqual(len(MEMBER_PATHS), 27)
         self.assertEqual(set(ADMIN_OPTIONS), ADMIN_PATHS)
 

@@ -938,6 +938,42 @@ class DashboardBrowserTests(unittest.TestCase):
             self.post_hook('/_test/cast-limits', {'max_cast': 5, 'max_favorites': 5})
             context.close()
 
+    def test_hub_tone_saves_persists_conflicts_and_guild_isolation(self):
+        """FEAT-24: a hub card's Tone select saves with an audit row and persists after reload, a hub changed elsewhere gives the stale message, world cards have no Tone, and guild 2's hubs are untouched."""
+        from playwright.sync_api import expect
+        hub = self.context.request.post(self.url + '/_test/hub', data={'name': 'Tone lobby'}).json()['id']
+        foreign = self.context.request.post(self.url + '/_test/hub', data={'guild': 2, 'name': 'Tone lobby'}).json()['id']
+        tone = lambda: next(r['hub_tone'] for r in self.state()['spaces'] if r['id'] == hub)
+        context, page, errors = self.ux_page('/admin/guild/1')
+        try:
+            page.get_by_role('tab', name='Server setup', exact=True).click()
+            worlds = _worlds_section(page)
+            worlds.get_by_text('Tone lobby · hub', exact=True).click()
+            worlds.get_by_label('Tone', exact=True).click()
+            page.get_by_role('option', name='Off duty', exact=True).click()
+            page.get_by_text("Off duty: characters keep their personality but chat casually and don't push their world's plot. World channels are always in character.").wait_for(timeout=5000)
+            worlds.get_by_role('button', name='Save hub tone', exact=True).click()
+            self.wait_for(lambda: tone() == 'off_duty')
+            rows = [r for r in self.state()['audit'] if r['action'] == 'space.hub_tone']
+            self.assertEqual([json.loads(r['detail_json']) for r in rows], [{'id': hub, 'tone': 'off_duty'}])
+            self.assertEqual([r['hub_tone'] for r in self.state()['guild2_spaces'] if r['id'] == foreign], ['in_character'])
+            page.reload()
+            page.get_by_role('tab', name='Server setup', exact=True).click()
+            worlds = _worlds_section(page)
+            worlds.get_by_text('Tone lobby · hub', exact=True).click()
+            expect(worlds.get_by_label('Tone', exact=True)).to_have_value('Off duty')
+            worlds.get_by_label('Tone', exact=True).click()
+            page.get_by_role('option', name='In character', exact=True).click()
+            self.context.request.post(self.url + '/_test/hub', data={'id': hub, 'tone': 'in_character'})
+            worlds.get_by_role('button', name='Save hub tone', exact=True).click()
+            page.get_by_text('The hub tone was changed elsewhere. Reload the page and try again.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(tone(), 'in_character')
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            for guild, ident in ((1, hub), (2, foreign)):
+                self.context.request.post(self.url + '/_test/hub', data={'guild': guild, 'id': ident, 'delete': True})
+            context.close()
+
     def test_server_archived_favorites_switch_persists_conflicts_and_guild_isolation(self):
         """FEAT-26: 'Archived favorites can answer their members' saves through the save bar with an audit row, persists after reload, refuses a save over a change made elsewhere, never touches guild 2, and shows its note."""
         from playwright.sync_api import expect

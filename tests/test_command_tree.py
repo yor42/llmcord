@@ -224,6 +224,23 @@ EXPECTED_COMMANDS = {
         "None",
         False,
     ),
+    "admin space tone": (
+        "Set how characters behave in a hub",
+        (
+            ("hub", "string", True, "…", True, ()),
+            (
+                "tone",
+                "string",
+                True,
+                "…",
+                False,
+                (("In character", "in_character"), ("Off duty", "off_duty")),
+            ),
+        ),
+        1,
+        "None",
+        False,
+    ),
     "daily": ("Claim your daily check-in bonus", (), 0, "None", False),
     "blackjack": (
         "Join or open a blackjack table in this channel",

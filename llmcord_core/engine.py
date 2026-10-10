@@ -270,6 +270,9 @@ class Engine:
             encounters += self.store.encounters(scene.guild_id, character["id"], scene.space_id)
         encounters = [row for row in encounters if visible(row["source_message_id"])]
         location = f"You are in {'hub' if space['kind']=='hub' else 'world'} {space['name']}."
+        if space['kind'] == 'hub' and space['hub_tone'] == 'off_duty':
+            location += (" This hub is an off-duty lounge shared with characters from other worlds. Keep your personality and voice, "
+                         "but you are off duty here: chat casually, and don't push your world's plot, quests or conflicts.")
         def lore_text(items):
             return "\n".join(f"[{item.entry_key}] {item.content}" for item in items)
         eligible = self.eligible_with_archived(scene)

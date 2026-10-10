@@ -8,6 +8,7 @@ These are the words the Discord commands, the admin dashboard and these docs use
 | **World** | A setting that characters belong to. Every character has one home world. | | `space` with `kind='world'` |
 | **Hub** | A shared setting where characters from several linked worlds can meet. | | `space` with `kind='hub'` |
 | **Space** | A world or a hub, when either one fits (for example `/admin space bind`). Prefer "world or hub" in sentences. | | `space` |
+| **Hub tone** | A per-hub setting: **In character** (default) or **Off duty**. Off duty characters keep their personality but chat casually and do not push their world's plot. Set with `/admin space tone` or the dashboard. World channels are always in character. | "mood" | `spaces.hub_tone`, `set_hub_tone` |
 | **Link** | Let a world's characters appear in a hub (`/admin space link_world`, dashboard **Link**). **Unlink** removes them and drops them from that hub's channel casts. | "allow", "disallow" | `link_world`, `unlink_world`, `hub_worlds` |
 | **Bind** | Attach a Discord text channel to one world or hub. Scenes in that channel use its characters and lore. | | `bind_channel`, `channels` |
 | **Cast** | The characters who can speak in a channel. The **default cast** is set by admins; members change the **active cast** of a scene. | | `default_cast`, `active_cast` |

@@ -13,7 +13,7 @@ Older saved messages from before this feature retain their user IDs; historical 
 | Scope | What it controls |
 | --- | --- |
 | World | Home for characters and world lore. A world channel can use only characters from that world. |
-| Hub | A crossover setting. Administrators choose its allowed worlds; a hub guest keeps its own home-world lore and receives hub lore. |
+| Hub | The lobby: a crossover setting. Administrators choose its allowed worlds; a hub guest keeps its own home-world lore and receives hub lore. Each hub has a tone, **In character** (default) or **Off duty**: off duty characters keep their personality but chat casually and do not push their world's plot. World channels are always in character. |
 | Bound channel | Chooses one world or hub and adds channel lore, a default cast, an active cast, and an ambient setting. Multiple channels can share one world or hub. |
 | Thread | Inherits its parent channel's world or hub, channel lore, and ambient setting. It has its own cast and conversation history. |
 
@@ -42,6 +42,7 @@ Commands marked **Admin** live under `/admin` and require Discord server adminis
 | `/admin space create` | Admin | Create a named world or hub. |
 | `/space list` | Member | List the server's worlds and hubs. |
 | `/admin space bind` | Admin | Bind a text channel to a world or hub; rebinding keeps its ambient setting and drops cast members not available in the new world or hub. |
+| `/admin space tone` | Admin | Set a hub's tone to in character or off duty. `/space list` marks off duty hubs. |
 | `/admin space link_world`, `/admin space unlink_world` | Admin | Link a world to a hub so its characters can appear there, or unlink it; unlinking also drops that world's characters from the hub's channel casts. |
 | `/admin character import` | Admin | Import a V2/V3 JSON or PNG card into a home world. |
 | `/character list`, `/character info` | Member | List eligible characters or inspect one character's home world. |

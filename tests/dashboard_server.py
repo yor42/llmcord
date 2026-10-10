@@ -210,6 +210,21 @@ def main():
         store.set_cast_limits(1, data['max_cast'], data['max_favorites'])
         return {}
 
+    @app.post('/_test/hub')
+    async def hub(request: Request):
+        # FEAT-24: creates a hub (any guild), sets its tone, or deletes it; used to simulate changes made elsewhere.
+        data = await request.json()
+        guild = data.get('guild', 1)
+        if 'name' in data:
+            ident = store.create_space(guild, data['name'], 'hub')
+        else:
+            ident = data['id']
+        if data.get('delete'):
+            store.delete_space(guild, ident, store.space_delete_impact(guild, ident)['revision'])
+        elif 'tone' in data:
+            store.set_hub_tone(guild, ident, data['tone'])
+        return {'id': ident}
+
     @app.post('/_test/archived-favorites')
     async def archived_favorites(request: Request):
         store.set_archived_favorites(1, (await request.json())['enabled'])
@@ -275,7 +290,7 @@ def main():
             'books': [dict(r) for r in store.all('SELECT * FROM lorebook_entries')],
             'presets': [dict(r) for r in store.list_presets(1)], 'active': store.active_preset(1)['id'],
             'active_bundle': store.active_preset(1)['bundle'], 'assets': [dict(r) for r in store.all('SELECT * FROM avatar_assets')],
-            'cast_limits': {g: store.cast_limits(g) for g in (1, 2)}, 'archived_favorites': {g: store.archived_favorites(g) for g in (1, 2)}, 'daily': {g: store.daily_settings(g) for g in (1, 2)}, 'games': {g: {**store.game_settings(g), 'channels': sorted(store.game_channels(g))} for g in (1, 2)}, 'guild_timezone': store.guild_timezone(1), 'catchup_anywhere': store.catchup_anywhere(1), 'turn_log': store.turn_log_settings(1), 'audit': [dict(r) for r in store.all('SELECT * FROM admin_audit ORDER BY id')],
+            'guild2_spaces': [dict(r) for r in originals['list_spaces'](2)], 'cast_limits': {g: store.cast_limits(g) for g in (1, 2)}, 'archived_favorites': {g: store.archived_favorites(g) for g in (1, 2)}, 'daily': {g: store.daily_settings(g) for g in (1, 2)}, 'games': {g: {**store.game_settings(g), 'channels': sorted(store.game_channels(g))} for g in (1, 2)}, 'guild_timezone': store.guild_timezone(1), 'catchup_anywhere': store.catchup_anywhere(1), 'turn_log': store.turn_log_settings(1), 'audit': [dict(r) for r in store.all('SELECT * FROM admin_audit ORDER BY id')],
             'model_profiles': [dict(r) for r in store.model_profile_rows()], 'model_roles': dict(store.model_roles()),
             'slots': [{'character_id': r['character_id'], 'slot_key': r['slot_key'], 'label': r['label'], 'has_image': bool(r['image'])} for r in store.all('SELECT * FROM avatar_slots')]}
 

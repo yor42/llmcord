@@ -299,6 +299,21 @@ class Store(AdminStore):
     def list_spaces(self, guild_id: int) -> list[sqlite3.Row]:
         return self.all("SELECT * FROM spaces WHERE guild_id=? ORDER BY kind,name", (guild_id,))
 
+    def hub_tone(self, guild_id: int, space_id: int) -> str:
+        row = self.one("SELECT hub_tone FROM spaces WHERE id=? AND guild_id=? AND kind='hub'", (space_id, guild_id))
+        return row["hub_tone"] if row else "in_character"
+
+    def set_hub_tone(self, guild_id: int, space_id: int, tone: str, expected: str | None = None) -> str:
+        if tone not in {"in_character", "off_duty"}:
+            raise ValueError("The tone must be in character or off duty.")
+        with self.write_admin():
+            if not self.one("SELECT 1 FROM spaces WHERE id=? AND guild_id=? AND kind='hub'", (space_id, guild_id)):
+                raise ValueError("Only hubs have a tone. Choose a hub.")
+            if expected is not None and self.hub_tone(guild_id, space_id) != expected:
+                raise ConflictError("The hub tone was changed elsewhere. Reload the page and try again.")
+            self.db.execute("UPDATE spaces SET hub_tone=? WHERE id=? AND guild_id=?", (tone, space_id, guild_id))
+        return tone
+
     def link_world(self, guild_id: int, hub_id: int, world_id: int) -> None:
         hub, world = self.space_by_id(hub_id), self.space_by_id(world_id)
         if not hub or not world or hub["guild_id"] != guild_id or world["guild_id"] != guild_id or hub["kind"] != "hub" or world["kind"] != "world":

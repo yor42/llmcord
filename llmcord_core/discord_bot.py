@@ -787,7 +787,7 @@ def _register_space_commands(bot: SkitBot, ctx: SimpleNamespace, admin_space: ap
     async def space_list(interaction: discord.Interaction):
         require_guild(interaction)
         rows = bot.store.list_spaces(interaction.guild_id)
-        text = "\n".join(f"#{row['id']} {row['kind']}: {row['name']}" for row in rows) or "No worlds or hubs yet."
+        text = "\n".join(f"#{row['id']} {row['kind']}: {row['name']}{' (off duty)' if row['kind'] == 'hub' and row['hub_tone'] == 'off_duty' else ''}" for row in rows) or "No worlds or hubs yet."
         await interaction.response.send_message(text[:1900], ephemeral=True)
 
     @admin_space.command(name="bind", description="Bind a text channel to a world or hub")
@@ -829,6 +829,16 @@ def _register_space_commands(bot: SkitBot, ctx: SimpleNamespace, admin_space: ap
         entries = "cast entry" if pruned == 1 else "cast entries"
         await interaction.response.send_message(
             f"{world_row['name']} is no longer linked to {hub_row['name']}; removed {pruned} {entries}.", ephemeral=True)
+
+    @admin_space.command(name="tone", description="Set how characters behave in a hub")
+    @app_commands.checks.has_permissions(administrator=True)
+    @app_commands.autocomplete(hub=space_choices("hub"))
+    @app_commands.choices(tone=[app_commands.Choice(name="In character", value="in_character"), app_commands.Choice(name="Off duty", value="off_duty")])
+    async def space_tone(interaction: discord.Interaction, hub: str, tone: str):
+        require_guild(interaction)
+        hub_row = guild_space(interaction, hub, "hub")
+        bot.store.set_hub_tone(interaction.guild_id, hub_row["id"], tone)
+        await interaction.response.send_message(f"Hub {hub_row['name']} tone: {tone.replace('_', ' ')}.", ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
     bot.tree.add_command(space)
 
