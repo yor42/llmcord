@@ -70,7 +70,7 @@ class TalkModels(CompiledAdapter):
     def record(self, kind, request, role):
         text = "\n".join(m.text for m in request.messages)
         entry = {"kind": kind, "role": role, "text": text, "feature": log_attribution()["feature"], "speaker": self.speaker,
-                 "table_locked": any(lock.locked() for lock in self.case.doubt.locks.values()), "request": request}
+                 "table_locked": any(lock.locked() for lock in self.case.doubt.runtime.locks.values()), "request": request}
         self.calls.append(entry)
         return entry
 

@@ -10,11 +10,14 @@ import weakref
 
 
 class TableRuntime:
-    def __init__(self, *, label: str, sleep=asyncio.sleep, retry_seconds: float = 5.0):
+    def __init__(self, *, label: str, sleep=None, retry_seconds: float = 5.0):
         self.label, self.sleep, self.retry_seconds = label, sleep, retry_seconds
         self.closed = False
         self.timers: dict[tuple, asyncio.Task] = {}
         self.locks: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
+
+    async def _sleep(self, seconds) -> None:
+        await (self.sleep or asyncio.sleep)(seconds)  # resolved per call, so patching asyncio.sleep still reaches timers
 
     def lock(self, key) -> asyncio.Lock:
         lock = self.locks.get(key)
@@ -39,7 +42,7 @@ class TableRuntime:
         return not self.closed and self.timers.get((key, kind)) is asyncio.current_task()
 
     async def _timer(self, key, kind, delay, hook, args) -> None:
-        await self.sleep(delay)
+        await self._sleep(delay)
         for attempt in (1, 2):  # one retry, so held bets do not wait for a restart after a transient failure
             try:
                 await hook(*args)
@@ -51,7 +54,7 @@ class TableRuntime:
                 if attempt == 1:
                     if not self.current(key, kind):  # replaced, disarmed or closed: the retry would be untracked
                         return
-                    await self.sleep(self.retry_seconds)  # still the table's timer, so disarm and close() cancel it
+                    await self._sleep(self.retry_seconds)  # still the table's timer, so disarm and close() cancel it
                     if not self.current(key, kind):
                         return
 

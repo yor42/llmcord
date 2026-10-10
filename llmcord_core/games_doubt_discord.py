@@ -13,7 +13,6 @@ import asyncio
 import logging
 import re
 import time
-import weakref
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 
@@ -24,6 +23,7 @@ from . import game_chooser
 from .admin_store import ConflictError, GameError
 from .games import blackjack, doubt
 from .games_discord import MAX_BET, NO_CHARACTER_SEATS, NO_MENTIONS, NOT_SEATED, NOT_YOUR_TURN, OFF_HERE, STALE, GameTables, _sign
+from .table_runtime import TableRuntime
 
 PREFIX = "llmcord:doubt"
 DOUBT_OFF = "I Doubt It is off on this server."
@@ -149,8 +149,7 @@ class DoubtTables:
 
     def __init__(self, bot, clock=time.time):
         self.bot, self.clock = bot, clock
-        self.locks: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
-        self.timers: dict[tuple[int, int, str], asyncio.Task] = {}
+        self.runtime = TableRuntime(label="I Doubt It", retry_seconds=self.RETRY_SECONDS)
         self.tables: dict[tuple[int, int], _Table] = {}
         self.threads: dict[int, tuple[int, int]] = {}  # thread id -> (guild, table) of the tables being played
         self.banter: dict[int, tuple[int, int]] = {}  # thread id -> (guild, table) of finished games, until the archive timer
@@ -158,7 +157,6 @@ class DoubtTables:
         self.event_tasks: set[asyncio.Task] = set()
         self.dirty: set[tuple[int, int]] = set()
         self.board_tasks: dict[tuple[int, int], asyncio.Task] = {}
-        self.closed = False
         self.sweeper: asyncio.Task | None = None
         self.ended: set[tuple[int, int]] = set()  # tables this object closed itself (settled, timed out, left): the sweeper leaves them alone
         self.talk_failed: dict[tuple[int, object], int] = {}  # model attempts without a usage row, per (guild, server day)
@@ -167,11 +165,9 @@ class DoubtTables:
     def store(self):
         return self.bot.store
 
-    def lock(self, key) -> asyncio.Lock:
-        lock = self.locks.get(key)
-        if lock is None:
-            lock = self.locks[key] = asyncio.Lock()
-        return lock
+    @property
+    def closed(self) -> bool:
+        return self.runtime.closed
 
     def table(self, key) -> _Table:
         table = self.tables.get(key)
@@ -184,53 +180,27 @@ class DoubtTables:
     def arm(self, key, kind: str, delay: float, *args) -> None:
         if self.closed:
             return
-        full = (*key, kind)
-        self.disarm(key, kind)
         hook = {"lobby": self.on_lobby_timer, "window": self.on_window_timer, "turn": self.on_turn_timer,
                 "character": self.on_character_timer, "archive": self.on_archive_timer}[kind]
-        task = self.timers[full] = asyncio.create_task(self._timer(full, delay, hook, args), name=f"doubt-{kind}-{key[1]}")
-        task.add_done_callback(lambda done: self.timers.get(full) is done and self.timers.pop(full, None))
+        self.runtime.arm(key, kind, delay, self._run, kind, hook, key, args, name=f"doubt-{kind}-{key[1]}")
 
-    def disarm(self, key, kind: str) -> None:
-        old = self.timers.pop((*key, kind), None)
-        if old is not None and old is not asyncio.current_task():
-            old.cancel()
-
-    def _current(self, full) -> bool:
-        return not self.closed and self.timers.get(full) is asyncio.current_task()
-
-    async def _timer(self, full, delay, hook, args) -> None:
-        await asyncio.sleep(delay)
-        for attempt in (1, 2):  # one retry, so money does not wait for a restart after a transient failure
-            try:
-                await hook(full[0], full[1], *args)
-                if full[2] != "archive":
-                    await self._reap(full[:2])  # the hook may have found the table closed from outside
-                return
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                logging.exception("I Doubt It %s timer failed (table %s, attempt %d)", full[2], full[1], attempt)
-                if attempt == 1:
-                    if not self._current(full):
-                        return
-                    await asyncio.sleep(self.RETRY_SECONDS)
-                    if not self._current(full):
-                        return
+    async def _run(self, kind, hook, key, args) -> None:
+        await hook(*key, *args)
+        if kind != "archive":
+            await self._reap(key)  # the hook may have found the table closed from outside
 
     async def close(self) -> None:
-        self.closed = True
-        tasks = [*self.timers.values(), *self.board_tasks.values(), *self.event_tasks, *([self.sweeper] if self.sweeper else [])]
-        self.timers.clear()
+        tasks = [*self.board_tasks.values(), *self.event_tasks, *([self.sweeper] if self.sweeper else [])]
         self.board_tasks.clear()
         for task in tasks:
             task.cancel()
+        await self.runtime.close()
         await asyncio.gather(*tasks, return_exceptions=True)
 
     def _release(self, key) -> None:
         """Stops the table's play timers and drops its thread. The archive timer is armed separately."""
         for kind in ("lobby", "window", "turn", "character"):
-            self.disarm(key, kind)
+            self.runtime.disarm(key, kind)
         self.threads = {thread: k for thread, k in self.threads.items() if k != key}
         self.event_at.pop(key, None)
         self.dirty.discard(key)
@@ -265,7 +235,7 @@ class DoubtTables:
                 logging.exception("I Doubt It table sweep failed")
 
     def _known(self) -> set:
-        return {*self.tables, *self.threads.values(), *(k[:2] for k in self.timers if k[2] != "archive")}
+        return {*self.tables, *self.threads.values(), *(k[0] for k in self.runtime.timers if k[1] != "archive")}
 
     async def sweep(self) -> None:
         """Cleans up tables closed in the store by someone else (dashboard switch, channel removal) while this object still holds them."""
@@ -277,12 +247,12 @@ class DoubtTables:
         if key in self.ended:
             self._release(key)  # idempotent: a thread registered while the table closed must not keep it known
             return
-        if key not in self.tables and key not in self.threads.values() and not any(k[:2] == key for k in self.timers):
+        if key not in self.tables and key not in self.threads.values() and not any(k[0] == key for k in self.runtime.timers):
             return
         row = self._row(key)
         if row is not None and row["game"] == "doubt" and row["status"] == "open":
             return
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             out = self._closed_out(key)
         await self._publish(key, out)
 
@@ -311,7 +281,7 @@ class DoubtTables:
         """Turns games off in a channel whose open table is this game's: the store step under the table lock, then the closing messages in order.
         Returns the id of the table the store closed (None if it had closed already)."""
         key = (guild_id, table_id)
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             closed = self.store.set_game_channel(guild_id, channel_id, False)["closed_table"]
             out = self._closed_out(key) if closed == table_id else None
         await self._publish(key, out)
@@ -324,10 +294,10 @@ class DoubtTables:
     def _after(self, key, snap) -> None:
         """Arms the timers the new state needs. Call under the table lock."""
         table, view = self.table(key), snap["view"]
-        self.disarm(key, "lobby")
+        self.runtime.disarm(key, "lobby")
         if snap["status"] != "playing" or not view:
             for kind in ("window", "turn", "character"):
-                self.disarm(key, kind)
+                self.runtime.disarm(key, kind)
             return
         rid, moves, seats = snap["round_id"], snap["moves"], snap["seats"]
         window, turn = view["window"], view["turn"]
@@ -336,7 +306,7 @@ class DoubtTables:
             self.arm(key, "window", self.WINDOW_SECONDS, rid, moves)
         else:
             table.deadlines.pop("window", None)
-            self.disarm(key, "window")
+            self.runtime.disarm(key, "window")
         can_play = turn is not None and not window  # a play is only waited for once the doubt window is closed
         if can_play and seats[turn]["kind"] == "member":
             delay = (snap["rules"] or {}).get("turn_timeout", 60)
@@ -344,12 +314,12 @@ class DoubtTables:
             self.arm(key, "turn", delay, rid, moves)
         else:
             table.deadlines.pop("turn", None)
-            self.disarm(key, "turn")
+            self.runtime.disarm(key, "turn")
         doubters = window and any(s["kind"] == "character" and view["active"][s["index"]] and s["index"] != window["claimer"] for s in seats)
         if (can_play and seats[turn]["kind"] == "character") or doubters:
             self.arm(key, "character", self.CHARACTER_SECONDS, rid, moves)
         else:
-            self.disarm(key, "character")
+            self.runtime.disarm(key, "character")
 
     # --- messages ---------------------------------------------------------------------------
 
@@ -703,7 +673,7 @@ class DoubtTables:
         board = await self._post(thread_id, out.start)
         turn = await self._post(thread_id, *out.turn) if board is not None else None
         if board is None or turn is None:
-            async with self.lock(key):
+            async with self.runtime.lock(key):
                 refunded = self._refunded(key)
                 if (current := self._row(key)) is not None and current["status"] == "open":
                     self.store.close_table(*key)
@@ -777,7 +747,7 @@ class DoubtTables:
         key, round_id = (guild_id, opened["table_id"]), opened["round_id"]
         self.table(key)
         self._ensure_sweeper()
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             try:
                 if favorites and space_id is not None:
                     result = self.store.join_with_favorites(guild_id, round_id, user.id, 0, space_id)
@@ -805,14 +775,14 @@ class DoubtTables:
                 message = await interaction.original_response()
                 self.store.set_table_message(*key, message.id)
             except Exception:
-                async with self.lock(key):
+                async with self.runtime.lock(key):
                     self.store.close_table(*key)
                     self._release(key)
                 self.tables.pop(key, None)
                 raise
             table.sent["lobby"] = max(table.sent.get("lobby", 0), out.seq)
         fresh = None
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             if table.issued > out.seq and (row := self._row(key))["status"] == "open":  # someone joined before the message existed
                 fresh = self._seal(key, _Out(lobby=self.render_lobby(key, self.store.latest_round(*key), row)))
         await self._publish(key, fresh)
@@ -824,7 +794,7 @@ class DoubtTables:
             await self._thread_failed(interaction, key, isinstance(error, discord.Forbidden))
             return
         ready = None
-        async with self.lock(key):  # Start waits for the thread
+        async with self.runtime.lock(key):  # Start waits for the thread
             row = self._row(key)
             if row["status"] == "open":
                 self.store.set_table_thread(*key, thread.id)
@@ -840,7 +810,7 @@ class DoubtTables:
             await self._say(interaction, note)
 
     async def _thread_failed(self, interaction, key, forbidden: bool) -> None:
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             refunded = self._refunded(key)
             row = self._row(key)
             if row is not None and row["status"] == "open":
@@ -878,7 +848,7 @@ class DoubtTables:
             await self._show_hand(interaction, key, round_id)
             return
         await self._ack(interaction)
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             out = self._press(interaction.user.id, key, action, round_id, moves)
         await self._publish(key, out)
         if out.say == STALE:
@@ -993,7 +963,7 @@ class DoubtTables:
         await self._show_hand(interaction, (guild_id, table["id"]), None)
 
     async def _show_hand(self, interaction, key, round_id) -> None:
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             text, picker = self._hand(key, round_id, interaction.user.id)
         kwargs = {"view": _Picker(*picker)} if picker else {}
         try:
@@ -1040,7 +1010,7 @@ class DoubtTables:
             await self.answer(interaction, STALE)
             return
         key = (guild_id, table_id)
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             out = self._picker_play(key, interaction.user.id, round_id, moves, counts)
         await self.answer(interaction, out.say, done=out.ok)  # answer first, so a slow edit cannot make it miss Discord's 3 seconds
         await self._publish(key, out)
@@ -1089,7 +1059,7 @@ class DoubtTables:
 
     async def on_lobby_timer(self, guild_id, table_id, round_id) -> None:
         key, out = (guild_id, table_id), None
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             row = self._row(key)
             if row is None or row["status"] != "open":
                 self._release(key)
@@ -1109,7 +1079,7 @@ class DoubtTables:
     async def on_window_timer(self, guild_id, table_id, round_id, moves) -> None:
         """The doubt window ran out: the claimer's claim stands."""
         key, out = (guild_id, table_id), None
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             snap = self._timer_snap(key, round_id, moves)
             if snap is None or snap["view"]["window"] is None:
                 return
@@ -1133,7 +1103,7 @@ class DoubtTables:
     async def on_turn_timer(self, guild_id, table_id, round_id, moves) -> None:
         """A member's turn ran out: the engine's timeout move; the second missed turn forfeits the seat."""
         key, out = (guild_id, table_id), None
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             snap = self._timer_snap(key, round_id, moves)
             if snap is None:
                 return
@@ -1193,7 +1163,7 @@ class DoubtTables:
 
     async def _apply_fresh(self, key, round_id, moves, tried):
         """Applies only if the table is still at the move count the decision was made for; else _STALE (dropped silently)."""
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             snap = self._timer_snap(key, round_id, moves)
             return _STALE if snap is None else self._apply_chain(key, snap, tried)
 
@@ -1206,7 +1176,7 @@ class DoubtTables:
         limit not reached, those decisions are model calls on the seat's own view, made outside the table lock and applied
         only if the table is still at the same move count; any failure falls back to the deterministic policy (no clock)."""
         key, out = (guild_id, table_id), None
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             snap = self._timer_snap(key, round_id, moves)
             if snap is None:
                 return

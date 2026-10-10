@@ -63,7 +63,7 @@ HTTP = []  # (kind, a table lock was held) for every fake Discord call
 
 
 def http(kind):
-    locks = list(DOUBT.locks.values()) + list(DOUBT.bot.games.runtime.locks.values()) if DOUBT is not None else []
+    locks = list(DOUBT.runtime.locks.values()) + list(DOUBT.bot.games.runtime.locks.values()) if DOUBT is not None else []
     HTTP.append((kind, any(lock.locked() for lock in locks)))
 
 
@@ -172,8 +172,9 @@ class DoubtCase(unittest.IsolatedAsyncioTestCase):
         s.set_game_character_talk(G, False)  # B1 tests pin the talk-off (policy only) behavior
         self.bot.models.structured_compiled = mock.AsyncMock(side_effect=RuntimeError("no model in B1 tests"))  # and nothing reaches a real gateway
         if self.doubt is not None:
-            for name in ("LOBBY_SECONDS", "WINDOW_SECONDS", "CHARACTER_SECONDS", "ARCHIVE_SECONDS", "BOARD_DEBOUNCE_SECONDS", "RETRY_SECONDS"):
+            for name in ("LOBBY_SECONDS", "WINDOW_SECONDS", "CHARACTER_SECONDS", "ARCHIVE_SECONDS", "BOARD_DEBOUNCE_SECONDS"):
                 setattr(self.doubt, name, 3600)
+            self.doubt.runtime.retry_seconds = 3600
             self.addAsyncCleanup(self.doubt.close)
         self.addAsyncCleanup(self.games.close)
 
@@ -318,7 +319,7 @@ class LobbyTests(DoubtCase):
         self.assertEqual((snap["game"], snap["status"], snap["rules"]["ante"]), ("doubt", "joining", ANTE))
         self.assertEqual(self.seats(snap), [("member", ALICE, None)])
         self.assertEqual(self.balance(ALICE), 100 - ANTE)
-        self.assertIn((G, snap["table_id"], "lobby"), self.doubt.timers)
+        self.assertIn(((G, snap["table_id"]), "lobby"), self.doubt.runtime.timers)
 
     async def test_a_public_table_thread_is_opened_on_the_lobby_message(self):
         await self.start()
@@ -455,7 +456,7 @@ class LobbyTests(DoubtCase):
         snap = self.snap()
         await self.doubt.on_lobby_timer(G, snap["table_id"], snap["round_id"])
         self.assertEqual(self.snap()["status"], "playing")
-        self.assertNotIn((G, snap["table_id"], "lobby"), self.doubt.timers)
+        self.assertNotIn(((G, snap["table_id"]), "lobby"), self.doubt.runtime.timers)
 
     async def test_stale_or_foreign_buttons_are_refused(self):
         await self.start()
@@ -496,13 +497,13 @@ class ComponentTests(DoubtCase):
 
     async def test_closing_the_bot_cancels_the_doubt_timers(self):
         await self.start()
-        task = self.doubt.timers[(G, self.table()["id"], "lobby")]
+        task = self.doubt.runtime.timers[((G, self.table()["id"]), "lobby")]
         with mock.patch.object(SkitBot.__mro__[1], "close", new=mock.AsyncMock()):
             self.bot.models.close = mock.AsyncMock()
             self.store.close = lambda: None
             await self.bot.close()
         self.assertTrue(task.cancelled())
-        self.assertEqual(self.doubt.timers, {})
+        self.assertEqual(self.doubt.runtime.timers, {})
 
 
 class StartAndBoardTests(DoubtCase):
@@ -529,8 +530,8 @@ class StartAndBoardTests(DoubtCase):
         self.assertIn("<t:", turn.content)  # the deadline
         self.assertEqual(labels(turn).count("My hand"), 1)
         self.assertTrue(item_of(button(turn, "Doubt")).disabled)  # no claim yet
-        self.assertNotIn((G, snap["table_id"], "lobby"), self.doubt.timers)
-        self.assertIn((G, snap["table_id"], "turn"), self.doubt.timers)
+        self.assertNotIn(((G, snap["table_id"]), "lobby"), self.doubt.runtime.timers)
+        self.assertIn(((G, snap["table_id"]), "turn"), self.doubt.runtime.timers)
 
     async def test_the_lobby_points_to_the_thread_once_play_starts(self):
         await self.playing()
@@ -567,7 +568,7 @@ class StartAndBoardTests(DoubtCase):
         self.assertIn(f"<@{ALICE}> claims two", turn.content)
         self.assertIn(f"<@{BOB}>", turn.content)  # next up
         self.assertFalse(item_of(button(turn, "Doubt")).disabled)  # a doubt window is open
-        self.assertIn((G, self.snap()["table_id"], "window"), self.doubt.timers)
+        self.assertIn(((G, self.snap()["table_id"]), "window"), self.doubt.runtime.timers)
 
 
 class HandTests(DoubtCase):
@@ -737,7 +738,7 @@ class DoubtWindowTests(DoubtCase):
         self.assertEqual(self.moves()[-1], (0, "close", "timeout"))
         self.assertIsNone(self.snap()["view"]["window"])
         self.assertTrue(item_of(button(self.turn(), "Doubt")).disabled)
-        self.assertIn((G, snap["table_id"], "turn"), self.doubt.timers)
+        self.assertIn(((G, snap["table_id"]), "turn"), self.doubt.runtime.timers)
         before = len(self.moves())
         await self.doubt.on_window_timer(G, snap["table_id"], snap["round_id"], snap["moves"])  # stale
         self.assertEqual(len(self.moves()), before)
@@ -799,7 +800,7 @@ class CharacterSeatTests(DoubtCase):
         self.assertEqual(self.seats()[1], ("character", self.ann, ALICE))
         await self.pick_play(ALICE, counts_of(self.hand(0)[:4]))  # four "aces" while Ann holds one herself
         snap = self.snap()
-        self.assertIn((G, snap["table_id"], "character"), self.doubt.timers)
+        self.assertIn(((G, snap["table_id"]), "character"), self.doubt.runtime.timers)
         await self.doubt.on_character_timer(G, snap["table_id"], snap["round_id"], snap["moves"])
         self.assertEqual(self.moves()[-1], (1, "doubt", "character"))
         self.assertTrue(any("Doubt" in text and "pile" in text for text in self.thread_texts()))
@@ -810,7 +811,7 @@ class CharacterSeatTests(DoubtCase):
         snap = self.snap()
         await self.doubt.on_window_timer(G, snap["table_id"], snap["round_id"], snap["moves"])
         snap = self.snap()
-        self.assertIn((G, snap["table_id"], "character"), self.doubt.timers)  # Ann is next
+        self.assertIn(((G, snap["table_id"]), "character"), self.doubt.runtime.timers)  # Ann is next
         held = counts_of(self.hand(1))
         await self.doubt.on_character_timer(G, snap["table_id"], snap["round_id"], snap["moves"])
         seat, move, actor = self.moves()[-1]
@@ -900,7 +901,7 @@ class SettlementTests(DoubtCase):
         self.assertIsNone(lobby.view)
         self.assertTrue(board.edits)
         self.assertIsNone(self.store.open_table_for(G, CH))
-        self.assertIn((G, tid, "archive"), self.doubt.timers)
+        self.assertIn(((G, tid), "archive"), self.doubt.runtime.timers)
         self.assertFalse(thread.archived)
         await self.doubt.on_archive_timer(G, tid)
         self.assertTrue(thread.archived and thread.locked)
@@ -1010,7 +1011,7 @@ class RecoveryTests(DoubtCase):
             self.assertIsNone(message.view)
         for placed in (thread, thread2):
             self.assertTrue(any("restarted" in text.lower() for text in self.thread_texts(placed)))
-        self.assertEqual(self.doubt.timers, {})
+        self.assertEqual(self.doubt.runtime.timers, {})
 
     async def test_recovery_still_refunds_when_nothing_can_be_reached(self):
         await self.two_tables()
@@ -1128,19 +1129,19 @@ class ReviewFixTests(DoubtCase):
         self.assertIn("turned off", lobby.content)
         self.assertIsNone(lobby.view)
         self.assertEqual([self.balance(u) for u in MEMBERS], [100, 100, 100])
-        self.assertEqual({k for k in self.doubt.timers if k[2] != "archive"}, set())
+        self.assertEqual({k for k in self.doubt.runtime.timers if k[1] != "archive"}, set())
 
     async def test_while_a_window_is_open_nothing_waits_for_a_play(self):
         await self.table_with_ann()
         await self.pick_play(ALICE, {"A": 1})  # Ann is next, Alice's window is open
         snap = self.snap()
-        kinds = {k[2] for k in self.doubt.timers}
+        kinds = {k[1] for k in self.doubt.runtime.timers}
         self.assertIn("window", kinds)
         self.assertIn("character", kinds)  # she may doubt
         await self.doubt.on_character_timer(G, snap["table_id"], snap["round_id"], snap["moves"])
         self.assertEqual(len(self.moves()), 1)  # but she does not play before the window closes
         await self.doubt.on_window_timer(G, snap["table_id"], snap["round_id"], snap["moves"])
-        self.assertIn((G, snap["table_id"], "character"), self.doubt.timers)
+        self.assertIn(((G, snap["table_id"]), "character"), self.doubt.runtime.timers)
 
     async def table_with_ann(self):
         await self.start(favorites=True)
@@ -1154,12 +1155,12 @@ class ReviewFixTests(DoubtCase):
         self.assertEqual(snap["rules"]["turn_timeout"], 15)
         await self.pick_play(ALICE, {"A": 1})
         snap = self.snap()
-        self.assertNotIn((G, snap["table_id"], "turn"), self.doubt.timers)
+        self.assertNotIn(((G, snap["table_id"]), "turn"), self.doubt.runtime.timers)
         self.assertNotIn("<t:", self.turn().content.split("Next:")[1].splitlines()[0])
         await self.doubt.on_turn_timer(G, snap["table_id"], snap["round_id"], snap["moves"])  # a straggler
         self.assertEqual(len(self.moves()), 1)
         await self.doubt.on_window_timer(G, snap["table_id"], snap["round_id"], snap["moves"])
-        self.assertIn((G, snap["table_id"], "turn"), self.doubt.timers)
+        self.assertIn(((G, snap["table_id"]), "turn"), self.doubt.runtime.timers)
         self.assertIn("<t:", self.turn().content.split("Next:")[1].splitlines()[0])
 
     async def test_decision_seeds_come_from_the_secret_seed_and_are_deterministic(self):
@@ -1265,18 +1266,18 @@ class OutsideCloseTests(DoubtCase):
             self.assertEqual(turn.content, "Table closed.")
             self.assertIsNone(turn.view)
         self.assertEqual(len([t for t in self.thread_texts(thread) if t.startswith("Table closed:")]), 1)
-        self.assertEqual({k for k in self.doubt.timers if k[2] != "archive"}, set())
-        self.assertIn((G, tid, "archive"), self.doubt.timers)
+        self.assertEqual({k for k in self.doubt.runtime.timers if k[1] != "archive"}, set())
+        self.assertIn(((G, tid), "archive"), self.doubt.runtime.timers)
 
     async def assert_forgotten(self, tid, thread):
         """After the archive timer the table is gone from memory and a later sweep says and archives nothing more."""
-        self.doubt.disarm((G, tid), "archive")
+        self.doubt.runtime.disarm((G, tid), "archive")
         await self.doubt.on_archive_timer(G, tid)
         self.assertNotIn((G, tid), self.doubt.tables)
         count, edits = len(thread.sent), len(thread.edit_calls)
         await self.doubt.sweep()
         self.assertEqual((len(thread.sent), len(thread.edit_calls)), (count, edits))
-        self.assertNotIn((G, tid, "archive"), self.doubt.timers)
+        self.assertNotIn(((G, tid), "archive"), self.doubt.runtime.timers)
 
     async def test_a_dashboard_switch_off_closes_a_table_in_play_through_the_sweeper(self):
         await self.playing()
@@ -1322,7 +1323,8 @@ class OutsideCloseTests(DoubtCase):
         tid, lobby, thread, turn = await self.grab()
         snap = self.snap()
         self.store.set_game_channels(G, {CH2})
-        await self.doubt._timer((G, tid, "turn"), 0, self.doubt.on_turn_timer, (snap["round_id"], snap["moves"]))
+        self.doubt.arm((G, tid), "turn", 0, snap["round_id"], snap["moves"])  # replaces the table's real turn timer with an immediate one
+        await self.doubt.runtime.timers[((G, tid), "turn")]
         self.assert_cleaned(tid, lobby, thread, turn, "games were turned off here.")
 
     async def test_a_game_that_ends_normally_is_not_repainted_by_the_sweeper(self):
@@ -1389,7 +1391,7 @@ class OutsideCloseTests(DoubtCase):
         await self.playing()
         tid, lobby, thread, turn = await self.grab()
         key, snap = (G, tid), self.snap()
-        async with self.doubt.lock(key):  # a pick, sealed but not yet delivered
+        async with self.doubt.runtime.lock(key):  # a pick, sealed but not yet delivered
             late = self.doubt._picker_play(key, ALICE, snap["round_id"], snap["moves"], self.any_card(0))
         self.assertTrue(late.ok)
         self.store.set_game_enabled(G, "doubt", False)
@@ -1472,11 +1474,11 @@ class OutsideCloseTests(DoubtCase):
 
     async def test_a_join_restarts_the_idle_lobby_clock(self):
         await self.start()
-        key = (G, self.table()["id"], "lobby")
-        first = self.doubt.timers[key]
+        key = ((G, self.table()["id"]), "lobby")
+        first = self.doubt.runtime.timers[key]
         self.doubt.clock = lambda: 5000.0
         await self.push(BOB, "Join", self.lobby())
-        self.assertIsNot(self.doubt.timers[key], first)
+        self.assertIsNot(self.doubt.runtime.timers[key], first)
         self.assertIn("<t:8600:R>", self.lobby().content)
 
     async def test_the_forbidden_reply_and_the_restart_note_mention_refunds_only_with_an_ante(self):

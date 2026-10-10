@@ -1,16 +1,18 @@
 """Characterization (MNT-50): timer, lock and close behavior shared by the Blackjack and I Doubt It adapters.
 
-Pins what ``GameTables`` and ``DoubtTables`` do today so a shared table runtime can replace their timer code without a
-behavior change. Tests drive ``arm``/``disarm``/``close``/``lock`` and the ``on_*_timer`` hooks. The migration surface,
-i.e. everything below that a refactor may have to touch, is confined to the two adapter wrappers and these helpers:
+Pins what ``GameTables`` and ``DoubtTables`` do through the shared ``TableRuntime``. Tests drive ``arm``/``disarm``/``close``/``lock``
+and the ``on_*_timer`` hooks. The migration surface, i.e. everything below that a refactor may have to touch, is confined to
+the two adapter wrappers and these helpers:
 
 - ``new_tasks()``: a snapshot of ``asyncio.all_tasks()`` taken in ``asyncSetUp``; "no live timer task" means no new
   pending task other than the test's own and ``tables.sweeper``. No task names are matched.
-- ``timer_present()``: reads ``tables.runtime.timers`` (key shape ``((guild, table), "table")`` for Blackjack, ``(guild, table, kind)``
+- ``timer_present()``: reads ``tables.runtime.timers`` (key shape ``((guild, table), "table")`` for Blackjack, ``((guild, table), kind)``
   for I Doubt It). The only other direct reads are ``tables.closed``, ``tables.sweeper`` and, for one Blackjack test,
   ``tables.table(key).deadline``.
+- ``set_retry``/``mark_closed``/``lock`` go through ``tables.runtime`` (``retry_seconds``, ``closed``, ``lock``); disarm goes
+  through ``tables.disarm(key)`` for Blackjack and ``tables.runtime.disarm(key, kind)`` for I Doubt It.
 - hooks (``on_*_timer``) and, for I Doubt It, ``_reap`` are replaced on the instance with scripted fakes.
-- ``RETRY_SECONDS``/``SWEEP_SECONDS`` and the per-kind ``*_SECONDS`` (Blackjack only) are set on the instance.
+- ``SWEEP_SECONDS`` and the per-kind ``*_SECONDS`` (Blackjack only) are set on the instance.
 """
 import asyncio
 import unittest
@@ -35,13 +37,13 @@ class _Adapter:
         tables.SWEEP_SECONDS = 3600
 
     def set_retry(self, seconds):
-        self.tables.RETRY_SECONDS = seconds
+        self.tables.runtime.retry_seconds = seconds
 
     def mark_closed(self):
-        self.tables.closed = True
+        self.tables.runtime.closed = True
 
     def lock(self, key):
-        return self.tables.lock(key)
+        return self.tables.runtime.lock(key)
 
     def hook(self, kind):
         async def hook(*_args):
@@ -70,15 +72,6 @@ class _Blackjack(_Adapter):
         super().__init__(tables, "turn", "join")
         for name, kind in (("on_join_timer", "join"), ("on_turn_timer", "turn"), ("on_character_timer", "character"), ("on_idle_timer", "idle")):
             setattr(tables, name, self.hook(kind))
-
-    def set_retry(self, seconds):
-        self.tables.runtime.retry_seconds = seconds
-
-    def mark_closed(self):
-        self.tables.runtime.closed = True
-
-    def lock(self, key):
-        return self.tables.runtime.lock(key)
 
     def arm(self, kind=None, delay=DELAY, key=None):
         kind = kind or self.kind
@@ -113,10 +106,10 @@ class _Doubt(_Adapter):
         self.tables.arm(key or self.key, kind or self.kind, delay)
 
     def disarm(self, kind=None, key=None):
-        self.tables.disarm(key or self.key, kind or self.kind)
+        self.tables.runtime.disarm(key or self.key, kind or self.kind)
 
     def timer_present(self, kind=None, key=None) -> bool:
-        return (*(key or self.key), kind or self.kind) in self.tables.timers
+        return ((key or self.key), kind or self.kind) in self.tables.runtime.timers
 
 
 async def settle(seconds=DELAY * 6):

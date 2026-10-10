@@ -6,10 +6,12 @@ tests are deterministic and instant.
 import asyncio
 import gc
 import unittest
+from unittest import mock
 
 from llmcord_core.table_runtime import TableRuntime
 
 KEY = (1, 7)
+REAL_SLEEP = asyncio.sleep  # captured before any test patches asyncio.sleep, for our own yielding
 
 
 class FakeSleep:
@@ -261,3 +263,23 @@ class TableRuntimeTests(unittest.IsolatedAsyncioTestCase):
         del lock
         gc.collect()
         self.assertNotIn(KEY, self.rt.locks)
+
+    async def test_default_sleep_is_late_bound_to_asyncio_sleep(self):
+        """MNT-50: without an injected sleep, the timer calls asyncio.sleep as looked up at call time, so patching it reaches both the delay and the retry sleep."""
+        seen: list[float] = []
+
+        async def fake_sleep(delay, result=None):
+            seen.append(delay)
+            await REAL_SLEEP(0)
+
+        runtime = TableRuntime(label="Test", retry_seconds=0.25)  # no sleep= injected
+        self.addAsyncCleanup(runtime.close)
+        self.failures = 1
+        with mock.patch("asyncio.sleep", fake_sleep), self.assertLogs(level="ERROR"):
+            runtime.arm(KEY, "turn", 42.0, self.hook)
+            for _ in range(1000):
+                if not runtime.timers:
+                    break
+                await REAL_SLEEP(0)
+        self.assertEqual(seen, [42.0, 0.25])
+        self.assertEqual(self.calls, ["hook", "hook"])

@@ -226,13 +226,13 @@ class ModelCase(base.DoubtCase):
         self.calls, self.lock_refs, self.answers = [], [], {"play": {}, "doubt": {"doubt": False}}
         self.in_flight = self.max_in_flight = 0
         self.record_usage = False
-        original = self.doubt.lock
+        original = self.doubt.runtime.lock
 
         def spy(key):
             lock = original(key)
             self.lock_refs.append(lock)  # a strong reference, so the weak lock registry cannot hide a held lock
             return lock
-        self.doubt.lock = spy
+        self.doubt.runtime.lock = spy
         self.bot.models.structured_compiled = self.model
 
     async def model(self, role, request, schema_name, schema):
@@ -525,7 +525,7 @@ class DoubtDecisionTests(ModelCase):
     async def claim_four_aces(self):
         await self.table3(quiet_seed())
         await self.pick_play(ALICE, counts_of(self.hand(0)[:4]))
-        self.assertIn((G, self.snap()["table_id"], "character"), self.doubt.timers)
+        self.assertIn(((G, self.snap()["table_id"]), "character"), self.doubt.runtime.timers)
 
     async def test_the_model_saying_doubt_makes_the_character_doubt(self):
         await self.claim_four_aces()
