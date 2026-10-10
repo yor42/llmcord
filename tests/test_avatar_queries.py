@@ -1,4 +1,4 @@
-"""PERF-03: avatar listings return no image BLOBs and read the slot table once (blobs are still read to hash them; a stored hash would need a schema change)."""
+"""PERF-03: avatar listings return no image BLOBs and read the slot table once (MNT-04: the sha256 is stored in avatar_slots.image_hash since schema v11)."""
 import hashlib
 import unittest
 from contextlib import contextmanager

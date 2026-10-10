@@ -83,7 +83,7 @@ class SchemaV4Tests(unittest.TestCase):
         """UX-08 (D2): a new database is created at the current schema version (5) with the column."""
         store = Store()
         try:
-            self.assertEqual(store.one("PRAGMA user_version")[0], 10)
+            self.assertEqual(store.one("PRAGMA user_version")[0], 11)
             self.assertIn("usage_footer", {row[1] for row in store.all("PRAGMA table_info(guild_settings)")})
         finally:
             store.close()
@@ -95,7 +95,7 @@ class SchemaV4Tests(unittest.TestCase):
             path = self.v3_file(folder)
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 10)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 11)
                 row = store.one("SELECT * FROM guild_settings WHERE guild_id=1")
                 self.assertEqual((row["preset_id"], row["preset_revision"], row["asset_channel_id"], row["usage_footer"]),
                                  (7, 3, 55, 1))
@@ -116,7 +116,7 @@ class SchemaV4Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "new.sqlite3"
             with closing(sqlite3.connect(path)) as connection, connection:
-                connection.execute("PRAGMA user_version=11")
+                connection.execute("PRAGMA user_version=12")
             with self.assertRaisesRegex(ValueError, "newer than this application"):
                 Store(path)
 

@@ -194,16 +194,16 @@ class Store(AdminStore):
 
     def _upgrade(self, path: str | Path, existing: bool) -> None:
         """The whole schema upgrade, backup included, in one write-locked transaction: a failure leaves the old file as it was,
-        and a second process opening the same file waits, then finds version 10 and does nothing. executescript commits, so scripts run per statement."""
+        and a second process opening the same file waits, then finds version 11 and does nothing. executescript commits, so scripts run per statement."""
         self.db.execute("BEGIN IMMEDIATE")
         try:
             old_version = self.db.execute("PRAGMA user_version").fetchone()[0]
-            if old_version > 10:
+            if old_version > 11:
                 raise ValueError('The database is newer than this application. Update the application.')
             node_columns = {row[1] for row in self.db.execute('PRAGMA table_info(nodes)')}
             needs_identities = bool(node_columns) and not {'author_label', 'mentions_json'} <= node_columns
-            if existing and (old_version < 10 or needs_identities):
-                upgrade = 'v3' if old_version < 3 else 'identities' if needs_identities else 'v4' if old_version == 3 else 'v5' if old_version == 4 else 'v6' if old_version == 5 else 'v7' if old_version == 6 else 'v8' if old_version == 7 else 'v9' if old_version == 8 else 'v10'
+            if existing and (old_version < 11 or needs_identities):
+                upgrade = 'v3' if old_version < 3 else 'identities' if needs_identities else 'v4' if old_version == 3 else 'v5' if old_version == 4 else 'v6' if old_version == 5 else 'v7' if old_version == 6 else 'v8' if old_version == 7 else 'v9' if old_version == 8 else 'v10' if old_version == 9 else 'v11'
                 backup = Path(str(path) + f".pre-{upgrade}-{time.time_ns()}.sqlite3")
                 # Connection.backup from the connection holding the write lock never finishes; a second reader sees the committed file (the lock excludes other writers).
                 with closing(sqlite3.connect(path, timeout=30)) as reader, closing(sqlite3.connect(backup)) as target:
@@ -227,11 +227,25 @@ class Store(AdminStore):
                         self.db.execute(f'ALTER TABLE thread_casts ADD COLUMN {name} INTEGER')
                 self._backfill_thread_cast_guilds()
             self.migrate_admin()
-            self.db.execute("PRAGMA user_version=10")
+            columns = {row[1] for row in self.db.execute('PRAGMA table_info(avatar_slots)')}
+            added = 'image_hash' not in columns
+            if added:
+                self.db.execute('ALTER TABLE avatar_slots ADD COLUMN image_hash TEXT')
+            if added or old_version < 11:
+                self._backfill_avatar_hashes()
+            self.db.execute("PRAGMA user_version=11")
             self.db.commit()
         except BaseException:
             self.db.rollback()
             raise
+
+    def _backfill_avatar_hashes(self) -> None:
+        """v11: image_hash = sha256 of each stored image, one row at a time so the BLOBs are never all in memory."""
+        keys = self.db.execute('SELECT character_id,slot_key FROM avatar_slots WHERE image IS NOT NULL').fetchall()
+        for character_id, slot_key in keys:
+            image = self.db.execute('SELECT image FROM avatar_slots WHERE character_id=? AND slot_key=?', (character_id, slot_key)).fetchone()[0]
+            self.db.execute('UPDATE avatar_slots SET image_hash=? WHERE character_id=? AND slot_key=?',
+                (AdminStore.image_digest(image), character_id, slot_key))
 
     def _backfill_thread_cast_guilds(self) -> None:
         """v10: guild_id = the one guild of the characters a cast references; NULL when none or ambiguous (parent stays NULL)."""

@@ -151,12 +151,12 @@ class StoreBehaviorUnchangedTests(unittest.TestCase):
             path = Path(tmp) / "sub" / "skit.sqlite3"
             store = Store(path)
             world = store.create_space(1, "World", "world")
-            self.assertEqual(store.one("PRAGMA user_version")[0], 10)
+            self.assertEqual(store.one("PRAGMA user_version")[0], 11)
             store.close()
             reopened = Store(path)
             try:
                 self.assertEqual(reopened.space_by_id(world)["name"], "World")
-                self.assertEqual(reopened.one("PRAGMA user_version")[0], 10)
+                self.assertEqual(reopened.one("PRAGMA user_version")[0], 11)
                 self.assertEqual(reopened.one("PRAGMA journal_mode")[0], "wal")
             finally:
                 reopened.close()

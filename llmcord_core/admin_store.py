@@ -99,7 +99,7 @@ CREATE INDEX IF NOT EXISTS turn_log_guild_time ON turn_log(guild_id, created_at)
 CREATE TABLE IF NOT EXISTS avatar_slots (
  character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
  slot_key TEXT NOT NULL, label TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
- image BLOB, revision INTEGER NOT NULL DEFAULT 0,
+ image BLOB, revision INTEGER NOT NULL DEFAULT 0, image_hash TEXT,
  PRIMARY KEY(character_id,slot_key)
 );
 CREATE TABLE IF NOT EXISTS avatar_assets (
@@ -1056,22 +1056,26 @@ class AdminStore:
 
     def avatar_slots(self, guild_id, character_id):
         self.validate_owner(guild_id, 'character', character_id)
-        stored = {r['slot_key']: self._slot_meta(dict(r), keep_image=False) for r in self.all('SELECT * FROM avatar_slots WHERE character_id=?', (character_id,))}
+        stored = {r['slot_key']: self._slot_meta(dict(r), keep_image=False) for r in self.all('SELECT character_id,slot_key,label,description,revision,image_hash FROM avatar_slots WHERE character_id=?', (character_id,))}
         stored.setdefault('neutral', self._slot_meta(self._neutral_slot(character_id), keep_image=False))
         return list(stored.values())
 
     @staticmethod
     def _neutral_slot(character_id):
-        return {'character_id': character_id, 'slot_key': 'neutral', 'label': 'Neutral', 'description': '', 'image': None, 'revision': 0}
+        return {'character_id': character_id, 'slot_key': 'neutral', 'label': 'Neutral', 'description': '', 'image': None, 'revision': 0, 'image_hash': None}
 
     @staticmethod
-    def _slot_meta(row, keep_image):
+    def image_digest(image):
         import hashlib
-        image = row['image']
-        digest = hashlib.sha256(image).hexdigest() if image else None
+        return hashlib.sha256(image).hexdigest() if image else None
+
+    @classmethod
+    def _slot_meta(cls, row, keep_image):
+        """Listings carry the stored image_hash and no image; a single slot also returns the blob."""
+        digest = row.get('image_hash') or cls.image_digest(row.get('image'))
         if not keep_image:
-            del row['image']
-        return {**row, 'has_image': bool(image), 'image_hash': digest, 'image_version': digest[:12] if digest else None}
+            row.pop('image', None)
+        return {**row, 'has_image': bool(digest), 'image_hash': digest, 'image_version': digest[:12] if digest else None}
 
     def save_static_avatar(self, guild_id, character_id, image, expected_revision):
         from .avatars import normalize_avatar
@@ -1111,15 +1115,15 @@ class AdminStore:
             if current and expected_revision is not None and current['revision'] != expected_revision:
                 raise ConflictError('This avatar changed in another tab. Reload the page and try again.')
             blob = image if image is not None else current['image'] if current else None
-            self.db.execute('INSERT INTO avatar_slots VALUES(?,?,?,?,?,1) ON CONFLICT(character_id,slot_key) DO UPDATE SET label=excluded.label,description=excluded.description,image=excluded.image,revision=revision+1',
-                (character_id, key, label.strip(), description, blob))
+            self.db.execute('INSERT INTO avatar_slots(character_id,slot_key,label,description,image,image_hash,revision) VALUES(?,?,?,?,?,?,1) ON CONFLICT(character_id,slot_key) DO UPDATE SET label=excluded.label,description=excluded.description,image=excluded.image,image_hash=excluded.image_hash,revision=revision+1',
+                (character_id, key, label.strip(), description, blob, self.image_digest(blob)))
             self.bump_owner(guild_id, 'character', character_id)
 
     def clear_avatar_image(self, guild_id, character_id, key, expected_revision):
         with self.write_admin():
             if self._slot_revision(guild_id, character_id, key) != expected_revision:
                 raise ConflictError('This avatar changed in another tab. Reload the page and try again.')
-            self.db.execute('UPDATE avatar_slots SET image=NULL,revision=revision+1 WHERE character_id=? AND slot_key=?', (character_id, key))
+            self.db.execute('UPDATE avatar_slots SET image=NULL,image_hash=NULL,revision=revision+1 WHERE character_id=? AND slot_key=?', (character_id, key))
             self.bump_owner(guild_id, 'character', character_id)
 
     def delete_avatar(self, guild_id, character_id, key, expected_revision):
