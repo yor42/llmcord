@@ -116,7 +116,7 @@ class LorebookTests(unittest.TestCase):
                 connection.execute("PRAGMA user_version=1")
             connection.close()
             store = Store(database)
-            self.assertEqual(store.one("PRAGMA user_version")[0], 13)
+            self.assertEqual(store.one("PRAGMA user_version")[0], 14)
             store.close()
             backups = list(Path(directory).glob("old.sqlite3.pre-v3-*.sqlite3"))
             self.assertEqual(len(backups), 1)

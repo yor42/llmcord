@@ -14,6 +14,7 @@ from contextlib import contextmanager
 from .backend import ROLES as MODEL_ROLES
 from .config import PROFILE_KEYS, check_key_pin, key_hosts_from_env, profile_from_mapping, validate_profile_name
 from .errors import mask_facts, redact
+from .games import IllegalMove, Seat, blackjack, new_seed, seed_hash
 from .lorebooks import normalize_entry, parse_lorebook
 
 ADMIN_SCHEMA = """
@@ -83,7 +84,8 @@ CREATE TABLE IF NOT EXISTS guild_settings (
  asset_channel_id INTEGER, usage_footer INTEGER NOT NULL DEFAULT 1,
  timezone TEXT NOT NULL DEFAULT '', turn_log_enabled INTEGER NOT NULL DEFAULT 0, turn_log_days INTEGER NOT NULL DEFAULT 14,
  catchup_anywhere INTEGER NOT NULL DEFAULT 0, currency_name TEXT NOT NULL DEFAULT '',
- daily_amount INTEGER NOT NULL DEFAULT 0, daily_streak_bonus INTEGER NOT NULL DEFAULT 0, daily_streak_days INTEGER NOT NULL DEFAULT 7
+ daily_amount INTEGER NOT NULL DEFAULT 0, daily_streak_bonus INTEGER NOT NULL DEFAULT 0, daily_streak_days INTEGER NOT NULL DEFAULT 7,
+ game_min_bet INTEGER NOT NULL DEFAULT 1, game_max_bet INTEGER NOT NULL DEFAULT 1000
 );
 CREATE TABLE IF NOT EXISTS currency_daily (
  guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, last_day TEXT NOT NULL, streak INTEGER NOT NULL,
@@ -105,6 +107,38 @@ CREATE TRIGGER IF NOT EXISTS currency_ledger_no_update BEFORE UPDATE ON currency
 BEGIN SELECT RAISE(ABORT, 'The currency ledger is append-only.'); END;
 CREATE TRIGGER IF NOT EXISTS currency_ledger_no_delete BEFORE DELETE ON currency_ledger
 BEGIN SELECT RAISE(ABORT, 'The currency ledger is append-only.'); END;
+CREATE TABLE IF NOT EXISTS game_channels (
+ guild_id INTEGER NOT NULL, channel_id INTEGER NOT NULL, created_at REAL NOT NULL,
+ PRIMARY KEY(guild_id,channel_id)
+);
+CREATE TABLE IF NOT EXISTS game_tables (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, channel_id INTEGER NOT NULL,
+ game TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('open','closed')),
+ message_id INTEGER, opened_by INTEGER NOT NULL, created_at REAL NOT NULL, updated_at REAL NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS game_tables_open ON game_tables(guild_id,channel_id) WHERE status='open';
+CREATE TABLE IF NOT EXISTS game_rounds (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, table_id INTEGER NOT NULL REFERENCES game_tables(id),
+ number INTEGER NOT NULL, seed TEXT NOT NULL, seed_hash TEXT NOT NULL,
+ status TEXT NOT NULL CHECK(status IN ('joining','playing','settled','cancelled')),
+ created_at REAL NOT NULL, dealt_at REAL, finished_at REAL,
+ UNIQUE(table_id,number)
+);
+CREATE TABLE IF NOT EXISTS game_seats (
+ guild_id INTEGER NOT NULL, round_id INTEGER NOT NULL REFERENCES game_rounds(id), seat_index INTEGER NOT NULL,
+ kind TEXT NOT NULL CHECK(kind IN ('member','character')), ref_id INTEGER NOT NULL,
+ stake INTEGER NOT NULL CHECK(stake>0), outcome TEXT, payout INTEGER,
+ PRIMARY KEY(round_id,seat_index), UNIQUE(round_id,kind,ref_id)
+);
+CREATE TABLE IF NOT EXISTS game_moves (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, round_id INTEGER NOT NULL, seat_index INTEGER NOT NULL,
+ move TEXT NOT NULL, actor TEXT NOT NULL CHECK(actor IN ('member','timeout','character')), created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS game_moves_round ON game_moves(round_id,id);
+CREATE TRIGGER IF NOT EXISTS game_moves_no_update BEFORE UPDATE ON game_moves
+BEGIN SELECT RAISE(ABORT, 'The game move log is append-only.'); END;
+CREATE TRIGGER IF NOT EXISTS game_moves_no_delete BEFORE DELETE ON game_moves
+BEGIN SELECT RAISE(ABORT, 'The game move log is append-only.'); END;
 CREATE TABLE IF NOT EXISTS user_timezones (
  guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, timezone TEXT NOT NULL, updated_at REAL NOT NULL,
  PRIMARY KEY(guild_id,user_id)
@@ -181,6 +215,10 @@ def valid_timezone(name):
 
 class CurrencyError(ValueError):
     """A currency change refused; the message is meant for the member or admin who asked."""
+
+
+class GameError(ValueError):
+    """A game action refused; the message is meant for the member or admin who asked."""
 
 
 class ConflictError(ValueError):
@@ -466,7 +504,7 @@ class AdminStore:
             'lore': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0'},
             'lorebook_entries': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0', 'pinned': 'INTEGER NOT NULL DEFAULT 0', 'source_message_id': 'INTEGER', 'promoted_from': 'INTEGER'},
             'characters': {'avatar_manual': 'INTEGER NOT NULL DEFAULT 0'},
-            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0', 'currency_name': "TEXT NOT NULL DEFAULT ''", 'daily_amount': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_bonus': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_days': 'INTEGER NOT NULL DEFAULT 7'},
+            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0', 'currency_name': "TEXT NOT NULL DEFAULT ''", 'daily_amount': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_bonus': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_days': 'INTEGER NOT NULL DEFAULT 7', 'game_min_bet': 'INTEGER NOT NULL DEFAULT 1', 'game_max_bet': 'INTEGER NOT NULL DEFAULT 1000'},
             'model_usage': {'channel_id': 'INTEGER', 'feature': "TEXT NOT NULL DEFAULT ''"},
         }.items():
             columns = {row[1] for row in self.db.execute(f'PRAGMA table_info({table})')}
@@ -1068,6 +1106,280 @@ class AdminStore:
             self.db.execute('INSERT INTO currency_daily(guild_id,user_id,last_day,streak) VALUES(?,?,?,?) ON CONFLICT(guild_id,user_id) DO UPDATE SET last_day=excluded.last_day,streak=excluded.streak',
                 (guild_id, user_id, today.isoformat(), streak))
         return {'status': 'paid', 'entry': entry, 'payout': payout, 'streak': streak, 'balance': entry['balance_after'], 'reset': reset}
+
+    GAME_BET_LIMIT = 100_000
+
+    def game_channels(self, guild_id):
+        return {row['channel_id'] for row in self.all('SELECT channel_id FROM game_channels WHERE guild_id=?', (guild_id,))}
+
+    def set_game_channel(self, guild_id, channel_id, enabled):
+        """Turning a channel off also closes its open table (an unfinished round is cancelled and refunded). Returns {'closed_table': table id or None}."""
+        closed = None
+        with self.write_admin():
+            if enabled:
+                self.db.execute('INSERT OR IGNORE INTO game_channels(guild_id,channel_id,created_at) VALUES(?,?,?)', (guild_id, channel_id, time.time()))
+            else:
+                self.db.execute('DELETE FROM game_channels WHERE guild_id=? AND channel_id=?', (guild_id, channel_id))
+                table = self.open_table_for(guild_id, channel_id)
+                if table:
+                    self._close_table_in_tx(guild_id, table['id'])
+                    closed = table['id']
+        return {'closed_table': closed}
+
+    def game_settings(self, guild_id):
+        row = self.one('SELECT game_min_bet,game_max_bet FROM guild_settings WHERE guild_id=?', (guild_id,))
+        return {'min_bet': row['game_min_bet'], 'max_bet': row['game_max_bet']} if row else {'min_bet': 1, 'max_bet': 1000}
+
+    def set_game_settings(self, guild_id, min_bet, max_bet, expected=None):
+        for value in (min_bet, max_bet):
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise GameError('The bet limits must be whole numbers.')
+        if not 1 <= min_bet <= max_bet <= self.GAME_BET_LIMIT:
+            raise GameError(f'The bet limits must satisfy 1 <= minimum <= maximum <= {self.GAME_BET_LIMIT:,}.')
+        with self.write_admin():
+            if expected is not None and self.game_settings(guild_id) != expected:
+                raise ConflictError('The game settings were changed elsewhere. Reload the page and try again.')
+            self.db.execute('INSERT INTO guild_settings(guild_id,game_min_bet,game_max_bet) VALUES(?,?,?) ON CONFLICT(guild_id) DO UPDATE SET game_min_bet=excluded.game_min_bet,game_max_bet=excluded.game_max_bet',
+                (guild_id, min_bet, max_bet))
+        return {'min_bet': min_bet, 'max_bet': max_bet}
+
+    def open_table_for(self, guild_id, channel_id):
+        row = self.one("SELECT * FROM game_tables WHERE guild_id=? AND channel_id=? AND status='open'", (guild_id, channel_id))
+        return dict(row) if row else None
+
+    def unfinished_rounds(self):
+        """Every joining or playing round on every server (restart recovery); no seeds."""
+        return [dict(row) for row in self.all("SELECT r.guild_id,r.table_id,r.id AS round_id,r.status,t.channel_id,t.message_id FROM game_rounds r JOIN game_tables t ON t.id=r.table_id AND t.guild_id=r.guild_id WHERE r.status IN ('joining','playing') ORDER BY r.id")]
+
+    def _game_table(self, guild_id, table_id):
+        row = self.one('SELECT * FROM game_tables WHERE id=? AND guild_id=?', (table_id, guild_id))
+        if row is None:
+            raise GameError('No such game table on this server.')
+        return row
+
+    def _game_round(self, guild_id, round_id):
+        row = self.one('SELECT r.*,t.channel_id,t.game,t.message_id FROM game_rounds r JOIN game_tables t ON t.id=r.table_id AND t.guild_id=r.guild_id WHERE r.id=? AND r.guild_id=?', (round_id, guild_id))
+        if row is None:
+            raise GameError('No such game round on this server.')
+        return row
+
+    def _game_seats(self, guild_id, round_id):
+        return self.all('SELECT * FROM game_seats WHERE guild_id=? AND round_id=? ORDER BY seat_index', (guild_id, round_id))
+
+    def _game_moves(self, guild_id, round_id):
+        return [(row['seat_index'], row['move']) for row in self.all('SELECT seat_index,move FROM game_moves WHERE guild_id=? AND round_id=? ORDER BY id', (guild_id, round_id))]
+
+    def _game_state(self, rnd, seats, moves):
+        """Rebuilds the engine state by replaying the stored moves; a seat's stored stake includes a double, the engine's does not."""
+        doubled = {seat for seat, move in moves if move == 'double'}
+        try:
+            return blackjack.replay(rnd['seed'], [Seat(row['seat_index'], row['kind'], row['ref_id'], row['stake'] // 2 if row['seat_index'] in doubled else row['stake']) for row in seats], moves)
+        except (IllegalMove, ValueError):
+            raise GameError('This round could not be restored. Ask an admin to cancel it.') from None
+
+    def _can_double(self, guild_id, state, seat_rows, seat):
+        return 0 <= seat < len(seat_rows) and self.balance(guild_id, seat_rows[seat]['ref_id']) >= state.stakes[seat]
+
+    def _game_snapshot(self, guild_id, round_id):
+        """One consistent read: inside the caller's write transaction, or else a read transaction of its own."""
+        with self.admin_lock:
+            if self.db.in_transaction:
+                return self._snapshot_reads(guild_id, round_id)
+            self.db.execute('BEGIN')
+            try:
+                return self._snapshot_reads(guild_id, round_id)
+            finally:
+                self.db.rollback()
+
+    def _snapshot_reads(self, guild_id, round_id):
+        rnd = self._game_round(guild_id, round_id)
+        seats = self._game_seats(guild_id, round_id)
+        moves = self._game_moves(guild_id, round_id)
+        out = {'guild_id': guild_id, 'channel_id': rnd['channel_id'], 'game': rnd['game'], 'table_id': rnd['table_id'], 'message_id': rnd['message_id'],
+               'round_id': round_id, 'number': rnd['number'], 'status': rnd['status'], 'seed_hash': rnd['seed_hash'],
+               'seats': [{'index': r['seat_index'], 'kind': r['kind'], 'ref_id': r['ref_id'], 'stake': r['stake'], 'outcome': r['outcome'], 'payout': r['payout']} for r in seats],
+               'moves': len(moves), 'view': None, 'legal': {}, 'summary': None,
+               'seed': rnd['seed'] if rnd['status'] in ('settled', 'cancelled') else None}
+        if rnd['dealt_at'] is not None:
+            try:
+                state = self._game_state(rnd, seats, moves)
+            except GameError:
+                if rnd['status'] == 'playing':
+                    raise
+                return out  # money already settled or refunded: a damaged move log must not hide that
+            out['view'] = asdict(blackjack.view(state, None))
+            if rnd['status'] == 'playing' and state.turn is not None:
+                out['legal'] = {state.turn: blackjack.legal_moves(state, state.turn, self._can_double(guild_id, state, seats, state.turn))}
+            if rnd['status'] == 'settled':
+                out['summary'] = blackjack.result(state).summary
+        return out
+
+    def round_snapshot(self, guild_id, round_id):
+        """Plain dict for the Discord layer. The seed appears only once the round is settled or cancelled."""
+        return self._game_snapshot(guild_id, round_id)
+
+    def latest_round(self, guild_id, table_id):
+        self._game_table(guild_id, table_id)
+        row = self.one('SELECT id FROM game_rounds WHERE guild_id=? AND table_id=? ORDER BY number DESC LIMIT 1', (guild_id, table_id))
+        if row is None:
+            raise GameError('That table has no rounds.')
+        return self._game_snapshot(guild_id, row['id'])
+
+    def _new_round(self, guild_id, table_id, seed, now):
+        number = self.one('SELECT COALESCE(MAX(number),0)+1 FROM game_rounds WHERE table_id=? AND guild_id=?', (table_id, guild_id))[0]
+        return self.db.execute('INSERT INTO game_rounds(guild_id,table_id,number,seed,seed_hash,status,created_at) VALUES(?,?,?,?,?,?,?)',
+            (guild_id, table_id, number, seed, seed_hash(seed), 'joining', now)).lastrowid
+
+    def open_table(self, guild_id, channel_id, game, user_id, now=None, seed=None):
+        now = time.time() if now is None else now
+        if game != 'blackjack':
+            raise GameError('That game is not available.')
+        with self.write_admin():
+            if channel_id not in self.game_channels(guild_id):
+                raise GameError('Games are not turned on in this channel. Ask an admin to turn them on.')
+            if self.open_table_for(guild_id, channel_id):
+                raise GameError('There is already a table open in this channel.')
+            table_id = self.db.execute('INSERT INTO game_tables(guild_id,channel_id,game,status,opened_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?)',
+                (guild_id, channel_id, game, 'open', user_id, now, now)).lastrowid
+            round_id = self._new_round(guild_id, table_id, seed or new_seed(), now)
+            return self._game_snapshot(guild_id, round_id)
+
+    def next_round(self, guild_id, table_id):
+        with self.write_admin():
+            if self._game_table(guild_id, table_id)['status'] != 'open':
+                raise GameError('That table is closed.')
+            if self.one("SELECT 1 FROM game_rounds WHERE guild_id=? AND table_id=? AND status IN ('joining','playing')", (guild_id, table_id)):
+                raise GameError('The current round is still unfinished.')
+            round_id = self._new_round(guild_id, table_id, new_seed(), time.time())
+            return self._game_snapshot(guild_id, round_id)
+
+    def close_table(self, guild_id, table_id):
+        with self.write_admin():
+            self._close_table_in_tx(guild_id, table_id)
+
+    def _close_table_in_tx(self, guild_id, table_id):
+        self._game_table(guild_id, table_id)
+        for row in self.all("SELECT id FROM game_rounds WHERE guild_id=? AND table_id=? AND status IN ('joining','playing')", (guild_id, table_id)):
+            self._cancel_in_tx(guild_id, self._game_round(guild_id, row['id']), 'table closed')
+        self.db.execute("UPDATE game_tables SET status='closed',updated_at=? WHERE id=? AND guild_id=? AND status='open'", (time.time(), table_id, guild_id))
+
+    def set_table_message(self, guild_id, table_id, message_id):
+        with self.write_admin():
+            self._game_table(guild_id, table_id)
+            self.db.execute('UPDATE game_tables SET message_id=?,updated_at=? WHERE id=? AND guild_id=?', (message_id, time.time(), table_id, guild_id))
+
+    def _game_label(self, rnd):
+        return f"table {rnd['table_id']}, round {rnd['number']}"
+
+    def _pay_clamped(self, guild_id, user_id, amount, reason):
+        """Settlement and refunds never fail on the balance cap: pay what fits and return the amount actually paid."""
+        paid = min(amount, self.MAX_CURRENCY_BALANCE - self.balance(guild_id, user_id))
+        if paid > 0:
+            self._append_ledger(guild_id, user_id, paid, reason, user_id, 'game', None)
+        return max(paid, 0)
+
+    def join_round(self, guild_id, round_id, user_id, stake, kind='member'):
+        if kind != 'member':
+            raise GameError('Only members can take a seat for now.')
+        if isinstance(stake, bool) or not isinstance(stake, int):
+            raise GameError('The bet must be a whole number.')
+        with self.write_admin():
+            rnd = self._game_round(guild_id, round_id)
+            if rnd['status'] != 'joining':
+                raise GameError('This round has already started.')
+            limits, name = self.game_settings(guild_id), self.currency_name(guild_id)
+            if not limits['min_bet'] <= stake <= limits['max_bet']:
+                raise GameError(f"The bet must be between {limits['min_bet']:,} and {limits['max_bet']:,} {name}.")
+            seats = self._game_seats(guild_id, round_id)
+            if any(row['kind'] == kind and row['ref_id'] == user_id for row in seats):
+                raise GameError('You already have a seat in this round.')
+            if len(seats) >= blackjack.MAX_SEATS:
+                raise GameError('The table is full.')
+            balance = self.balance(guild_id, user_id)
+            if balance < stake:
+                raise GameError(f'You need {stake:,} {name} for that bet but have {balance:,}.')
+            self._append_ledger(guild_id, user_id, -stake, f'Blackjack bet ({self._game_label(rnd)})', user_id, 'game', None)
+            self.db.execute('INSERT INTO game_seats(guild_id,round_id,seat_index,kind,ref_id,stake) VALUES(?,?,?,?,?,?)', (guild_id, round_id, len(seats), kind, user_id, stake))
+            return self._game_snapshot(guild_id, round_id)
+
+    def leave_round(self, guild_id, round_id, user_id):
+        with self.write_admin():
+            rnd = self._game_round(guild_id, round_id)
+            if rnd['status'] != 'joining':
+                raise GameError('This round has already started.')
+            seat = self.one("SELECT * FROM game_seats WHERE guild_id=? AND round_id=? AND kind='member' AND ref_id=?", (guild_id, round_id, user_id))
+            if seat is None:
+                raise GameError('You do not have a seat in this round.')
+            self._pay_clamped(guild_id, user_id, seat['stake'], f'Blackjack refund ({self._game_label(rnd)})')
+            self.db.execute('DELETE FROM game_seats WHERE guild_id=? AND round_id=? AND seat_index=?', (guild_id, round_id, seat['seat_index']))
+            for row in self.all('SELECT seat_index FROM game_seats WHERE guild_id=? AND round_id=? AND seat_index>? ORDER BY seat_index', (guild_id, round_id, seat['seat_index'])):
+                self.db.execute('UPDATE game_seats SET seat_index=? WHERE guild_id=? AND round_id=? AND seat_index=?', (row['seat_index'] - 1, guild_id, round_id, row['seat_index']))
+            return self._game_snapshot(guild_id, round_id)
+
+    def deal(self, guild_id, round_id):
+        with self.write_admin():
+            rnd = self._game_round(guild_id, round_id)
+            if rnd['status'] != 'joining':
+                raise GameError('This round has already started.')
+            if not self._game_seats(guild_id, round_id):
+                raise GameError('Nobody has joined this round yet.')
+            self.db.execute("UPDATE game_rounds SET status='playing',dealt_at=? WHERE id=? AND guild_id=?", (time.time(), round_id, guild_id))
+            state = self._game_state(rnd, self._game_seats(guild_id, round_id), [])
+            if state.finished:
+                self._settle_in_tx(guild_id, rnd, state)
+            return self._game_snapshot(guild_id, round_id)
+
+    def play(self, guild_id, round_id, seat_index, move, actor, expected_moves):
+        """Applies one move. expected_moves is the move count the caller saw; a different count raises ConflictError (a double press applies once)."""
+        if actor not in ('member', 'timeout'):
+            raise GameError('That player cannot move here.')
+        if isinstance(seat_index, bool) or not isinstance(seat_index, int) or not isinstance(move, str):
+            raise GameError('That is not a legal move.')
+        with self.write_admin():
+            rnd = self._game_round(guild_id, round_id)
+            if len(self._game_moves(guild_id, round_id)) != expected_moves:
+                raise ConflictError('The table moved on. Look at the latest message and try again.')
+            if rnd['status'] != 'playing':
+                raise GameError('This round is not being played.')
+            seats = self._game_seats(guild_id, round_id)
+            state = self._game_state(rnd, seats, self._game_moves(guild_id, round_id))
+            try:
+                after = blackjack.apply(state, seat_index, move, self._can_double(guild_id, state, seats, seat_index))
+            except IllegalMove:
+                raise GameError("It's not your turn." if state.turn != seat_index else "That move isn't allowed right now.") from None
+            if move == 'double':
+                extra = state.stakes[seat_index]
+                self._append_ledger(guild_id, seats[seat_index]['ref_id'], -extra, f'Blackjack double ({self._game_label(rnd)})', seats[seat_index]['ref_id'], 'game', None)
+                self.db.execute('UPDATE game_seats SET stake=stake+? WHERE guild_id=? AND round_id=? AND seat_index=?', (extra, guild_id, round_id, seat_index))
+            self.db.execute('INSERT INTO game_moves(guild_id,round_id,seat_index,move,actor,created_at) VALUES(?,?,?,?,?,?)', (guild_id, round_id, seat_index, move, actor, time.time()))
+            if after.finished:
+                self._settle_in_tx(guild_id, rnd, after)
+            return self._game_snapshot(guild_id, round_id)
+
+    def _settle_in_tx(self, guild_id, rnd, state):
+        label = self._game_label(rnd)
+        seats = self._game_seats(guild_id, rnd['id'])
+        for res in blackjack.result(state).seats:
+            user_id, paid = seats[res.seat]['ref_id'], 0
+            if res.returned > 0:
+                paid = self._pay_clamped(guild_id, user_id, res.returned, f'Blackjack payout ({res.outcome}), {label}')
+            self.db.execute('UPDATE game_seats SET stake=?,outcome=?,payout=? WHERE guild_id=? AND round_id=? AND seat_index=?', (res.stake, res.outcome, paid, guild_id, rnd['id'], res.seat))
+        self.db.execute("UPDATE game_rounds SET status='settled',finished_at=? WHERE id=? AND guild_id=?", (time.time(), rnd['id'], guild_id))
+
+    def _cancel_in_tx(self, guild_id, rnd, reason):
+        if rnd['status'] not in ('joining', 'playing'):
+            return
+        label, why = self._game_label(rnd), ' '.join(str(reason).split())[:60]
+        for seat in self._game_seats(guild_id, rnd['id']):
+            paid = self._pay_clamped(guild_id, seat['ref_id'], seat['stake'], f'Blackjack refund ({why}), {label}')
+            self.db.execute("UPDATE game_seats SET outcome='refund',payout=? WHERE guild_id=? AND round_id=? AND seat_index=?", (paid, guild_id, rnd['id'], seat['seat_index']))
+        self.db.execute("UPDATE game_rounds SET status='cancelled',finished_at=? WHERE id=? AND guild_id=?", (time.time(), rnd['id'], guild_id))
+
+    def cancel_round(self, guild_id, round_id, reason):
+        """Refunds every seat's full stake (doubles included); a settled or cancelled round is left alone."""
+        with self.write_admin():
+            self._cancel_in_tx(guild_id, self._game_round(guild_id, round_id), reason)
+            return self._game_snapshot(guild_id, round_id)
 
     def ledger(self, guild_id, user_id=None, limit=50, before_id=None):
         sql, args = 'SELECT * FROM currency_ledger WHERE guild_id=?', [guild_id]

@@ -192,7 +192,7 @@ class DailyMigrationTests(unittest.TestCase):
             path = v12_file(folder)
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 13)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 14)
                 self.assertEqual((store.currency_name(1), store.balance(1, 5)), ("gold", 40))
                 self.assertEqual(store.daily_settings(1), {"amount": 0, "streak_bonus": 0, "streak_days": 7})
                 store.set_daily_settings(1, 10, 0, 7)
@@ -207,11 +207,11 @@ class DailyMigrationTests(unittest.TestCase):
             Store(path).close()
             self.assertEqual(len(list(Path(folder).glob("*.pre-*"))), 1)
 
-    def test_v14_file_is_refused(self):
+    def test_v15_file_is_refused(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "new.sqlite3"
             with closing(sqlite3.connect(path)) as db, db:
-                db.execute("PRAGMA user_version=14")
+                db.execute("PRAGMA user_version=15")
             with self.assertRaisesRegex(ValueError, "newer than this application"):
                 Store(path)
 
