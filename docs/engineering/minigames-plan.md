@@ -75,3 +75,73 @@ Six-deck shoe shuffled per round from the seed; dealer stands on soft 17; blackj
 - UI-53 to UI-56: table polish (end-of-table summary, dealer pacing, how-to-play button, rules line). These come first.
 - FEAT-27: the Games tab and the server switch.
 - FEAT-28: the rule options. Schema columns go into v16 while it is unreleased.
+
+## I Doubt It (FEAT-21, D29, user 2026-10-11)
+
+Phase 3's first game, and the start of a library of multiplayer games built around table talk. The terms (**I Doubt It**, **Claim**, **Doubt**, **Pile**, **Doubt window**, **Table thread**, **Ante / Pot**) are in the [glossary](../glossary.md).
+
+**Rules (v1).**
+
+- 3–8 seats. One deck for 3–5 seats, two decks for 6–8. The whole deck is dealt.
+- On your turn you play 1–4 cards face down and claim that many of the **forced rank**. The rank follows the previous claim: A, 2 … K, A …. You can't pass, and you bluff if you hold none of the rank.
+- After each play there is a **doubt window** of 15 s. Any other seated player may doubt, and the first press wins. The window closes on a doubt, when the next player plays (which counts as passing on the doubt), or on timeout. The next player's turn timer starts when the window closes.
+- On a doubt, the played cards are revealed to everyone. Whoever loses the doubt takes the pile.
+- A player who empties their hand wins once the window on that last play closes. If the play is doubted and was truthful, they win. If it was a bluff, they take the pile and play on.
+- **Rule key:** `claim_rule: sequence` is stored and normalized from day one. `free` (claim any rank) is the end goal and comes as a later rule-options item. Only `sequence` is accepted in v1.
+- **Ante:** optional, off (0) by default. Each seat pays it at the deal, from a member's or a character's own wallet. The winner takes the pot. Losing a doubt costs no currency.
+- **Timeouts:** a member's turn timeout (default 60 s, a Games tab setting) plays the lowest card truthfully if they can, or else a random card as a bluff. Two timeouts in a row forfeit the seat, and that seat's cards leave play.
+
+**Seats.**
+
+- **Bound game channels** (world or hub, D27) seat members and characters together. A member brings their favorites (`favorites:True`), marked "(with @member)". The host can press **Fill seats** in the lobby to add characters from the channel's active cast, marked "(house)", up to the minimum or a chosen count. Character seats ante from their own wallet.
+- **Unbound game channels** are **humans-only tables**, with at least 3 members and no character seats.
+- Joining is lobby-only. Nobody joins mid-game.
+
+**Who decides what.** D26 holds. The engine owns everything random or resulting: the shuffle, the deal, reveals, who takes the pile, the winner and the pot. A character's model picks one legal move for its seat (which cards to play, whether to doubt) from that seat's view only: its own hand, the hand counts, the pile size, the claim history and the revealed cards. The fallback is a deterministic policy with per-character bluff and suspicion tendencies seeded from the character id. It plays whenever the model is unavailable (error, timeout, daily talk limit, spending cap).
+
+**Doubt triage.** Asking every character "doubt?" after every play would be up to 7 model calls per play. Instead, the policy scores each character seat's suspicion from public information plus its own hand. Only the top 1–2 most suspicious seats get a model call, and the others pass. An impossible claim (more of a rank than that seat can't see) is always asked. These calls run in parallel inside the window, and the first doubt wins.
+
+**Table thread.**
+
+- `/game start` posts the lobby in the game channel and opens a public thread on it.
+- **Board message:** pinned at the top of the thread and edited on game events, debounced. It shows hand counts, turn order, the pile size and the current rank.
+- **Turn message:** a single message edited in place. It shows the last claim, the pile, who's next, and the **Doubt** and **My hand** buttons. It is reposted at the bottom only when buried (8 or more thread messages since it was posted), at most once per turn, so a quiet table never reposts.
+- **My hand** (or `/game hand`) opens a private picker that groups the hand by rank: choose how many of each rank to play. A hand has at most 13 distinct ranks, so one select fits.
+- At the end, the result is posted in the thread and the lobby is edited to a one-line result. The thread stays open 10 minutes for banter, then is archived and locked.
+- New bot permissions: **Create Public Threads** and **Send Messages in Threads**.
+
+**Table talk.**
+
+- The table thread is a normal skit thread. It inherits the parent's binding, cast, lore and preset, and has its own scene and lock.
+- Only seated characters speak. Their prompt gets a table block with public state plus that speaker's own hand.
+- Human messages, from players and spectators, trigger the usual director turn. Game events (a doubt, a reveal, a near-win) also trigger an ambient character turn.
+- Talk counts against the daily table-talk limit and the spending cap.
+- Game moves never wait for talk.
+- Talk needs a bound parent and character table talk turned on. Without them, characters still play, silently.
+
+**Commands.**
+
+- `/game start game:<blackjack|doubt> [ante|bet] [favorites]`
+- `/game hand` works in any table thread.
+- `/game rules game:<name>`
+- `/blackjack` stays as an alias of `/game start game:blackjack`.
+- An option that doesn't apply to the chosen game gets a short private reply.
+
+**Game registry.** Each game registers its engine module, Discord adapter, Games tab section and settings. `/game`, the Games tab and button prefixes (`llmcord:<game>:…`) come from the registry. Blackjack moves onto it, keeping its existing `llmcord:bj` custom ids so live buttons keep working.
+
+**Schema v17** (backup before upgrade):
+
+- New `game_settings(guild_id, game, enabled, rules_json, revision)`. Blackjack's `blackjack_enabled` and `blackjack_rules` are copied into its row, and every read and write moves to the new table. The old columns stay, unused and commented, because dropping them would be destructive.
+- `game_tables` gains nullable `thread_id`, `board_message_id` and `turn_message_id`, and `open_table` accepts `doubt`.
+- The ante goes in `game_seats.stake`, and the pot is the sum of stakes.
+- Hands are never stored. They replay from seed plus moves.
+- Ledger reasons: "I Doubt It ante / payout / refund (table T, round N)".
+
+**Games tab:** an I Doubt It section with on/off, ante (0 = off), turn timeout, and the claim rule shown read-only as "Sequence". The doubt window (15 s), the bump threshold (8) and the deck count are fixed. The shared settings apply as they are.
+
+| Part | Content | Review |
+| --- | --- | --- |
+| A | Engine (`games/doubt.py`: `new`, `view`, `legal_moves`, `apply`, `result`, replay, rule normalizer), the seeded fallback policy and doubt triage scoring, the game registry, schema v17 (`game_settings` with blackjack moved over, `game_tables` thread columns), store API, ledger. | Opus (migration, money) |
+| B | Discord: `/game` (with `/blackjack` alias), lobby, Fill seats, table thread, board and turn messages with bump, rank-count hand picker, doubt window, timers, forfeits, model chooser with triage, restart recovery. | Opus (concurrency) |
+| C | Table talk: table threads as skit threads, the seated-only cast, the table prompt block (seat view only), event-triggered ambient turns, talk limits. | Opus (skit turn path, hidden information) |
+| D | Games tab section through the registry, user docs (how to play, permissions), glossary code names. | Sonnet |
