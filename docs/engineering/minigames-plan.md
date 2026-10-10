@@ -45,3 +45,33 @@ Six-deck shoe shuffled per round from the seed; dealer stands on soft 17; blackj
 | B | Schema v14 and store API: game channels, bet limits, tables, seats, rounds, moves; stake taken at join and paid at settle through the ledger in one transaction; refunds on cancel; finding unfinished rounds after a restart. | Opus (migration, money, concurrency) |
 | C | Discord: `/blackjack bet`, buttons, join window, turn timer (default policy on timeout), deal again / leave, per-table lock, restart recovery (refund unfinished rounds), `/admin games channel` and bet limits. | Opus (concurrency) |
 | D | Dashboard: game channel switches and bet limits. | Sonnet |
+
+## Games tab and blackjack rule options (D28, user 2026-10-10)
+
+**Games tab.** The dashboard gets a Games tab with one section per game. Blackjack is the first. The Currency tab keeps money only: the name, daily check-in, character wallets, balances and the ledger. The Games tab has:
+
+- **Shared settings:** game channels, bet limits, character table talk, the daily table-talk limit, and how many rounds the end-of-table summary shows (default 5).
+- **Blackjack:**
+  - The game on or off for the whole server. Turning it off closes open tables with refunds, as turning a channel off does today.
+  - The rule options below.
+
+**Rule options.** Each round stores the rules it was dealt with, in `game_rounds.rules_json`. A rules change applies from the next round, and replays of older rounds stay correct. An empty rules value means the classic rules, so existing rounds replay unchanged.
+
+| Option | Choices | Default (today's rules) |
+| --- | --- | --- |
+| Dealer stands on | total 16, 17 or 18 | 17 |
+| Dealer on soft 17 | stand or hit (H17); only when the stand total is 17 | stand |
+| Blackjack pays | 3:2 or 6:5 | 3:2 |
+| Ties | push (bet back) or the dealer wins | push |
+| Insurance and even money | off or on. When the dealer shows an ace, each seat in turn may insure for half its bet, which pays 2:1 if the dealer has blackjack. A seat with blackjack is offered even money (1:1 now) instead. A timeout or a character with table talk off declines. | off |
+| Late surrender | off or on. On the first two cards, after the dealer checks for blackjack, give up the hand and get half the bet back. | off |
+
+- **Rounding:** halves and 6:5 payouts round down, so the house keeps any odd unit. Insurance needs a bet of at least 2.
+- **Rules line:** the table message shows the round's rules as a gray `-# ` line, for example "Dealer stands on 17 · Blackjack pays 3:2 · Ties push · Double on the first two cards · No splitting · 6 decks".
+- **Character seats:** the model's legal moves include insurance and surrender when they are allowed. The house-rule fallback never insures and never surrenders.
+
+**Items:**
+
+- UI-53 to UI-56: table polish (end-of-table summary, dealer pacing, how-to-play button, rules line). These come first.
+- FEAT-27: the Games tab and the server switch.
+- FEAT-28: the rule options. Schema columns go into v16 while it is unreleased.
