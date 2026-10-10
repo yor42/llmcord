@@ -1,4 +1,5 @@
-"""Error mapping for turns and slash commands (UX-07, SEC-05 error part; decision D3 in docs/engineering/roadmap.md).
+"""Error mapping for turns and slash commands (UX-07, SEC-05 error part; decision D3 in
+docs/engineering/history/roadmap-r1-r6.md).
 
 D3: the public channel gets a generic message with a short reference id; the person who ran a command gets the
 stage and (sanitized) provider detail as an ephemeral reply when there is an interaction; the detail is logged with

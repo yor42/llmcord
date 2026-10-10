@@ -1,4 +1,5 @@
-"""Characterization tests for slash-command callbacks (see docs/engineering/audit.md).
+"""Characterization tests for slash-command callbacks (see
+docs/engineering/history/audit-2026-10-07.md).
 
 Tests named ``test_known_defect_*`` are ``expectedFailure``: they assert the intended behavior
 for an objectively incorrect current behavior and will report "unexpected success" once fixed.

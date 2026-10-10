@@ -1,4 +1,5 @@
-"""Characterization of dashboard HTTP authorization cost and boundaries (docs/engineering/audit.md).
+"""Characterization of dashboard HTTP authorization cost and boundaries
+(docs/engineering/history/audit-2026-10-07.md).
 
 The Discord-call counts pin today's behavior (PERF-01). When admin checks become cached, update the
 expected counts deliberately and note the change in docs/engineering/perf-baseline.md.

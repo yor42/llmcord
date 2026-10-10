@@ -1,6 +1,7 @@
 """Characterization tests for scene/state lifecycle in Store, Engine and the bot loop.
 
-Confirmed defects follow the ``test_known_defect_*`` / ``expectedFailure`` convention (docs/engineering/audit.md).
+Confirmed defects follow the ``test_known_defect_*`` / ``expectedFailure`` convention
+(docs/engineering/history/audit-2026-10-07.md).
 """
 import asyncio
 import unittest

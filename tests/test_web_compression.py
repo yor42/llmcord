@@ -1,4 +1,5 @@
-"""Compression and security-header middleware behavior (PERF-04, docs/engineering/audit.md)."""
+"""Compression and security-header middleware behavior (PERF-04,
+docs/engineering/history/audit-2026-10-07.md)."""
 import re
 import unittest
 from io import BytesIO

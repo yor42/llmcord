@@ -4,7 +4,7 @@
 
 **Status:** approved by the user on 2026-10-07. R1–R6 are complete and merged into `main`; R6 was fast-forwarded to `9671c31` on 2026-10-08. All decisions D1–D12 are taken (see "Decisions taken").
 
-Every phase goes through the `orchestrate-change` skill: needed tests → scoped worker → final verification → review. Model routing and evidence ownership follow [the Claude workflow](../claude-workflow.md). Finding IDs refer to `audit.md`.
+Every phase goes through the `orchestrate-change` skill: needed tests → scoped worker → final verification → review. Model routing and evidence ownership follow [the Claude workflow](../claude-workflow.md). Finding IDs refer to [the audit](audit-2026-10-07.md).
 
 **Phase rules**
 - A phase is one or more small PRs, each green on `scripts/verify.sh` (plus `--browser` when it touches dashboard files, plus `--bench` when it claims performance).

@@ -1,5 +1,5 @@
 """Per-server usage footer switch and self-cleaning "no character" hint (UX-08; decisions D2 and D12 in
-docs/engineering/roadmap.md).
+docs/engineering/history/roadmap-r1-r6.md).
 
 D2: ``guild_settings.usage_footer INTEGER NOT NULL DEFAULT 1`` (schema v4), ``Store.usage_footer_enabled(guild_id)``
 (True when there is no row) and ``Store.set_usage_footer(guild_id, enabled)``. Off hides only the public ``-# ``
