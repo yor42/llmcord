@@ -147,9 +147,8 @@ def valid_timezone(name):
 class ConflictError(ValueError):
     """An optimistic revision or unresolved import conflict rejected a write."""
 
+
 TURN_LOG_DAYS = (0, 7, 14, 30)
-
-
 
 
 class AdminStore:
@@ -190,7 +189,6 @@ class AdminStore:
                 self.db.execute('UPDATE model_roles SET version=version+1 WHERE id=1')
                 revision = self.model_backend_version()
                 self.db.execute('UPDATE model_profiles SET data_json=?, revision=?, updated_at=? WHERE name=?', (stored, revision, now, name))
-            self.db.execute('UPDATE model_roles SET version=version+1 WHERE id=1')
         return revision
 
     def delete_model_profile(self, name, expected_revision, config_names):
