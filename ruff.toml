@@ -1,4 +1,4 @@
-# Bug-class lint only; formatting is intentionally not enforced yet (see docs/engineering/roadmap.md).
+# Bug-class lint only; formatting is intentionally not enforced yet (see docs/engineering/history/roadmap-r1-r6.md).
 target-version = "py312"
 extend-exclude = [".venv", ".venv314", "data", ".test-artifacts"]
 
