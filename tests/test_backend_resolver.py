@@ -321,6 +321,198 @@ class ClientCacheTests(BackendCase):
         self.assertEqual(len(FakeOpenAI.created), 1)
 
 
+class ClientLifecycleTests(BackendCase):
+    """MNT-31: retired clients are closed after their last in-flight use; close() closes everything."""
+
+    def setUp(self):
+        super().setUp()
+        self.gate = asyncio.Event()
+        self.started = asyncio.Event()
+        patcher = patch('llmcord_core.models.AsyncOpenAI', self.gated_sdk, create=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def gated_sdk(self, **kwargs):
+        client = FakeOpenAI(**kwargs)
+        create = client.chat.completions.create
+
+        async def gated(**request):
+            self.started.set()
+            await self.gate.wait()
+            if getattr(client, 'fail', False):
+                raise RuntimeError('provider failure')
+            return await create(**request)
+        client.chat.completions.create = gated
+        return client
+
+    def variant(self, timeout):
+        return self.with_profile(timeout_seconds=timeout)
+
+    async def settle(self):
+        for _ in range(5):
+            await asyncio.sleep(0)
+
+    async def test_retired_client_is_closed_after_its_last_in_flight_call(self):
+        """MNT-31 (fixed): a replaced client stays open while a call uses it, then is closed and dropped."""
+        gateway = ModelGateway(self.variant(10))
+        call = asyncio.create_task(gateway.text('dialogue', '', MSG, settings=self.variant(10)))
+        await self.started.wait()
+        newer = asyncio.create_task(gateway.text('dialogue', '', MSG, settings=self.variant(20)))
+        await self.settle()
+        old = FakeOpenAI.created[0]
+        self.assertEqual(len(FakeOpenAI.created), 2)
+        self.assertFalse(old.closed, 'a client with a call in flight must stay open')
+        self.gate.set()
+        await asyncio.gather(call, newer)
+        await self.settle()
+        self.assertTrue(old.closed)
+        self.assertFalse(FakeOpenAI.created[1].closed)
+        self.assertEqual(gateway.retired, {})
+        await gateway.close()
+
+    async def test_idle_replaced_client_is_closed_at_once(self):
+        """MNT-31 (fixed): a replaced client with no call in flight is closed without waiting for shutdown."""
+        gateway = ModelGateway(self.variant(10))
+        self.gate.set()
+        await gateway.text('dialogue', '', MSG, settings=self.variant(10))
+        await gateway.text('dialogue', '', MSG, settings=self.variant(20))
+        await self.settle()
+        self.assertEqual([c.closed for c in FakeOpenAI.created], [True, False])
+        self.assertEqual(gateway.retired, {})
+
+    async def test_retired_client_is_closed_when_a_stream_is_closed_early(self):
+        """MNT-31 (fixed): a stream closed before completion still releases its client."""
+        gateway = ModelGateway(self.variant(10))
+        self.gate.set()
+        stream = gateway.stream_text('dialogue', '', MSG, settings=self.variant(10))
+        self.assertEqual(await anext(stream), 'ok')
+        await gateway.text('dialogue', '', MSG, settings=self.variant(20))
+        await self.settle()
+        old = FakeOpenAI.created[0]
+        self.assertFalse(old.closed, 'an open stream keeps its client alive')
+        await stream.aclose()
+        await self.settle()
+        self.assertTrue(old.closed)
+        self.assertEqual(gateway.retired, {})
+
+    async def test_alternating_fingerprints_do_not_keep_building_clients(self):
+        """MNT-31 (fixed, was suspicion c): an older pinned snapshot and the current one share stable clients instead of retiring each other."""
+        gateway = ModelGateway(self.variant(10))
+        hold = asyncio.create_task(gateway.text('dialogue', '', MSG, settings=self.variant(10)))
+        await self.started.wait()
+        for _ in range(3):
+            for timeout in (20, 10):
+                call = asyncio.create_task(gateway.text('dialogue', '', MSG, settings=self.variant(timeout)))
+                await self.settle()
+                call.cancel()
+                await asyncio.gather(call, return_exceptions=True)
+        self.assertEqual(len(FakeOpenAI.created), 2)
+        self.gate.set()
+        await hold
+        await gateway.close()
+
+    async def test_failing_call_releases_and_closes_its_retired_client(self):
+        """MNT-31 (fixed): a provider call that raises still releases its client, so a retired one is closed."""
+        gateway = ModelGateway(self.variant(10))
+        call = asyncio.create_task(gateway.text('dialogue', '', MSG, settings=self.variant(10)))
+        await self.started.wait()
+        old = FakeOpenAI.created[0]
+        old.fail = True
+        newer = asyncio.create_task(gateway.text('dialogue', '', MSG, settings=self.variant(20)))
+        await self.settle()
+        self.assertFalse(old.closed)
+        self.gate.set()
+        with self.assertRaises(RuntimeError):
+            await call
+        await newer
+        await self.settle()
+        self.assertEqual(gateway._inflight, {})
+        self.assertTrue(old.closed)
+
+    async def test_structured_text_fallback_counts_nested_use_then_closes(self):
+        """MNT-31 (fixed): the compatible structured->text fallback holds its client twice, then releases to zero and closes it."""
+        gateway = ModelGateway(self.variant(10))
+        call = asyncio.create_task(gateway.structured('dialogue', '', MSG, 'x', {'type': 'string'}, settings=self.variant(10)))
+        await self.started.wait()
+        old = FakeOpenAI.created[0]
+        self.assertEqual(gateway._inflight, {id(old): 2})
+        newer = asyncio.create_task(gateway.text('dialogue', '', MSG, settings=self.variant(20)))
+        await self.settle()
+        self.assertFalse(old.closed)
+        self.gate.set()
+        with self.assertRaises(ValueError):
+            await call
+        await newer
+        await self.settle()
+        self.assertEqual(gateway._inflight, {})
+        self.assertTrue(old.closed)
+
+    async def test_anthropic_stream_releases_its_client(self):
+        """MNT-31 (fixed): the anthropic messages.stream path releases its client when the stream ends."""
+        profile = dataclasses.replace(self.base.profiles['test'], provider='anthropic', base_url=None)
+        settings = dataclasses.replace(self.base, profiles={'test': profile})
+
+        class Stream:
+            text_stream = _empty()
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            async def get_final_message(self):
+                return SimpleNamespace(usage=None)
+        gateway = ModelGateway(settings)
+        client = gateway._client('test')
+        client.messages.stream = lambda **kw: Stream()
+        self.assertEqual([d async for d in gateway.stream_text('dialogue', '', MSG, settings=settings)], [])
+        self.assertEqual(gateway._inflight, {})
+        await gateway.close()
+
+    async def test_close_awaits_a_pending_scheduled_close(self):
+        """MNT-31 (fixed): close() waits for a replaced client's scheduled close and still closes the rest."""
+        gateway = ModelGateway(self.variant(10))
+        self.gate.set()
+        await gateway.text('dialogue', '', MSG, settings=self.variant(10))
+        release = asyncio.Event()
+        first = FakeOpenAI.created[0]
+        real = first.close
+
+        async def slow_close():
+            await release.wait()
+            await real()
+        first.close = slow_close
+        await gateway.text('dialogue', '', MSG, settings=self.variant(20))
+        await self.settle()
+        self.assertFalse(first.closed)
+        closing = asyncio.create_task(gateway.close())
+        await self.settle()
+        self.assertFalse(closing.done())
+        release.set()
+        await closing
+        self.assertTrue(first.closed)
+        self.assertTrue(FakeOpenAI.created[1].closed)
+
+    async def test_close_continues_past_a_failing_client_and_logs_type_only(self):
+        """MNT-31 (fixed): close() closes every client, logs failures by exception type only, and does not stop at the first."""
+        gateway = ModelGateway(self.variant(10))
+        self.gate.set()
+        await gateway.text('dialogue', '', MSG, settings=self.variant(10))
+        first = FakeOpenAI.created[0]
+        gateway.retired[('test', 'other')] = second = FakeOpenAI()
+
+        async def broken():
+            raise RuntimeError('provider said: private text')
+        first.close = broken
+        with self.assertLogs(level='WARNING') as logs:
+            await gateway.close()
+        self.assertTrue(second.closed)
+        output = '\n'.join(logs.output)
+        self.assertIn('RuntimeError', output)
+        self.assertNotIn('private text', output)
+
+
 class UnpinnedCallTests(BackendCase):
     async def test_each_unpinned_call_reads_current_once_and_logs_the_profile_used(self):
         """FEAT-10: outside a turn every gateway entry point reads current() exactly once, and the log entry matches the request."""

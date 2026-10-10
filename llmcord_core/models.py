@@ -69,7 +69,9 @@ class ModelGateway:
         self.source = settings_source(settings)
         self.environment = environment
         self.fingerprints: dict[str, tuple] = {}
-        self.retired: list[Any] = []
+        self.retired: dict[tuple, Any] = {}  # replaced clients still serving a call, by (profile name, fingerprint)
+        self._inflight: dict[int, int] = {}
+        self._closing: set[asyncio.Task] = set()
         self.log_sink = log_sink
         self.clients: dict[str, Any] = {}
         self.usage_sink = usage_sink
@@ -144,6 +146,8 @@ class ModelGateway:
         fingerprint = (profile.provider, profile.base_url, profile.api_key_env, profile.timeout_seconds, profile.max_retries, profile.source)
         if profile_name in self.clients and self.fingerprints.get(profile_name, fingerprint) == fingerprint:
             return self.clients[profile_name]
+        if (profile_name, fingerprint) in self.retired:
+            return self.retired[profile_name, fingerprint]
         key = environ.get(profile.api_key_env or "", "local-no-key")
         if profile.provider == "anthropic":
             kwargs = {"api_key": key, "timeout": profile.timeout_seconds, "max_retries": profile.max_retries}
@@ -158,9 +162,48 @@ class ModelGateway:
                 kwargs["base_url"] = 'https://api.openai.com/v1'
             client = AsyncOpenAI(**kwargs)
         if profile_name in self.clients:
-            self.retired.append(self.clients[profile_name])
+            old, old_key = self.clients[profile_name], (profile_name, self.fingerprints.get(profile_name))
+            if self._inflight.get(id(old)):
+                self.retired[old_key] = old
+            else:
+                self._schedule_close(old)
         self.clients[profile_name], self.fingerprints[profile_name] = client, fingerprint
         return client
+
+    @contextlib.contextmanager
+    def _use(self, profile_name: str, profile: ModelProfile):
+        """Hand out the client for one call or stream; a replaced client is closed once its last user is done."""
+        client = self._client(profile_name, profile)
+        self._inflight[id(client)] = self._inflight.get(id(client), 0) + 1
+        try:
+            yield client
+        finally:
+            left = self._inflight[id(client)] - 1
+            if left:
+                self._inflight[id(client)] = left
+            else:
+                del self._inflight[id(client)]
+                for key, retired in list(self.retired.items()):
+                    if retired is client:
+                        del self.retired[key]
+                        self._schedule_close(client)
+
+    def _schedule_close(self, client) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            logging.debug('Model client could not be closed: no running event loop')
+            return
+        task = loop.create_task(self._close_client(client))
+        self._closing.add(task)
+        task.add_done_callback(self._closing.discard)
+
+    @staticmethod
+    async def _close_client(client) -> None:
+        try:
+            await client.close()
+        except Exception as error:
+            logging.warning('Model client could not be closed: %s', type(error).__name__)
 
     def compiled_input(self, role, request, settings=None):
         if (settings or self.settings).profile(role).provider == 'anthropic':
@@ -239,7 +282,10 @@ class ModelGateway:
     async def _text(self, role, system, messages, max_tokens, entry, settings) -> str:
         profile_name = getattr(settings, role)
         profile = settings.profiles[profile_name]
-        client = self._client(profile_name, profile)
+        with self._use(profile_name, profile) as client:
+            return await self._text_with(client, role, system, messages, max_tokens, entry, settings, profile_name, profile)
+
+    async def _text_with(self, client, role, system, messages, max_tokens, entry, settings, profile_name, profile) -> str:
         limit = max_tokens or settings.limits["max_output_tokens"]
         if profile.provider == "openai":
             response = await client.responses.create(model=profile.model, instructions=system,
@@ -280,7 +326,12 @@ class ModelGateway:
     async def _stream(self, role, system, messages, max_tokens, entry, settings) -> AsyncIterator[str]:
         profile_name = getattr(settings, role)
         profile = settings.profiles[profile_name]
-        client = self._client(profile_name, profile)
+        with self._use(profile_name, profile) as client:
+            async with contextlib.aclosing(self._stream_with(client, role, system, messages, max_tokens, entry, settings, profile_name, profile)) as deltas:
+                async for delta in deltas:
+                    yield delta
+
+    async def _stream_with(self, client, role, system, messages, max_tokens, entry, settings, profile_name, profile) -> AsyncIterator[str]:
         limit = max_tokens or settings.limits["max_output_tokens"]
         if profile.provider == "openai":
             stream = await client.responses.create(model=profile.model, instructions=system,
@@ -343,7 +394,10 @@ class ModelGateway:
     async def _structured(self, role, system, messages, schema_name, schema, entry, settings) -> dict:
         profile_name = getattr(settings, role)
         profile = settings.profiles[profile_name]
-        client = self._client(profile_name, profile)
+        with self._use(profile_name, profile) as client:
+            return await self._structured_with(client, system, messages, schema_name, schema, entry, settings, role, profile_name, profile)
+
+    async def _structured_with(self, client, system, messages, schema_name, schema, entry, settings, role, profile_name, profile) -> dict:
         limit = settings.limits["max_output_tokens"]
         if profile.provider == "openai":
             response = await client.responses.create(model=profile.model, instructions=system,
@@ -399,8 +453,10 @@ class ModelGateway:
         raise ValueError("Compatible model returned invalid JSON")
 
     async def close(self) -> None:
-        for client in [*self.clients.values(), *self.retired]:
-            await client.close()
+        await asyncio.gather(*self._closing, return_exceptions=True)
+        retired, self.retired = list(self.retired.values()), {}
+        for client in [*self.clients.values(), *retired]:
+            await self._close_client(client)
 
 
 DIRECTOR_SCHEMA = {
