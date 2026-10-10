@@ -234,7 +234,7 @@ class JoinTests(GameCase):
         self.assertIn("**Blackjack**", content)
         self.assertIn(f"<@{ALICE}> bet 10 coins", content)
         self.assertRegex(content, r"Join with /blackjack <bet> — dealing <t:\d+:R>\.")
-        self.assertIn(f"Seed hash: {snap['seed_hash'][:12]}", content)
+        self.assertIn(f"\n-# Seed hash: {snap['seed_hash'][:12]}", content)
         self.assertNotIn(SEED, content)
         self.assertEqual([child.item.label for child in kwargs["view"].children], ["Deal now", "Leave"])
         self.assertEqual(self.balance(ALICE), 90)
@@ -470,7 +470,7 @@ class SettleTests(GameCase):
         content = click.response.edited[0]["content"]
         self.assertIn("win +10", content)
         self.assertRegex(content, r"Dealer: 9. 7. 2. \(18\)")
-        self.assertIn(f"Seed: {SEED} (hash {self.latest()['seed_hash'][:12]})", content)
+        self.assertIn(f"\n-# Seed: {SEED} (hash {self.latest()['seed_hash'][:12]})", content)
         self.assertNotIn("Seed hash:", content)
         self.assertEqual(self.labels(), ["Play again (same bet)", "Leave table"])
         self.assertEqual(self.balance(ALICE), 110)

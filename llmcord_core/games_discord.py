@@ -352,9 +352,9 @@ class GameTables:
         elif status == "settled":
             lines.append(f"Play again or leave. The table closes {stamp} if nobody plays again." if stamp else "Play again or leave.")
         if status == "settled" and snap["seed"]:
-            lines.append(f"Seed: {snap['seed']} (hash {snap['seed_hash'][:12]})")
+            lines.append(f"-# Seed: {snap['seed']} (hash {snap['seed_hash'][:12]})")
         else:
-            lines.append(f"Seed hash: {snap['seed_hash'][:12]}")
+            lines.append(f"-# Seed hash: {snap['seed_hash'][:12]}")
         return "\n".join(lines)
 
     def buttons(self, snap) -> discord.ui.View | None:
