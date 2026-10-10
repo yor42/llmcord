@@ -56,6 +56,7 @@
 | MNT-41 | FEAT-20 review: if the store refuses even the house-rule move for a character seat, `on_character_timer` returns without arming a timer and the round waits for restart recovery to refund it; cancel the round with a refund and repaint instead | FEAT-20 part B review | **Done** (d620609) |
 | MNT-42 | FEAT-20 review: character table talk has no per-member or per-table limit (one director call per character decision; only the server spending cap and the switch bound it); consider a daily per-server call cap or a per-table character limit | FEAT-20 part B review | **Done** (d620609): server setting "Table talk calls per day" (default 100, 1–10,000), failed attempts count, approximate across tables |
 | MNT-43 | Flaky browser test: `test_hub_tone_saves_persists_conflicts_and_guild_isolation` sometimes times out clicking the 'In character' option (the select menu is not open yet); wait for the menu like other select tests do | verify run 2026-10-10 | Open |
+| MNT-44 | Save bar: give `SaveBar` a supported hook (e.g. an enabled predicate per control) so the Games tab's "Dealer hits soft 17" switch stays disabled after a save without overriding `soft.enable` on the instance (`games_ui.py`) | FEAT-28 review 2026-10-10 | Open |
 
 ## UI polish
 
@@ -117,6 +118,7 @@
 | UI-54 | Blackjack: the dealer's play is paced: the hole card is revealed and each dealer card is shown about 1.5 seconds apart before the results (display only; the round is already settled in the store) | user 2026-10-10 | Done (b75796d) |
 | UI-55 | Blackjack: a **How to play** button under each table message gives a short ephemeral guide (goal, card values, the buttons, payouts) | user 2026-10-10 | Done (b75796d) |
 | UI-56 | Blackjack: the table message shows the rules as a gray `-# ` line in plain words ("Dealer stands on 17 · Blackjack pays 3:2 · …"), built from the round's rules so FEAT-28 options show up | user 2026-10-10 | Done (b75796d) |
+| UI-57 | Games tab: the "Rounds in the end-of-table summary" number field is too narrow, so its label shows as "Round…"; widen it like the other number fields | FEAT-28 screenshot 2026-10-10 | Open |
 
 ## Features
 
@@ -182,7 +184,7 @@ Items (order roughly as listed):
 | FEAT-25 | Schema v16 and character wallets ([channels-plan.md](channels-plan.md)): a balance per character per server through the same ledger; refills the daily check-in amount (no streak bonus) once per server day up to a per-server refill cap, lazily, missed days not added; winnings may exceed the cap; Currency tab view and `/balance character:` | user 2026-10-10 (D27) | Done (703da43) |
 | FEAT-26 | Archived favorites: an admin option lets an archived character still answer the members who have it as a favorite (only them, only where its home world is eligible; never in casts, ambient replies to others, games or `/summon`). Proposed: one server switch in Server settings ("Archived favorites can answer their members"); with it on, members can add archived characters as favorites and they count toward the limit again. The column goes into v15 while v15 is unreleased | user 2026-10-10 | **Done** (2026-10-10, 603877c): server switch, off by default; an archived favorite answers only its member, in both modes, never in casts, games or as the /summon target (it may answer alongside a summon, like step in). Column added to unreleased v15. |
 | FEAT-27 | Games tab ([minigames-plan.md](minigames-plan.md), D28): a dashboard tab with one section per game; shared game settings move there from the Currency tab (game channels, bet limits, table talk, daily talk limit) plus the end-of-table summary length; blackjack on/off for the whole server (off closes tables with refunds) | user 2026-10-10 (D28) | Done (998ce16) |
-| FEAT-28 | Blackjack rule options (D28): rules stored per round; dealer stand total 16–18 and hit/stand soft 17, blackjack 3:2 or 6:5, ties push or dealer wins, insurance and even money, late surrender; character legal moves include them, the fallback never takes them | user 2026-10-10 (D28) | Planned |
+| FEAT-28 | Blackjack rule options (D28): rules stored per round; dealer stand total 16–18 and hit/stand soft 17, blackjack 3:2 or 6:5, ties push or dealer wins, insurance and even money, late surrender; character legal moves include them, the fallback never takes them | user 2026-10-10 (D28) | Done (6cc071f, 743a54f) |
 
 ## Decisions
 
