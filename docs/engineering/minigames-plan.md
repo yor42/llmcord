@@ -1,6 +1,6 @@
 # Minigames and items: plan (proposed 2026-10-10)
 
-Status: **phase 1 done 2026-10-10 (FEAT-19, D26)**; later phases are a plan. Builds on FEAT-17 (currency) and FEAT-18 (daily check-in).
+Status: **phase 1 done 2026-10-10 (FEAT-19, D26)**; later phases are a plan. Character seats (FEAT-20) now build on favorites and character wallets: see [channels-plan.md](channels-plan.md) (D27). Builds on FEAT-17 (currency) and FEAT-18 (daily check-in).
 
 ## Principle
 
