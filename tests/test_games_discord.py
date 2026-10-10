@@ -201,6 +201,54 @@ class AdminTests(GameCase):
 
 
 class JoinTests(GameCase):
+    def flag_off_raw(self):
+        """Turns the switch off without the store's closing, as a flip that left a row open."""
+        with self.store.write_admin():
+            self.store.db.execute("INSERT INTO guild_settings(guild_id,blackjack_enabled) VALUES(?,0) ON CONFLICT(guild_id) DO UPDATE SET blackjack_enabled=0", (G,))
+
+    async def test_blackjack_off_refuses_before_the_channel_check_and_presses_act_like_a_closed_table(self):
+        """FEAT-27: /blackjack says so when the server switch is off (even in a non-game channel); a press on an open table of an off game closes it for the presser."""
+        await self.bet(ALICE, 10)
+        table = self.store.open_table_for(G, CH)["id"]
+        snap = self.latest()
+        self.flag_off_raw()
+        click = await self.bet(BOB, 10, channel_id=555)
+        self.assertEqual(click.replies, ["Blackjack is off on this server."])
+        click = await self.bet(BOB, 10)
+        self.assertEqual(click.replies, ["Blackjack is off on this server."])
+        self.assertEqual(self.balance(BOB), 100)
+        click = await self.press(ALICE, "Deal now", snap)
+        self.assertIn("Table closed: blackjack was turned off on this server.", click.response.edited[0]["content"])
+        self.assertNotIn((G, table), self.games.tables)
+        self.assertEqual(self.balance(ALICE), 100)
+        self.store.set_blackjack_enabled(G, True)
+        click = await self.bet(BOB, 10)
+        self.assertNotEqual(click.replies, ["Blackjack is off on this server."])
+
+    async def test_the_bot_closes_and_refunds_a_table_left_open_while_blackjack_is_off(self):
+        """FEAT-27: a flag flip that left a row open (raw write) is closed with refunds by the sweep, not just forgotten."""
+        await self.bet(ALICE, 10)
+        table = self.store.open_table_for(G, CH)["id"]
+        self.assertEqual(self.balance(ALICE), 90)
+        self.flag_off_raw()
+        await self.games.sweep()
+        self.assertIsNone(self.store.open_table_for(G, CH))
+        self.assertEqual(self.balance(ALICE), 100)
+        self.assertNotIn((G, table), self.games.tables)
+        self.assertEqual(self.texts()[-1].splitlines()[0], "Table closed: blackjack was turned off on this server.")
+
+    async def test_the_switch_flipping_after_the_precheck_opens_no_table(self):
+        """FEAT-27: open_table refuses inside its own transaction, so a flip between the bot's pre-check and the open leaves no table and takes no bet."""
+        calls = []
+        def flips(guild_id):
+            calls.append(guild_id)
+            return len(calls) == 1
+        with mock.patch.object(self.store, "blackjack_enabled", side_effect=flips):
+            click = await self.bet(ALICE, 10)
+        self.assertIn("Blackjack is off on this server.", click.replies)
+        self.assertIsNone(self.store.open_table_for(G, CH))
+        self.assertEqual(self.balance(ALICE), 100)
+
     async def test_refused_outside_game_channels_and_by_bots(self):
         click = await self.bet(ALICE, 10, channel_id=555)
         self.assertEqual(click.replies, ["Games are off in this channel."])

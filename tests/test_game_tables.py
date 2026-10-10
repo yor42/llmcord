@@ -766,6 +766,51 @@ class HardeningTests(TableCase):
             self.assertEqual(str(caught.exception), text)
 
 
+class BlackjackSwitchAndSummaryTests(TableCase):
+    """FEAT-27: per-guild summary rounds and the blackjack switch (schema v16 columns)."""
+
+    def test_defaults_roundtrip_conflict_and_validation(self):
+        self.assertEqual((self.store.game_summary_rounds(G), self.store.blackjack_enabled(G)), (5, True))
+        self.assertEqual(self.store.set_game_summary_rounds(G, 20, 5), 20)
+        self.assertEqual(self.store.set_blackjack_enabled(G, False, True)["enabled"], False)
+        self.assertEqual((self.store.game_summary_rounds(G), self.store.blackjack_enabled(G)), (20, False))
+        self.assertEqual((self.store.game_summary_rounds(2), self.store.blackjack_enabled(2)), (5, True))
+        with self.assertRaisesRegex(ConflictError, "The summary rounds setting was changed elsewhere. Reload the page and try again."):
+            self.store.set_game_summary_rounds(G, 3, 5)
+        with self.assertRaisesRegex(ConflictError, "The blackjack setting was changed elsewhere. Reload the page and try again."):
+            self.store.set_blackjack_enabled(G, True, True)
+        for bad in (0, 21, True, 2.5, "5", None):
+            with self.assertRaisesRegex(ValueError, "The number of summary rounds must be a whole number from 1 to 20."):
+                self.store.set_game_summary_rounds(G, bad)
+        for bad in (1, 0, "on", None):
+            with self.assertRaisesRegex(ValueError, "The setting must be on or off."):
+                self.store.set_blackjack_enabled(G, bad)
+        self.assertEqual(self.store.game_summary_rounds(G), 20)
+
+    def test_turning_it_off_closes_and_refunds_this_guilds_tables_in_one_call(self):
+        self.store.set_game_channel(2, 200, True)
+        self.store.change_balance(2, ALICE, 100, "start", 1)
+        other = self.store.open_table(2, 200, "blackjack", ALICE)
+        self.store.join_round(2, other["round_id"], ALICE, 10)
+        snap = self.started(["10", "9", "10", "8"])
+        self.assertEqual(self.store.balance(G, ALICE), 90)
+        self.assertEqual(self.store.set_blackjack_enabled(G, False), {"enabled": False, "closed_tables": [snap["table_id"]]})
+        self.assertIsNone(self.store.open_table_for(G, CH))
+        self.assertEqual(self.store.balance(G, ALICE), 100)
+        self.assertIsNotNone(self.store.open_table_for(2, 200))
+        self.assertEqual(self.store.balance(2, ALICE), 90)
+        self.assertEqual(self.store.set_blackjack_enabled(G, False), {"enabled": False, "closed_tables": []})
+        with self.assertRaisesRegex(GameError, "Blackjack is off on this server."):
+            self.store.open_table(G, CH, "blackjack", ALICE)
+
+    def test_the_flag_flipping_between_a_precheck_and_open_table_refuses_the_open(self):
+        self.assertTrue(self.store.blackjack_enabled(G))
+        self.store.set_blackjack_enabled(G, False)
+        with self.assertRaisesRegex(GameError, "Blackjack is off on this server."):
+            self.store.open_table(G, CH, "blackjack", ALICE)
+        self.assertIsNone(self.store.open_table_for(G, CH))
+
+
 class IsolationTests(TableCase):
     def test_a_round_id_from_another_guild_fails_everywhere(self):
         snap = self.started(["10", "9", "10", "8"])

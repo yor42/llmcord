@@ -28,6 +28,7 @@ from .games import DefaultPolicy, blackjack
 
 STALE = "That table has moved on — use the latest buttons."
 OFF_HERE = "Games are off in this channel."
+BLACKJACK_OFF = "Blackjack is off on this server."
 BUSY = "A round is being played; join the next one with /blackjack when it ends."
 LEAVE_BUSY = "You can leave when this round ends."
 NOT_SEATED = "You're not seated at this table."
@@ -35,9 +36,9 @@ NOT_YOUR_TURN = "It's not your turn."
 NO_CHARACTER_SEATS = "Characters can't sit at tables in this channel."
 SKIPPED = {"seated": "already at the table", "full": "table full", "archived": "archived"}
 CLOSED_OFF = "Table closed: games were turned off here."
+CLOSED_BLACKJACK_OFF = "Table closed: blackjack was turned off on this server."
 CLOSED = "Table closed."
 MAX_BET = 100_000
-SUMMARY_ROUNDS = 5
 HOW_TO_JOIN = "Join with /blackjack bet:<amount>; add favorites:True to bring your favorite characters."
 PREFIX = "llmcord:bj"
 NO_MENTIONS = discord.AllowedMentions.none()
@@ -270,11 +271,20 @@ class GameTables:
 
     def _is_open(self, key) -> bool:
         row = self._table_row(key)
-        return row is not None and row["status"] == "open"
+        return row is not None and row["status"] == "open" and self.store.blackjack_enabled(key[0])
+
+    def _off_text(self, key) -> str:
+        return CLOSED_OFF if self.store.blackjack_enabled(key[0]) else CLOSED_BLACKJACK_OFF
+
+    def _on_here(self, key, row) -> bool:
+        return self.store.blackjack_enabled(key[0]) and row["channel_id"] in self.store.game_channels(key[0])
 
     def _closed(self, key, repaint=False) -> tuple[bool, Paint | None]:
         """Under the table lock: is the table closed in the store? If the bot still holds it, forget it and return the paint that closes its message.
         ``repaint`` (a button press) also returns a one-off closing paint for a table the bot no longer holds, e.g. one closed while it was down."""
+        row = self._table_row(key)
+        if row is not None and row["status"] == "open" and not self.store.blackjack_enabled(key[0]):
+            self.store.close_table(*key)  # left open by a flag flip: close it with refunds, never just forget it
         if self._is_open(key):
             return False, None
         if key not in self.tables:
@@ -283,8 +293,8 @@ class GameTables:
             row = self._table_row(key)
             if row is None:
                 return True, None
-            return True, self._closing(key, CLOSED if row["channel_id"] in self.store.game_channels(key[0]) else CLOSED_OFF)
-        paint = self._closing(key, CLOSED_OFF)
+            return True, self._closing(key, CLOSED if self._on_here(key, row) else self._off_text(key))
+        paint = self._closing(key, self._off_text(key))
         self._forget(key)
         return True, paint
 
@@ -295,7 +305,7 @@ class GameTables:
             return None
         if text is None:
             row = self._table_row(key)
-            text = STALE if row is None else CLOSED if row["channel_id"] in self.store.game_channels(key[0]) else OFF_HERE
+            text = STALE if row is None else CLOSED if self._on_here(key, row) else OFF_HERE if self.store.blackjack_enabled(key[0]) else BLACKJACK_OFF
         return _Out(text, [paint] if paint else [])
 
     # --- painting ---------------------------------------------------------------------------
@@ -328,14 +338,14 @@ class GameTables:
         view.add_item(GameButton("help", snap["table_id"], snap["round_id"], snap["moves"], "How to play", discord.ButtonStyle.secondary))
         return view
 
-    def summary_rounds(self) -> int:
-        return SUMMARY_ROUNDS
+    def summary_rounds(self, guild_id) -> int:
+        return self.store.game_summary_rounds(guild_id)
 
     def _closing(self, key, text: str) -> Paint:
         sender = self.sender(key)
         sender.issued += 1
         try:
-            text = self._summary_text(text, self.store.game_table_summary(key[0], key[1], self.summary_rounds()))
+            text = self._summary_text(text, self.store.game_table_summary(key[0], key[1], self.summary_rounds(key[0])))
         except Exception:
             logging.exception("Could not build the blackjack table summary (table %s)", key[1])
         return Paint(key, sender, sender.issued, text, None, True)
@@ -522,7 +532,7 @@ class GameTables:
         say, first = out.say, not interaction.response.is_done()
         if first and say:
             if out.joined and not self._is_open(out.paints[0].key):
-                say = OFF_HERE  # the table was closed (and the bet refunded) after the join
+                say = OFF_HERE if self.store.blackjack_enabled(out.paints[0].key[0]) else BLACKJACK_OFF  # the table was closed (and the bet refunded) after the join
             await self._say(interaction, say)
             say = None
         for paint in out.paints:
@@ -578,6 +588,9 @@ class GameTables:
         channel_id = getattr(interaction, "channel_id", None) or interaction.channel.id
         if interaction.user.bot:
             await self._say(interaction, "Bots cannot play blackjack.")
+            return
+        if not self.store.blackjack_enabled(guild_id):
+            await self._say(interaction, BLACKJACK_OFF)
             return
         if channel_id not in self.store.game_channels(guild_id):
             await self._say(interaction, OFF_HERE)

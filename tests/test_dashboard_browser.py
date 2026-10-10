@@ -3869,6 +3869,11 @@ class DashboardBrowserTests(unittest.TestCase):
         page.locator('.ll-currency-table').nth(1).locator('tbody tr').first.wait_for(timeout=5000)
         return context, page, errors
 
+    def open_games(self):
+        context, page, errors = self.ux_page('/admin/guild/1?tab=games')
+        page.get_by_text('When a table closes, its message lists this many of the last rounds.', exact=True).wait_for(timeout=5000)
+        return context, page, errors
+
     def currency_give(self, page, button, member, amount, reason):
         page.get_by_label('Member ID or mention', exact=True).fill(member)
         page.get_by_label('Amount', exact=True).fill(str(amount))
@@ -4024,7 +4029,7 @@ class DashboardBrowserTests(unittest.TestCase):
         """FEAT-19 D: the Games section saves bet limits and game channels through the save bar with toasts and audit rows, shows the store's message for bad limits, refuses saves over settings changed elsewhere, and never touches guild 2."""
         from playwright.sync_api import expect
         other = self.state()['games']['2']
-        context, page, errors = self.open_currency()
+        context, page, errors = self.open_games()
         try:
             bar = page.get_by_role('region', name='Unsaved changes')
             low, high = page.get_by_label('Smallest bet', exact=True), page.get_by_label('Largest bet', exact=True)
@@ -4071,7 +4076,7 @@ class DashboardBrowserTests(unittest.TestCase):
         """FEAT-20: 'Characters talk at the table' saves through the save bar with an audit row, persists after reload, refuses a save over a change made elsewhere, never touches guild 2, and shows its note."""
         from playwright.sync_api import expect
         other = self.state()['games']['2']
-        context, page, errors = self.open_currency()
+        context, page, errors = self.open_games()
         try:
             bar = page.get_by_role('region', name='Unsaved changes')
             switch = page.get_by_role('switch', name='Characters talk at the table')
@@ -4101,7 +4106,7 @@ class DashboardBrowserTests(unittest.TestCase):
         """MNT-42: 'Table talk calls per day' saves through the save bar with an audit row, persists after reload, refuses a stale save, shows its note and today's count, and never touches guild 2."""
         from playwright.sync_api import expect
         other = self.state()['games']['2']
-        context, page, errors = self.open_currency()
+        context, page, errors = self.open_games()
         try:
             bar = page.get_by_role('region', name='Unsaved changes')
             field = page.get_by_label('Table talk calls per day')
@@ -4134,7 +4139,7 @@ class DashboardBrowserTests(unittest.TestCase):
         self.post_hook('/_test/games', {'channels': [100, 999]})
         seated = self.context.request.post(self.url + '/_test/game-table', data={'channel': 100, 'user': member, 'funds': 500, 'stake': 40}).json()
         self.assertEqual(seated['balance'], 460)
-        context, page, errors = self.open_currency()
+        context, page, errors = self.open_games()
         try:
             bar = page.get_by_role('region', name='Unsaved changes')
             picker = page.get_by_label('Game channels', exact=True)
@@ -4153,6 +4158,84 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             self.post_hook('/_test/games', {'channels': []})
             self.post_hook('/_test/game-table-cleanup', {'user': member})
+            context.close()
+
+    def test_games_tab_pointer_and_summary_rounds_save_validate_conflict_and_guild_isolation(self):
+        """FEAT-27: the Currency tab points to the Games tab and no longer holds game settings; 'Rounds in the end-of-table summary' saves with an audit row, persists, shows the store's message for 0 and 21, refuses a stale save, and never touches guild 2."""
+        from playwright.sync_api import expect
+        other = self.state()['games']['2']
+        context, page, errors = self.open_currency()
+        try:
+            page.get_by_text('Game channels, bets and table talk are in the Games tab.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(page.get_by_label('Smallest bet', exact=True).count(), 0)
+            context.close()
+            context, page, errors = self.open_games()
+            bar = page.get_by_role('region', name='Unsaved changes')
+            field = page.get_by_label('Rounds in the end-of-table summary')
+            self.assertEqual(field.input_value(), '5')
+            field.fill('0')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The number of summary rounds must be a whole number from 1 to 20.', exact=True).wait_for(timeout=5000)
+            field.fill('21')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The number of summary rounds must be a whole number from 1 to 20.', exact=True).wait_for(timeout=5000)
+            field.fill('8')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Summary rounds saved', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['summary_rounds'], 8)
+            rows = [r for r in self.state()['audit'] if r['action'] == 'games.summary_rounds']
+            self.assertEqual([json.loads(r['detail_json']) for r in rows], [{'rounds': 8}])
+            page.reload()
+            expect(page.get_by_label('Rounds in the end-of-table summary')).to_have_value('8', timeout=5000)
+            page.get_by_label('Rounds in the end-of-table summary').fill('9')
+            self.post_hook('/_test/games', {'summary_rounds': 12})
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The summary rounds setting was changed elsewhere. Reload the page and try again.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['summary_rounds'], 12)
+            self.assertEqual(self.state()['games']['2'], other)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'summary_rounds': 5})
+            context.close()
+
+    def test_games_tab_blackjack_switch_closes_open_tables_with_refunds_and_guild_isolation(self):
+        """FEAT-27: turning 'Blackjack is on' off saves with an audit row, closes this server's open tables with every bet refunded and toasts the count, leaves guild 2's table and balance alone, persists after reload, and refuses a stale save."""
+        from playwright.sync_api import expect
+        member, other_member = 777000111, 777000222
+        self.post_hook('/_test/games', {'channels': [100]})
+        self.post_hook('/_test/games', {'guild': 2, 'channels': [300]})
+        self.assertEqual(self.context.request.post(self.url + '/_test/game-table', data={'channel': 100, 'user': member, 'funds': 500, 'stake': 40}).json()['balance'], 460)
+        self.assertEqual(self.context.request.post(self.url + '/_test/game-table', data={'guild': 2, 'channel': 300, 'user': other_member, 'funds': 500, 'stake': 40}).json()['balance'], 460)
+        other = self.state()['games']['2']
+        context, page, errors = self.open_games()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            switch = page.get_by_role('switch', name='Blackjack is on')
+            switch.wait_for(timeout=5000)
+            page.get_by_text('Off: /blackjack is refused and open blackjack tables close with every bet refunded.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(switch.get_attribute('aria-checked'), 'true')
+            switch.click()
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Blackjack is off. Closed 1 open table.', exact=True).wait_for(timeout=5000)
+            self.assertFalse(self.state()['games']['1']['blackjack_enabled'])
+            self.assertIn('games.blackjack_enabled', self.audit_actions())
+            balance = lambda user, guild: self.context.request.get(self.url + '/_test/balance', params={'user': user, 'guild': guild}).json()['balance']
+            self.assertEqual(balance(member, 1), 500)
+            self.assertEqual(balance(other_member, 2), 460)
+            self.assertEqual(self.state()['games']['2'], other)
+            page.reload()
+            expect(page.get_by_role('switch', name='Blackjack is on')).to_have_attribute('aria-checked', 'false', timeout=5000)
+            page.get_by_role('switch', name='Blackjack is on').click()
+            self.post_hook('/_test/games', {'blackjack_enabled': True})
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The blackjack setting was changed elsewhere. Reload the page and try again.', exact=True).wait_for(timeout=5000)
+            self.assertTrue(self.state()['games']['1']['blackjack_enabled'])
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'blackjack_enabled': True, 'channels': []})
+            self.post_hook('/_test/games', {'guild': 2, 'channels': []})
+            self.post_hook('/_test/game-table-cleanup', {'user': member})
+            self.post_hook('/_test/game-table-cleanup', {'guild': 2, 'user': other_member})
             context.close()
 
     def test_currency_character_wallets_cap_and_balances(self):

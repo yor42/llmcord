@@ -56,6 +56,8 @@ def legacy_file(folder, version=9):
         db.execute("ALTER TABLE guild_settings DROP COLUMN character_refill_cap")
         db.execute("ALTER TABLE guild_settings DROP COLUMN game_character_talk")
         db.execute("ALTER TABLE guild_settings DROP COLUMN game_talk_daily_limit")
+        db.execute("ALTER TABLE guild_settings DROP COLUMN game_summary_rounds")
+        db.execute("ALTER TABLE guild_settings DROP COLUMN blackjack_enabled")
         db.execute("DROP TABLE member_favorites")
         db.execute("DROP TABLE member_settings")
         for column in ("max_cast", "max_favorites", "archived_favorites"):

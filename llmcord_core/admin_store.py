@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS guild_settings (
  daily_amount INTEGER NOT NULL DEFAULT 0, daily_streak_bonus INTEGER NOT NULL DEFAULT 0, daily_streak_days INTEGER NOT NULL DEFAULT 7,
  game_min_bet INTEGER NOT NULL DEFAULT 1, game_max_bet INTEGER NOT NULL DEFAULT 1000,
  max_cast INTEGER NOT NULL DEFAULT 5, max_favorites INTEGER NOT NULL DEFAULT 5, archived_favorites INTEGER NOT NULL DEFAULT 0,
- character_refill_cap INTEGER NOT NULL DEFAULT 1000, game_character_talk INTEGER NOT NULL DEFAULT 1,
+ character_refill_cap INTEGER NOT NULL DEFAULT 1000, game_character_talk INTEGER NOT NULL DEFAULT 1, game_summary_rounds INTEGER NOT NULL DEFAULT 5, blackjack_enabled INTEGER NOT NULL DEFAULT 1,
  game_talk_daily_limit INTEGER NOT NULL DEFAULT 100
 );
 CREATE TABLE IF NOT EXISTS currency_daily (
@@ -527,7 +527,7 @@ class AdminStore:
             'lore': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0'},
             'lorebook_entries': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0', 'pinned': 'INTEGER NOT NULL DEFAULT 0', 'source_message_id': 'INTEGER', 'promoted_from': 'INTEGER'},
             'characters': {'avatar_manual': 'INTEGER NOT NULL DEFAULT 0'},
-            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0', 'currency_name': "TEXT NOT NULL DEFAULT ''", 'daily_amount': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_bonus': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_days': 'INTEGER NOT NULL DEFAULT 7', 'game_min_bet': 'INTEGER NOT NULL DEFAULT 1', 'game_max_bet': 'INTEGER NOT NULL DEFAULT 1000', 'max_cast': 'INTEGER NOT NULL DEFAULT 5', 'max_favorites': 'INTEGER NOT NULL DEFAULT 5', 'archived_favorites': 'INTEGER NOT NULL DEFAULT 0', 'character_refill_cap': 'INTEGER NOT NULL DEFAULT 1000', 'game_character_talk': 'INTEGER NOT NULL DEFAULT 1', 'game_talk_daily_limit': 'INTEGER NOT NULL DEFAULT 100'},
+            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0', 'currency_name': "TEXT NOT NULL DEFAULT ''", 'daily_amount': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_bonus': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_days': 'INTEGER NOT NULL DEFAULT 7', 'game_min_bet': 'INTEGER NOT NULL DEFAULT 1', 'game_max_bet': 'INTEGER NOT NULL DEFAULT 1000', 'max_cast': 'INTEGER NOT NULL DEFAULT 5', 'max_favorites': 'INTEGER NOT NULL DEFAULT 5', 'archived_favorites': 'INTEGER NOT NULL DEFAULT 0', 'character_refill_cap': 'INTEGER NOT NULL DEFAULT 1000', 'game_character_talk': 'INTEGER NOT NULL DEFAULT 1', 'game_talk_daily_limit': 'INTEGER NOT NULL DEFAULT 100', 'game_summary_rounds': 'INTEGER NOT NULL DEFAULT 5', 'blackjack_enabled': 'INTEGER NOT NULL DEFAULT 1'},
             'game_seats': {'brought_by': 'INTEGER'},
             'currency_ledger': {'holder_kind': "TEXT NOT NULL DEFAULT 'member' CHECK(holder_kind IN ('member','character'))"},
             'model_usage': {'channel_id': 'INTEGER', 'feature': "TEXT NOT NULL DEFAULT ''"},
@@ -1346,6 +1346,40 @@ class AdminStore:
             self.db.execute('INSERT INTO guild_settings(guild_id,game_character_talk) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET game_character_talk=excluded.game_character_talk', (guild_id, int(bool(enabled))))
         return bool(enabled)
 
+    GAME_SUMMARY_MAX = 20
+
+    def game_summary_rounds(self, guild_id):
+        row = self.one('SELECT game_summary_rounds FROM guild_settings WHERE guild_id=?', (guild_id,))
+        return row['game_summary_rounds'] if row else 5
+
+    def set_game_summary_rounds(self, guild_id, rounds, expected=None):
+        if isinstance(rounds, bool) or not isinstance(rounds, int) or not 1 <= rounds <= self.GAME_SUMMARY_MAX:
+            raise ValueError('The number of summary rounds must be a whole number from 1 to 20.')
+        with self.write_admin():
+            if expected is not None and self.game_summary_rounds(guild_id) != expected:
+                raise ConflictError('The summary rounds setting was changed elsewhere. Reload the page and try again.')
+            self.db.execute('INSERT INTO guild_settings(guild_id,game_summary_rounds) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET game_summary_rounds=excluded.game_summary_rounds', (guild_id, rounds))
+        return rounds
+
+    def blackjack_enabled(self, guild_id):
+        row = self.one('SELECT blackjack_enabled FROM guild_settings WHERE guild_id=?', (guild_id,))
+        return bool(row['blackjack_enabled']) if row else True
+
+    def set_blackjack_enabled(self, guild_id, enabled, expected=None):
+        """Turning it off also closes the guild's open blackjack tables in the same transaction (rounds cancelled and refunded). Returns {'enabled', 'closed_tables': [table ids]}."""
+        if not isinstance(enabled, bool):
+            raise ValueError('The setting must be on or off.')
+        closed = []
+        with self.write_admin():
+            if expected is not None and self.blackjack_enabled(guild_id) != expected:
+                raise ConflictError('The blackjack setting was changed elsewhere. Reload the page and try again.')
+            self.db.execute('INSERT INTO guild_settings(guild_id,blackjack_enabled) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET blackjack_enabled=excluded.blackjack_enabled', (guild_id, int(enabled)))
+            if not enabled:
+                for row in self.all("SELECT id FROM game_tables WHERE guild_id=? AND game='blackjack' AND status='open' ORDER BY id", (guild_id,)):
+                    self._close_table_in_tx(guild_id, row['id'])
+                    closed.append(row['id'])
+        return {'enabled': enabled, 'closed_tables': closed}
+
     GAME_TALK_LIMIT = 10_000
 
     def game_talk_daily_limit(self, guild_id):
@@ -1586,6 +1620,8 @@ class AdminStore:
         if game != 'blackjack':
             raise GameError('That game is not available.')
         with self.write_admin():
+            if not self.blackjack_enabled(guild_id):
+                raise GameError('Blackjack is off on this server.')
             if channel_id not in self.game_channels(guild_id):
                 raise GameError('Games are not turned on in this channel. Ask an admin to turn them on.')
             if self.open_table_for(guild_id, channel_id):

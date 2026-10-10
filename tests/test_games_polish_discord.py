@@ -190,9 +190,16 @@ class SummaryTests(GameCase):
     async def test_the_size_is_read_through_one_function(self):
         for _ in range(3):
             await self.play()
-        self.games.summary_rounds = lambda: 2
+        self.games.summary_rounds = lambda guild_id: 2
         click = await self.press(ALICE, "Leave table")
         self.assertEqual(click.response.edited[0]["content"].count("\nRound "), 2)
+
+    async def test_the_size_follows_the_server_setting_and_defaults_to_five(self):
+        """FEAT-27: the summary length is games.summary_rounds of the table's own server."""
+        self.assertEqual(self.games.summary_rounds(G), 5)
+        self.store.set_game_summary_rounds(G, 2)
+        self.assertEqual(self.games.summary_rounds(G), 2)
+        self.assertEqual(self.games.summary_rounds(G + 1), 5)
 
     async def test_seven_seats_and_five_rounds_fit_in_one_message(self):
         users = [ALICE, BOB, CARA, 8, 9, 10, 11]
