@@ -34,6 +34,7 @@ from .avatars import emotion_stream
 from .errors import ModelConfigError, error_detail, error_stack, reference_id, user_detail
 from .usage import capture_usage, log_attribution, log_purpose, log_scope, mask_for_log, reply_footer
 from .identity import discord_identity, message_context
+from .games_discord import GameButton, GameTables, register_game_commands
 
 AVATAR_ASSET_CHECK_TTL = 600
 CACHE_LIMIT = 512
@@ -146,6 +147,7 @@ class SkitBot(commands.Bot):
         self.tree.allowed_contexts = app_commands.AppCommandContext(guild=True)
         self.memory_tasks: dict[int, asyncio.Task] = {}
         self.note_tasks: set[asyncio.Task] = set()
+        self.games = GameTables(self)
         register_commands(self)
 
     async def setup_hook(self):
@@ -155,6 +157,8 @@ class SkitBot(commands.Bot):
             await self.tree.sync(guild=guild)
         else:
             await self.tree.sync()
+        await self.games.recover()
+        self.add_dynamic_items(GameButton)
         self.cleanup_task = asyncio.create_task(self._cleanup_loop())
 
     async def on_ready(self):
@@ -176,6 +180,10 @@ class SkitBot(commands.Bot):
     async def close(self):
         if self.cleanup_task:
             self.cleanup_task.cancel()
+        try:
+            await self.games.close()
+        except Exception:
+            logging.exception('Closing the game timers failed')
         try:
             pending = [task for task in self.memory_tasks.values() if not task.done()]
             if pending:
@@ -1496,6 +1504,7 @@ def register_commands(bot: SkitBot) -> None:
     admin_lore = app_commands.Group(name="lore", description="Add and manage lore", parent=admin)
     admin_scene = app_commands.Group(name="scene", description="Delete stored scenes", parent=admin)
     admin_currency = app_commands.Group(name="currency", description="Give, take and name the server currency", parent=admin)
+    admin_games = app_commands.Group(name="games", description="Turn games on in channels and set bet limits", parent=admin)
 
     _register_space_commands(bot, ctx, admin_space)
     _register_character_commands(bot, ctx, admin_character)
@@ -1506,6 +1515,7 @@ def register_commands(bot: SkitBot) -> None:
     _register_memory_commands(bot, ctx)
     _register_time_commands(bot, ctx)
     _register_currency_commands(bot, ctx, admin_currency)
+    register_game_commands(bot, ctx, admin_games)
     _register_lore_commands(bot, ctx, admin_lore)
     _register_scene_commands(bot, ctx, admin_scene)
     bot.tree.add_command(admin)

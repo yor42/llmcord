@@ -58,6 +58,26 @@ EXPECTED_COMMANDS = {
         "None",
         False,
     ),
+    "admin games bets": (
+        "Set the smallest and largest bet",
+        (
+            ("min", "integer", True, "Smallest bet", False, ()),
+            ("max", "integer", True, "Largest bet", False, ()),
+        ),
+        1,
+        "None",
+        False,
+    ),
+    "admin games channel": (
+        "Turn games on or off in a channel",
+        (
+            ("enabled", "boolean", True, "On or off", False, ()),
+            ("channel", "channel", False, "The channel (default: this one)", False, ()),
+        ),
+        1,
+        "None",
+        False,
+    ),
     "admin currency grant": (
         "Give a member currency",
         (
@@ -205,6 +225,13 @@ EXPECTED_COMMANDS = {
         False,
     ),
     "daily": ("Claim your daily check-in bonus", (), 0, "None", False),
+    "blackjack": (
+        "Join or open a blackjack table in this channel",
+        (("bet", "integer", True, "How much to bet", False, ()),),
+        0,
+        "None",
+        False,
+    ),
     "balance": (
         "Show your balance, or another member's",
         (("member", "user", False, "Whose balance to show (default: yours)", False, ()),),
@@ -319,6 +346,7 @@ EXPECTED_GROUPS = {
     "admin cast": ("Set a channel's default cast", "None", False),
     "admin character": ("Import characters", "None", False),
     "admin currency": ("Give, take and name the server currency", "None", False),
+    "admin games": ("Turn games on in channels and set bet limits", "None", False),
     "admin lore": ("Add and manage lore", "None", False),
     "admin scene": ("Delete stored scenes", "None", False),
     "admin space": ("Manage worlds, hubs and channel bindings", "None", False),
