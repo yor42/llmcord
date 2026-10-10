@@ -1584,7 +1584,7 @@ class AdminStore:
         return row
 
     def _game_round(self, guild_id, round_id):
-        row = self.one('SELECT r.*,t.channel_id,t.game,t.message_id FROM game_rounds r JOIN game_tables t ON t.id=r.table_id AND t.guild_id=r.guild_id WHERE r.id=? AND r.guild_id=?', (round_id, guild_id))
+        row = self.one('SELECT r.*,t.channel_id,t.game,t.message_id,t.thread_id,t.board_message_id,t.turn_message_id FROM game_rounds r JOIN game_tables t ON t.id=r.table_id AND t.guild_id=r.guild_id WHERE r.id=? AND r.guild_id=?', (round_id, guild_id))
         if row is None:
             raise GameError('No such game round on this server.')
         return row
@@ -1658,6 +1658,7 @@ class AdminStore:
         moves = self._game_moves(guild_id, round_id)
         names = self.character_names(guild_id, [r['ref_id'] for r in seats if r['kind'] == 'character'])
         out = {'guild_id': guild_id, 'channel_id': rnd['channel_id'], 'game': rnd['game'], 'table_id': rnd['table_id'], 'message_id': rnd['message_id'],
+               'thread_id': rnd['thread_id'], 'board_message_id': rnd['board_message_id'], 'turn_message_id': rnd['turn_message_id'],
                'round_id': round_id, 'number': rnd['number'], 'status': rnd['status'], 'seed_hash': rnd['seed_hash'],
                'seats': [{'index': r['seat_index'], 'kind': r['kind'], 'ref_id': r['ref_id'], 'stake': r['stake'], 'outcome': r['outcome'], 'payout': r['payout'],
                          'brought_by': r['brought_by'], 'insurance': r['insurance'], 'name': (names.get(r['ref_id']) or f"Deleted character (#{r['ref_id']})") if r['kind'] == 'character' else None} for r in seats],
@@ -1671,13 +1672,12 @@ class AdminStore:
                 if rnd['status'] == 'playing':
                     raise
                 return out  # money already settled or refunded: a damaged move log must not hide that
-            engine = spec.engine
-            out['view'] = asdict(engine.view(state, None))
-            out['phase'] = state.phase if rnd['status'] == 'playing' else None
+            out['view'] = asdict(spec.engine.view(state, None))  # public view only: a hand is reached through seat_view
+            out['phase'] = getattr(state, 'phase', None) if rnd['status'] == 'playing' else None
             if rnd['status'] == 'playing' and state.turn is not None:
-                out['legal'] = {state.turn: engine.legal_moves(state, state.turn, self._can_double(guild_id, state, seats, state.turn), self._can_insure(guild_id, state, seats, state.turn))}
+                out['legal'] = spec.public_legal(state, lambda: self._can_double(guild_id, state, seats, state.turn), lambda: self._can_insure(guild_id, state, seats, state.turn))
             if rnd['status'] == 'settled':
-                out['summary'] = engine.result(state).summary
+                out['summary'] = spec.summary(state)
         return out
 
     def round_snapshot(self, guild_id, round_id):
@@ -1685,7 +1685,7 @@ class AdminStore:
         return self._game_snapshot(guild_id, round_id)
 
     def game_table_summary(self, guild_id, table_id, limit):
-        """The table's last ``limit`` settled rounds, oldest first: dealer total and each seat's net (payout - stake - insurance). Cancelled rounds are left out."""
+        """The table's last ``limit`` settled rounds, oldest first: the game's facts (blackjack: dealer_total; I Doubt It: winner, pot) and each seat's net (payout - stake - insurance). Cancelled rounds are left out."""
         if limit <= 0:
             return []
         rounds = self.all("SELECT r.*,t.game FROM game_rounds r JOIN game_tables t ON t.id=r.table_id AND t.guild_id=r.guild_id WHERE r.guild_id=? AND r.table_id=? AND r.status='settled' ORDER BY r.number DESC LIMIT ?", (guild_id, table_id, limit))[::-1]
@@ -1702,11 +1702,12 @@ class AdminStore:
         out = []
         for rnd in rounds:
             rows = seats.get(rnd['id'], [])
+            spec = self._round_game(rnd)
             try:
-                dealer_total = blackjack.hand_total(self._game_state(rnd, rows, moves.get(rnd['id'], [])).dealer)[0]
+                facts = spec.round_facts(self._game_state(rnd, rows, moves.get(rnd['id'], [])))
             except GameError:
-                dealer_total = None  # a damaged move log must not hide what was paid
-            out.append({'number': rnd['number'], 'dealer_total': dealer_total, 'seats': [
+                facts = dict.fromkeys(spec.fact_keys)  # a damaged move log must not hide what was paid
+            out.append({'number': rnd['number'], **facts, 'seats': [
                 {'index': r['seat_index'], 'kind': r['kind'], 'ref_id': r['ref_id'], 'brought_by': None, 'net': (r['payout'] or 0) - r['stake'] - r['insurance'],
                  'name': (names.get(r['ref_id']) or f"Deleted character (#{r['ref_id']})") if r['kind'] == 'character' else None} for r in rows]})
         return out
@@ -1722,7 +1723,8 @@ class AdminStore:
         number = self.one('SELECT COALESCE(MAX(number),0)+1 FROM game_rounds WHERE table_id=? AND guild_id=?', (table_id, guild_id))[0]
         game = self._game_table(guild_id, table_id)['game']
         return self.db.execute('INSERT INTO game_rounds(guild_id,table_id,number,seed,seed_hash,status,created_at,rules_json) VALUES(?,?,?,?,?,?,?,?)',
-            (guild_id, table_id, number, seed, seed_hash(seed), 'joining', now, self._rules_json(self.game_rules(guild_id, game), game))).lastrowid
+            (guild_id, table_id, number, seed, seed_hash(seed), 'joining', now,
+             json.dumps(self.game_rules(guild_id, game), sort_keys=True) if registry.get(game).ante else self._rules_json(self.game_rules(guild_id, game), game))).lastrowid  # an ante game always pins its full rules in the round
 
     def open_table(self, guild_id, channel_id, game, user_id, now=None, seed=None):
         now = time.time() if now is None else now
@@ -1764,6 +1766,43 @@ class AdminStore:
             self._game_table(guild_id, table_id)
             self.db.execute('UPDATE game_tables SET message_id=?,updated_at=? WHERE id=? AND guild_id=?', (message_id, time.time(), table_id, guild_id))
 
+    def _set_table_column(self, guild_id, table_id, column, value):
+        if column not in ('thread_id', 'board_message_id', 'turn_message_id'):
+            raise ValueError('not a table column')
+        if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
+            raise GameError('That is not a Discord id.')
+        with self.write_admin():
+            self._game_table(guild_id, table_id)
+            self.db.execute(f'UPDATE game_tables SET {column}=?,updated_at=? WHERE id=? AND guild_id=?', (value, time.time(), table_id, guild_id))
+
+    def set_table_thread(self, guild_id, table_id, thread_id):
+        self._set_table_column(guild_id, table_id, 'thread_id', thread_id)
+
+    def set_board_message(self, guild_id, table_id, message_id):
+        self._set_table_column(guild_id, table_id, 'board_message_id', message_id)
+
+    def set_turn_message(self, guild_id, table_id, message_id):
+        self._set_table_column(guild_id, table_id, 'turn_message_id', message_id)
+
+    def table_for_thread(self, guild_id, thread_id):
+        """The guild's open table played in this thread (the game_tables row as a dict), or None."""
+        row = self.one("SELECT * FROM game_tables WHERE guild_id=? AND thread_id=? AND status='open' ORDER BY id DESC", (guild_id, thread_id))
+        return dict(row) if row else None
+
+    def seat_view(self, guild_id, round_id, seat_index):
+        """What one seat may see (its own hand included) of a round being played; the Discord layer shows it only to that seat's holder."""
+        rnd = self._game_round(guild_id, round_id)
+        if rnd['status'] != 'playing':
+            raise GameError('This round is not being played.')
+        state = self._game_state(rnd, self._game_seats(guild_id, round_id), self._game_moves(guild_id, round_id))
+        if isinstance(seat_index, bool) or not isinstance(seat_index, int) or not 0 <= seat_index < len(state.seats):
+            raise GameError('No such seat.')
+        return self._round_game(rnd).engine.view(state, seat_index)
+
+    def member_seat_index(self, guild_id, round_id, user_id):
+        row = self.one("SELECT seat_index FROM game_seats WHERE guild_id=? AND round_id=? AND kind='member' AND ref_id=?", (guild_id, round_id, user_id))
+        return row['seat_index'] if row else None
+
     def _game_label(self, rnd):
         return f"table {rnd['table_id']}, round {rnd['number']}"
 
@@ -1776,6 +1815,8 @@ class AdminStore:
 
     def _pay_seat(self, guild_id, seat, amount, reason):
         """Pays a seat's holder (member or character wallet), clamped at the balance maximum; a deleted character's wallet is gone, so 0."""
+        if amount <= 0:
+            return 0
         if seat['kind'] != 'character':
             return self._pay_clamped(guild_id, seat['ref_id'], amount, reason)
         if self._character_row(guild_id, seat['ref_id']) is None:
@@ -1798,8 +1839,12 @@ class AdminStore:
             raise GameError('This round has already started.')
         limits, name = self.game_settings(guild_id), self.currency_name(guild_id)
         spec = self._round_game(rnd)
-        if stake < 1 or not limits['min_bet'] <= stake <= limits['max_bet']:  # game_seats allows stake 0 since v17 (a free ante), so a bet is checked here
-            raise GameError(f"The bet must be between {limits['min_bet']:,} and {limits['max_bet']:,} {name}.")
+        if spec.ante:  # the stake argument is ignored: the seat antes what the round's rules snapshot says
+            stake, word = self._round_ante(rnd), 'ante'
+        else:
+            word = 'bet'
+            if stake < 1 or not limits['min_bet'] <= stake <= limits['max_bet']:  # game_seats allows stake 0 since v17 (a free ante), so a bet is checked here
+                raise GameError(f"The bet must be between {limits['min_bet']:,} and {limits['max_bet']:,} {name}.")
         seats = self._game_seats(guild_id, round_id)
         if any(row['kind'] == kind and row['ref_id'] == user_id for row in seats):
             raise GameError('You already have a seat in this round.')
@@ -1807,10 +1852,35 @@ class AdminStore:
             raise GameError('The table is full.')
         balance = self.balance(guild_id, user_id)
         if balance < stake:
-            raise GameError(f'You need {stake:,} {name} for that bet but have {balance:,}.')
-        self._append_ledger(guild_id, user_id, -stake, f'{spec.ledger_label} bet ({self._game_label(rnd)})', user_id, 'game', None)
+            raise GameError(f'You need {stake:,} {name} for that {word} but have {balance:,}.')
+        if stake > 0:
+            self._append_ledger(guild_id, user_id, -stake, f'{spec.ledger_label} {word} ({self._game_label(rnd)})', user_id, 'game', None)
         self.db.execute('INSERT INTO game_seats(guild_id,round_id,seat_index,kind,ref_id,stake) VALUES(?,?,?,?,?,?)', (guild_id, round_id, len(seats), kind, user_id, stake))
         return rnd
+
+    def _round_ante(self, rnd):
+        rules = self._round_rules(rnd)
+        if rules is None:
+            raise GameError('This round could not be restored. Ask an admin to cancel it.')
+        return rules['ante']
+
+    def _seat_character(self, guild_id, rnd, round_id, user_id, cid, bet_for, now, skipped, seated, label, spec):
+        """Inside write_admin: one character seat (brought by user_id, or None for a house seat) with its skip reasons; appends to seated/skipped."""
+        row = self._character_row(guild_id, cid)
+        seats = self._game_seats(guild_id, round_id)
+        if any(s['kind'] == 'character' and s['ref_id'] == cid for s in seats):
+            skipped.append({'character_id': cid, 'name': row['name'], 'reason': 'seated'})
+        elif len(seats) >= spec.max_seats:
+            skipped.append({'character_id': cid, 'name': row['name'], 'reason': 'full'})
+        else:
+            bet = bet_for(cid)
+            if bet is None:
+                skipped.append({'character_id': cid, 'name': row['name'], 'reason': 'broke'})
+                return
+            if bet > 0:
+                self._character_debit_locked(guild_id, cid, bet, f"{spec.ledger_label} {'ante' if spec.ante else 'bet'} ({label})", now)
+            self.db.execute('INSERT INTO game_seats(guild_id,round_id,seat_index,kind,ref_id,stake,brought_by) VALUES(?,?,?,?,?,?,?)', (guild_id, round_id, len(seats), 'character', cid, bet, user_id))
+            seated.append({'character_id': cid, 'name': row['name'], 'stake': bet})
 
     def join_with_favorites(self, guild_id, round_id, user_id, stake, space_id, now=None):
         """FEAT-20: seats the member as join_round does, then (with a space) each eligible, non-archived favorite as a character seat they bring,
@@ -1823,6 +1893,13 @@ class AdminStore:
             rnd = self._join_member_locked(guild_id, round_id, user_id, stake)
             if space_id is not None:
                 limits, label, spec = self.game_settings(guild_id), self._game_label(rnd), self._round_game(rnd)
+                ante = self._round_ante(rnd) if spec.ante else None
+
+                def bet_for(cid):
+                    if spec.ante:
+                        return ante if self.character_balance(guild_id, cid, now) >= ante else None
+                    bet = min(stake, self.character_balance(guild_id, cid, now), limits['max_bet'])
+                    return bet if bet >= max(limits['min_bet'], 1) else None
                 for fav in self.eligible_favorites(guild_id, user_id, space_id):
                     cid, row = fav['character_id'], self._character_row(guild_id, fav['character_id'])
                     if row is None:
@@ -1830,19 +1907,32 @@ class AdminStore:
                     if row['archived']:
                         skipped.append({'character_id': cid, 'name': row['name'], 'reason': 'archived'})
                         continue
-                    seats = self._game_seats(guild_id, round_id)
-                    if any(s['kind'] == 'character' and s['ref_id'] == cid for s in seats):
-                        skipped.append({'character_id': cid, 'name': row['name'], 'reason': 'seated'})
-                    elif len(seats) >= spec.max_seats:
-                        skipped.append({'character_id': cid, 'name': row['name'], 'reason': 'full'})
-                    else:
-                        bet = min(stake, self.character_balance(guild_id, cid, now), limits['max_bet'])
-                        if bet < max(limits['min_bet'], 1):
-                            skipped.append({'character_id': cid, 'name': row['name'], 'reason': 'broke'})
-                            continue
-                        self._character_debit_locked(guild_id, cid, bet, f'{spec.ledger_label} bet ({label})', now)
-                        self.db.execute('INSERT INTO game_seats(guild_id,round_id,seat_index,kind,ref_id,stake,brought_by) VALUES(?,?,?,?,?,?,?)', (guild_id, round_id, len(seats), 'character', cid, bet, user_id))
-                        seated.append({'character_id': cid, 'name': row['name'], 'stake': bet})
+                    self._seat_character(guild_id, rnd, round_id, user_id, cid, bet_for, now, skipped, seated, label, spec)
+            return {'snapshot': self._game_snapshot(guild_id, round_id), 'seated': seated, 'skipped': skipped}
+
+    def fill_seats(self, guild_id, round_id, user_id, character_ids, space_id, now=None):
+        """I Doubt It "Fill seats": the table's host seats house characters (no brought_by) from this world or hub, each anteing from its wallet.
+        All-or-nothing on eligibility (an unknown, archived or out-of-world character refuses the whole call); a character that is
+        broke, already seated or past the seat cap is skipped. Same return shape as join_with_favorites."""
+        seated, skipped = [], []
+        with self.write_admin():
+            rnd = self._game_round(guild_id, round_id)
+            spec = self._round_game(rnd)
+            if not spec.ante:
+                raise GameError('House seats are only for I Doubt It.')
+            if self._game_table(guild_id, rnd['table_id'])['opened_by'] != user_id:
+                raise GameError('Only the member who opened the table can fill seats.')
+            if rnd['status'] != 'joining':
+                raise GameError('This round has already started.')
+            if space_id is None:
+                raise GameError('Characters can only join a table in a world or hub channel.')
+            eligible = {row['id'] for row in self.eligible_characters(guild_id, space_id)}
+            ids = list(character_ids)
+            if any(isinstance(c, bool) or not isinstance(c, int) or c not in eligible for c in ids):
+                raise GameError('One of those characters cannot sit at this table.')
+            ante, label = self._round_ante(rnd), self._game_label(rnd)
+            for cid in ids:
+                self._seat_character(guild_id, rnd, round_id, None, cid, lambda c: ante if self.character_balance(guild_id, c, now) >= ante else None, now, skipped, seated, label, spec)
             return {'snapshot': self._game_snapshot(guild_id, round_id), 'seated': seated, 'skipped': skipped}
 
     def character_seat_context(self, guild_id, round_id, seat_index):
@@ -1879,6 +1969,9 @@ class AdminStore:
                 raise GameError('This round has already started.')
             if not self._game_seats(guild_id, round_id):
                 raise GameError('Nobody has joined this round yet.')
+            spec = self._round_game(rnd)
+            if len(self._game_seats(guild_id, round_id)) < spec.min_seats:
+                raise GameError(f'{spec.name} needs at least {spec.min_seats} players.')
             self.db.execute("UPDATE game_rounds SET status='playing',dealt_at=? WHERE id=? AND guild_id=?", (time.time(), round_id, guild_id))
             state = self._game_state(rnd, self._game_seats(guild_id, round_id), [])
             if state.finished:
@@ -1901,22 +1994,23 @@ class AdminStore:
             if actor != 'timeout' and 0 <= seat_index < len(seats) and (seats[seat_index]['kind'] == 'character') != (actor == 'character'):
                 raise GameError('That player cannot move here.')
             state = self._game_state(rnd, seats, self._game_moves(guild_id, round_id))
-            if move == 'insure' and 0 <= seat_index < len(seats) and 'insure' in blackjack.legal_moves(state, seat_index, True, True):
+            spec, bj = self._round_game(rnd), rnd['game'] == 'blackjack'
+            if bj and move == 'insure' and 0 <= seat_index < len(seats) and 'insure' in blackjack.legal_moves(state, seat_index, True, True):
                 cost, have = state.stakes[seat_index] // 2, self._seat_balance(guild_id, seats[seat_index])
                 if cost > 0 and have < cost:
                     raise GameError(f'You need {cost:,} {self.currency_name(guild_id)} for insurance but have {have:,}.')
             try:
-                after = blackjack.apply(state, seat_index, move, self._can_double(guild_id, state, seats, seat_index))
+                after = spec.apply_move(state, seat_index, move, lambda: self._can_double(guild_id, state, seats, seat_index))
             except IllegalMove:
-                raise GameError("It's not your turn." if state.turn != seat_index else "That move isn't allowed right now.") from None
-            if move == 'double':
+                raise GameError(spec.illegal_text(state, seat_index, move)) from None
+            if bj and move == 'double':
                 extra = state.stakes[seat_index]
                 if seats[seat_index]['kind'] == 'character':
                     self._character_debit_locked(guild_id, seats[seat_index]['ref_id'], extra, f'Blackjack double ({self._game_label(rnd)})')
                 else:
                     self._append_ledger(guild_id, seats[seat_index]['ref_id'], -extra, f'Blackjack double ({self._game_label(rnd)})', seats[seat_index]['ref_id'], 'game', None)
                 self.db.execute('UPDATE game_seats SET stake=stake+? WHERE guild_id=? AND round_id=? AND seat_index=?', (extra, guild_id, round_id, seat_index))
-            if move == 'insure':
+            if bj and move == 'insure':
                 cost = after.insured[seat_index]
                 self._debit_seat(guild_id, seats[seat_index], cost, f'Blackjack insurance ({self._game_label(rnd)})')
                 self.db.execute('UPDATE game_seats SET insurance=? WHERE guild_id=? AND round_id=? AND seat_index=?', (cost, guild_id, round_id, seat_index))
@@ -1928,12 +2022,9 @@ class AdminStore:
     def _settle_in_tx(self, guild_id, rnd, state):
         label, spec = self._game_label(rnd), self._round_game(rnd)
         seats = self._game_seats(guild_id, rnd['id'])
-        for res in spec.engine.result(state).seats:
-            paid = 0
-            if res.returned > 0:
-                note = ', insurance paid' if res.insurance and state.dealer_natural else ''
-                paid = self._pay_seat(guild_id, seats[res.seat], res.returned, f'{spec.ledger_label} payout ({res.outcome}), {label}{note}')
-            self.db.execute('UPDATE game_seats SET stake=?,outcome=?,payout=? WHERE guild_id=? AND round_id=? AND seat_index=?', (res.stake, res.outcome, paid, guild_id, rnd['id'], res.seat))
+        for seat, outcome, stake, returned, reason in spec.settlements(state, spec.ledger_label, label):
+            paid = self._pay_seat(guild_id, seats[seat], returned, reason) if returned > 0 else 0
+            self.db.execute('UPDATE game_seats SET stake=?,outcome=?,payout=? WHERE guild_id=? AND round_id=? AND seat_index=?', (stake, outcome, paid, guild_id, rnd['id'], seat))
         self.db.execute("UPDATE game_rounds SET status='settled',finished_at=? WHERE id=? AND guild_id=?", (time.time(), rnd['id'], guild_id))
 
     def _cancel_in_tx(self, guild_id, rnd, reason):
