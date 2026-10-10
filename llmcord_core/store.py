@@ -8,7 +8,7 @@ import threading
 from contextlib import closing
 from pathlib import Path
 from typing import Any
-from .admin_store import AdminStore, ConflictError, entry_match
+from .admin_store import AdminStore, ConflictError, entry_match, run_script
 
 
 SCHEMA = """
@@ -179,48 +179,59 @@ class Store(AdminStore):
         if str(path) != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path, check_same_thread=False, factory=TimedConnection)
-        self.db.row_factory = sqlite3.Row
-        self.db.create_function("llmcord_entry_match", 8, entry_match, deterministic=True)
-        self.db.execute("PRAGMA foreign_keys=ON")
-        self.db.execute("PRAGMA busy_timeout=5000")
-        self.db.execute("PRAGMA journal_mode=WAL")
-        old_version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if old_version > 10:
+        try:
+            self.db.row_factory = sqlite3.Row
+            self.db.create_function("llmcord_entry_match", 8, entry_match, deterministic=True)
+            self.db.execute("PRAGMA foreign_keys=ON")
+            self.db.execute("PRAGMA busy_timeout=30000")
+            self.db.execute("PRAGMA journal_mode=WAL")
+            self.admin_lock = threading.RLock()
+            self._upgrade(path, existing)
+        except BaseException:
             self.db.close()
-            raise ValueError('The database is newer than this application. Update the application.')
-        node_columns = {row[1] for row in self.db.execute('PRAGMA table_info(nodes)')}
-        needs_identities = bool(node_columns) and not {'author_label', 'mentions_json'} <= node_columns
-        if existing and (old_version < 10 or needs_identities):
-            upgrade = 'v3' if old_version < 3 else 'identities' if needs_identities else 'v4' if old_version == 3 else 'v5' if old_version == 4 else 'v6' if old_version == 5 else 'v7' if old_version == 6 else 'v8' if old_version == 7 else 'v9' if old_version == 8 else 'v10'
-            backup = Path(str(path) + f".pre-{upgrade}-{time.time_ns()}.sqlite3")
-            with closing(sqlite3.connect(backup)) as target:
-                backup.chmod(0o600)
-                self.db.backup(target)
-        self.db.executescript(SCHEMA)
-        columns = {row[1] for row in self.db.execute("PRAGMA table_info(characters)")}
-        if "archived" not in columns:
-            self.db.execute("ALTER TABLE characters ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
-        columns = {row[1] for row in self.db.execute("PRAGMA table_info(lore)")}
-        if "rule_json" not in columns:
-            self.db.execute("ALTER TABLE lore ADD COLUMN rule_json TEXT NOT NULL DEFAULT '{}'")
-        with self.db:
-            self.db.execute('BEGIN IMMEDIATE')
+            raise
+        self.db.execute("PRAGMA busy_timeout=5000")
+
+    def _upgrade(self, path: str | Path, existing: bool) -> None:
+        """The whole schema upgrade, backup included, in one write-locked transaction: a failure leaves the old file as it was,
+        and a second process opening the same file waits, then finds version 10 and does nothing. executescript commits, so scripts run per statement."""
+        self.db.execute("BEGIN IMMEDIATE")
+        try:
+            old_version = self.db.execute("PRAGMA user_version").fetchone()[0]
+            if old_version > 10:
+                raise ValueError('The database is newer than this application. Update the application.')
+            node_columns = {row[1] for row in self.db.execute('PRAGMA table_info(nodes)')}
+            needs_identities = bool(node_columns) and not {'author_label', 'mentions_json'} <= node_columns
+            if existing and (old_version < 10 or needs_identities):
+                upgrade = 'v3' if old_version < 3 else 'identities' if needs_identities else 'v4' if old_version == 3 else 'v5' if old_version == 4 else 'v6' if old_version == 5 else 'v7' if old_version == 6 else 'v8' if old_version == 7 else 'v9' if old_version == 8 else 'v10'
+                backup = Path(str(path) + f".pre-{upgrade}-{time.time_ns()}.sqlite3")
+                # Connection.backup from the connection holding the write lock never finishes; a second reader sees the committed file (the lock excludes other writers).
+                with closing(sqlite3.connect(path, timeout=30)) as reader, closing(sqlite3.connect(backup)) as target:
+                    backup.chmod(0o600)
+                    reader.backup(target)
+            run_script(self.db, SCHEMA)
+            columns = {row[1] for row in self.db.execute("PRAGMA table_info(characters)")}
+            if "archived" not in columns:
+                self.db.execute("ALTER TABLE characters ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+            columns = {row[1] for row in self.db.execute("PRAGMA table_info(lore)")}
+            if "rule_json" not in columns:
+                self.db.execute("ALTER TABLE lore ADD COLUMN rule_json TEXT NOT NULL DEFAULT '{}'")
             columns = {row[1] for row in self.db.execute('PRAGMA table_info(nodes)')}
             for name, spec in {'author_label': "TEXT NOT NULL DEFAULT ''", 'mentions_json': "TEXT NOT NULL DEFAULT '[]'"}.items():
                 if name not in columns:
                     self.db.execute(f'ALTER TABLE nodes ADD COLUMN {name} {spec}')
-        if old_version < 10:
-            with self.db:
-                self.db.execute('BEGIN IMMEDIATE')
+            if old_version < 10:
                 columns = {row[1] for row in self.db.execute('PRAGMA table_info(thread_casts)')}
                 for name in ('guild_id', 'parent_id'):
                     if name not in columns:
                         self.db.execute(f'ALTER TABLE thread_casts ADD COLUMN {name} INTEGER')
                 self._backfill_thread_cast_guilds()
-        self.admin_lock = threading.RLock()
-        self.migrate_admin()
-        self.db.execute("PRAGMA user_version=10")
-        self.db.commit()
+            self.migrate_admin()
+            self.db.execute("PRAGMA user_version=10")
+            self.db.commit()
+        except BaseException:
+            self.db.rollback()
+            raise
 
     def _backfill_thread_cast_guilds(self) -> None:
         """v10: guild_id = the one guild of the characters a cast references; NULL when none or ambiguous (parent stays NULL)."""

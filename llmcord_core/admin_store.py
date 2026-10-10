@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 import math
+import sqlite3
 import uuid
 from datetime import datetime
 import time
@@ -115,6 +116,19 @@ CREATE TABLE IF NOT EXISTS model_roles (
 );
 INSERT OR IGNORE INTO model_roles(id) VALUES(1);
 """
+
+
+def run_script(db, script):
+    """executescript without its implicit COMMIT: runs statement by statement inside the caller's transaction.
+    Every statement must end at the end of a line (a second statement on the same line would run with the first)."""
+    pending = ''
+    for line in script.splitlines(keepends=True):
+        pending += line
+        if sqlite3.complete_statement(pending):
+            db.execute(pending)
+            pending = ''
+    if pending.strip():
+        db.execute(pending)
 
 
 def entry_rule(ident, row):
@@ -412,7 +426,17 @@ class AdminStore:
                 raise
 
     def migrate_admin(self):
-        self.db.executescript(ADMIN_SCHEMA)
+        """Runs inside the caller's write transaction (Store._upgrade); on its own it opens and commits one."""
+        if not self.db.in_transaction:
+            self.db.execute('BEGIN IMMEDIATE')
+            try:
+                self.migrate_admin()
+                self.db.commit()
+            except BaseException:
+                self.db.rollback()
+                raise
+            return
+        run_script(self.db, ADMIN_SCHEMA)
         for table, additions in {
             'lore': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0'},
             'lorebook_entries': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0', 'pinned': 'INTEGER NOT NULL DEFAULT 0', 'source_message_id': 'INTEGER', 'promoted_from': 'INTEGER'},
@@ -434,7 +458,7 @@ class AdminStore:
                     self.db.execute('INSERT OR IGNORE INTO avatar_slots(character_id,slot_key,label) VALUES(?,?,?)', (character['id'], key, key.title()))
         self.db.execute('CREATE UNIQUE INDEX IF NOT EXISTS lore_identity ON lore(entry_key) WHERE entry_key<>\'\'')
         self.db.execute('CREATE UNIQUE INDEX IF NOT EXISTS book_identity ON lorebook_entries(entry_key) WHERE entry_key<>\'\'')
-        self.db.executescript("""CREATE TRIGGER IF NOT EXISTS lore_insert_identity AFTER INSERT ON lore WHEN new.entry_key='' BEGIN
+        run_script(self.db, """CREATE TRIGGER IF NOT EXISTS lore_insert_identity AFTER INSERT ON lore WHEN new.entry_key='' BEGIN
             UPDATE lore SET entry_key='entry:'||lower(hex(randomblob(16))),revision=(random() & 4611686018427387903)+1 WHERE id=new.id;
         END;""")
         upgrading = self.one('PRAGMA user_version')[0] < 3
@@ -467,12 +491,9 @@ class AdminStore:
                 rows.remove(match)
                 self.db.execute('INSERT OR IGNORE INTO import_entries VALUES(?,?,?,?,?,?,?,?)',
                     (character['guild_id'], 'character', character['id'], source.uid, match['entry_key'], json.dumps({'content': source.content, 'rule': source.rule, 'pinned': False}), source.source_hash, 'active'))
-        self.db.commit()
-        with self.db:
-            self.db.execute('BEGIN IMMEDIATE')
-            if self.one('PRAGMA user_version')[0] < 6:
-                self.db.execute("INSERT OR REPLACE INTO spend_days(day,cost_usd,unpriced_calls) SELECT strftime('%Y-%m-%d',created_at,'unixepoch'),SUM(COALESCE(cost_usd,0)),SUM(cost_usd IS NULL) FROM model_usage GROUP BY 1")
-                self.db.execute('PRAGMA user_version=6')
+        if self.one('PRAGMA user_version')[0] < 6:
+            self.db.execute("INSERT OR REPLACE INTO spend_days(day,cost_usd,unpriced_calls) SELECT strftime('%Y-%m-%d',created_at,'unixepoch'),SUM(COALESCE(cost_usd,0)),SUM(cost_usd IS NULL) FROM model_usage GROUP BY 1")
+            self.db.execute('PRAGMA user_version=6')
 
     def validate_owner(self, guild_id, kind, owner_id):
         if kind == 'guild':
