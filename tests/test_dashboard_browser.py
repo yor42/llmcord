@@ -101,6 +101,16 @@ class DashboardBrowserTests(unittest.TestCase):
             self.page.wait_for_timeout(100)
         self.fail('Expected database state was not reached')
 
+    def settled_height(self, locator, polls=50):
+        previous = None
+        for _ in range(polls):
+            height = locator.bounding_box()['height']
+            if height == previous:
+                return height
+            previous = height
+            locator.page.wait_for_timeout(100)
+        self.fail(f'Height never settled (last {previous})')
+
     def lore_idle(self, expected_owners=None):
         self.page.evaluate("""async () => {
             const { Sortable } = await import('nicegui-sortable');
@@ -2853,7 +2863,10 @@ class DashboardBrowserTests(unittest.TestCase):
             edit = row.get_by_role('button', name='Edit entry', exact=True)
             self.assertEqual(edit.inner_text().strip(), '')
             self.assertEqual(edit.get_attribute('aria-label'), 'Edit entry')
-            self.assertLess(row.bounding_box()['height'], 70)
+            # Right after Save lore the list re-renders while the editor closes, so
+            # a single early measurement can catch a transient taller layout
+            # (MNT-36). Wait for two equal readings, then assert the settled height.
+            self.assertLess(self.settled_height(row), 70)
             self.assertEqual(row.get_by_text('Disabled', exact=True).count(), 0)
             edit.click()
             self.assertEqual(page.get_by_text('Confirm deleting this entry', exact=True).count(), 0)
