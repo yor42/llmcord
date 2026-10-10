@@ -32,6 +32,7 @@ Assumed API (proposed, pinned here; the implementer creates it):
   After the archive timer the thread behaves like any normal thread (the whole cast, feature ``'reply'``, no block).
 """
 import asyncio
+from unittest import mock
 import re
 import time
 import json
@@ -1007,6 +1008,31 @@ class ReviewFixTests(TalkCase):
         text = self.models.of("dialogue")[0]["text"]
         self.assertIn(str(datetime.now(timezone.utc).year), text)
         self.assertNotIn("2001", text)
+
+    async def test_an_event_turn_time_is_the_clock_not_a_decoded_synthetic_id(self):
+        """The event carries an explicit created_at; the negative synthetic id is only a unique node id."""
+        from datetime import datetime, timezone
+        from llmcord_core import discord_bot
+        await self.table3()
+        self.models.pick = [self.ann]
+        moment = datetime(2031, 3, 4, 12, 30, tzinfo=timezone.utc).timestamp()
+        fake = mock.Mock(wraps=time)
+        fake.time.return_value = moment
+        with mock.patch.object(discord_bot, "time", fake):
+            await self.bot.run_table_event(self.thread(), "Bob won the game.")
+        await drain_memory_tasks(self.bot)
+        text = self.models.of("dialogue")[0]["text"]
+        self.assertIn("March 4, 2031", text)
+        self.assertIn("12:30 PM", text)
+
+    def test_time_values_prefers_created_at_and_never_decodes_a_negative_id(self):
+        from datetime import datetime, timezone
+        from llmcord_core.prompts import time_values
+        moment = datetime(2031, 3, 4, 12, 30, tzinfo=timezone.utc).timestamp()
+        self.assertEqual(time_values(-5, "UTC", moment)["local_time"], "Tuesday, March 4, 2031, 12:30 PM (UTC)")
+        self.assertEqual(time_values(-5, "UTC", moment)["isodate"], "2031-03-04")
+        snowflake = ((int(datetime(2026, 10, 8, 8, 39, tzinfo=timezone.utc).timestamp() * 1000) - 1420070400000) << 22)
+        self.assertEqual(time_values(snowflake, "UTC")["isotime"], "08:39")
 
     async def test_table_talk_schedules_no_memory_work_but_a_normal_thread_still_does(self):
         await self.table3()

@@ -106,7 +106,7 @@ _EVENT_COUNTER = itertools.count()
 
 
 def _event_id() -> int:
-    """A synthetic node id for a table event: negative (never a real Discord id), snowflake-shaped so the prompt's time is now."""
+    """A synthetic node id for a table event: negative (never a real Discord id) and snowflake-shaped so it stays unique across restarts. Never decoded for its time (SceneContext.created_at)."""
     return -(((int(time.time() * 1000) - 1420070400000) << 22) | (next(_EVENT_COUNTER) & 0x3FFFFF))
 
 
@@ -333,7 +333,7 @@ class SkitBot(commands.Bot):
             except Exception as error:
                 logging.warning('Table event could not read recent chat: %s', error_detail(error))
             scene = SceneContext(guild.id, thread.id, parent_id, binding["space_id"], self.user.id if self.user else 0, _event_id(), text,
-                None, recent, [], ambient=True, user_label='Table events', event=True, **self._table_fields(table))
+                None, recent, [], ambient=True, user_label='Table events', event=True, created_at=time.time(), **self._table_fields(table))
             await self.run_scene(scene, thread)
 
     @staticmethod

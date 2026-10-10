@@ -69,9 +69,10 @@ MONTHS = ('January', 'February', 'March', 'April', 'May', 'June', 'July', 'Augus
 WEEKDAYS = ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')
 
 
-def time_values(message_id, zone_name):
+def time_values(message_id, zone_name, created_at=None):
     zone = zone_name or 'UTC'
-    moment = datetime.fromtimestamp(((abs(message_id) >> 22) + 1420070400000) / 1000, timezone.utc).astimezone(ZoneInfo(zone))
+    seconds = created_at if created_at is not None else ((message_id >> 22) + 1420070400000) / 1000
+    moment = datetime.fromtimestamp(seconds, timezone.utc).astimezone(ZoneInfo(zone))
     clock = f"{moment.hour % 12 or 12}:{moment.minute:02d} {'AM' if moment.hour < 12 else 'PM'}"
     date, weekday = f'{MONTHS[moment.month - 1]} {moment.day}, {moment.year}', WEEKDAYS[moment.weekday()]
     return {'time': clock, 'date': date, 'weekday': weekday, 'isotime': f'{moment.hour:02d}:{moment.minute:02d}',

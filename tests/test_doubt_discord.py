@@ -1248,5 +1248,264 @@ class ReviewFixTests(DoubtCase):
         self.assertIsNone(turn.view)
 
 
+class OutsideCloseTests(DoubtCase):
+    """MNT-45/46 and the FEAT-21 branch review: tables closed from outside, lock namespaces, the host who left, wording."""
+
+    async def grab(self):
+        """(table id, lobby message, thread, turn message or None) of the open table."""
+        table = self.table()
+        thread = self.thread()
+        return table["id"], self.lobby(), thread, thread.messages.get(table["turn_message_id"])
+
+    def assert_cleaned(self, tid, lobby, thread, turn, reason):
+        self.assertIn("Table closed", lobby.content)
+        self.assertIn(reason, lobby.content)
+        self.assertIsNone(lobby.view)
+        if turn is not None:
+            self.assertEqual(turn.content, "Table closed.")
+            self.assertIsNone(turn.view)
+        self.assertEqual(len([t for t in self.thread_texts(thread) if t.startswith("Table closed:")]), 1)
+        self.assertEqual({k for k in self.doubt.timers if k[2] != "archive"}, set())
+        self.assertIn((G, tid, "archive"), self.doubt.timers)
+
+    async def assert_forgotten(self, tid, thread):
+        """After the archive timer the table is gone from memory and a later sweep says and archives nothing more."""
+        self.doubt.disarm((G, tid), "archive")
+        await self.doubt.on_archive_timer(G, tid)
+        self.assertNotIn((G, tid), self.doubt.tables)
+        count, edits = len(thread.sent), len(thread.edit_calls)
+        await self.doubt.sweep()
+        self.assertEqual((len(thread.sent), len(thread.edit_calls)), (count, edits))
+        self.assertNotIn((G, tid, "archive"), self.doubt.timers)
+
+    async def test_a_dashboard_switch_off_closes_a_table_in_play_through_the_sweeper(self):
+        await self.playing()
+        tid, lobby, thread, turn = await self.grab()
+        HTTP.clear()
+        self.store.set_game_enabled(G, "doubt", False)
+        await self.doubt.sweep()
+        self.assert_cleaned(tid, lobby, thread, turn, "I Doubt It was turned off on this server.")
+        self.assertIn("refunded", lobby.content)
+        self.assertEqual([self.balance(u) for u in MEMBERS], [100, 100, 100])
+        self.assertFalse(any(held for _, held in HTTP))
+        count = len(thread.sent)
+        await self.doubt.sweep()
+        self.assertEqual(len(thread.sent), count)
+        await self.assert_forgotten(tid, thread)
+
+    async def test_removing_the_channel_closes_the_lobby_with_its_own_words(self):
+        await self.lobby3()
+        tid, lobby, thread, turn = await self.grab()
+        self.store.set_game_channels(G, {CH2})
+        await self.doubt.sweep()
+        self.assert_cleaned(tid, lobby, thread, turn, "games were turned off here.")
+
+    async def test_a_generic_close_and_no_refund_words_without_an_ante(self):
+        self.store.set_game_rules(G, "doubt", {"ante": 0})
+        await self.lobby3()
+        tid, lobby, thread, turn = await self.grab()
+        self.store.close_table(G, tid)
+        await self.doubt.sweep()
+        self.assert_cleaned(tid, lobby, thread, turn, "the table was closed.")
+        self.assertNotIn("refund", lobby.content.lower())
+
+    async def test_a_press_on_a_table_closed_from_outside_cleans_up_at_once(self):
+        await self.lobby3()
+        tid, lobby, thread, turn = await self.grab()
+        self.store.set_game_enabled(G, "doubt", False)
+        click = await self.push(DAN, "Join", lobby)
+        self.assertEqual(says(click), [STALE])
+        self.assert_cleaned(tid, lobby, thread, turn, "turned off")
+
+    async def test_a_timer_that_finds_the_table_closed_cleans_up_at_once(self):
+        await self.playing()
+        tid, lobby, thread, turn = await self.grab()
+        snap = self.snap()
+        self.store.set_game_channels(G, {CH2})
+        await self.doubt._timer((G, tid, "turn"), 0, self.doubt.on_turn_timer, (snap["round_id"], snap["moves"]))
+        self.assert_cleaned(tid, lobby, thread, turn, "games were turned off here.")
+
+    async def test_a_game_that_ends_normally_is_not_repainted_by_the_sweeper(self):
+        await self.playing()
+        tid, lobby, thread, turn = await self.grab()
+        await self.play_out()
+        text = lobby.content
+        await self.doubt.sweep()
+        self.assertEqual(lobby.content, text)
+        self.assertIn("won I Doubt It", text)
+        self.assertEqual([t for t in self.thread_texts(thread) if t.startswith("Table closed:")], [])
+
+    async def test_the_sweeper_is_started_with_the_first_table_and_stopped_with_close(self):
+        await self.lobby3()
+        tid, lobby, thread, turn = await self.grab()
+        sweeper = self.doubt.sweeper
+        self.assertIsNotNone(sweeper)
+        self.assertFalse(sweeper.done())
+        self.store.set_game_enabled(G, "doubt", False)
+        await self.doubt.sweep()  # what the loop does every SWEEP_SECONDS
+        self.assert_cleaned(tid, lobby, thread, turn, "turned off")
+        self.assertFalse(sweeper.done())
+        await self.doubt.close()
+        self.assertTrue(sweeper.done())
+        self.assertTrue(sweeper.cancelled())
+
+    async def test_every_close_path_forgets_the_table(self):
+        await self.start()
+        key = (G, self.table()["id"])
+        self.assertIn(key, self.doubt.tables)
+        await self.push(ALICE, "Leave", self.lobby())  # the last player leaves
+        await self.doubt.on_archive_timer(*key)
+        self.assertNotIn(key, self.doubt.tables)
+        await self.start(DAN, channel=self.channel2)
+        key2 = (G, self.table(CH2)["id"])
+        await self.doubt.recover()
+        self.assertNotIn(key2, self.doubt.tables)
+
+    async def test_switching_a_doubt_channel_off_holds_no_blackjack_table_lock(self):
+        await self.lobby3()
+        tid = self.table()["id"]
+        lobby = self.lobby()
+        async with self.games.lock((G, tid)):
+            closed, paint = await asyncio.wait_for(self.games.switch_channel(G, CH, False), 2)
+        self.assertEqual((closed, paint), (True, None))
+        self.assertIn("turned off", lobby.content)
+        await self.doubt.on_archive_timer(G, tid)
+        self.assertNotIn((G, tid), self.doubt.tables)
+
+    async def test_a_doubt_table_closed_by_a_switch_that_did_not_see_it_is_cleaned_up(self):
+        await self.lobby3()
+        tid, lobby, thread, turn = await self.grab()
+        real, calls = self.store.open_table_for, []
+
+        def blind_once(*args):
+            calls.append(args)
+            return None if len(calls) == 1 else real(*args)
+        with mock.patch.object(self.store, "open_table_for", side_effect=blind_once):
+            closed, paint = await self.games.switch_channel(G, CH, False)
+        self.assertTrue(closed)
+        self.assert_cleaned(tid, lobby, thread, turn, "games were turned off here.")
+
+    async def test_a_step_sealed_before_an_outside_close_cannot_repaint_the_closed_table(self):
+        await self.playing()
+        tid, lobby, thread, turn = await self.grab()
+        key, snap = (G, tid), self.snap()
+        async with self.doubt.lock(key):  # a pick, sealed but not yet delivered
+            late = self.doubt._picker_play(key, ALICE, snap["round_id"], snap["moves"], self.any_card(0))
+        self.assertTrue(late.ok)
+        self.store.set_game_enabled(G, "doubt", False)
+        await self.doubt.sweep()
+        sent = [m.content for m in thread.sent]
+        await self.doubt._publish(key, late)
+        self.assertEqual(turn.content, "Table closed.")
+        self.assertIsNone(lobby.view)
+        self.assertEqual([m.content for m in thread.sent], sent)
+        self.assertEqual(len([t for t in self.thread_texts(thread) if t.startswith("Table closed:")]), 1)
+        await self.assert_forgotten(tid, thread)
+
+    async def test_a_table_closed_while_its_thread_is_being_made_leaves_no_registered_thread(self):
+        real = self.channel.make_thread
+
+        async def close_first(name, **kwargs):
+            self.store.set_game_enabled(G, "doubt", False)
+            return await real(name, **kwargs)
+        with mock.patch.object(self.channel, "make_thread", side_effect=close_first):
+            await self.start()
+        (thread,) = self.channel.threads.values()
+        row = self.store.one("SELECT * FROM game_tables WHERE guild_id=?", (G,))
+        self.assertIsNone(row["thread_id"])
+        self.assertEqual(self.doubt.threads, {})
+        self.assertTrue(thread.archived and thread.locked)
+        await self.doubt.sweep()
+        self.assertIn("turned off", self.channel.messages[row["message_id"]].content)
+        self.assertEqual(thread.sent, [])
+
+    async def test_closing_a_channel_whose_table_closed_already_still_cleans_it_up(self):
+        await self.lobby3()
+        tid, lobby, thread, turn = await self.grab()
+        self.store.close_table(G, tid)
+        closed = await self.doubt.close_for_channel(G, CH, tid)
+        self.assertIsNone(closed)
+        self.assertIn("Table closed", lobby.content)
+        self.assertIsNone(lobby.view)
+
+    async def test_when_the_host_left_the_first_seated_member_hosts(self):
+        await self.lobby3()
+        lobby = self.lobby()
+        self.assertIn(f"Host: <@{ALICE}>", lobby.content)
+        await self.push(ALICE, "Leave", lobby)
+        self.assertIn(f"Host: <@{BOB}>", lobby.content)
+        self.assertNotIn(f"Host: <@{ALICE}>", lobby.content)
+        self.assertIn("if the host has left", lobby.content)
+        await self.push(DAN, "Join", lobby)
+        for stranger in (ALICE, CARA + 100):
+            click = await self.push(stranger, "Start", lobby)
+            self.assertEqual(self.snap()["status"], "joining")
+            self.assertTrue(says(click))
+        await self.push(CARA, "Start", lobby)
+        self.assertEqual(self.snap()["status"], "playing")
+
+    async def test_a_present_host_is_still_the_only_one_who_starts(self):
+        await self.lobby3()
+        click = await self.push(BOB, "Start", self.lobby())
+        self.assertEqual(says(click), ["Only the host can start the game."])
+        self.assertEqual(self.snap()["status"], "joining")
+
+    async def test_my_hand_words_before_and_after_the_game(self):
+        await self.lobby3()
+        thread = self.thread()
+        click = self.click(BOB, channel=thread)
+        await invoke(self.bot, "game hand", click)
+        self.assertEqual(says(click), ["The game hasn't started yet."])
+        snap = self.snap()
+        await self.doubt.on_lobby_timer(G, snap["table_id"], snap["round_id"])
+        click = self.click(BOB, channel=thread)
+        await self.doubt._show_hand(click, (G, snap["table_id"]), snap["round_id"])
+        self.assertEqual(says(click), ["This game is over."])
+
+    async def test_my_hand_after_a_settled_game_says_the_game_is_over(self):
+        await self.playing()
+        snap = self.snap()
+        await self.play_out()
+        click = self.click(BOB, channel=self.ch)
+        await self.doubt._show_hand(click, (G, snap["table_id"]), snap["round_id"])
+        self.assertEqual(says(click), ["This game is over."])
+
+    async def test_a_join_restarts_the_idle_lobby_clock(self):
+        await self.start()
+        key = (G, self.table()["id"], "lobby")
+        first = self.doubt.timers[key]
+        self.doubt.clock = lambda: 5000.0
+        await self.push(BOB, "Join", self.lobby())
+        self.assertIsNot(self.doubt.timers[key], first)
+        self.assertIn("<t:8600:R>", self.lobby().content)
+
+    async def test_the_forbidden_reply_and_the_restart_note_mention_refunds_only_with_an_ante(self):
+        self.channel.thread_error = forbidden()
+        click = await self.start()
+        text = " ".join(says(click))
+        self.assertIn("Send Messages in Threads", text)
+        self.assertIn("antes are refunded", text)
+        self.channel.thread_error = None
+        await self.start(ALICE)
+        lobby = self.lobby()
+        await self.doubt.recover()
+        self.assertIn("antes were refunded", lobby.content)
+        self.store.set_game_rules(G, "doubt", {"ante": 0})
+        await self.start(DAN, channel=self.channel2)
+        lobby2 = self.channel2.messages[self.table(CH2)["message_id"]]
+        await self.doubt.recover()
+        self.assertIn("restarted", lobby2.content)
+        self.assertNotIn("refund", lobby2.content.lower())
+
+    async def test_the_doubt_window_line_reads_the_same_with_and_without_a_stamp(self):
+        await self.playing()
+        await self.pick_play(ALICE, {"A": 1})
+        self.assertRegex(self.turn().content, r"Doubt window open <t:\d+:R>\.")
+        snap = self.snap()
+        self.doubt.table((G, snap["table_id"])).deadlines.pop("window")
+        content, _ = self.doubt.render_turn((G, snap["table_id"]), snap)
+        self.assertIn("Doubt window open.", content)
+
+
 if __name__ == "__main__":
     unittest.main()

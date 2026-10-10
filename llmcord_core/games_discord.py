@@ -582,6 +582,11 @@ class GameTables:
             table = self.store.open_table_for(guild_id, channel_id)
             if table is None:
                 closed = self.store.set_game_channel(guild_id, channel_id, False)["closed_table"]
+                if closed is not None:  # a table opened since the look: if it was an I Doubt It one, clean it up (blackjack's own sweep covers its tables)
+                    await self.bot.doubt.sweep()
+                break
+            if table["game"] == "doubt":  # its own lock namespace: never hold a blackjack table lock for it
+                closed = await self.bot.doubt.close_for_channel(guild_id, channel_id, table["id"])
                 break
             async with self.lock((guild_id, table["id"])):
                 current = self.store.open_table_for(guild_id, channel_id)
@@ -591,8 +596,8 @@ class GameTables:
                 if closed is not None and (current or table)["game"] == "blackjack":
                     paint = self._closing((guild_id, closed), CLOSED_OFF)
                     self._forget((guild_id, closed))
-            if closed is not None and paint is None:  # another game's table: its own module says so
-                await self.bot.doubt.closed_by_channel(guild_id, closed)
+            if closed is not None and paint is None:  # another game's table (opened meanwhile): its own sweep says so
+                await self.bot.doubt.sweep()
             break
         return closed is not None, paint
 

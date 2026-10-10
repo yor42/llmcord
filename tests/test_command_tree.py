@@ -445,7 +445,7 @@ EXPECTED_GROUPS = {
     "character": ("Inspect characters available here", "None", False),
     "favorites": ("Keep favorite characters who are more likely to answer you", "None", False),
     "game": ("Open a table and play", "None", False),
-    "lore":("Show the lore available here", "None", False),
+    "lore": ("Show the lore available here", "None", False),
     "memory": ("Control your personal character memories", "None", False),
     "scene": ("Start a fresh scene", "None", False),
     "space": ("List the server's worlds and hubs", "None", False),

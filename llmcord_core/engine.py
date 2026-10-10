@@ -51,6 +51,7 @@ class SceneContext:
     allowed_ids: tuple | None = None  # table thread: only these characters may speak (None: unrestricted)
     usage_feature: str | None = None  # overrides the ambient/summon/reply usage label of the turn
     event: bool = False  # a table event turn: the ambient cheap gate never silences it
+    created_at: float | None = None  # unix time of the turn when the message id is not a snowflake (table events)
 
 
 class Engine:
@@ -306,7 +307,7 @@ class Engine:
         guidelines = scene.guidelines if scene.guidelines is not None else self.store.scene_guidelines(scene.guild_id, scene.space_id, scene.parent_channel_id or scene.channel_id)
         values.update({key: row['content'] for key, row in guidelines.items()})
         zone, _ = self.store.resolve_timezone(scene.guild_id, scene.user_id)
-        values.update(time_values(scene.user_message_id, zone))
+        values.update(time_values(scene.user_message_id, zone, scene.created_at))
         for position in ('before_char', 'after_char', 'before_examples', 'after_examples'):
             values['lore_' + position] = lore_text([item for item in lore if item.position == position])
         if not history:

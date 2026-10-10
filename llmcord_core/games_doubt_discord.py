@@ -123,6 +123,8 @@ class _Out:
     advanced: bool = False  # a move was made: the turn message may be moved to the bottom
     seq: int = 0
     talk: tuple | None = None  # (public text, is the game's end): the event turn for the characters at the table
+    closing: str | None = None  # the table was closed from outside: this line goes to the thread and the turn message loses its buttons
+    closed: bool = False  # the table is over: forget it once this is delivered
 
 
 def _cards(n: int) -> str:
@@ -143,6 +145,7 @@ class DoubtTables:
     BUMP_AFTER = 8
     MODEL_SECONDS = 20
     EVENT_COOLDOWN_SECONDS = 20
+    SWEEP_SECONDS = 30
 
     def __init__(self, bot, clock=time.time):
         self.bot, self.clock = bot, clock
@@ -156,6 +159,8 @@ class DoubtTables:
         self.dirty: set[tuple[int, int]] = set()
         self.board_tasks: dict[tuple[int, int], asyncio.Task] = {}
         self.closed = False
+        self.sweeper: asyncio.Task | None = None
+        self.ended: set[tuple[int, int]] = set()  # tables this object closed itself (settled, timed out, left): the sweeper leaves them alone
         self.talk_failed: dict[tuple[int, object], int] = {}  # model attempts without a usage row, per (guild, server day)
 
     @property
@@ -199,6 +204,8 @@ class DoubtTables:
         for attempt in (1, 2):  # one retry, so money does not wait for a restart after a transient failure
             try:
                 await hook(full[0], full[1], *args)
+                if full[2] != "archive":
+                    await self._reap(full[:2])  # the hook may have found the table closed from outside
                 return
             except asyncio.CancelledError:
                 raise
@@ -213,20 +220,106 @@ class DoubtTables:
 
     async def close(self) -> None:
         self.closed = True
-        tasks = [*self.timers.values(), *self.board_tasks.values(), *self.event_tasks]
+        tasks = [*self.timers.values(), *self.board_tasks.values(), *self.event_tasks, *([self.sweeper] if self.sweeper else [])]
         self.timers.clear()
         self.board_tasks.clear()
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
 
-    def _forget(self, key) -> None:
-        """The table is over (closed in the store): stop its play timers. The archive timer is armed separately."""
+    def _release(self, key) -> None:
+        """Stops the table's play timers and drops its thread. The archive timer is armed separately."""
         for kind in ("lobby", "window", "turn", "character"):
             self.disarm(key, kind)
         self.threads = {thread: k for thread, k in self.threads.items() if k != key}
         self.event_at.pop(key, None)
         self.dirty.discard(key)
+
+    def _forget(self, key) -> None:
+        """This object closed the table (in the store): release it, and keep the sweeper off it until its archive timer."""
+        self.ended.add(key)
+        self._release(key)
+
+    # --- tables closed from outside (dashboard, /admin games channel) -------------------------
+
+    def _ensure_sweeper(self) -> None:
+        if self.closed or not self.tables or (self.sweeper is not None and not self.sweeper.done()):
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self.sweeper = asyncio.create_task(self._sweep_loop(), name="doubt-sweep")
+
+    async def _sweep_loop(self) -> None:
+        while True:
+            await asyncio.sleep(self.SWEEP_SECONDS)
+            if not self._known():  # nothing in memory: stay idle until a table appears
+                self.sweeper = None
+                return
+            try:
+                await self.sweep()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logging.exception("I Doubt It table sweep failed")
+
+    def _known(self) -> set:
+        return {*self.tables, *self.threads.values(), *(k[:2] for k in self.timers if k[2] != "archive")}
+
+    async def sweep(self) -> None:
+        """Cleans up tables closed in the store by someone else (dashboard switch, channel removal) while this object still holds them."""
+        for key in self._known():
+            await self._reap(key)
+
+    async def _reap(self, key) -> None:
+        """If the table is closed in the store and this object did not close it, say so (lobby, turn message, thread), archive and forget it."""
+        if key in self.ended:
+            self._release(key)  # idempotent: a thread registered while the table closed must not keep it known
+            return
+        if key not in self.tables and key not in self.threads.values() and not any(k[:2] == key for k in self.timers):
+            return
+        row = self._row(key)
+        if row is not None and row["game"] == "doubt" and row["status"] == "open":
+            return
+        async with self.lock(key):
+            out = self._closed_out(key)
+        await self._publish(key, out)
+
+    def _closed_out(self, key) -> _Out | None:
+        """Under the table lock: the closing messages for a table that is closed in the store, or None (still open, or already handled)."""
+        row = self._row(key)
+        if key in self.ended or (row is not None and row["game"] == "doubt" and row["status"] == "open"):
+            return None
+        if row is None or row["game"] != "doubt":
+            self._release(key)
+            self.tables.pop(key, None)
+            return None
+        guild_id = key[0]
+        if not self.store.game_enabled(guild_id, "doubt"):
+            reason = "I Doubt It was turned off on this server."
+        elif row["channel_id"] not in self.store.game_channels(guild_id):
+            reason = "games were turned off here."
+        else:
+            reason = "the table was closed."
+        self._forget(key)
+        self.arm(key, "archive", self.ARCHIVE_SECONDS)
+        text = f"Table closed: {reason}" + self._refunded(key)
+        return self._seal(key, _Out(lobby=(text, None), closing=text, closed=True))
+
+    async def close_for_channel(self, guild_id, channel_id, table_id) -> int | None:
+        """Turns games off in a channel whose open table is this game's: the store step under the table lock, then the closing messages in order.
+        Returns the id of the table the store closed (None if it had closed already)."""
+        key = (guild_id, table_id)
+        async with self.lock(key):
+            closed = self.store.set_game_channel(guild_id, channel_id, False)["closed_table"]
+            out = self._closed_out(key) if closed == table_id else None
+        await self._publish(key, out)
+        if closed != table_id:
+            await self._reap(key)
+            if closed is not None:
+                await self.sweep()
+        return closed
 
     def _after(self, key, snap) -> None:
         """Arms the timers the new state needs. Call under the table lock."""
@@ -330,13 +423,23 @@ class DoubtTables:
         except discord.HTTPException as error:
             logging.warning("I Doubt It could not acknowledge the press: %s", type(error).__name__)
 
-    def _refunded(self, key) -> str:
-        """" The antes are refunded." when the table's round had an ante, else nothing."""
+    def _refunded(self, key, past: bool = False) -> str:
+        """" The antes are refunded." (``past``: "were") when the table's round had an ante, else nothing."""
         try:
             ante = (self.store.latest_round(*key)["rules"] or {}).get("ante", 0)
         except GameError:
             ante = 0
-        return " The antes are refunded." if ante else ""
+        return (" The antes were refunded." if past else " The antes are refunded.") if ante else ""
+
+    def _host(self, row, snap) -> int:
+        """The table's host: the opener while seated, else the first seated member."""
+        members = [s["ref_id"] for s in snap["seats"] if s["kind"] == "member"]
+        return row["opened_by"] if row["opened_by"] in members or not members else members[0]
+
+    def _is_host(self, row, snap, user_id) -> bool:
+        """The opener while seated; once the opener left, any seated member."""
+        members = {s["ref_id"] for s in snap["seats"] if s["kind"] == "member"}
+        return user_id == row["opened_by"] if row["opened_by"] in members else user_id in members
 
     def _row(self, key):
         return self.store.one("SELECT * FROM game_tables WHERE id=? AND guild_id=?", (key[1], key[0]))
@@ -355,13 +458,14 @@ class DoubtTables:
         rules = snap["rules"] or doubt.normalize_rules(None)
         name, pot, ante = self.store.currency_name(key[0]), sum(s["stake"] for s in snap["seats"]), rules["ante"]
         lines = [f"**I Doubt It** · table {key[1]}", f"Ante: {ante:,} {name} · Pot: {pot:,} {name}" if ante else f"No ante · Pot: {pot:,} {name}",
-                 f"Host: <@{row['opened_by']}>", ""]
+                 f"Host: <@{self._host(row, snap)}>", ""]
         for seat in snap["seats"]:
             tag = " (house)" if seat["kind"] == "character" and not seat["brought_by"] else ""
             lines.append(f"{seat['index'] + 1}. {GameTables._who(seat)}{tag}")
         stamp = self._stamp(key, "lobby")
         lines.append("")
-        lines.append(f"Join with the button. The host starts the game with {doubt.MIN_SEATS} to {doubt.MAX_SEATS} seats" + (f"; the table closes {stamp} if it hasn't started." if stamp else "."))
+        lines.append(f"Join with the button. The host (if the host has left, any player) starts the game with {doubt.MIN_SEATS} to {doubt.MAX_SEATS} seats"
+                     + (f"; the table closes {stamp} if it hasn't started." if stamp else "."))
         lines.append("-# " + doubt.rules_text(rules))
         view, tid, rid = discord.ui.View(timeout=None), key[1], snap["round_id"]
         spec = [("join", "Join", discord.ButtonStyle.primary, False), ("leave", "Leave", discord.ButtonStyle.secondary, False)]
@@ -415,7 +519,8 @@ class DoubtTables:
             who = self._who(snap, turn)
             lines.append(f"Next: {who}, claim {view['rank']}" + (f" — {stamp}." if stamp and seats[turn]["kind"] == "member" else "."))
         if view["window"]:
-            lines.append(f"Doubt window open {self._stamp(key, 'window')}.".replace(" .", "."))
+            window_stamp = self._stamp(key, "window")
+            lines.append("Doubt window open" + (f" {window_stamp}" if window_stamp else "") + ".")
         buttons = discord.ui.View(timeout=None)
         buttons.add_item(DoubtButton("doubt", key[1], snap["round_id"], snap["moves"], "Doubt", discord.ButtonStyle.danger, view["window"] is None))
         buttons.add_item(DoubtButton("hand", key[1], snap["round_id"], snap["moves"], "My hand", discord.ButtonStyle.primary))
@@ -471,7 +576,7 @@ class DoubtTables:
         """Under the table lock: the playing snapshot a timer may act on, or None (the table moved on or closed)."""
         row = self._row(key)
         if row is None or row["status"] != "open" or row["game"] != "doubt":
-            self._forget(key)
+            self._release(key)
             return None
         try:
             snap = self.store.round_snapshot(*key[:1], round_id)
@@ -519,11 +624,16 @@ class DoubtTables:
         """After the table lock is released: the thread lines, then the edits (an edit older than the last one sent is dropped)."""
         if out is None:
             return
+        await self._send(key, out)
+
+    async def _send(self, key, out: _Out) -> None:
         table = self.table(key)
         async with table.send_lock:
             row = self._row(key)
             if row is None:
                 return
+            if row["status"] != "open" and not (out.final or out.closed or out.closing):
+                return  # a step sealed before the table was closed: it must not repaint the closed table
             thread_id, channel_id = row["thread_id"], row["channel_id"]
             if out.start:
                 if not await self._open_play(key, out, row):
@@ -538,9 +648,13 @@ class DoubtTables:
                 self.dirty.discard(key)
                 await self._edit_board(key)
                 await self._edit(channel_id, row["message_id"], content=lobby, view=None)
-                self.tables.pop(key, None)
                 return
             self._talk_event(thread_id, out)
+            if out.closing:
+                if out.seq > table.sent.get("turn", 0):
+                    table.sent["turn"] = out.seq
+                    await self._edit(thread_id, row["turn_message_id"], content="Table closed.", view=None)
+                await self._post(thread_id, out.closing)
             if out.lobby and out.seq > table.sent.get("lobby", 0):
                 table.sent["lobby"] = out.seq
                 await self._edit(channel_id, row["message_id"], content=out.lobby[0], view=out.lobby[1])
@@ -596,7 +710,6 @@ class DoubtTables:
                 self._forget(key)
             await self._edit(row["channel_id"], row["message_id"], content="Table closed: I couldn't post in the table thread." + refunded, view=None)
             self.arm(key, "archive", self.ARCHIVE_SECONDS)
-            self.tables.pop(key, None)
             return False
         try:
             await board.pin()
@@ -662,6 +775,8 @@ class DoubtTables:
             await self._say(interaction, str(error))
             return
         key, round_id = (guild_id, opened["table_id"]), opened["round_id"]
+        self.table(key)
+        self._ensure_sweeper()
         async with self.lock(key):
             try:
                 if favorites and space_id is not None:
@@ -671,6 +786,8 @@ class DoubtTables:
                     snap = self.store.join_round(guild_id, round_id, user.id, 0)
             except GameError as error:
                 self.store.close_table(*key)
+                self._release(key)
+                self.tables.pop(key, None)
                 refusal = str(error)
             else:
                 refusal = None
@@ -690,7 +807,8 @@ class DoubtTables:
             except Exception:
                 async with self.lock(key):
                     self.store.close_table(*key)
-                    self._forget(key)
+                    self._release(key)
+                self.tables.pop(key, None)
                 raise
             table.sent["lobby"] = max(table.sent.get("lobby", 0), out.seq)
         fresh = None
@@ -705,13 +823,18 @@ class DoubtTables:
             logging.warning("Could not open the I Doubt It thread (%s)", type(error).__name__)
             await self._thread_failed(interaction, key, isinstance(error, discord.Forbidden))
             return
-        self.store.set_table_thread(*key, thread.id)
-        self.threads[thread.id] = key
+        ready = None
         async with self.lock(key):  # Start waits for the thread
             row = self._row(key)
-            ready = None
             if row["status"] == "open":
+                self.store.set_table_thread(*key, thread.id)
+                self.threads[thread.id] = key
                 ready = self._seal(key, _Out(lobby=self.render_lobby(key, self.store.latest_round(*key), row)))
+        if ready is None:  # closed while the thread was being made: nothing else to say there, just archive it
+            try:
+                await thread.edit(archived=True, locked=True)
+            except Exception as error:
+                logging.warning("Could not archive the unused I Doubt It thread (%s)", type(error).__name__)
         await self._publish(key, ready)
         if note:
             await self._say(interaction, note)
@@ -723,10 +846,11 @@ class DoubtTables:
             if row is not None and row["status"] == "open":
                 self.store.close_table(*key)
             self._forget(key)
-            out = self._seal(key, _Out(lobby=("Table closed: I couldn't open a thread here." + refunded, None)))
+            out = self._seal(key, _Out(lobby=("Table closed: I couldn't open a thread here." + refunded, None), closed=True))
         await self._publish(key, out)
         self.tables.pop(key, None)
-        await self._say(interaction, (THREAD_FORBIDDEN if forbidden else THREAD_FAILED + refunded))
+        self.ended.discard(key)
+        await self._say(interaction, (THREAD_FORBIDDEN if forbidden else THREAD_FAILED) + refunded)
 
     # --- buttons ----------------------------------------------------------------------------
 
@@ -757,6 +881,8 @@ class DoubtTables:
         async with self.lock(key):
             out = self._press(interaction.user.id, key, action, round_id, moves)
         await self._publish(key, out)
+        if out.say == STALE:
+            await self._reap(key)  # the table may have been closed from outside
         if out.say:
             await self._say(interaction, out.say)
 
@@ -782,8 +908,14 @@ class DoubtTables:
         except GameError as error:
             return _Out(str(error))
 
+    def _touch_lobby(self, key, round_id) -> None:
+        """A join restarts the idle clock of the lobby."""
+        self.table(key).deadlines["lobby"] = self.clock() + self.LOBBY_SECONDS
+        self.arm(key, "lobby", self.LOBBY_SECONDS, round_id)
+
     def _join(self, key, row, snap, user_id) -> _Out:
         snap = self.store.join_round(key[0], snap["round_id"], user_id, 0)
+        self._touch_lobby(key, snap["round_id"])
         ante, name = (snap["rules"] or {}).get("ante", 0), self.store.currency_name(key[0])
         say = "You joined the table." + (f" Your ante of {ante:,} {name} is in the pot." if ante else "")
         return self._seal(key, _Out(say, lobby=self.render_lobby(key, snap, row)))
@@ -794,11 +926,11 @@ class DoubtTables:
             self.store.close_table(*key)
             self._forget(key)
             self.arm(key, "archive", self.ARCHIVE_SECONDS)
-            return self._seal(key, _Out("You left the table. It is closed.", lobby=("Table closed: everyone left.", None)))
+            return self._seal(key, _Out("You left the table. It is closed.", lobby=("Table closed: everyone left.", None), closed=True))
         return self._seal(key, _Out("You left the table. Your ante is refunded.", lobby=self.render_lobby(key, snap, row)))
 
     def _fill(self, key, row, snap, user_id) -> _Out:
-        if row["opened_by"] != user_id:
+        if not self._is_host(row, snap, user_id):
             return _Out("Only the host can fill seats.")
         guild_id, binding = key[0], self.store.binding(row["channel_id"])
         if binding is None:
@@ -815,13 +947,14 @@ class DoubtTables:
             skipped += result["skipped"]
         if not seated:
             return _Out("No one is left in the cast who can take a seat.")
+        self._touch_lobby(key, snap["round_id"])
         say = "Seated: " + ", ".join(s["name"] for s in seated) + "."
         if skipped:
             say += " Not seated: " + ", ".join(s["name"] for s in skipped) + "."
         return self._seal(key, _Out(say, lobby=self.render_lobby(key, snap, row)))
 
     def _start(self, key, row, snap, user_id) -> _Out:
-        if row["opened_by"] != user_id:
+        if not self._is_host(row, snap, user_id):
             return _Out("Only the host can start the game.")
         if row["thread_id"] is None:
             return _Out(THREAD_NOT_READY)
@@ -883,6 +1016,8 @@ class DoubtTables:
         seat = self.store.member_seat_index(guild_id, snap["round_id"], user_id)
         if seat is None:
             return NOT_SEATED, None
+        if snap["status"] == "joining":
+            return "The game hasn't started yet.", None
         if snap["status"] != "playing":
             return "This game is over.", None
         view = self.store.seat_view(guild_id, snap["round_id"], seat)
@@ -909,6 +1044,8 @@ class DoubtTables:
             out = self._picker_play(key, interaction.user.id, round_id, moves, counts)
         await self.answer(interaction, out.say, done=out.ok)  # answer first, so a slow edit cannot make it miss Discord's 3 seconds
         await self._publish(key, out)
+        if out.say == STALE:
+            await self._reap(key)
 
     def _picker_play(self, key, user_id, round_id, moves, counts) -> _Out:
         loaded, refusal = self._load(key, round_id)
@@ -955,7 +1092,7 @@ class DoubtTables:
         async with self.lock(key):
             row = self._row(key)
             if row is None or row["status"] != "open":
-                self._forget(key)
+                self._release(key)
                 return
             try:
                 snap = self.store.round_snapshot(guild_id, round_id)
@@ -966,9 +1103,8 @@ class DoubtTables:
             self.store.close_table(*key)
             self._forget(key)
             self.arm(key, "archive", self.ARCHIVE_SECONDS)
-            out = self._seal(key, _Out(lobby=("Table closed: nobody started the game." + self._refunded(key), None)))
+            out = self._seal(key, _Out(lobby=("Table closed: nobody started the game." + self._refunded(key), None), closed=True))
         await self._publish(key, out)
-        self.tables.pop(key, None)
 
     async def on_window_timer(self, guild_id, table_id, round_id, moves) -> None:
         """The doubt window ran out: the claimer's claim stands."""
@@ -1195,7 +1331,7 @@ class DoubtTables:
                 return out
         bound = min(self.MODEL_SECONDS, self.WINDOW_SECONDS - 3)
         # Design: triaged seats without a character row, or beyond the remaining daily budget, simply pass (as do unselected seats).
-        asked = [item for item in asked if item[1] is not None] if bound > 0 else []
+        asked = [item for item in asked if item[1] is not None]
         tasks = {asyncio.create_task(self._doubt_one(key, snap, seat, character, seen, tend, names, bound)) for seat, character, seen, tend in asked[:budget]}
         try:
             while tasks:
@@ -1209,18 +1345,9 @@ class DoubtTables:
             await asyncio.gather(*tasks, return_exceptions=True)
         return None
 
-    async def closed_by_channel(self, guild_id, table_id) -> None:
-        """Games were turned off in the table's channel (the store already closed and refunded it): stop the timers and say so in the lobby."""
-        key = (guild_id, table_id)
-        row = self._row(key)
-        if row is None or row["game"] != "doubt":
-            return
-        self._forget(key)
-        self.arm(key, "archive", self.ARCHIVE_SECONDS)
-        await self._edit(row["channel_id"], row["message_id"], content="Table closed: games were turned off here." + self._refunded(key), view=None)
-        self.tables.pop(key, None)
-
     async def on_archive_timer(self, guild_id, table_id) -> None:
+        self.ended.discard((guild_id, table_id))
+        self.tables.pop((guild_id, table_id), None)
         self.banter = {thread: k for thread, k in self.banter.items() if k != (guild_id, table_id)}
         row = self._row((guild_id, table_id))
         if row is None or row["status"] == "open" or row["thread_id"] is None:
@@ -1333,7 +1460,7 @@ class DoubtTables:
         tables = {(r["guild_id"], r["table_id"]): (r["channel_id"], r["message_id"], r["thread_id"]) for r in rounds}
         for row in store.all("SELECT id,guild_id,channel_id,message_id,thread_id FROM game_tables WHERE status='open' AND game='doubt'"):
             tables.setdefault((row["guild_id"], row["id"]), (row["channel_id"], row["message_id"], row["thread_id"]))
-        notes = {(r["guild_id"], r["table_id"]): self._refunded((r["guild_id"], r["table_id"])) for r in rounds}
+        notes = {(r["guild_id"], r["table_id"]): self._refunded((r["guild_id"], r["table_id"]), past=True) for r in rounds}
         for r in rounds:
             try:
                 store.cancel_round(r["guild_id"], r["round_id"], "bot restarted")
@@ -1349,9 +1476,10 @@ class DoubtTables:
                 failed += 1
                 logging.exception("Could not close I Doubt It table %s on restart", table_id)
                 continue
-            self._forget((guild_id, table_id))
+            self._release((guild_id, table_id))
+            self.tables.pop((guild_id, table_id), None)
             self.banter = {thread: k for thread, k in self.banter.items() if k != (guild_id, table_id)}
-            text = "This table closed when the bot restarted." + notes.get((guild_id, table_id), "").replace("are", "were")
+            text = "This table closed when the bot restarted." + notes.get((guild_id, table_id), "")
             await self._edit(channel_id, message_id, content=text, view=None)
             await self._post(thread_id, text)
         if refunded or closed or failed:
