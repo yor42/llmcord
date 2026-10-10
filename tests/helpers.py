@@ -333,8 +333,9 @@ def is_turn_failure(content: str) -> bool:
     return bool(content) and (content.startswith("Character response failed") or bool(reference_ids(content)))
 
 
-def not_found(text="Unknown Webhook") -> discord.NotFound:
-    return discord.NotFound(SimpleNamespace(status=404, reason="Not Found"), text)
+def not_found(text="Unknown Webhook", code=10015) -> discord.NotFound:
+    """A 404 as Discord sends it; ``code`` is the JSON error code (10015 Unknown Webhook, 10008 Unknown Message)."""
+    return discord.NotFound(SimpleNamespace(status=404, reason="Not Found"), {"message": text, "code": code})
 
 
 class FakeSentMessage:

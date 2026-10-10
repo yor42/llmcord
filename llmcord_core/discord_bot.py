@@ -9,6 +9,7 @@ import time
 import re
 import hashlib
 import json
+from collections import OrderedDict
 from dataclasses import replace
 from datetime import timedelta
 from types import SimpleNamespace
@@ -34,6 +35,8 @@ from .usage import capture_usage, log_attribution, log_purpose, log_scope, mask_
 from .identity import discord_identity, message_context
 
 AVATAR_ASSET_CHECK_TTL = 600
+CACHE_LIMIT = 512
+UNKNOWN_WEBHOOK = 10015
 MEMORY_WAIT_SECONDS = 15
 PROVIDER_STAGES = {'speaker selection', 'image description', 'dialogue generation'}
 MEMORY_CLOSE_SECONDS = 5
@@ -71,6 +74,55 @@ def split_discord(text: str, limit: int = 1900) -> list[str]:
     return chunks or ["(no response)"]
 
 
+class LruDict(OrderedDict):
+    """Dict that drops its least recently used entry past ``cap``."""
+
+    def __init__(self, cap=CACHE_LIMIT):
+        super().__init__()
+        self.cap = cap
+
+    def __getitem__(self, key):
+        value = super().__getitem__(key)
+        self.move_to_end(key)
+        return value
+
+    def get(self, key, default=None):
+        return self[key] if key in self else default
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        self.move_to_end(key)
+        while len(self) > self.cap:
+            self.popitem(last=False)
+
+
+class LockPool(dict):
+    """Per-key asyncio locks; past ``cap`` the oldest idle locks are dropped, never one held or awaited."""
+
+    def __init__(self, cap=CACHE_LIMIT):
+        super().__init__()
+        self.cap = cap
+
+    def lock(self, key):
+        lock = self.pop(key, None) or asyncio.Lock()
+        self[key] = lock
+        for old in list(self):
+            if len(self) <= self.cap:
+                break
+            idle = self[old]
+            # private asyncio attr: a just-released lock with a woken waiter is unlocked; guarded by test_lock_with_waiters_is_never_evicted
+            if old != key and not idle.locked() and not getattr(idle, '_waiters', None):
+                del self[old]
+        return lock
+
+
+def _webhook_gone(error):
+    """True when Discord says the cached webhook is unusable (Unknown Webhook, or an invalid token)."""
+    if isinstance(error, discord.NotFound):
+        return error.code == UNKNOWN_WEBHOOK
+    return isinstance(error, discord.HTTPException) and error.status == 401
+
+
 class SkitBot(commands.Bot):
     def __init__(self, settings: Settings):
         intents = discord.Intents.default()
@@ -82,12 +134,12 @@ class SkitBot(commands.Bot):
         self.models = ModelGateway(self.backend, usage_sink=self.store.record_model_usage,
                                   budget_gate=self._budget_check, log_sink=self._log_model_call)
         self.engine = Engine(self.store, self.models, self.backend)
-        self.channel_locks: dict[int, asyncio.Lock] = {}
+        self.channel_locks = LockPool()
         self.catchup_used: dict[tuple[int, int, int], float] = {}
-        self.webhook_locks = {}
-        self.webhooks = {}
-        self.webhook_defaults = {}
-        self.checked_avatar_assets = {}
+        self.webhook_locks = LockPool()
+        self.webhooks = LruDict()
+        self.webhook_defaults = LruDict()
+        self.checked_avatar_assets = LruDict()
         self.cleanup_task: asyncio.Task | None = None
         self.tree.allowed_contexts = app_commands.AppCommandContext(guild=True)
         self.memory_tasks: dict[int, asyncio.Task] = {}
@@ -163,7 +215,7 @@ class SkitBot(commands.Bot):
             state = self._budget_check()
             if state and state.hard_reached:
                 return
-            async with self.channel_locks.setdefault(message.channel.id, asyncio.Lock()):
+            async with self.channel_locks.lock(message.channel.id):
                 self.store.count_ambient_message(message.channel.id)
                 count, last = self.store.ambient_state(message.channel.id)
                 if count < 2 or time.time() - last < self.base_settings.limits["ambient_cooldown_seconds"]:
@@ -205,7 +257,7 @@ class SkitBot(commands.Bot):
             binding["space_id"], message.author.id, message.id, text,
             reference_id if referenced else None, recent, images, ambient=not explicit, user_label=message.author.display_name,
             mentioned_users=[discord_identity(user) for user in message.mentions if not user.bot])
-        async with self.channel_locks.setdefault(message.channel.id, asyncio.Lock()):
+        async with self.channel_locks.lock(message.channel.id):
             await self.run_scene(scene, message.channel)
 
     @staticmethod
@@ -222,14 +274,16 @@ class SkitBot(commands.Bot):
         if not isinstance(parent_channel, discord.TextChannel):
             raise ValueError("Character webhooks require a text channel or its thread")
         key = (parent_channel.id, character['id'])
-        async with self.webhook_locks.setdefault(key, asyncio.Lock()):
+        async with self.webhook_locks.lock(key):
             return await self._webhook_locked(parent_channel, character, key)
 
     async def _webhook_identity(self, webhook, character, key, identity):
         if self.webhook_defaults.get(key) != identity:
             try:
                 webhook = await webhook.edit(name=character['name'][:80], avatar=character['avatar'])
-            except discord.NotFound:
+            except discord.HTTPException as error:
+                if not _webhook_gone(error):
+                    raise
                 self._forget_webhook(key)
                 return None
             self.webhook_defaults[key] = identity
@@ -483,7 +537,9 @@ class SkitBot(commands.Bot):
                             stage.name = 'webhook delivery'
                             try:
                                 placeholder = await send_placeholder()
-                            except discord.NotFound:
+                            except discord.HTTPException as error:
+                                if not _webhook_gone(error):
+                                    raise
                                 self._forget_webhook(self._webhook_key(channel, character))
                                 stage.name = 'webhook setup'
                                 webhook = await self._webhook(channel, character)
@@ -505,7 +561,7 @@ class SkitBot(commands.Bot):
             stage.name = 'webhook delivery'
             await placeholder.edit(content=chunks[0] + footer, allowed_mentions=discord.AllowedMentions.none())
         except Exception as error:
-            if isinstance(error, discord.NotFound):
+            if _webhook_gone(error):
                 self._forget_webhook(self._webhook_key(channel, character))
             if placeholder:
                 try:
@@ -519,8 +575,9 @@ class SkitBot(commands.Bot):
                 outgoing.append(await webhook.send(chunk + footer, **thread_options, wait=True, silent=True,
                     username=character['name'], avatar_url=chosen_avatar['url'],
                     allowed_mentions=discord.AllowedMentions.none()))
-        except discord.NotFound:
-            self._forget_webhook(self._webhook_key(channel, character))
+        except discord.HTTPException as error:
+            if _webhook_gone(error):
+                self._forget_webhook(self._webhook_key(channel, character))
             raise
         return line, outgoing, chunks, emotion, chosen_avatar, usage
 
@@ -933,7 +990,7 @@ def _register_summon_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
             parent_message_id, recent, [], forced_character_id=row["id"], user_label=interaction.user.display_name,
             mentioned_users=[discord_identity(member) for ident in re.findall(r'<@!?(\d+)>', prompt)
                              if (member := interaction.guild.get_member(int(ident))) and not member.bot])
-        async with bot.channel_locks.setdefault(interaction.channel.id, asyncio.Lock()):
+        async with bot.channel_locks.lock(interaction.channel.id):
             await bot.run_scene(scene, interaction.channel, interaction)
 
 

@@ -12,7 +12,7 @@ import discord
 
 from llmcord_core.discord_bot import SkitBot
 from llmcord_core.engine import SceneContext
-from helpers import FakeModels, FakeTextChannel, ShiftedClock, make_settings
+from helpers import FakeModels, FakeTextChannel, ShiftedClock, make_settings, not_found
 
 
 class LongModels(FakeModels):
@@ -229,6 +229,146 @@ class WebhookCacheTests(unittest.IsolatedAsyncioTestCase):
         self.assert_delivered_by(new)
         self.assertEqual(new.options[-1]["username"], "Alicia")
         self.assertEqual(self.store.webhook_id(100, self.alice), new.id)
+
+
+    # --- MNT-02: only a gone webhook is forgotten ----------------------------------------------
+
+    @staticmethod
+    def unauthorized():
+        return discord.HTTPException(SimpleNamespace(status=401, reason="Unauthorized"),
+                                     {"message": "Invalid Webhook Token", "code": 50027})
+
+    def fail_sends(self, hook, error):
+        """Make the hook's next send raise ``error`` once (a placeholder send)."""
+        original, state = hook.send, {"left": 1}
+
+        async def send(content, **kwargs):
+            if state["left"]:
+                state["left"] -= 1
+                raise error
+            return await original(content, **kwargs)
+        hook.send = send
+
+    def fail_placeholder_edits(self, hook, error):
+        original = hook.send
+
+        async def send(content, **kwargs):
+            message = await original(content, **kwargs)
+
+            async def edit(**_kwargs):
+                raise error
+            message.edit = edit
+            return message
+        hook.send = send
+        return original
+
+    async def test_unauthorized_placeholder_send_drops_cache_and_retries(self):
+        """MNT-02: an HTTP 401 (invalid webhook token) on the placeholder send forgets the cached webhook, looks
+        one up again and retries the send."""
+        await self.turn()
+        hook = self.channel.hooks[0]
+        self.fail_sends(hook, self.unauthorized())
+        await self.turn()
+        self.assertEqual(self.channel.errors, [])
+        self.assertEqual(self.channel.listings, 1)
+        self.assert_delivered_by(self.channel.hooks[0], start=1)
+
+    async def test_unknown_message_on_placeholder_send_keeps_webhook(self):
+        """MNT-02: a NotFound that is not Unknown Webhook (10008) on the placeholder send fails the turn without
+        retrying and without dropping the cached webhook."""
+        await self.turn()
+        hook = self.channel.hooks[0]
+        self.fail_sends(hook, not_found("Unknown Message", 10008))
+        await self.failed_turn()
+        self.assertEqual(len(self.channel.errors), 1)
+        self.assertEqual(self.channel.listings, 0)
+        await self.turn()
+        self.assertEqual(self.channel.listings, 0)
+        self.assertEqual(self.channel.creates, 1)
+
+    async def test_unknown_message_on_placeholder_edit_keeps_webhook(self):
+        """MNT-02: someone deleting the placeholder mid-stream (NotFound 10008 on edit) fails the turn but the
+        cached webhook is kept."""
+        await self.turn()
+        hook = self.channel.hooks[0]
+        original = self.fail_placeholder_edits(hook, not_found("Unknown Message", 10008))
+        await self.failed_turn()
+        self.assertEqual(len(self.channel.errors), 1)
+        hook.send = original
+        await self.turn()
+        self.assertEqual(self.channel.listings, 0)
+        self.assertEqual(self.channel.creates, 1)
+
+    async def test_unknown_webhook_on_placeholder_edit_drops_cache(self):
+        """MNT-02: NotFound 10015 on the placeholder edit fails the turn and forgets the cached webhook, so the
+        next turn looks one up again."""
+        await self.turn()
+        hook = self.channel.hooks[0]
+        original = self.fail_placeholder_edits(hook, not_found())
+        await self.failed_turn()
+        hook.send = original
+        await self.turn()
+        self.assertEqual(self.channel.listings, 1)
+
+    async def test_unauthorized_on_placeholder_edit_drops_cache(self):
+        """MNT-02: HTTP 401 on the placeholder edit forgets the cached webhook."""
+        await self.turn()
+        hook = self.channel.hooks[0]
+        original = self.fail_placeholder_edits(hook, self.unauthorized())
+        await self.failed_turn()
+        hook.send = original
+        await self.turn()
+        self.assertEqual(self.channel.listings, 1)
+
+
+    def fail_chunks(self, hook, error):
+        original = hook.send
+
+        async def send(content, **kwargs):
+            if content != "…":
+                raise error
+            return await original(content, **kwargs)
+        hook.send = send
+
+    async def test_unknown_message_on_continuation_chunk_keeps_webhook(self):
+        """MNT-02: a non-10015 NotFound on a later chunk fails the turn (re-raised) but keeps the cached webhook."""
+        self.bot.engine.models = self.bot.models = LongModels([self.alice])
+        await self.turn()
+        self.fail_chunks(self.channel.hooks[0], not_found("Unknown Message", 10008))
+        await self.failed_turn()
+        self.assertEqual(len(self.channel.errors), 1)
+        self.assertEqual(len(self.bot.webhooks), 1)
+
+    async def test_unauthorized_on_continuation_chunk_drops_webhook(self):
+        """MNT-02: HTTP 401 on a later chunk forgets the cached webhook and re-raises."""
+        self.bot.engine.models = self.bot.models = LongModels([self.alice])
+        await self.turn()
+        self.fail_chunks(self.channel.hooks[0], self.unauthorized())
+        await self.failed_turn()
+        self.assertEqual(len(self.channel.errors), 1)
+        self.assertEqual(len(self.bot.webhooks), 0)
+
+    async def test_webhook_identity_reraises_other_not_found(self):
+        """MNT-02: webhook.edit failing with a NotFound that is not Unknown Webhook propagates and keeps the cache."""
+        await self.turn()
+        hook = self.channel.hooks[0]
+
+        async def edit(**kwargs):
+            raise not_found("Unknown Message", 10008)
+        hook.edit = edit
+        self.rename("Alicia")
+        await self.failed_turn()
+        self.assertEqual(len(self.bot.webhooks), 1)
+
+    async def test_other_not_found_on_placeholder_send_is_not_retried(self):
+        """MNT-02: NotFound 10003 (Unknown Channel) on the placeholder send is not retried."""
+        await self.turn()
+        hook = self.channel.hooks[0]
+        self.fail_sends(hook, not_found("Unknown Channel", 10003))
+        await self.failed_turn()
+        self.assertEqual(self.channel.listings, 0)
+        self.assertEqual(self.channel.creates, 1)
+        self.assertEqual(len(self.bot.webhooks), 1)
 
 
 class AvatarAssetCheckTests(unittest.IsolatedAsyncioTestCase):

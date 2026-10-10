@@ -92,7 +92,7 @@ class MemoryBackgroundCase(unittest.IsolatedAsyncioTestCase):
     async def turn(self, ident, text="Hi", parent=None, within=1.0):
         """One turn the way on_message runs it: hold the channel lock around run_scene (bounded)."""
         scene = SceneContext(1, CHANNEL, None, self.world, 9, ident, text, parent, [], [])
-        async with self.bot.channel_locks.setdefault(CHANNEL, asyncio.Lock()):
+        async with self.bot.channel_locks.lock(CHANNEL):
             await asyncio.wait_for(self.bot.run_scene(scene, self.channel), within)
 
     @property
