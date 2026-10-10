@@ -1687,8 +1687,9 @@ def character_card(ctx, row, worlds):
                     def archive():
                         store.archive_character(gid, row['id'], not row['archived'], revision)
                         return True
-                    ok, result = await ctx._attempt(archive, 'character.archive', {'id': row['id']})
-                    if ok or isinstance(getattr(result, 'error', None), ConflictError):
+                    outcome = await ctx._attempt(archive, 'character.archive', {'id': row['id']})
+                    # .error lives on the outcome tuple, not its items
+                    if outcome[0] or isinstance(getattr(outcome, 'error', None), ConflictError):
                         await ctx.refresh('characters')
                 ui.menu_item('Restore' if row['archived'] else 'Archive', on_click=archive_item).props('role=menuitem')
                 ui.separator()

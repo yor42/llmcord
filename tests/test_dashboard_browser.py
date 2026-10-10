@@ -3430,6 +3430,38 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def test_archive_conflict_refreshes_the_list_and_retry_succeeds(self):
+        """MNT-05: Archive from a stale card shows the conflict toast and archives nothing, then the list refreshes so Archive works on retry."""
+        context, page, errors, card, description = self.open_alice()
+        original = description.input_value()
+        try:
+            self.assertTrue(self.context.request.post(self.url + '/_test/change-character', data={'name': 'Alice', 'description': 'Changed behind the page'}).ok)
+            audit_before = len([r for r in self.state()['audit'] if r['action'] == 'character.archive'])
+            page.evaluate("document.querySelector('.character-card').dataset.stale = '1'")
+            self.open_more_item(page, card, 'Alice', 'Archive')
+            page.get_by_text('Character changed; reload before archiving', exact=True).wait_for(timeout=5000)
+            self.assertFalse(self.alice_row()['archived'])
+            self.assertEqual(len([r for r in self.state()['audit'] if r['action'] == 'character.archive']), audit_before)
+            self.assertEqual(page.get_by_text('Alice · Archived', exact=True).count(), 0)
+            # The refresh replaces the card element; the marker on the old element survives only if it never ran.
+            page.wait_for_function("() => !document.querySelector('.character-card[data-stale]')", timeout=3000)
+            alice = page.locator('.character-card').filter(has=page.get_by_text('Alice', exact=True)).first
+            self.open_more_item(page, alice, 'Alice', 'Archive')
+            page.get_by_text('Alice · Archived', exact=True).wait_for(timeout=5000)
+            self.wait_for(lambda: self.alice_row()['archived'])
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+            if self.alice_row()['archived']:
+                ctx2, page2, _ = self.ux_page('/admin/guild/1?tab=characters')
+                try:
+                    archived = page2.locator('.character-card').filter(has=page2.get_by_text('Alice · Archived', exact=True)).first
+                    self.open_more_item(page2, archived, 'Alice', 'Restore')
+                    self.wait_for(lambda: not self.alice_row()['archived'])
+                finally:
+                    ctx2.close()
+            self.restore_alice(original)
+
     def test_more_menu_hides_tooltip_and_keyboard_returns_focus(self):
         """UI-39: no "More actions" tooltip stays over the open menu; Tab, Enter opens it, Escape closes it and focus returns to the button."""
         context, page, errors, card, description = self.open_alice()
