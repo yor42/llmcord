@@ -39,7 +39,7 @@ class MigrationTests(unittest.TestCase):
             self._make_v8(path)
             store = Store(path)
             try:
-                self.assertEqual(store.one('PRAGMA user_version')[0], 16)
+                self.assertEqual(store.one('PRAGMA user_version')[0], 17)
                 self.assertEqual(store.one('SELECT COUNT(*) FROM spaces')[0], 1)
                 self.assertEqual(store.model_profile_rows(), [])
                 roles = store.model_roles()
@@ -61,7 +61,7 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual(len(list(Path(folder).glob('*.pre-*'))), 1)
             store = Store(path)
             try:
-                self.assertEqual(store.one('PRAGMA user_version')[0], 16)
+                self.assertEqual(store.one('PRAGMA user_version')[0], 17)
             finally:
                 store.close()
             self.assertEqual(len(list(Path(folder).glob('*.pre-*'))), 1)
@@ -71,7 +71,7 @@ class MigrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'new.sqlite3'
             with closing(sqlite3.connect(path)) as connection, connection:
-                connection.execute('PRAGMA user_version=17')
+                connection.execute('PRAGMA user_version=18')
             with self.assertRaisesRegex(ValueError, 'newer than this application'):
                 Store(path)
 

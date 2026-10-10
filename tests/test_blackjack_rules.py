@@ -102,9 +102,9 @@ class DisplayTests(unittest.TestCase):
 
     def test_damaged_round_rules_read_as_none(self):
         from llmcord_core.admin_store import AdminStore
-        self.assertIsNone(AdminStore._round_rules({"rules_json": "{nope"}))
-        self.assertIsNone(AdminStore._round_rules({"rules_json": '{"stand_on": 3}'}))
-        self.assertEqual(AdminStore._round_rules({"rules_json": ""}), CLASSIC)
+        self.assertIsNone(AdminStore._round_rules({"game": "blackjack", "rules_json": "{nope"}))
+        self.assertIsNone(AdminStore._round_rules({"game": "blackjack", "rules_json": '{"stand_on": 3}'}))
+        self.assertEqual(AdminStore._round_rules({"game": "blackjack", "rules_json": ""}), CLASSIC)
 
 
 class GoldenClassicTests(unittest.TestCase):
@@ -353,7 +353,7 @@ class ReplayTests(unittest.TestCase):
 
 class RulesStoreTests(TableCase):
     def stored(self, guild=G):
-        return self.store.one("SELECT blackjack_rules FROM guild_settings WHERE guild_id=?", (guild,))
+        return self.store.one("SELECT rules_json FROM game_settings WHERE guild_id=? AND game='blackjack'", (guild,))
 
     def test_default_set_get_and_conflict(self):
         s = self.store

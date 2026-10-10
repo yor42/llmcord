@@ -300,7 +300,7 @@ class MigrationTests(unittest.TestCase):
             path = self.v15_file(folder)
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 16)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 17)
                 self.assertEqual(store.balance(G, 5), 30)
                 ledger = store.ledger(G, user_id=5)
                 self.assertEqual([(r["amount"], r["holder_kind"]) for r in ledger], [(-10, "member"), (40, "member")])
@@ -327,7 +327,7 @@ class MigrationTests(unittest.TestCase):
             Store(path).close()
             self.assertEqual(len(list(Path(folder).glob("*.pre-*.sqlite3"))), 1)
             with closing(sqlite3.connect(path)) as db, db:
-                db.execute("PRAGMA user_version=17")
+                db.execute("PRAGMA user_version=18")
             with self.assertRaisesRegex(ValueError, "newer than this application"):
                 Store(path)
 

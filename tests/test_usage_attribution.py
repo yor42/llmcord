@@ -99,7 +99,7 @@ class MigrationTests(unittest.TestCase):
                 connection.execute('PRAGMA user_version=7')
             store = Store(path)
             try:
-                self.assertEqual(store.one('PRAGMA user_version')[0], 16)
+                self.assertEqual(store.one('PRAGMA user_version')[0], 17)
                 row = store.one('SELECT guild_id,input_tokens,channel_id,feature FROM model_usage')
                 self.assertEqual(tuple(row), (1, 1, None, ''))
                 self.assertTrue(store.one("SELECT 1 FROM sqlite_master WHERE name='model_usage_guild_time'"))
@@ -118,7 +118,7 @@ class MigrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'new.sqlite3'
             with closing(sqlite3.connect(path)) as connection, connection:
-                connection.execute('PRAGMA user_version=17')
+                connection.execute('PRAGMA user_version=18')
             with self.assertRaisesRegex(ValueError, 'newer than this application'):
                 Store(path)
 

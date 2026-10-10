@@ -131,9 +131,9 @@ Phase 3's first game, and the start of a library of multiplayer games built arou
 
 **Schema v17** (backup before upgrade):
 
-- New `game_settings(guild_id, game, enabled, rules_json, revision)`. Blackjack's `blackjack_enabled` and `blackjack_rules` are copied into its row, and every read and write moves to the new table. The old columns stay, unused and commented, because dropping them would be destructive.
+- New `game_settings(guild_id, game, enabled, rules_json, updated_at)`, without a revision column: writes keep today's expected-value checks (`ConflictError`). Blackjack's `blackjack_enabled` and `blackjack_rules` are copied into its row, and every read and write moves to the new table. The old columns stay, unused and commented, because dropping them would be destructive.
 - `game_tables` gains nullable `thread_id`, `board_message_id` and `turn_message_id`, and `open_table` accepts `doubt`.
-- The ante goes in `game_seats.stake`, and the pot is the sum of stakes.
+- The ante goes in `game_seats.stake`, and the pot is the sum of stakes. An ante of 0 needs a stake of 0, which v16's `CHECK(stake > 0)` refuses and SQLite cannot alter, so v17 rebuilds `game_seats` with `CHECK(stake >= 0)` and keeps every row. Blackjack still rejects a stake of 0 in its engine and store.
 - Hands are never stored. They replay from seed plus moves.
 - Ledger reasons: "I Doubt It ante / payout / refund (table T, round N)".
 

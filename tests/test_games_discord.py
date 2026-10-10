@@ -204,7 +204,7 @@ class JoinTests(GameCase):
     def flag_off_raw(self):
         """Turns the switch off without the store's closing, as a flip that left a row open."""
         with self.store.write_admin():
-            self.store.db.execute("INSERT INTO guild_settings(guild_id,blackjack_enabled) VALUES(?,0) ON CONFLICT(guild_id) DO UPDATE SET blackjack_enabled=0", (G,))
+            self.store.db.execute("INSERT INTO game_settings(guild_id,game,enabled,updated_at) VALUES(?,'blackjack',0,0) ON CONFLICT(guild_id,game) DO UPDATE SET enabled=0", (G,))
 
     async def test_blackjack_off_refuses_before_the_channel_check_and_presses_act_like_a_closed_table(self):
         """FEAT-27: /blackjack says so when the server switch is off (even in a non-game channel); a press on an open table of an off game closes it for the presser."""
@@ -243,7 +243,7 @@ class JoinTests(GameCase):
         def flips(guild_id):
             calls.append(guild_id)
             return len(calls) == 1
-        with mock.patch.object(self.store, "blackjack_enabled", side_effect=flips):
+        with mock.patch.object(self.store, "game_enabled", side_effect=lambda guild_id, game: flips(guild_id)):
             click = await self.bet(ALICE, 10)
         self.assertIn("Blackjack is off on this server.", click.replies)
         self.assertIsNone(self.store.open_table_for(G, CH))

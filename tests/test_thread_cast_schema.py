@@ -55,7 +55,7 @@ class MigrationTests(Fixture, unittest.TestCase):
             with self.assertLogs("llmcord_core.store", "WARNING") as logs:
                 store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 16)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 17)
                 self.assertEqual(columns(store.db, "thread_casts"), ["thread_id", "cast", "guild_id", "parent_id"])
                 rows = {r["thread_id"]: (r["guild_id"], r["parent_id"]) for r in store.all("SELECT * FROM thread_casts")}
                 self.assertEqual(rows, {1001: (1, None), 1002: (None, None), 1003: (None, None),
@@ -95,7 +95,7 @@ class MigrationTests(Fixture, unittest.TestCase):
                 store = Store(path)
             try:
                 self.assertEqual(store.one("SELECT guild_id FROM thread_casts WHERE thread_id=1001")[0], 1)
-                self.assertEqual(store.one("PRAGMA user_version")[0], 16)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 17)
             finally:
                 store.close()
 
@@ -115,10 +115,10 @@ class MigrationTests(Fixture, unittest.TestCase):
             self.assertEqual(len(list(Path(folder).glob("*.pre-v11-*.sqlite3"))), 1)
 
     def test_fresh_store_has_columns(self):
-        """MNT-05: a new database is version 16 with the columns from SCHEMA."""
+        """MNT-05: a new database is version 17 with the columns from SCHEMA."""
         store = Store()
         try:
-            self.assertEqual(store.one("PRAGMA user_version")[0], 16)
+            self.assertEqual(store.one("PRAGMA user_version")[0], 17)
             self.assertEqual(columns(store.db, "thread_casts"), ["thread_id", "cast", "guild_id", "parent_id"])
         finally:
             store.close()
@@ -128,7 +128,7 @@ class MigrationTests(Fixture, unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "new.sqlite3"
             with closing(sqlite3.connect(path)) as connection, connection:
-                connection.execute("PRAGMA user_version=17")
+                connection.execute("PRAGMA user_version=18")
             with self.assertRaisesRegex(ValueError, "newer than this application"):
                 Store(path)
 

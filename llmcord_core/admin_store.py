@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from .backend import ROLES as MODEL_ROLES
 from .config import PROFILE_KEYS, check_key_pin, key_hosts_from_env, profile_from_mapping, validate_profile_name
 from .errors import mask_facts, redact
-from .games import IllegalMove, Seat, blackjack, new_seed, seed_hash
+from .games import IllegalMove, Seat, blackjack, new_seed, registry, seed_hash
 from .lorebooks import normalize_entry, parse_lorebook
 
 ADMIN_SCHEMA = """
@@ -124,7 +124,12 @@ CREATE TABLE IF NOT EXISTS game_channels (
 CREATE TABLE IF NOT EXISTS game_tables (
  id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, channel_id INTEGER NOT NULL,
  game TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('open','closed')),
- message_id INTEGER, opened_by INTEGER NOT NULL, created_at REAL NOT NULL, updated_at REAL NOT NULL
+ message_id INTEGER, opened_by INTEGER NOT NULL, created_at REAL NOT NULL, updated_at REAL NOT NULL,
+ thread_id INTEGER, board_message_id INTEGER, turn_message_id INTEGER
+);
+CREATE TABLE IF NOT EXISTS game_settings (
+ guild_id INTEGER NOT NULL, game TEXT NOT NULL, enabled INTEGER NOT NULL, rules_json TEXT NOT NULL DEFAULT '', updated_at REAL NOT NULL,
+ PRIMARY KEY(guild_id,game)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS game_tables_open ON game_tables(guild_id,channel_id) WHERE status='open';
 CREATE TABLE IF NOT EXISTS game_rounds (
@@ -137,7 +142,7 @@ CREATE TABLE IF NOT EXISTS game_rounds (
 CREATE TABLE IF NOT EXISTS game_seats (
  guild_id INTEGER NOT NULL, round_id INTEGER NOT NULL REFERENCES game_rounds(id), seat_index INTEGER NOT NULL,
  kind TEXT NOT NULL CHECK(kind IN ('member','character')), ref_id INTEGER NOT NULL,
- stake INTEGER NOT NULL CHECK(stake>0), outcome TEXT, payout INTEGER, brought_by INTEGER, insurance INTEGER NOT NULL DEFAULT 0,
+ stake INTEGER NOT NULL CHECK(stake>=0), outcome TEXT, payout INTEGER, brought_by INTEGER, insurance INTEGER NOT NULL DEFAULT 0,
  PRIMARY KEY(round_id,seat_index), UNIQUE(round_id,kind,ref_id)
 );
 CREATE TABLE IF NOT EXISTS game_moves (
@@ -529,6 +534,7 @@ class AdminStore:
             'characters': {'avatar_manual': 'INTEGER NOT NULL DEFAULT 0'},
             'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0', 'currency_name': "TEXT NOT NULL DEFAULT ''", 'daily_amount': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_bonus': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_days': 'INTEGER NOT NULL DEFAULT 7', 'game_min_bet': 'INTEGER NOT NULL DEFAULT 1', 'game_max_bet': 'INTEGER NOT NULL DEFAULT 1000', 'max_cast': 'INTEGER NOT NULL DEFAULT 5', 'max_favorites': 'INTEGER NOT NULL DEFAULT 5', 'archived_favorites': 'INTEGER NOT NULL DEFAULT 0', 'character_refill_cap': 'INTEGER NOT NULL DEFAULT 1000', 'game_character_talk': 'INTEGER NOT NULL DEFAULT 1', 'game_talk_daily_limit': 'INTEGER NOT NULL DEFAULT 100', 'game_summary_rounds': 'INTEGER NOT NULL DEFAULT 5', 'blackjack_enabled': 'INTEGER NOT NULL DEFAULT 1', 'blackjack_rules': "TEXT NOT NULL DEFAULT ''"},
             'game_rounds': {'rules_json': "TEXT NOT NULL DEFAULT ''"},
+            'game_tables': {'thread_id': 'INTEGER', 'board_message_id': 'INTEGER', 'turn_message_id': 'INTEGER'},
             'game_seats': {'brought_by': 'INTEGER', 'insurance': 'INTEGER NOT NULL DEFAULT 0'},
             'currency_ledger': {'holder_kind': "TEXT NOT NULL DEFAULT 'member' CHECK(holder_kind IN ('member','character'))"},
             'model_usage': {'channel_id': 'INTEGER', 'feature': "TEXT NOT NULL DEFAULT ''"},
@@ -537,6 +543,8 @@ class AdminStore:
             for name, spec in additions.items():
                 if name not in columns:
                     self.db.execute(f'ALTER TABLE {table} ADD COLUMN {name} {spec}')
+        self._migrate_game_settings()
+        self._rebuild_game_seats()
         self.db.execute('CREATE INDEX IF NOT EXISTS model_usage_guild_time ON model_usage(guild_id, created_at)')
         self.db.execute('CREATE INDEX IF NOT EXISTS currency_ledger_holder ON currency_ledger(guild_id,holder_kind,user_id,id)')
         self.db.execute("UPDATE lore SET entry_key='lore:'||id WHERE entry_key=''")
@@ -584,6 +592,25 @@ class AdminStore:
         if self.one('PRAGMA user_version')[0] < 6:
             self.db.execute("INSERT OR REPLACE INTO spend_days(day,cost_usd,unpriced_calls) SELECT strftime('%Y-%m-%d',created_at,'unixepoch'),SUM(COALESCE(cost_usd,0)),SUM(cost_usd IS NULL) FROM model_usage GROUP BY 1")
             self.db.execute('PRAGMA user_version=6')
+
+    def _migrate_game_settings(self):
+        """v17: each guild's blackjack switch and rules are copied once into game_settings (an existing row is never overwritten).
+        guild_settings.blackjack_enabled / blackjack_rules stay in place, unused: superseded by game_settings in v17; dropping them would be destructive."""
+        if self.one('PRAGMA user_version')[0] < 17:
+            self.db.execute("INSERT OR IGNORE INTO game_settings(guild_id,game,enabled,rules_json,updated_at) SELECT guild_id,'blackjack',blackjack_enabled,blackjack_rules,? FROM guild_settings", (time.time(),))
+
+    def _rebuild_game_seats(self):
+        """v17: SQLite cannot alter a CHECK, so a game_seats table that still demands stake>0 is rebuilt with stake>=0, rows kept."""
+        row = self.one("SELECT sql FROM sqlite_master WHERE type='table' AND name='game_seats'")
+        if row is None or 'stake>0' not in row['sql'].replace(' ', ''):
+            return
+        start = ADMIN_SCHEMA.index('CREATE TABLE IF NOT EXISTS game_seats')
+        create = ADMIN_SCHEMA[start:ADMIN_SCHEMA.index('\n);', start) + 3]
+        self.db.execute('ALTER TABLE game_seats RENAME TO game_seats_old')
+        run_script(self.db, create)
+        cols = 'guild_id,round_id,seat_index,kind,ref_id,stake,outcome,payout,brought_by,insurance'
+        self.db.execute(f'INSERT INTO game_seats({cols}) SELECT {cols} FROM game_seats_old')
+        self.db.execute('DROP TABLE game_seats_old')
 
     def validate_owner(self, guild_id, kind, owner_id):
         if kind == 'guild':
@@ -1318,6 +1345,7 @@ class AdminStore:
         return {'closed_tables': closed}
 
     def game_settings(self, guild_id):
+        """The shared bet limits from guild_settings (not the per-game game_settings table)."""
         row = self.one('SELECT game_min_bet,game_max_bet FROM guild_settings WHERE guild_id=?', (guild_id,))
         return {'min_bet': row['game_min_bet'], 'max_bet': row['game_max_bet']} if row else {'min_bet': 1, 'max_bet': 1000}
 
@@ -1362,47 +1390,70 @@ class AdminStore:
             self.db.execute('INSERT INTO guild_settings(guild_id,game_summary_rounds) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET game_summary_rounds=excluded.game_summary_rounds', (guild_id, rounds))
         return rounds
 
-    def blackjack_enabled(self, guild_id):
-        row = self.one('SELECT blackjack_enabled FROM guild_settings WHERE guild_id=?', (guild_id,))
-        return bool(row['blackjack_enabled']) if row else True
+    @staticmethod
+    def _game_def(game):
+        try:
+            return registry.get(game)
+        except KeyError:
+            raise GameError('That game is not available.') from None
 
-    def set_blackjack_enabled(self, guild_id, enabled, expected=None):
-        """Turning it off also closes the guild's open blackjack tables in the same transaction (rounds cancelled and refunded). Returns {'enabled', 'closed_tables': [table ids]}."""
+    def game_enabled(self, guild_id, game):
+        row = self.one('SELECT enabled FROM game_settings WHERE guild_id=? AND game=?', (guild_id, game))
+        return bool(row['enabled']) if row else self._game_def(game).default_enabled
+
+    def set_game_enabled(self, guild_id, game, enabled, expected=None):
+        """Turning it off also closes the guild's open tables of that game in the same transaction (rounds cancelled and refunded). Returns {'enabled', 'closed_tables': [table ids]}."""
+        spec = self._game_def(game)
         if not isinstance(enabled, bool):
             raise ValueError('The setting must be on or off.')
         closed = []
         with self.write_admin():
-            if expected is not None and self.blackjack_enabled(guild_id) != expected:
-                raise ConflictError('The blackjack setting was changed elsewhere. Reload the page and try again.')
-            self.db.execute('INSERT INTO guild_settings(guild_id,blackjack_enabled) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET blackjack_enabled=excluded.blackjack_enabled', (guild_id, int(enabled)))
+            if expected is not None and self.game_enabled(guild_id, game) != expected:
+                raise ConflictError(f'The {spec.name.lower()} setting was changed elsewhere. Reload the page and try again.')
+            self.db.execute('INSERT INTO game_settings(guild_id,game,enabled,updated_at) VALUES(?,?,?,?) ON CONFLICT(guild_id,game) DO UPDATE SET enabled=excluded.enabled,updated_at=excluded.updated_at',
+                (guild_id, game, int(enabled), time.time()))
             if not enabled:
-                for row in self.all("SELECT id FROM game_tables WHERE guild_id=? AND game='blackjack' AND status='open' ORDER BY id", (guild_id,)):
+                for row in self.all("SELECT id FROM game_tables WHERE guild_id=? AND game=? AND status='open' ORDER BY id", (guild_id, game)):
                     self._close_table_in_tx(guild_id, row['id'])
                     closed.append(row['id'])
         return {'enabled': enabled, 'closed_tables': closed}
 
-    def blackjack_rules(self, guild_id):
-        """The guild's blackjack rules as a full normalized dict (the classic table when none are set)."""
-        row = self.one('SELECT blackjack_rules FROM guild_settings WHERE guild_id=?', (guild_id,))
+    def game_rules(self, guild_id, game):
+        """The guild's rules for a game as a full normalized dict (the default table when none are set)."""
+        spec = self._game_def(game)
+        row = self.one('SELECT rules_json FROM game_settings WHERE guild_id=? AND game=?', (guild_id, game))
         try:
-            return blackjack.normalize_rules(json.loads(row['blackjack_rules']) if row and row['blackjack_rules'] else None)
+            return spec.normalize_rules(json.loads(row['rules_json']) if row and row['rules_json'] else None)
         except ValueError:
-            return blackjack.normalize_rules(None)
+            return spec.normalize_rules(None)
 
-    def set_blackjack_rules(self, guild_id, rules, expected=None):
+    def set_game_rules(self, guild_id, game, rules, expected=None):
         """Rules apply from the next new round; a round already open keeps its rules. Returns the normalized dict."""
-        rules = blackjack.normalize_rules(rules)
-        expected = None if expected is None else blackjack.normalize_rules(expected)
+        spec = self._game_def(game)
+        rules = spec.normalize_rules(rules)
+        expected = None if expected is None else spec.normalize_rules(expected)
         with self.write_admin():
-            if expected is not None and self.blackjack_rules(guild_id) != expected:
-                raise ConflictError('The blackjack rules were changed elsewhere. Reload the page and try again.')
-            self.db.execute('INSERT INTO guild_settings(guild_id,blackjack_rules) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET blackjack_rules=excluded.blackjack_rules',
-                (guild_id, self._rules_json(rules)))
+            if expected is not None and self.game_rules(guild_id, game) != expected:
+                raise ConflictError(f'The {spec.name.lower()} rules were changed elsewhere. Reload the page and try again.')
+            self.db.execute('INSERT INTO game_settings(guild_id,game,enabled,rules_json,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(guild_id,game) DO UPDATE SET rules_json=excluded.rules_json,updated_at=excluded.updated_at',
+                (guild_id, game, int(spec.default_enabled), self._rules_json(rules, game), time.time()))
         return rules
 
+    def blackjack_enabled(self, guild_id):
+        return self.game_enabled(guild_id, 'blackjack')
+
+    def set_blackjack_enabled(self, guild_id, enabled, expected=None):
+        return self.set_game_enabled(guild_id, 'blackjack', enabled, expected)
+
+    def blackjack_rules(self, guild_id):
+        return self.game_rules(guild_id, 'blackjack')
+
+    def set_blackjack_rules(self, guild_id, rules, expected=None):
+        return self.set_game_rules(guild_id, 'blackjack', rules, expected)
+
     @staticmethod
-    def _rules_json(rules):
-        return '' if rules == blackjack.CLASSIC_RULES else json.dumps(rules, sort_keys=True)
+    def _rules_json(rules, game='blackjack'):
+        return '' if rules == registry.get(game).normalize_rules(None) else json.dumps(rules, sort_keys=True)
 
     GAME_TALK_LIMIT = 10_000
 
@@ -1539,9 +1590,17 @@ class AdminStore:
         return row
 
     @staticmethod
+    def _round_game(rnd):
+        """The registry entry for a round row (rows carry the table's game); a game this build does not know is a GameError."""
+        try:
+            return registry.get(rnd['game'])
+        except KeyError:
+            raise GameError('That game is not available.') from None
+
+    @staticmethod
     def _round_rules(rnd):
         try:
-            return blackjack.normalize_rules(json.loads(rnd['rules_json']) if rnd['rules_json'] else None)
+            return AdminStore._round_game(rnd).normalize_rules(json.loads(rnd['rules_json']) if rnd['rules_json'] else None)
         except ValueError:
             return None
 
@@ -1556,7 +1615,7 @@ class AdminStore:
         doubled = {seat for seat, move in moves if move == 'double'}
         try:
             rules = json.loads(rnd['rules_json']) if rnd['rules_json'] else None
-            return blackjack.replay(rnd['seed'], [Seat(row['seat_index'], row['kind'], row['ref_id'], row['stake'] // 2 if row['seat_index'] in doubled else row['stake']) for row in seats], moves, rules)
+            return self._round_game(rnd).engine.replay(rnd['seed'], [Seat(row['seat_index'], row['kind'], row['ref_id'], row['stake'] // 2 if row['seat_index'] in doubled else row['stake']) for row in seats], moves, rules)
         except (IllegalMove, ValueError):
             raise GameError('This round could not be restored. Ask an admin to cancel it.') from None
 
@@ -1594,6 +1653,7 @@ class AdminStore:
 
     def _snapshot_reads(self, guild_id, round_id):
         rnd = self._game_round(guild_id, round_id)
+        spec = self._round_game(rnd)
         seats = self._game_seats(guild_id, round_id)
         moves = self._game_moves(guild_id, round_id)
         names = self.character_names(guild_id, [r['ref_id'] for r in seats if r['kind'] == 'character'])
@@ -1611,12 +1671,13 @@ class AdminStore:
                 if rnd['status'] == 'playing':
                     raise
                 return out  # money already settled or refunded: a damaged move log must not hide that
-            out['view'] = asdict(blackjack.view(state, None))
+            engine = spec.engine
+            out['view'] = asdict(engine.view(state, None))
             out['phase'] = state.phase if rnd['status'] == 'playing' else None
             if rnd['status'] == 'playing' and state.turn is not None:
-                out['legal'] = {state.turn: blackjack.legal_moves(state, state.turn, self._can_double(guild_id, state, seats, state.turn), self._can_insure(guild_id, state, seats, state.turn))}
+                out['legal'] = {state.turn: engine.legal_moves(state, state.turn, self._can_double(guild_id, state, seats, state.turn), self._can_insure(guild_id, state, seats, state.turn))}
             if rnd['status'] == 'settled':
-                out['summary'] = blackjack.result(state).summary
+                out['summary'] = engine.result(state).summary
         return out
 
     def round_snapshot(self, guild_id, round_id):
@@ -1627,7 +1688,7 @@ class AdminStore:
         """The table's last ``limit`` settled rounds, oldest first: dealer total and each seat's net (payout - stake - insurance). Cancelled rounds are left out."""
         if limit <= 0:
             return []
-        rounds = self.all("SELECT * FROM game_rounds WHERE guild_id=? AND table_id=? AND status='settled' ORDER BY number DESC LIMIT ?", (guild_id, table_id, limit))[::-1]
+        rounds = self.all("SELECT r.*,t.game FROM game_rounds r JOIN game_tables t ON t.id=r.table_id AND t.guild_id=r.guild_id WHERE r.guild_id=? AND r.table_id=? AND r.status='settled' ORDER BY r.number DESC LIMIT ?", (guild_id, table_id, limit))[::-1]
         if not rounds:
             return []
         ids = [r['id'] for r in rounds]
@@ -1659,16 +1720,17 @@ class AdminStore:
 
     def _new_round(self, guild_id, table_id, seed, now):
         number = self.one('SELECT COALESCE(MAX(number),0)+1 FROM game_rounds WHERE table_id=? AND guild_id=?', (table_id, guild_id))[0]
+        game = self._game_table(guild_id, table_id)['game']
         return self.db.execute('INSERT INTO game_rounds(guild_id,table_id,number,seed,seed_hash,status,created_at,rules_json) VALUES(?,?,?,?,?,?,?,?)',
-            (guild_id, table_id, number, seed, seed_hash(seed), 'joining', now, self._rules_json(self.blackjack_rules(guild_id)))).lastrowid
+            (guild_id, table_id, number, seed, seed_hash(seed), 'joining', now, self._rules_json(self.game_rules(guild_id, game), game))).lastrowid
 
     def open_table(self, guild_id, channel_id, game, user_id, now=None, seed=None):
         now = time.time() if now is None else now
-        if game != 'blackjack':
+        if game not in registry.keys():
             raise GameError('That game is not available.')
         with self.write_admin():
-            if not self.blackjack_enabled(guild_id):
-                raise GameError('Blackjack is off on this server.')
+            if not self.game_enabled(guild_id, game):
+                raise GameError(f'{registry.get(game).name} is off on this server.')
             if channel_id not in self.game_channels(guild_id):
                 raise GameError('Games are not turned on in this channel. Ask an admin to turn them on.')
             if self.open_table_for(guild_id, channel_id):
@@ -1735,17 +1797,18 @@ class AdminStore:
         if rnd['status'] != 'joining':
             raise GameError('This round has already started.')
         limits, name = self.game_settings(guild_id), self.currency_name(guild_id)
-        if not limits['min_bet'] <= stake <= limits['max_bet']:
+        spec = self._round_game(rnd)
+        if stake < 1 or not limits['min_bet'] <= stake <= limits['max_bet']:  # game_seats allows stake 0 since v17 (a free ante), so a bet is checked here
             raise GameError(f"The bet must be between {limits['min_bet']:,} and {limits['max_bet']:,} {name}.")
         seats = self._game_seats(guild_id, round_id)
         if any(row['kind'] == kind and row['ref_id'] == user_id for row in seats):
             raise GameError('You already have a seat in this round.')
-        if len(seats) >= blackjack.MAX_SEATS:
+        if len(seats) >= spec.max_seats:
             raise GameError('The table is full.')
         balance = self.balance(guild_id, user_id)
         if balance < stake:
             raise GameError(f'You need {stake:,} {name} for that bet but have {balance:,}.')
-        self._append_ledger(guild_id, user_id, -stake, f'Blackjack bet ({self._game_label(rnd)})', user_id, 'game', None)
+        self._append_ledger(guild_id, user_id, -stake, f'{spec.ledger_label} bet ({self._game_label(rnd)})', user_id, 'game', None)
         self.db.execute('INSERT INTO game_seats(guild_id,round_id,seat_index,kind,ref_id,stake) VALUES(?,?,?,?,?,?)', (guild_id, round_id, len(seats), kind, user_id, stake))
         return rnd
 
@@ -1759,7 +1822,7 @@ class AdminStore:
         with self.write_admin():
             rnd = self._join_member_locked(guild_id, round_id, user_id, stake)
             if space_id is not None:
-                limits, label = self.game_settings(guild_id), self._game_label(rnd)
+                limits, label, spec = self.game_settings(guild_id), self._game_label(rnd), self._round_game(rnd)
                 for fav in self.eligible_favorites(guild_id, user_id, space_id):
                     cid, row = fav['character_id'], self._character_row(guild_id, fav['character_id'])
                     if row is None:
@@ -1770,14 +1833,14 @@ class AdminStore:
                     seats = self._game_seats(guild_id, round_id)
                     if any(s['kind'] == 'character' and s['ref_id'] == cid for s in seats):
                         skipped.append({'character_id': cid, 'name': row['name'], 'reason': 'seated'})
-                    elif len(seats) >= blackjack.MAX_SEATS:
+                    elif len(seats) >= spec.max_seats:
                         skipped.append({'character_id': cid, 'name': row['name'], 'reason': 'full'})
                     else:
                         bet = min(stake, self.character_balance(guild_id, cid, now), limits['max_bet'])
-                        if bet < limits['min_bet']:
+                        if bet < max(limits['min_bet'], 1):
                             skipped.append({'character_id': cid, 'name': row['name'], 'reason': 'broke'})
                             continue
-                        self._character_debit_locked(guild_id, cid, bet, f'Blackjack bet ({label})', now)
+                        self._character_debit_locked(guild_id, cid, bet, f'{spec.ledger_label} bet ({label})', now)
                         self.db.execute('INSERT INTO game_seats(guild_id,round_id,seat_index,kind,ref_id,stake,brought_by) VALUES(?,?,?,?,?,?,?)', (guild_id, round_id, len(seats), 'character', cid, bet, user_id))
                         seated.append({'character_id': cid, 'name': row['name'], 'stake': bet})
             return {'snapshot': self._game_snapshot(guild_id, round_id), 'seated': seated, 'skipped': skipped}
@@ -1799,7 +1862,7 @@ class AdminStore:
             seat = self.one("SELECT * FROM game_seats WHERE guild_id=? AND round_id=? AND kind='member' AND ref_id=?", (guild_id, round_id, user_id))
             if seat is None:
                 raise GameError('You do not have a seat in this round.')
-            refund = f'Blackjack refund ({self._game_label(rnd)})'
+            refund = f"{self._round_game(rnd).ledger_label} refund ({self._game_label(rnd)})"
             gone = [seat, *self.all("SELECT * FROM game_seats WHERE guild_id=? AND round_id=? AND kind='character' AND brought_by=? ORDER BY seat_index", (guild_id, round_id, user_id))]
             for row in gone:
                 self._pay_seat(guild_id, row, row['stake'], refund)
@@ -1863,22 +1926,22 @@ class AdminStore:
             return self._game_snapshot(guild_id, round_id)
 
     def _settle_in_tx(self, guild_id, rnd, state):
-        label = self._game_label(rnd)
+        label, spec = self._game_label(rnd), self._round_game(rnd)
         seats = self._game_seats(guild_id, rnd['id'])
-        for res in blackjack.result(state).seats:
+        for res in spec.engine.result(state).seats:
             paid = 0
             if res.returned > 0:
                 note = ', insurance paid' if res.insurance and state.dealer_natural else ''
-                paid = self._pay_seat(guild_id, seats[res.seat], res.returned, f'Blackjack payout ({res.outcome}), {label}{note}')
+                paid = self._pay_seat(guild_id, seats[res.seat], res.returned, f'{spec.ledger_label} payout ({res.outcome}), {label}{note}')
             self.db.execute('UPDATE game_seats SET stake=?,outcome=?,payout=? WHERE guild_id=? AND round_id=? AND seat_index=?', (res.stake, res.outcome, paid, guild_id, rnd['id'], res.seat))
         self.db.execute("UPDATE game_rounds SET status='settled',finished_at=? WHERE id=? AND guild_id=?", (time.time(), rnd['id'], guild_id))
 
     def _cancel_in_tx(self, guild_id, rnd, reason):
         if rnd['status'] not in ('joining', 'playing'):
             return
-        label, why = self._game_label(rnd), ' '.join(str(reason).split())[:60]
+        label, why, spec = self._game_label(rnd), ' '.join(str(reason).split())[:60], self._round_game(rnd)
         for seat in self._game_seats(guild_id, rnd['id']):
-            paid = self._pay_seat(guild_id, seat, seat['stake'] + seat['insurance'], f'Blackjack refund ({why}), {label}')
+            paid = self._pay_seat(guild_id, seat, seat['stake'] + seat['insurance'], f'{spec.ledger_label} refund ({why}), {label}')
             self.db.execute("UPDATE game_seats SET outcome='refund',payout=? WHERE guild_id=? AND round_id=? AND seat_index=?", (paid, guild_id, rnd['id'], seat['seat_index']))
         self.db.execute("UPDATE game_rounds SET status='cancelled',finished_at=? WHERE id=? AND guild_id=?", (time.time(), rnd['id'], guild_id))
 

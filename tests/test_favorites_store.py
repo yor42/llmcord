@@ -54,7 +54,7 @@ class MigrationTests(unittest.TestCase):
             path = self.v14_file(folder)
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 16)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 17)
                 self.assertEqual(store.game_settings(G), {"min_bet": 2, "max_bet": 50})
                 self.assertEqual(store.cast_limits(G), {"max_cast": 5, "max_favorites": 5})
                 self.assertEqual(store.one("SELECT hub_tone FROM spaces")[0], "in_character")
@@ -378,7 +378,7 @@ class ArchivedFavoritesTests(FavoritesCase):
                 db.execute("ALTER TABLE guild_settings DROP COLUMN archived_favorites")
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 16)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 17)
                 self.assertFalse(store.archived_favorites(G))
                 store.set_archived_favorites(G, True)
                 self.assertTrue(store.archived_favorites(G))

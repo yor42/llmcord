@@ -41,7 +41,7 @@ class UpgradeTests(unittest.TestCase):
             try:
                 rows = {r['slot_key']: r['image_hash'] for r in store.all("SELECT slot_key,image_hash FROM avatar_slots WHERE slot_key IN ('neutral','happy','sad')")}
                 self.assertEqual(rows, {'neutral': digest(IMAGES['neutral']), 'happy': digest(IMAGES['happy']), 'sad': None})
-                self.assertEqual(store.one('PRAGMA user_version')[0], 16)
+                self.assertEqual(store.one('PRAGMA user_version')[0], 17)
             finally:
                 store.close()
             backups = list(Path(folder).glob('*.pre-v11-*.sqlite3'))
@@ -94,7 +94,7 @@ class UpgradeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'new.sqlite3'
             with closing(sqlite3.connect(path)) as db, db:
-                db.execute('PRAGMA user_version=17')
+                db.execute('PRAGMA user_version=18')
             with self.assertRaisesRegex(ValueError, 'newer than this application'):
                 Store(path)
             self.assertEqual(list(Path(folder).glob('*.pre-*')), [])
