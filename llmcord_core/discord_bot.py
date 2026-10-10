@@ -1187,11 +1187,17 @@ def _register_currency_commands(bot: SkitBot, ctx: SimpleNamespace, admin_curren
         await interaction.response.send_message(message, ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
     @bot.tree.command(name="balance", description="Show your balance, or another member's")
-    @app_commands.describe(member="Whose balance to show (default: yours)")
-    async def balance(interaction: discord.Interaction, member: discord.Member | None = None):
+    @app_commands.describe(member="Whose balance to show (default: yours)", character="A character whose balance to show")
+    @app_commands.autocomplete(character=ctx.guild_character_choices)
+    async def balance(interaction: discord.Interaction, member: discord.Member | None = None, character: str | None = None):
         require_guild(interaction)
         guild_id, name = interaction.guild_id, bot.store.currency_name(interaction.guild_id)
-        if member is None or member.id == interaction.user.id:
+        if member is not None and character:
+            await reply(interaction, "Choose a member or a character, not both.")
+        elif character:
+            row = resolve(ctx.guild_characters(guild_id), character, "character", " in this server")
+            await reply(interaction, f"{row['name']} has {bot.store.character_balance(guild_id, row['id']):,} {name}.")
+        elif member is None or member.id == interaction.user.id:
             await reply(interaction, f"You have {bot.store.balance(guild_id, interaction.user.id):,} {name}.")
         else:
             await reply(interaction, f"{member.mention} has {bot.store.balance(guild_id, member.id):,} {name}.")

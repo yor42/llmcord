@@ -86,7 +86,8 @@ CREATE TABLE IF NOT EXISTS guild_settings (
  catchup_anywhere INTEGER NOT NULL DEFAULT 0, currency_name TEXT NOT NULL DEFAULT '',
  daily_amount INTEGER NOT NULL DEFAULT 0, daily_streak_bonus INTEGER NOT NULL DEFAULT 0, daily_streak_days INTEGER NOT NULL DEFAULT 7,
  game_min_bet INTEGER NOT NULL DEFAULT 1, game_max_bet INTEGER NOT NULL DEFAULT 1000,
- max_cast INTEGER NOT NULL DEFAULT 5, max_favorites INTEGER NOT NULL DEFAULT 5, archived_favorites INTEGER NOT NULL DEFAULT 0
+ max_cast INTEGER NOT NULL DEFAULT 5, max_favorites INTEGER NOT NULL DEFAULT 5, archived_favorites INTEGER NOT NULL DEFAULT 0,
+ character_refill_cap INTEGER NOT NULL DEFAULT 1000
 );
 CREATE TABLE IF NOT EXISTS currency_daily (
  guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, last_day TEXT NOT NULL, streak INTEGER NOT NULL,
@@ -100,7 +101,8 @@ CREATE TABLE IF NOT EXISTS currency_balances (
 CREATE TABLE IF NOT EXISTS currency_ledger (
  id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
  amount INTEGER NOT NULL CHECK(amount<>0), balance_after INTEGER NOT NULL CHECK(balance_after>=0),
- reason TEXT NOT NULL, actor_id INTEGER NOT NULL, source TEXT NOT NULL, reverses_id INTEGER, created_at REAL NOT NULL
+ reason TEXT NOT NULL, actor_id INTEGER NOT NULL, source TEXT NOT NULL, reverses_id INTEGER, created_at REAL NOT NULL,
+ holder_kind TEXT NOT NULL DEFAULT 'member' CHECK(holder_kind IN ('member','character'))
 );
 CREATE INDEX IF NOT EXISTS currency_ledger_member ON currency_ledger(guild_id,user_id,id);
 CREATE UNIQUE INDEX IF NOT EXISTS currency_ledger_reversal ON currency_ledger(reverses_id) WHERE reverses_id IS NOT NULL;
@@ -108,6 +110,12 @@ CREATE TRIGGER IF NOT EXISTS currency_ledger_no_update BEFORE UPDATE ON currency
 BEGIN SELECT RAISE(ABORT, 'The currency ledger is append-only.'); END;
 CREATE TRIGGER IF NOT EXISTS currency_ledger_no_delete BEFORE DELETE ON currency_ledger
 BEGIN SELECT RAISE(ABORT, 'The currency ledger is append-only.'); END;
+CREATE TABLE IF NOT EXISTS character_balances (
+ guild_id INTEGER NOT NULL,
+ character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+ balance INTEGER NOT NULL DEFAULT 0 CHECK(balance>=0), refill_day TEXT NOT NULL DEFAULT '', updated_at REAL NOT NULL,
+ PRIMARY KEY(guild_id,character_id)
+);
 CREATE TABLE IF NOT EXISTS game_channels (
  guild_id INTEGER NOT NULL, channel_id INTEGER NOT NULL, created_at REAL NOT NULL,
  PRIMARY KEY(guild_id,channel_id)
@@ -518,7 +526,8 @@ class AdminStore:
             'lore': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0'},
             'lorebook_entries': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0', 'pinned': 'INTEGER NOT NULL DEFAULT 0', 'source_message_id': 'INTEGER', 'promoted_from': 'INTEGER'},
             'characters': {'avatar_manual': 'INTEGER NOT NULL DEFAULT 0'},
-            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0', 'currency_name': "TEXT NOT NULL DEFAULT ''", 'daily_amount': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_bonus': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_days': 'INTEGER NOT NULL DEFAULT 7', 'game_min_bet': 'INTEGER NOT NULL DEFAULT 1', 'game_max_bet': 'INTEGER NOT NULL DEFAULT 1000', 'max_cast': 'INTEGER NOT NULL DEFAULT 5', 'max_favorites': 'INTEGER NOT NULL DEFAULT 5', 'archived_favorites': 'INTEGER NOT NULL DEFAULT 0'},
+            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0', 'currency_name': "TEXT NOT NULL DEFAULT ''", 'daily_amount': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_bonus': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_days': 'INTEGER NOT NULL DEFAULT 7', 'game_min_bet': 'INTEGER NOT NULL DEFAULT 1', 'game_max_bet': 'INTEGER NOT NULL DEFAULT 1000', 'max_cast': 'INTEGER NOT NULL DEFAULT 5', 'max_favorites': 'INTEGER NOT NULL DEFAULT 5', 'archived_favorites': 'INTEGER NOT NULL DEFAULT 0', 'character_refill_cap': 'INTEGER NOT NULL DEFAULT 1000'},
+            'currency_ledger': {'holder_kind': "TEXT NOT NULL DEFAULT 'member' CHECK(holder_kind IN ('member','character'))"},
             'model_usage': {'channel_id': 'INTEGER', 'feature': "TEXT NOT NULL DEFAULT ''"},
         }.items():
             columns = {row[1] for row in self.db.execute(f'PRAGMA table_info({table})')}
@@ -526,6 +535,7 @@ class AdminStore:
                 if name not in columns:
                     self.db.execute(f'ALTER TABLE {table} ADD COLUMN {name} {spec}')
         self.db.execute('CREATE INDEX IF NOT EXISTS model_usage_guild_time ON model_usage(guild_id, created_at)')
+        self.db.execute('CREATE INDEX IF NOT EXISTS currency_ledger_holder ON currency_ledger(guild_id,holder_kind,user_id,id)')
         self.db.execute("UPDATE lore SET entry_key='lore:'||id WHERE entry_key=''")
         self.db.execute("UPDATE lorebook_entries SET entry_key='book:'||book_id||':'||uid WHERE entry_key=''")
         if self.one('PRAGMA user_version')[0] < 3:
@@ -890,7 +900,7 @@ class AdminStore:
     def _create_character_locked(self, guild_id, world_id, name, card, avatar=None):
         # Deleted characters retain an owner-revision tombstone. Never reuse an
         # ID: historical replies and a bot turn in progress may still reference it.
-        ident = self.one("SELECT COALESCE(MAX(id),0)+1 AS next_id FROM (SELECT id FROM characters UNION ALL SELECT owner_id FROM owner_revisions WHERE kind='character' UNION ALL SELECT character_id FROM nodes WHERE character_id IS NOT NULL)")['next_id']
+        ident = self.one("SELECT COALESCE(MAX(id),0)+1 AS next_id FROM (SELECT id FROM characters UNION ALL SELECT owner_id FROM owner_revisions WHERE kind='character' UNION ALL SELECT character_id FROM nodes WHERE character_id IS NOT NULL UNION ALL SELECT user_id FROM currency_ledger WHERE holder_kind='character' UNION ALL SELECT character_id FROM character_balances)")['next_id']
         self.db.execute('INSERT INTO characters(id,guild_id,world_id,name,card,avatar) VALUES(?,?,?,?,?,?)',
                         (ident, guild_id, world_id, name, json.dumps(card), avatar))
         from .avatars import DEFAULT_SLOTS
@@ -1060,6 +1070,10 @@ class AdminStore:
                 raise CurrencyError('A reversal cannot be reversed.')
             if self.one('SELECT 1 FROM currency_ledger WHERE reverses_id=?', (entry_id,)):
                 raise CurrencyError('That entry was already reversed.')
+            if entry['holder_kind'] == 'character':
+                if self._character_row(guild_id, entry['user_id']) is None:
+                    raise CurrencyError("That character was deleted, so this entry cannot be reversed.")
+                return self._append_character_ledger(guild_id, entry['user_id'], -entry['amount'], reason, actor_id, 'reversal', entry_id)
             return self._append_ledger(guild_id, entry['user_id'], -entry['amount'], reason, actor_id, 'reversal', entry_id)
 
     def _append_ledger(self, guild_id, user_id, amount, reason, actor_id, source, reverses_id):
@@ -1096,15 +1110,19 @@ class AdminStore:
                 (guild_id, amount, streak_bonus, streak_days))
         return values
 
-    def claim_daily(self, guild_id, user_id, now=None):
-        """One payout per member per server day (the server timezone, UTC if unset or invalid). Returns {'status': 'off'|'already'|'paid', 'reset': next local midnight as a Unix time, ...};
-        the claim record, balance and ledger row share one transaction, so a refused balance (CurrencyError) records nothing."""
-        now = time.time() if now is None else now
+    def _server_day(self, guild_id, now):
+        """(timezone, local date) of `now` in the server's timezone (UTC if unset or invalid)."""
         try:
             zone = ZoneInfo(self.guild_timezone(guild_id) or 'UTC')
         except Exception:
             zone = ZoneInfo('UTC')
-        today = datetime.fromtimestamp(now, zone).date()
+        return zone, datetime.fromtimestamp(now, zone).date()
+
+    def claim_daily(self, guild_id, user_id, now=None):
+        """One payout per member per server day (the server timezone, UTC if unset or invalid). Returns {'status': 'off'|'already'|'paid', 'reset': next local midnight as a Unix time, ...};
+        the claim record, balance and ledger row share one transaction, so a refused balance (CurrencyError) records nothing."""
+        now = time.time() if now is None else now
+        zone, today = self._server_day(guild_id, now)
         reset = datetime.combine(today + timedelta(days=1), dt_time.min, zone).timestamp()
         with self.write_admin():
             settings = self.daily_settings(guild_id)
@@ -1120,6 +1138,140 @@ class AdminStore:
             self.db.execute('INSERT INTO currency_daily(guild_id,user_id,last_day,streak) VALUES(?,?,?,?) ON CONFLICT(guild_id,user_id) DO UPDATE SET last_day=excluded.last_day,streak=excluded.streak',
                 (guild_id, user_id, today.isoformat(), streak))
         return {'status': 'paid', 'entry': entry, 'payout': payout, 'streak': streak, 'balance': entry['balance_after'], 'reset': reset}
+
+    REFILL_REASON = 'Daily refill'
+
+    def refill_cap(self, guild_id):
+        row = self.one('SELECT character_refill_cap FROM guild_settings WHERE guild_id=?', (guild_id,))
+        return row['character_refill_cap'] if row else 1000
+
+    def set_refill_cap(self, guild_id, cap, expected=None):
+        if isinstance(cap, bool) or not isinstance(cap, int) or not 0 <= cap <= self.MAX_CURRENCY_BALANCE:
+            raise ValueError(f'The refill cap must be a whole number from 0 to {self.MAX_CURRENCY_BALANCE:,}.')
+        with self.write_admin():
+            if expected is not None and self.refill_cap(guild_id) != expected:
+                raise ConflictError('The character refill cap was changed elsewhere. Reload the page and try again.')
+            self.db.execute('INSERT INTO guild_settings(guild_id,character_refill_cap) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET character_refill_cap=excluded.character_refill_cap', (guild_id, cap))
+        return cap
+
+    def _character_row(self, guild_id, character_id):
+        return self.one('SELECT id,name,archived FROM characters WHERE id=? AND guild_id=?', (character_id, guild_id))
+
+    def _character_label(self, guild_id, character_id):
+        row = self._character_row(guild_id, character_id)
+        return row['name'] if row else f'Deleted character (#{character_id})'
+
+    def _require_character(self, guild_id, character_id):
+        row = self._character_row(guild_id, character_id) if isinstance(character_id, int) and not isinstance(character_id, bool) else None
+        if row is None:
+            raise CurrencyError('That character is not on this server.')
+        return row
+
+    def character_names(self, guild_id, character_ids):
+        ids = list(dict.fromkeys(character_ids))
+        if not ids:
+            return {}
+        return {r['id']: r['name'] for r in self.all(f"SELECT id,name FROM characters WHERE guild_id=? AND id IN ({','.join('?' for _ in ids)})", (guild_id, *ids))}
+
+    @staticmethod
+    def _pending_refill(amount, cap, balance, refill_day, today):
+        """What today's refill would add to `balance` (0 when daily check-in is off, already refilled today, or at or above the cap)."""
+        if amount == 0 or refill_day == today.isoformat():
+            return 0
+        return max(0, min(amount, cap - balance))
+
+    def character_balance(self, guild_id, character_id, now=None):
+        """The effective balance: stored balance plus today's refill if it is still due. Writes nothing."""
+        self._require_character(guild_id, character_id)
+        now = time.time() if now is None else now
+        row = self.one('SELECT balance,refill_day FROM character_balances WHERE guild_id=? AND character_id=?', (guild_id, character_id))
+        balance, day = (row['balance'], row['refill_day']) if row else (0, '')
+        return balance + self._pending_refill(self.daily_settings(guild_id)['amount'], self.refill_cap(guild_id), balance, day, self._server_day(guild_id, now)[1])
+
+    def _refill_character_locked(self, guild_id, character_id, now=None):
+        """Inside write_admin: the once-per-server-day refill (the daily check-in amount, no streak bonus, up to the refill cap; missed days do not add up).
+        Returns the ledger entry (actor 0, source 'refill') or None. Check-in off (amount 0) does nothing and leaves refill_day unset."""
+        now = time.time() if now is None else now
+        amount = self.daily_settings(guild_id)['amount']
+        if amount == 0:
+            return None
+        day = self._server_day(guild_id, now)[1]
+        today = day.isoformat()
+        row = self.one('SELECT balance,refill_day FROM character_balances WHERE guild_id=? AND character_id=?', (guild_id, character_id))
+        if row and row['refill_day'] == today:
+            return None
+        credit = self._pending_refill(amount, self.refill_cap(guild_id), row['balance'] if row else 0, '', day)
+        entry = self._append_character_ledger(guild_id, character_id, credit, self.REFILL_REASON, 0, 'refill', None) if credit else None
+        self.db.execute('INSERT INTO character_balances(guild_id,character_id,balance,refill_day,updated_at) VALUES(?,?,0,?,?) ON CONFLICT(guild_id,character_id) DO UPDATE SET refill_day=excluded.refill_day', (guild_id, character_id, today, now))
+        return entry
+
+    def refill_character(self, guild_id, character_id, now=None):
+        with self.write_admin():
+            self._require_character(guild_id, character_id)
+            return self._refill_character_locked(guild_id, character_id, now)
+
+    def change_character_balance(self, guild_id, character_id, amount, reason, actor_id, source='admin', now=None):
+        if isinstance(amount, bool) or not isinstance(amount, int) or amount == 0 or abs(amount) > self.MAX_CURRENCY_CHANGE:
+            raise CurrencyError(f'The amount must be a whole number from 1 to {self.MAX_CURRENCY_CHANGE:,}.')
+        reason = reason.strip() if isinstance(reason, str) else ''
+        if not 1 <= len(reason) <= 200:
+            raise CurrencyError('The reason must be 1 to 200 characters.')
+        with self.write_admin():
+            self._require_character(guild_id, character_id)
+            self._refill_character_locked(guild_id, character_id, now)
+            return self._append_character_ledger(guild_id, character_id, amount, reason, actor_id, source, None)
+
+    @staticmethod
+    def _positive_amount(amount):
+        if isinstance(amount, bool) or not isinstance(amount, int) or amount <= 0:
+            raise ValueError('The amount must be a positive whole number.')
+
+    def _character_debit_locked(self, guild_id, character_id, amount, reason, now=None):
+        """Inside write_admin (FEAT-20): refill if due, then take `amount` (a positive int) as a 'game' entry; CurrencyError if the balance is short."""
+        self._positive_amount(amount)
+        self._require_character(guild_id, character_id)
+        self._refill_character_locked(guild_id, character_id, now)
+        return self._append_character_ledger(guild_id, character_id, -amount, reason, 0, 'game', None)
+
+    def _character_credit_clamped_locked(self, guild_id, character_id, amount, reason, now=None):
+        """Inside write_admin (FEAT-20): refill if due, then pay what fits under the balance maximum as a 'game' entry. Returns the amount actually paid."""
+        self._positive_amount(amount)
+        self._require_character(guild_id, character_id)
+        self._refill_character_locked(guild_id, character_id, now)
+        row = self.one('SELECT balance FROM character_balances WHERE guild_id=? AND character_id=?', (guild_id, character_id))
+        paid = min(amount, self.MAX_CURRENCY_BALANCE - (row['balance'] if row else 0))
+        if paid > 0:
+            self._append_character_ledger(guild_id, character_id, paid, reason, 0, 'game', None)
+        return max(paid, 0)
+
+    def _append_character_ledger(self, guild_id, character_id, amount, reason, actor_id, source, reverses_id):
+        """Inside write_admin: like _append_ledger for a character wallet (ledger user_id holds the character id, holder_kind 'character')."""
+        row = self.one('SELECT balance FROM character_balances WHERE guild_id=? AND character_id=?', (guild_id, character_id))
+        current = row['balance'] if row else 0
+        after = current + amount
+        name, currency = self._character_label(guild_id, character_id), self.currency_name(guild_id)
+        if after < 0:
+            raise CurrencyError(f'That would leave {name} with a negative balance (current balance: {current:,} {currency}).')
+        if after > self.MAX_CURRENCY_BALANCE:
+            raise CurrencyError(f'That would take {name} above the maximum balance of {self.MAX_CURRENCY_BALANCE:,} {currency}.')
+        now = time.time()
+        self.db.execute("INSERT INTO character_balances(guild_id,character_id,balance,refill_day,updated_at) VALUES(?,?,?,'',?) ON CONFLICT(guild_id,character_id) DO UPDATE SET balance=excluded.balance,updated_at=excluded.updated_at",
+            (guild_id, character_id, after, now))
+        cursor = self.db.execute("INSERT INTO currency_ledger(guild_id,user_id,amount,balance_after,reason,actor_id,source,reverses_id,created_at,holder_kind) VALUES(?,?,?,?,?,?,?,?,?,'character')",
+            (guild_id, character_id, amount, after, reason, actor_id, source, reverses_id, now))
+        return dict(self.one('SELECT * FROM currency_ledger WHERE id=?', (cursor.lastrowid,)))
+
+    def character_balances(self, guild_id, limit=50, offset=0, now=None):
+        """Characters that have a wallet row (they needed money at least once), richest first (effective balance, then name):
+        [{character_id, name, archived, balance, updated_at}]. Characters that never needed money have no row and are not listed."""
+        now = time.time() if now is None else now
+        today, amount, cap = self._server_day(guild_id, now)[1], self.daily_settings(guild_id)['amount'], self.refill_cap(guild_id)
+        rows = [{'character_id': r['character_id'], 'name': r['name'], 'archived': bool(r['archived']), 'updated_at': r['updated_at'],
+                 'balance': r['balance'] + self._pending_refill(amount, cap, r['balance'], r['refill_day'], today)}
+                for r in self.all('SELECT b.character_id,b.balance,b.refill_day,b.updated_at,c.name,c.archived FROM character_balances b JOIN characters c ON c.id=b.character_id AND c.guild_id=b.guild_id WHERE b.guild_id=?', (guild_id,))]
+        rows.sort(key=lambda r: (-r['balance'], r['name'].casefold(), r['character_id']))
+        start = max(0, int(offset))
+        return rows[start:start + max(1, min(int(limit), 500))]
 
     GAME_BET_LIMIT = 100_000
 
@@ -1507,11 +1659,15 @@ class AdminStore:
             self._cancel_in_tx(guild_id, self._game_round(guild_id, round_id), reason)
             return self._game_snapshot(guild_id, round_id)
 
-    def ledger(self, guild_id, user_id=None, limit=50, before_id=None):
+    def ledger(self, guild_id, user_id=None, limit=50, before_id=None, character_id=None):
+        """Newest first. With user_id only that member's entries, with character_id only that character's, otherwise both kinds (each entry has holder_kind)."""
         sql, args = 'SELECT * FROM currency_ledger WHERE guild_id=?', [guild_id]
         if user_id is not None:
-            sql += ' AND user_id=?'
+            sql += " AND holder_kind='member' AND user_id=?"
             args.append(user_id)
+        if character_id is not None:
+            sql += " AND holder_kind='character' AND user_id=?"
+            args.append(character_id)
         if before_id is not None:
             sql += ' AND id<?'
             args.append(before_id)

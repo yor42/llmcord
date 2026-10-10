@@ -41,6 +41,11 @@ def save_daily(store, gid, amount, streak_bonus, streak_days, expected):
     return store.set_daily_settings(gid, whole(amount), whole(streak_bonus), whole(streak_days), expected)
 
 
+def save_refill_cap(store, gid, cap, expected):
+    """Save the character refill cap; blank or fractional input reaches the store as-is so its range message is shown."""
+    return store.set_refill_cap(gid, int(cap) if isinstance(cap, (int, float)) and not isinstance(cap, bool) and cap == int(cap) else cap, expected)
+
+
 def save_bets(store, gid, min_bet, max_bet, expected):
     """Save the game bet limits; blank or fractional input reaches the store as-is so its message is shown."""
     whole = lambda value: int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value == int(value) else value
@@ -66,20 +71,22 @@ def plain_mentions(text, names):
     return _MENTION.sub(lambda m: member_label(names, int(m.group(1))), text)
 
 
-def ledger_rows(entries, names, zone_name):
+def ledger_rows(entries, names, zone_name, characters=None):
     """Display rows for ledger entries (newest first); `entries` must be a run from the newest entry down, so every reversal of a shown entry is shown."""
     try:
         zone = ZoneInfo(zone_name or 'UTC')
     except Exception:
         zone = ZoneInfo('UTC')
+    characters = characters or {}
+    holder = lambda e: (characters.get(e['user_id']) or f"Deleted character (#{e['user_id']})") if e.get('holder_kind') == 'character' else member_label(names, e['user_id'])
     reversed_by = {e['reverses_id']: e['id'] for e in entries if e['reverses_id'] is not None}
     rows = []
     for e in entries:
         note = f"Reverses #{e['reverses_id']}" if e['reverses_id'] is not None else f"Reversed by #{reversed_by[e['id']]}" if e['id'] in reversed_by else ''
         rows.append({'id': e['id'], 'entry': f"#{e['id']}", 'time': datetime.fromtimestamp(e['created_at'], zone).strftime('%Y-%m-%d %H:%M'),
-                     'member': member_label(names, e['user_id']), 'amount': f"{e['amount']:+,}", 'after': f"{e['balance_after']:,}",
+                     'member': holder(e), 'amount': f"{e['amount']:+,}", 'after': f"{e['balance_after']:,}",
                      'reason': e['reason'], 'admin': member_label(names, e['actor_id']) if e['actor_id'] else '', 'note': note,
-                     'can_reverse': e['reverses_id'] is None and e['id'] not in reversed_by})
+                     'can_reverse': e['reverses_id'] is None and e['id'] not in reversed_by and (e.get('holder_kind') != 'character' or e['user_id'] in characters)})
     return rows
 
 
@@ -92,7 +99,7 @@ class CurrencyPanel:
         self.ctx, self.store, self.gid = ctx, ctx.store, ctx.guild_id
         self.live = ctx.live('currency')
         self.names, self.absent, self.warned = {}, set(), False  # absent: left the server, or failed to load in this build
-        self.page, self.entries, self.more = 0, [], False
+        self.page, self.character_page, self.entries, self.more, self.characters = 0, 0, [], False, {}
 
     def actor(self):
         return int(self.ctx.app.state.sessions[self.ctx.ident]['user']['id'])
@@ -137,6 +144,7 @@ class CurrencyPanel:
             def save_daily_settings():
                 nonlocal daily
                 daily = save_daily(store, gid, *(f.value for f in fields), daily)
+                self.refill_off.set_visibility(daily['amount'] == 0)
                 return daily
             daily_keys = ('amount', 'streak_bonus', 'streak_days')
             def daily_reset():
@@ -146,6 +154,19 @@ class CurrencyPanel:
                               detail=lambda result: dict(result), success='Daily check-in saved',
                               dirty=lambda: [f.value for f in fields] != [daily[key] for key in daily_keys],
                               reset=daily_reset)
+        with section('Character wallets'):
+            cap = {'value': store.refill_cap(gid)}
+            refill_cap = ui.number('Character refill cap', value=cap['value'], min=0, precision=0, format='%d')
+            ui.label('Each character gets the daily amount once per server day, without the streak bonus, until it reaches this cap. Winnings can take a character above it.').classes('ll-muted')
+            self.refill_off = ui.label("Daily check-in is off, so characters don't refill.").classes('ll-muted')
+            self.refill_off.set_visibility(daily['amount'] == 0)
+            def save_cap():
+                cap['value'] = save_refill_cap(store, gid, refill_cap.value, cap['value'])
+                return cap['value']
+            ctx.savebar.track('Character refill cap', {refill_cap: cap['value']}, save=save_cap, action='currency.refill_cap',
+                              detail=lambda result: {'cap': result}, success='Character refill cap saved',
+                              dirty=lambda: refill_cap.value != cap['value'],
+                              reset=lambda: refill_cap.set_value(cap['value']))
         with section('Games'):
             bets = store.game_settings(gid)
             with ui.element('div').classes('ll-form-row ll-field-row'):
@@ -179,6 +200,8 @@ class CurrencyPanel:
             ui.label('Members play with /blackjack in game channels. Bets are taken when a member joins and paid when the round ends. Turning a channel off closes its open table and refunds the bets.').classes('ll-muted')
         with section('Balances'):
             self.balances_body = ui.column().classes('w-full gap-2')
+        with section('Character balances'):
+            self.characters_body = ui.column().classes('w-full gap-2')
         with section('Give or take currency'):
             self.build_form()
         with section('Ledger'):
@@ -218,6 +241,7 @@ class CurrencyPanel:
 
     async def render_all(self):
         await self.render_balances()
+        await self.render_character_balances()
         await self.render_ledger(reset=True)
 
     async def render_balances(self):
@@ -243,6 +267,32 @@ class CurrencyPanel:
                     ui.label(f'Page {self.page + 1}').classes('ll-muted')
                     ui.button('Next', on_click=lambda: self.turn(1)).props('outline').set_enabled(more)
 
+    async def render_character_balances(self):
+        from nicegui import ui
+        rows = self.store.character_balances(self.gid, PAGE + 1, self.character_page * PAGE)
+        more, rows = len(rows) > PAGE, rows[:PAGE]
+        if not rows and self.character_page:
+            self.character_page -= 1
+            return await self.render_character_balances()
+        if not self.live():
+            return
+        self.characters_body.clear()
+        with self.characters_body:
+            if not rows:
+                ui.label('No character balances yet. Characters refill when they first need money each day.').classes('ll-muted')
+                return
+            table([('character', 'Character'), ('balance', 'Balance')],
+                  [{'id': str(r['character_id']), 'character': r['name'] + (' (archived)' if r['archived'] else ''), 'balance': f"{r['balance']:,}"} for r in rows], 'id', 'll-character-table')
+            if self.character_page or more:
+                with ui.element('div').classes('ll-form-row'):
+                    ui.button('Previous', on_click=lambda: self.turn_characters(-1)).props('outline').set_enabled(self.character_page > 0)
+                    ui.label(f'Page {self.character_page + 1}').classes('ll-muted')
+                    ui.button('Next', on_click=lambda: self.turn_characters(1)).props('outline').set_enabled(more)
+
+    async def turn_characters(self, step):
+        self.character_page = max(0, self.character_page + step)
+        await self.render_character_balances()
+
     async def turn(self, step):
         self.page = max(0, self.page + step)
         await self.render_balances()
@@ -253,9 +303,10 @@ class CurrencyPanel:
         fetched = self.store.ledger(self.gid, limit=PAGE + 1, before_id=before)
         self.more, fetched = len(fetched) > PAGE, fetched[:PAGE]
         entries = fetched if before is None else self.entries + fetched
-        await self.lookup([i for e in fetched for i in (e['user_id'], e['actor_id']) if i])
+        await self.lookup([i for e in fetched for i in (e['user_id'] if e['holder_kind'] == 'member' else 0, e['actor_id']) if i])
         if not self.live():
             return
+        self.characters = {**self.characters, **self.store.character_names(self.gid, [e['user_id'] for e in fetched if e['holder_kind'] == 'character'])}
         self.entries = entries
         self.ledger_body.clear()
         with self.ledger_body:
@@ -264,7 +315,7 @@ class CurrencyPanel:
                 return
             columns = [('entry', 'Entry'), ('time', 'Time'), ('member', 'Member'), ('amount', 'Amount'), ('after', 'Balance after'),
                        ('reason', 'Reason'), ('admin', 'Admin'), ('note', 'Status'), ('action', 'Actions')]
-            grid = table(columns, ledger_rows(entries, self.names, self.store.guild_timezone(self.gid)), 'id')
+            grid = table(columns, ledger_rows(entries, self.names, self.store.guild_timezone(self.gid), self.characters), 'id')
             grid.add_slot('body-cell-action', '<q-td :props="props"><q-btn v-if="props.row.can_reverse" flat dense no-caps color="negative" label="Reverse" '
                           ':aria-label="`Reverse entry ${props.row.entry}`" @click="() => $parent.$emit(\'reverse\', props.row.id)" /></q-td>')
             grid.add_slot('item', '<div class="q-table__grid-item col-12"><div class="q-table__grid-item-card q-pa-sm">'
@@ -278,7 +329,7 @@ class CurrencyPanel:
     def reverse_requested(self, entry_id):
         if isinstance(entry_id, bool) or not isinstance(entry_id, int):
             return
-        row = next((r for r in ledger_rows(self.entries, self.names, self.store.guild_timezone(self.gid)) if r['id'] == entry_id and r['can_reverse']), None)
+        row = next((r for r in ledger_rows(self.entries, self.names, self.store.guild_timezone(self.gid), self.characters) if r['id'] == entry_id and r['can_reverse']), None)
         if row:
             self.reverse_dialog(row)
 
@@ -305,10 +356,10 @@ class CurrencyPanel:
         dialog.open()
 
 
-def table(columns, rows, key):
+def table(columns, rows, key, css='ll-currency-table'):
     from nicegui import ui
     return ui.table(columns=[{'name': n, 'field': n, 'label': label, 'align': 'left', **({'headerClasses': 'sr-only'} if n == 'action' else {})} for n, label in columns], rows=rows, row_key=key,
-                    pagination=0).classes('w-full ll-currency-table ll-usage').props(':grid="Quasar.Screen.lt.sm" flat dense hide-pagination')
+                    pagination=0).classes(f'w-full {css} ll-usage').props(':grid="Quasar.Screen.lt.sm" flat dense hide-pagination')
 
 
 async def currency_panel(ctx):

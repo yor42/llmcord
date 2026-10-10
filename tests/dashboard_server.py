@@ -275,6 +275,36 @@ def main():
             store.db.execute(trigger)
         return {}
 
+    @app.post('/_test/character-wallet')
+    async def character_wallet(request: Request):
+        # FEAT-25: sets the daily amount, then refills the named character (a wallet row plus a ledger entry); the reply holds its balance.
+        body = await request.json()
+        guild = body.get('guild', 1)
+        store.set_daily_settings(guild, body['daily'], 0, 7)
+        row = store.one('SELECT id FROM characters WHERE guild_id=? AND name=?', (guild, body['name']))
+        store.refill_character(guild, row['id'])
+        return {'balance': store.character_balance(guild, row['id'])}
+
+    @app.post('/_test/character-wallet-cleanup')
+    async def character_wallet_cleanup(request: Request):
+        # Undo /_test/character-wallet: character wallets and their ledger rows (the delete trigger is dropped and restored), daily off, default cap.
+        guild = (await request.json()).get('guild', 1)
+        with store.write_admin():
+            store.db.execute('DELETE FROM character_balances WHERE guild_id=?', (guild,))
+            trigger = store.one("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='currency_ledger_no_delete'")['sql']
+            store.db.execute('DROP TRIGGER currency_ledger_no_delete')
+            store.db.execute("DELETE FROM currency_ledger WHERE guild_id=? AND holder_kind='character'", (guild,))
+            store.db.execute(trigger)
+            store.db.execute('UPDATE guild_settings SET daily_amount=0, character_refill_cap=1000 WHERE guild_id=?', (guild,))
+        return {}
+
+    @app.post('/_test/refill-cap')
+    async def refill_cap(request: Request):
+        # Simulates a change made elsewhere while a dashboard page is open.
+        body = await request.json()
+        store.set_refill_cap(body.get('guild', 1), body['cap'])
+        return {}
+
     @app.get('/_test/balance')
     async def balance(user: int, guild: int = 1):
         return {'balance': store.balance(guild, user)}
@@ -290,7 +320,7 @@ def main():
             'books': [dict(r) for r in store.all('SELECT * FROM lorebook_entries')],
             'presets': [dict(r) for r in store.list_presets(1)], 'active': store.active_preset(1)['id'],
             'active_bundle': store.active_preset(1)['bundle'], 'assets': [dict(r) for r in store.all('SELECT * FROM avatar_assets')],
-            'guild2_spaces': [dict(r) for r in originals['list_spaces'](2)], 'cast_limits': {g: store.cast_limits(g) for g in (1, 2)}, 'archived_favorites': {g: store.archived_favorites(g) for g in (1, 2)}, 'daily': {g: store.daily_settings(g) for g in (1, 2)}, 'games': {g: {**store.game_settings(g), 'channels': sorted(store.game_channels(g))} for g in (1, 2)}, 'guild_timezone': store.guild_timezone(1), 'catchup_anywhere': store.catchup_anywhere(1), 'turn_log': store.turn_log_settings(1), 'audit': [dict(r) for r in store.all('SELECT * FROM admin_audit ORDER BY id')],
+            'guild2_spaces': [dict(r) for r in originals['list_spaces'](2)], 'cast_limits': {g: store.cast_limits(g) for g in (1, 2)}, 'archived_favorites': {g: store.archived_favorites(g) for g in (1, 2)}, 'daily': {g: store.daily_settings(g) for g in (1, 2)}, 'refill_cap': {g: store.refill_cap(g) for g in (1, 2)}, 'games': {g: {**store.game_settings(g), 'channels': sorted(store.game_channels(g))} for g in (1, 2)}, 'guild_timezone': store.guild_timezone(1), 'catchup_anywhere': store.catchup_anywhere(1), 'turn_log': store.turn_log_settings(1), 'audit': [dict(r) for r in store.all('SELECT * FROM admin_audit ORDER BY id')],
             'model_profiles': [dict(r) for r in store.model_profile_rows()], 'model_roles': dict(store.model_roles()),
             'slots': [{'character_id': r['character_id'], 'slot_key': r['slot_key'], 'label': r['label'], 'has_image': bool(r['image'])} for r in store.all('SELECT * FROM avatar_slots')]}
 

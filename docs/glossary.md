@@ -20,6 +20,8 @@ These are the words the Discord commands, the admin dashboard and these docs use
 | **Channel lore** | Lore owned by one channel, or by one thread when added inside a thread (`/admin lore add scope:channel`). | "local" | `channel`, `thread` scopes |
 | **Server-wide lore** | Lore owned by the server, available in every world and hub. | "guild lore" | owner kind `guild` |
 | **Lorebook** | A named, reusable set of lore entries, usually imported from SillyTavern or RisuAI. A **server lorebook** is enabled per world or hub; a **channel lorebook** applies to one channel. | "book" alone | `lorebooks`, owner kind `book` |
+| **Character wallet** | A character's own balance on one server, separate from member balances. It refills lazily, once per server day, with the daily check-in amount (no streak bonus) up to the **refill cap**; winnings can take it above the cap. Moves only through ledger entries. | "bank", "purse" | `character_balances`, `holder_kind` |
+| **Refill cap** | The balance up to which a character wallet refills each day. A server setting (default 1000); it never reduces a balance. | "limit" | `character_refill_cap` |
 | **Currency** | A per-server, per-member balance for minigames. Each server names its own (default "coins"). Every change is a **ledger** entry; a mistake is undone by a **reversal** entry, never by editing. | "points", "money" | `currency_balances`, `currency_ledger`, `currency_name` |
 | **Character card** | A V2/V3 character file (`.json` or `.png`) imported into a home world. | | `cards.py` |
 | **Emotion avatar** | A per-emotion image for a character. The **fallback avatar** is used when no emotion image is usable. | "slot" in sentences | `avatar_slots`, `avatar` |

@@ -4095,6 +4095,45 @@ class DashboardBrowserTests(unittest.TestCase):
             self.post_hook('/_test/game-table-cleanup', {'user': member})
             context.close()
 
+    def test_currency_character_wallets_cap_and_balances(self):
+        """FEAT-25: the refill cap saves and persists, a stale save conflicts, a refilled character is listed (and in the ledger by name), guild 2 is untouched."""
+        from playwright.sync_api import expect
+        self.post_hook('/_test/daily', {'amount': 0, 'streak_bonus': 0, 'streak_days': 7})
+        context, page, errors = self.open_currency()
+        try:
+            bar, cap = page.get_by_role('region', name='Unsaved changes'), page.get_by_label('Character refill cap', exact=True)
+            page.get_by_text("Daily check-in is off, so characters don't refill.", exact=True).wait_for(timeout=5000)
+            page.get_by_text('No character balances yet. Characters refill when they first need money each day.', exact=True).wait_for(timeout=5000)
+            other = self.state()['refill_cap']['2']
+            expect(cap).to_have_value('1000')
+            cap.fill('250')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Character refill cap saved', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['refill_cap'], {'1': 250, '2': other})
+            self.assertIn('currency.refill_cap', self.audit_actions())
+            page.reload()
+            expect(page.get_by_label('Character refill cap', exact=True)).to_have_value('250')
+            cap = page.get_by_label('Character refill cap', exact=True)
+            cap.fill('300')
+            self.post_hook('/_test/refill-cap', {'cap': 400})
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The character refill cap was changed elsewhere. Reload the page and try again.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['refill_cap']['1'], 400)
+            cap.fill('-5')
+            bar.get_by_role('button', name='Reload', exact=True).click()
+            bar.wait_for(state='hidden', timeout=5000)
+            expect(page.get_by_label('Character refill cap', exact=True)).to_have_value('400')
+            self.assertEqual(self.context.request.post(self.url + '/_test/character-wallet', data={'daily': 60, 'name': 'Alice'}).json()['balance'], 60)
+            page.reload()
+            page.locator('.ll-character-table tbody tr').first.wait_for(timeout=5000)
+            self.assertIn('60', page.locator('.ll-character-table tbody tr').first.inner_text())
+            self.assertIn('Alice', self.currency_rows(page, 1).first.inner_text())
+            self.assertIn('Daily refill', self.currency_rows(page, 1).first.inner_text())
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/character-wallet-cleanup', {})
+            context.close()
+
     def test_currency_saved_values_become_the_save_bar_baseline(self):
         """MNT-40: after a save, editing the currency name or a daily check-in field back to its pre-save value shows the save bar, and Reset restores the last saved value, not the page-build one."""
         from playwright.sync_api import expect

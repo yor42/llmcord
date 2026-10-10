@@ -251,7 +251,10 @@ EXPECTED_COMMANDS = {
     ),
     "balance": (
         "Show your balance, or another member's",
-        (("member", "user", False, "Whose balance to show (default: yours)", False, ()),),
+        (
+            ("member", "user", False, "Whose balance to show (default: yours)", False, ()),
+            ("character", "string", False, "A character whose balance to show", True, ()),
+        ),
         0,
         "None",
         False,

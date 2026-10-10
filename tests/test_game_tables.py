@@ -84,7 +84,7 @@ class MigrationTests(unittest.TestCase):
             path = self.v13_file(folder)
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 15)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 16)
                 self.assertEqual((store.currency_name(1), store.balance(1, 5)), ("gold", 40))
                 self.assertEqual(store.game_settings(1), {"min_bet": 1, "max_bet": 1000})
                 self.assertEqual(store.game_channels(1), set())
