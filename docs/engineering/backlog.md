@@ -55,8 +55,8 @@
 | MNT-40 | FEAT-19 part D review: the older Currency editors (daily check-in, currency name) keep the save bar baseline from page build, so after a save, editing a field back to its pre-save value hides the bar although the store holds the new value (`savebar.py` `differs`; give them `dirty`/`reset` callables like the Games editors, or let `track` rebase); `save_game_channels` re-reads `picker.value` after the save instead of keeping the saved set as the baseline; the bet `reset` relies on `game_settings` key order (`zip(limits, ('min_bet', 'max_bet'))`); turning a channel off from the dashboard does not edit the Discord table message (money is refunded and every press is refused, but the old buttons stay until pressed; the bot has no IPC with the dashboard); the browser test does not cover an unknown channel id or the "Closed N open table(s)" toast end to end. | FEAT-19 part D review | **Done** (2a7fba6 dashboard, a925022 Discord, 2026-10-10) |
 | MNT-41 | FEAT-20 review: if the store refuses even the house-rule move for a character seat, `on_character_timer` returns without arming a timer and the round waits for restart recovery to refund it; cancel the round with a refund and repaint instead | FEAT-20 part B review | **Done** (d620609) |
 | MNT-42 | FEAT-20 review: character table talk has no per-member or per-table limit (one director call per character decision; only the server spending cap and the switch bound it); consider a daily per-server call cap or a per-table character limit | FEAT-20 part B review | **Done** (d620609): server setting "Table talk calls per day" (default 100, 1–10,000), failed attempts count, approximate across tables |
-| MNT-43 | Flaky browser test: `test_hub_tone_saves_persists_conflicts_and_guild_isolation` sometimes times out clicking the 'In character' option (the select menu is not open yet); wait for the menu like other select tests do | verify run 2026-10-10 | Open |
-| MNT-44 | Save bar: give `SaveBar` a supported hook (e.g. an enabled predicate per control) so the Games tab's "Dealer hits soft 17" switch stays disabled after a save without overriding `soft.enable` on the instance (`games_ui.py`) | FEAT-28 review 2026-10-10 | Open |
+| MNT-43 | Flaky browser test: `test_hub_tone_saves_persists_conflicts_and_guild_isolation` sometimes times out clicking the 'In character' option (the select menu is not open yet); wait for the menu like other select tests do | verify run 2026-10-10 | Done (3c46366) |
+| MNT-44 | Save bar: give `SaveBar` a supported hook (e.g. an enabled predicate per control) so the Games tab's "Dealer hits soft 17" switch stays disabled after a save without overriding `soft.enable` on the instance (`games_ui.py`) | FEAT-28 review 2026-10-10 | Done (3c46366) |
 
 ## UI polish
 
@@ -118,7 +118,7 @@
 | UI-54 | Blackjack: the dealer's play is paced: the hole card is revealed and each dealer card is shown about 1.5 seconds apart before the results (display only; the round is already settled in the store) | user 2026-10-10 | Done (b75796d) |
 | UI-55 | Blackjack: a **How to play** button under each table message gives a short ephemeral guide (goal, card values, the buttons, payouts) | user 2026-10-10 | Done (b75796d) |
 | UI-56 | Blackjack: the table message shows the rules as a gray `-# ` line in plain words ("Dealer stands on 17 · Blackjack pays 3:2 · …"), built from the round's rules so FEAT-28 options show up | user 2026-10-10 | Done (b75796d) |
-| UI-57 | Games tab: the "Rounds in the end-of-table summary" number field is too narrow, so its label shows as "Round…"; widen it like the other number fields | FEAT-28 screenshot 2026-10-10 | Open |
+| UI-57 | Games tab: the "Rounds in the end-of-table summary" number field is too narrow, so its label shows as "Round…"; widen it like the other number fields | FEAT-28 screenshot 2026-10-10 | Done (3c46366) |
 
 ## Features
 
