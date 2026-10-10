@@ -28,6 +28,7 @@ from .admin_store import ConflictError
 from .backend import ROLES, effective_backend
 from .avatars import MAX_AVATAR_BYTES, avatar_version, normalize_avatar
 from .cards import parse_card
+from .currency_ui import currency_panel
 from .config import PROFILE_KEYS, format_key_ref, parse_key_ref, validate_profile_name
 from .icons import icon_css, lucide, lucide_button, more_menu
 from .lorebooks import parse_lorebook
@@ -1091,8 +1092,9 @@ def _register_pages(app):
                 imports = ui.tab('imports', 'Imports')
                 prompts = ui.tab('prompts', 'Prompt presets')
                 monitoring = ui.tab('monitoring', 'Monitoring')
+                currency = ui.tab('currency', 'Currency')
             selected_tab = request.query_params.get('tab')
-            if selected_tab not in ('setup', 'characters', 'lore', 'imports', 'prompts', 'monitoring'):
+            if selected_tab not in ('setup', 'characters', 'lore', 'imports', 'prompts', 'monitoring', 'currency'):
                 selected_tab = 'setup'
             await ctx.load_channel_names()  # must precede any ctx.snapshot access: it bakes channel names into owner labels
             await ctx.load_thread_names()
@@ -1104,9 +1106,9 @@ def _register_pages(app):
             ctx.builders = {'setup': lambda: setup_panel(ctx), 'characters': lambda: characters_panel(ctx),
                             'lore': lambda: lore_panel(ctx, on_import=lambda: ctx.selector.set_value('imports')),
                             'imports': lambda: imports_panel(ctx), 'prompts': lambda: presets_panel(ctx),
-                            'monitoring': lambda: monitoring_panel(ctx)}
+                            'monitoring': lambda: monitoring_panel(ctx), 'currency': lambda: currency_panel(ctx)}
             with ui.tab_panels(tabs, value=selected_tab, on_change=changed).classes('w-full') as ctx.selector:
-                for tab in (setup, characters, lore, imports, prompts, monitoring):
+                for tab in (setup, characters, lore, imports, prompts, monitoring, currency):
                     ctx.containers[tab.props['name']] = ui.tab_panel(tab)
             ctx.savebar = SaveBar(ctx)
             await ctx.build(selected_tab)

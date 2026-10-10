@@ -2,6 +2,7 @@
 import asyncio
 import json
 import os
+import re
 import sqlite3
 import tempfile
 import time
@@ -40,6 +41,15 @@ def main():
                 return httpx.Response(429, json={'retry_after': 0.05})
             return httpx.Response(200, json=[{'id': '1', 'name': state['guild_name'], 'permissions': '8' if state['admin'] else '0'}],
                                   headers={'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset-After': reset_after})
+        member = re.fullmatch(r'/api/v10/guilds/1/members/(\d+)', request.url.path)
+        if member:
+            # FEAT-17: 111... has a nickname, 222... left the server, 333... only a username; /_test/fail-members makes every lookup fail.
+            if state.get('members_fail'):
+                return httpx.Response(500, json={})
+            if member.group(1) == '2' * 18:
+                return httpx.Response(404, json={'message': 'Unknown Member'})
+            nick = 'Aria' if member.group(1) == '1' * 18 else None
+            return httpx.Response(200, json={'nick': nick, 'user': {'id': member.group(1), 'username': 'user' + member.group(1)[-4:], 'global_name': None}})
         if request.method == 'POST' and request.url.path.endswith('/messages'):
             return httpx.Response(200, json={'id': '900', 'attachments': [{'url': 'https://cdn.discordapp.com/attachments/100/900/image.png?ex=test'}]})
         return httpx.Response(200, json=[{'id': '100', 'name': 'scene', 'type': 0},
@@ -74,6 +84,10 @@ def main():
     store.db.execute(log_sql, (1, 777, None, 'summon · dialogue', 'fixture', 'second-model', 'ok', '', '', 'FIXTURE-REQUEST-TEXT', 'FIXTURE-RESPONSE-TEXT', 12, 34, now - 2000))
     store.db.execute(log_sql, (2, 100, None, 'reply · dialogue', 'other', 'other-guild-model', 'ok', '', '', 'OTHER-GUILD-CANARY request', 'OTHER-GUILD-CANARY reply', 1, 1, now - 100))
     store.db.commit()
+    # FEAT-17: 55 seeded members (balance 1 each, so paging shows on both the balances and the ledger) and a guild-2 canary.
+    for n in range(1, 56):
+        store.change_balance(1, 7_000_000_000_000_000_000 + n, 1, f'Seed grant {n}', 1, 'seed')
+    store.change_balance(2, 8_000_000_000_000_000_001, 5, 'OTHER-GUILD-CANARY', 1)
     # FEAT-13: keep the spending period's start about two weeks from today so the period-bound assertions cannot flake around midnight UTC on the reset day.
     store.db.execute('UPDATE bot_settings SET reset_day=? WHERE id=1', ((time.gmtime().tm_mday + 13) % 28 + 1,))
     store.db.commit()
@@ -177,6 +191,18 @@ def main():
             raise RuntimeError('Fixture audit bug')
         return original_audit(*args, **kwargs)
     store.audit = failing_audit
+
+    @app.post('/_test/fail-members')
+    async def fail_members(n: int = 1):
+        state['members_fail'] = bool(n)
+        app.state.admin.avatars.__dict__.pop('_members', None)  # the 10-minute name cache would otherwise hide the failure
+        return {}
+
+    @app.post('/_test/currency-name')
+    async def currency_name(request: Request):
+        # Simulates a change made elsewhere (the slash command) while a dashboard page is open.
+        store.set_currency_name(1, (await request.json())['name'])
+        return {}
 
     @app.get('/_test/state')
     async def snapshot():

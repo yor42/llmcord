@@ -968,11 +968,13 @@ class AdminStore:
         row = self.one('SELECT currency_name FROM guild_settings WHERE guild_id=?', (guild_id,))
         return (row['currency_name'] if row else '') or self.DEFAULT_CURRENCY
 
-    def set_currency_name(self, guild_id, name):
+    def set_currency_name(self, guild_id, name, expected=None):
         name = name.strip() if isinstance(name, str) else ''
         if not 1 <= len(name) <= 32 or not name.isprintable() or any(c in name for c in '<@`*_~|'):
             raise ValueError('The currency name must be 1 to 32 characters on one line.')
         with self.write_admin():
+            if expected is not None and self.currency_name(guild_id) != expected:
+                raise ConflictError('The currency name was changed elsewhere. Reload the page and try again.')
             self.db.execute('INSERT INTO guild_settings(guild_id,currency_name) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET currency_name=excluded.currency_name', (guild_id, name))
         return name
 

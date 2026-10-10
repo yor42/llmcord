@@ -5,7 +5,7 @@ Conventions for polish work on the two user surfaces: the NiceGUI dashboard unde
 ## Dashboard (NiceGUI + Quasar, Tailwind classes)
 
 **Structure**
-- The server page (`dashboard.py`, `_register_pages`) has six tabs, named `setup`, `characters`, `lore`, `imports`, `prompts`, `monitoring` and labelled Server setup, Characters, Lore, Imports, Prompt presets, Monitoring. `?tab=` selects one and the URL follows the selected tab.
+- The server page (`dashboard.py`, `_register_pages`) has seven tabs, named `setup`, `characters`, `lore`, `imports`, `prompts`, `monitoring`, `currency` and labelled Server setup, Characters, Lore, Imports, Prompt presets, Monitoring, Currency. `?tab=` selects one and the URL follows the selected tab.
 - Panels build lazily on first selection. `LiveContext.refresh(tab=None, owner=None)` rebuilds in place; there are no full-page reloads or `ui.navigate` calls. Keep it that way.
 - A builder must not `await` during a build (a refresh mid-build would double-fill).
 

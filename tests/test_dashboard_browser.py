@@ -3628,3 +3628,142 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertFalse(self.page_errors(page), errors)
         finally:
             context.close()
+
+    def open_currency(self):
+        context, page, errors = self.ux_page('/admin/guild/1?tab=currency')
+        page.get_by_text('Every change is kept here.', exact=False).wait_for(timeout=5000)
+        page.locator('.ll-currency-table').nth(1).locator('tbody tr').first.wait_for(timeout=5000)
+        return context, page, errors
+
+    def currency_give(self, page, button, member, amount, reason):
+        page.get_by_label('Member ID or mention', exact=True).fill(member)
+        page.get_by_label('Amount', exact=True).fill(str(amount))
+        page.get_by_label('Reason', exact=True).fill(reason)
+        page.get_by_role('button', name=button, exact=True).click()
+
+    def currency_rows(self, page, index):
+        return page.locator('.ll-currency-table').nth(index).locator('tbody tr')
+
+    def audit_actions(self):
+        return [row['action'] for row in self.state()['audit']]
+
+    def test_currency_tab_lists_this_server_only_and_pages(self):
+        """FEAT-17 B: ?tab=currency opens the tab; balances page by 50, the ledger loads more, guild 2's canary never shows; names come from the member lookup."""
+        context, page, errors = self.open_currency()
+        try:
+            self.assertTrue(self.tab_selected(page, 'Currency'))
+            self.assertEqual(self.currency_rows(page, 0).count(), 50)
+            self.assertEqual(self.currency_rows(page, 1).count(), 50)
+            self.assertRegex(self.currency_rows(page, 1).nth(49).inner_text(), r'user00\d\d.*Seed grant')
+            page.get_by_role('button', name='Next', exact=True).click()
+            page.get_by_text('Page 2', exact=True).wait_for(timeout=5000)
+            self.assertGreaterEqual(self.currency_rows(page, 0).count(), 5)
+            page.get_by_role('button', name='Load more', exact=True).click()
+            page.wait_for_function('document.querySelectorAll(".ll-currency-table")[1].querySelectorAll("tbody tr").length > 50')
+            self.assertEqual(page.get_by_text('OTHER-GUILD-CANARY', exact=False).count(), 0)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_currency_give_take_refusal_and_plain_text_reason(self):
+        """FEAT-17 B: Give and Take toast the result with the member's name, a refusal below zero shows its message without mention markup, reasons stay plain text, and each write is audited."""
+        context, page, errors = self.open_currency()
+        try:
+            self.currency_give(page, 'Give', '111111111111111111', 50, '<b>Quest</b> reward')
+            page.get_by_text('Gave 50 coins to Aria. New balance: 50 coins.', exact=True).wait_for(timeout=5000)
+            first = self.currency_rows(page, 1).first.inner_text()
+            self.assertIn('Aria', first)
+            self.assertIn('+50', first)
+            self.assertIn('<b>Quest</b> reward', first)
+            self.assertEqual(self.currency_rows(page, 1).first.locator('b').count(), 0)
+            self.currency_give(page, 'Take', '111111111111111111', 80, 'Too much')
+            page.get_by_text('That would leave Aria with a negative balance (current balance: 50 coins).', exact=True).wait_for(timeout=5000)
+            self.currency_give(page, 'Take', '<@111111111111111111>', 20, 'Spent')
+            page.get_by_text('Took 20 coins from Aria. New balance: 30 coins.', exact=True).wait_for(timeout=5000)
+            self.assertIn('-20', self.currency_rows(page, 1).first.inner_text())
+            self.assertEqual(page.get_by_label('Reason', exact=True).input_value(), '')
+            audit = self.audit_actions()
+            self.assertEqual([a for a in audit if a.startswith('currency.')][-2:], ['currency.grant', 'currency.revoke'])
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_currency_form_checks_and_departed_member_fallback(self):
+        """FEAT-17 B: a bad member ID or amount is refused with a message; a member who left shows as Member ...NNNN."""
+        context, page, errors = self.open_currency()
+        try:
+            self.currency_give(page, 'Give', 'not-an-id', 5, 'x')
+            page.get_by_text('Enter a member ID (digits only) or paste a mention.', exact=True).wait_for(timeout=5000)
+            self.currency_give(page, 'Give', '444444444444444444', 5000000, 'x')
+            page.get_by_text('The amount must be a whole number from 1 to 1,000,000.', exact=True).wait_for(timeout=5000)
+            self.currency_give(page, 'Give', '222222222222222222', 5, 'Left the server')
+            page.get_by_text('Gave 5 coins to Member …2222. New balance: 5 coins.', exact=True).wait_for(timeout=5000)
+            self.assertIn('Member …2222', self.currency_rows(page, 0).nth(0).inner_text() + self.currency_rows(page, 1).first.inner_text())
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_currency_reverse_through_dialog(self):
+        """FEAT-17 B: Reverse asks for a reason in a dialog, toasts 'Reversed entry #N.', marks both rows, and offers no second Reverse."""
+        context, page, errors = self.open_currency()
+        try:
+            self.currency_give(page, 'Give', '333333333333333333', 7, 'Reverse me')
+            page.get_by_text('Gave 7 coins to user3333. New balance: 7 coins.', exact=True).wait_for(timeout=5000)
+            row = self.currency_rows(page, 1).first
+            number = row.locator('td').first.inner_text().strip()
+            row.get_by_role('button', name=f'Reverse entry {number}', exact=True).click()
+            dialog = page.get_by_role('dialog')
+            dialog.get_by_text(f'Reverse entry {number}', exact=True).wait_for(timeout=5000)
+            dialog.get_by_label('Reason', exact=True).fill('Mistake')
+            dialog.get_by_role('button', name='Reverse entry', exact=True).click()
+            page.get_by_text(f'Reversed entry {number}.', exact=True).wait_for(timeout=5000)
+            page.wait_for_function('document.querySelectorAll(".ll-currency-table")[1].querySelector("tbody tr").innerText.includes("Reverses")')
+            newest, older = self.currency_rows(page, 1).nth(0), self.currency_rows(page, 1).nth(1)
+            self.assertIn(f'Reverses {number}', newest.inner_text())
+            self.assertIn('Reversed by #', older.inner_text())
+            self.assertEqual(newest.get_by_role('button').count() + older.get_by_role('button').count(), 0)
+            self.assertIn('currency.reverse', self.audit_actions())
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_currency_name_save_and_stale_conflict(self):
+        """FEAT-17 B: the name saves through the save bar with its toast and an audit row; an invalid name is refused; saving over a name changed elsewhere is refused and Reload shows the new name."""
+        from playwright.sync_api import expect
+        context, page, errors = self.open_currency()
+        try:
+            bar, field = page.get_by_role('region', name='Unsaved changes'), page.get_by_label('Currency name', exact=True)
+            field.fill('gold')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Currency name saved', exact=True).wait_for(timeout=5000)
+            self.assertIn('currency.name', self.audit_actions())
+            field.fill('<@5>')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The currency name must be 1 to 32 characters on one line.', exact=True).wait_for(timeout=5000)
+            field.fill('gems')
+            self.post_hook('/_test/currency-name', {'name': 'silver'})
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The currency name was changed elsewhere. Reload the page and try again.', exact=True).wait_for(timeout=5000)
+            bar.get_by_text('Currency name was changed somewhere else.', exact=True).wait_for(timeout=5000)
+            bar.get_by_role('button', name='Reload', exact=True).click()
+            bar.wait_for(state='hidden', timeout=5000)
+            expect(page.get_by_label('Currency name', exact=True)).to_have_value('silver')
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/currency-name', {'name': 'coins'})
+            context.close()
+
+    def test_currency_member_lookup_failure_falls_back_to_ids_with_one_warning(self):
+        """FEAT-17 B: when the Discord member lookup fails the tab shows 'Member ...NNNN' and warns once."""
+        self.post_hook('/_test/fail-members', n=1)
+        try:
+            context, page, errors = self.open_currency()
+            try:
+                page.get_by_text('Member names could not be loaded. Showing member IDs.', exact=True).wait_for(timeout=5000)
+                self.assertEqual(page.get_by_text('Member names could not be loaded. Showing member IDs.', exact=True).count(), 1)
+                self.assertIn('Member …', self.currency_rows(page, 0).first.inner_text())
+                self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+            finally:
+                context.close()
+        finally:
+            self.post_hook('/_test/fail-members', n=0)

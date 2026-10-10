@@ -108,6 +108,17 @@ Operators also see one read-only line at the top of this tab, "Bot-wide spending
 
 Generation status shows the dialogue model and its tracked input-plus-output tokens over a rolling 24 hours for the current server, including director, memory, summary, and image calls using that same profile/model.
 
+## Currency
+
+The **Currency** tab manages this server's member currency (see `/balance` and `/admin currency` in the [server guide](server-guide.md#discord-commands)). Members earn and spend it in future minigames; for now admins give and take it.
+
+- **Currency name**: what this server calls its currency (default "coins"; 1 to 32 characters on one line, without `@`, `<` or markdown symbols). Save it with the bar at the bottom. If it was renamed meanwhile (in another tab, by another admin, or with `/admin currency name`), the save is refused; reload and try again.
+- **Balances**: members with a balance, highest first, 50 per page. Names come from Discord; a member who left shows as "Member …NNNN" (the last digits of their ID). If Discord names cannot be loaded, the tab shows IDs.
+- **Give or take currency**: enter a member ID (or paste a mention), an amount from 1 to 1,000,000 and a reason (required, up to 200 characters). A balance never goes below zero; taking more than a member has is refused.
+- **Ledger**: every change, newest first, with time, member, amount, balance after, reason and admin; **Load more** shows older entries. Entries are never edited or deleted. To undo a mistake, choose **Reverse** and give a reason: this adds an opposite entry ("Reverses #N"), and the original shows "Reversed by #M". An entry can be reversed once, and a reversal is refused if it would leave the balance below zero.
+
+Balances and the ledger stay when a member leaves the server. The dashboard audit log records each change's action, member, amount and entry, but not its reason, which stays in the ledger.
+
 ## Reply footer and cost estimates
 
 By default each completed Discord message has a footer with model, reply input/output tokens, and estimated USD cost. Continuation messages repeat the same reply-level figures; they are not separate model calls. Footers are excluded from saved conversation text and memory extraction. Provider-reported counts include thinking tokens when reported as output. Missing counts and unknown prices display as unavailable rather than being inferred from visible text. Turn the footer off per server with the "Show model and cost footer on replies" switch under Server setup → **Server settings** (then **Save changes**); usage is still recorded and the Usage figures are unaffected.

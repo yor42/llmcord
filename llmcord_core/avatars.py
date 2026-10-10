@@ -1,8 +1,10 @@
 """Bounded avatar uploads, Discord publication, and emotion stream parsing."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import logging
 import time
 from dataclasses import dataclass
 from io import BytesIO
@@ -12,6 +14,7 @@ from PIL import Image, ImageOps
 
 from .discord_api import DISCORD_API
 
+log = logging.getLogger(__name__)
 DEFAULT_SLOTS = ('neutral', 'happy', 'sad', 'angry', 'surprised', 'embarrassed')
 MAX_AVATAR_BYTES = 8 * 1024 * 1024
 
@@ -115,6 +118,45 @@ class AvatarPublisher:
         if result.status_code != 200:
             raise ValueError('Discord threads are unavailable. Try again in a moment.')
         return result.json().get('threads', [])
+
+    MEMBER_TTL, MEMBER_CACHE_MAX = 600, 1000
+
+    async def member_names(self, guild_id, user_ids):
+        """Display names for the given members, one bot-token lookup each (never the privileged member list).
+
+        Returns (names, failed): a member who left (404) is simply absent; any other failure sets failed. Answers, including
+        "left", are cached for 10 minutes (bounded); after a rate limit no further request is made in this call."""
+        cache = self.__dict__.setdefault('_members', {})
+        now, gate, limited = time.monotonic(), asyncio.Semaphore(4), []
+        async def one(user_id):
+            hit = cache.get((guild_id, user_id))
+            if hit and hit[0] > now:
+                return hit[1]
+            async with gate:
+                if limited:
+                    raise ValueError('Discord members are rate limited.')
+                result = await self.http.get(f'{DISCORD_API}/guilds/{guild_id}/members/{user_id}', headers={'Authorization': 'Bot ' + self.bot_token})
+            if result.status_code == 429 or (result.headers.get('X-RateLimit-Remaining') == '0' and result.headers.get('Retry-After')):
+                if not limited:
+                    limited.append(True)
+                    log.warning('Discord rate-limited the member name lookup (guild %s)', guild_id)
+            if result.status_code == 404:
+                name = None
+            elif result.status_code != 200:
+                raise ValueError('Discord members are unavailable.')
+            else:
+                body = result.json()
+                user = body.get('user') or {}
+                name = body.get('nick') or user.get('global_name') or user.get('username') or None
+            if len(cache) >= self.MEMBER_CACHE_MAX:
+                for key in [k for k, v in cache.items() if v[0] <= now] or [next(iter(cache))]:
+                    del cache[key]
+            cache[(guild_id, user_id)] = (now + self.MEMBER_TTL, name)
+            return name
+        ids = list(dict.fromkeys(user_ids))
+        found = await asyncio.gather(*(one(i) for i in ids), return_exceptions=True)
+        failed = any(isinstance(r, BaseException) for r in found)
+        return {i: r for i, r in zip(ids, found) if isinstance(r, str)}, failed
 
     async def configure(self, guild_id, channel_id):
         channels = await self.channels(guild_id)
