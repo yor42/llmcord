@@ -104,7 +104,7 @@ def _sign(net: int) -> str:
 
 
 def _outcome(seat: dict) -> str:
-    outcome, net = seat["outcome"], (seat["payout"] or 0) - seat["stake"]
+    outcome, net = seat["outcome"], (seat["payout"] or 0) - seat["stake"] - (seat.get("insurance") or 0)
     if outcome == "push":
         return "push"
     if outcome == "refund":

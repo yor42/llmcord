@@ -35,7 +35,7 @@ class Chooser(Protocol):
 
 
 class DefaultPolicy:
-    """Deterministic fallback (timeouts, bad model output): hit below 17, else stand; never double."""
+    """Deterministic fallback (timeouts, bad model output): decline insurance, hit below 17, else stand; never double or surrender."""
 
     async def choose(self, view, legal_moves):
         return self.pick(view, legal_moves)
@@ -45,12 +45,14 @@ class DefaultPolicy:
         legal = tuple(legal_moves)
         if not legal:
             raise IllegalMove("no legal moves")
+        if "no_insurance" in legal:
+            return "no_insurance"
         total = getattr(view, "total", None)
         if "hit" in legal and total is not None and total < 17:
             return "hit"
         if "stand" in legal:
             return "stand"
-        return legal[0]
+        return next((m for m in legal if m not in ("double", "surrender", "insure", "even_money")), legal[0])
 
 
 def new_seed():
