@@ -1,5 +1,6 @@
 {
 "fresh": [
+"CREATE INDEX currency_ledger_member ON currency_ledger(guild_id,user_id,id)",
 "CREATE INDEX model_usage_guild_time ON model_usage(guild_id, created_at)",
 "CREATE INDEX nodes_channel_time ON nodes(channel_id,created_at)",
 "CREATE INDEX nodes_root ON nodes(root_id)",
@@ -16,10 +17,12 @@
 "CREATE TABLE channels (\n channel_id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL,\n space_id INTEGER NOT NULL REFERENCES spaces(id),\n default_cast TEXT NOT NULL DEFAULT '[]', active_cast TEXT NOT NULL DEFAULT '[]',\n ambient INTEGER NOT NULL DEFAULT 0, ambient_count INTEGER NOT NULL DEFAULT 0,\n last_ambient REAL NOT NULL DEFAULT 0\n)",
 "CREATE TABLE characters (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL,\n world_id INTEGER NOT NULL REFERENCES spaces(id),\n name TEXT NOT NULL, card TEXT NOT NULL, avatar BLOB, archived INTEGER NOT NULL DEFAULT 0, avatar_manual INTEGER NOT NULL DEFAULT 0,\n UNIQUE(guild_id,name)\n)",
 "CREATE TABLE consent (\n guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, enabled INTEGER NOT NULL,\n PRIMARY KEY(guild_id,user_id)\n)",
+"CREATE TABLE currency_balances (\n guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL,\n balance INTEGER NOT NULL DEFAULT 0 CHECK(balance>=0), updated_at REAL NOT NULL,\n PRIMARY KEY(guild_id,user_id)\n)",
+"CREATE TABLE currency_ledger (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL,\n amount INTEGER NOT NULL CHECK(amount<>0), balance_after INTEGER NOT NULL CHECK(balance_after>=0),\n reason TEXT NOT NULL, actor_id INTEGER NOT NULL, source TEXT NOT NULL, reverses_id INTEGER, created_at REAL NOT NULL\n)",
 "CREATE TABLE encounters (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, character_id INTEGER NOT NULL,\n space_id INTEGER NOT NULL, content TEXT NOT NULL, source_message_id INTEGER NOT NULL,\n UNIQUE(guild_id,character_id,space_id,content)\n)",
 "CREATE TABLE evidence (\n candidate_id INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,\n root_id INTEGER NOT NULL, source_message_id INTEGER NOT NULL,\n PRIMARY KEY(candidate_id,root_id)\n)",
 "CREATE TABLE guild_lore_entries (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL,\n scope_kind TEXT NOT NULL DEFAULT 'guild' CHECK(scope_kind='guild'),\n scope_id INTEGER NOT NULL, content TEXT NOT NULL, keys_json TEXT NOT NULL DEFAULT '[]',\n constant INTEGER NOT NULL DEFAULT 0, insertion_order INTEGER NOT NULL DEFAULT 100,\n enabled INTEGER NOT NULL DEFAULT 1, source_message_id INTEGER, promoted_from INTEGER,\n pinned INTEGER NOT NULL DEFAULT 0, rule_json TEXT NOT NULL DEFAULT '{}',\n entry_key TEXT NOT NULL UNIQUE, revision INTEGER NOT NULL DEFAULT 0\n)",
-"CREATE TABLE guild_settings (\n guild_id INTEGER PRIMARY KEY, preset_id INTEGER, preset_revision INTEGER,\n asset_channel_id INTEGER, usage_footer INTEGER NOT NULL DEFAULT 1,\n timezone TEXT NOT NULL DEFAULT '', turn_log_enabled INTEGER NOT NULL DEFAULT 0, turn_log_days INTEGER NOT NULL DEFAULT 14,\n catchup_anywhere INTEGER NOT NULL DEFAULT 0\n)",
+"CREATE TABLE guild_settings (\n guild_id INTEGER PRIMARY KEY, preset_id INTEGER, preset_revision INTEGER,\n asset_channel_id INTEGER, usage_footer INTEGER NOT NULL DEFAULT 1,\n timezone TEXT NOT NULL DEFAULT '', turn_log_enabled INTEGER NOT NULL DEFAULT 0, turn_log_days INTEGER NOT NULL DEFAULT 14,\n catchup_anywhere INTEGER NOT NULL DEFAULT 0, currency_name TEXT NOT NULL DEFAULT ''\n)",
 "CREATE TABLE hub_worlds (\n hub_id INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,\n world_id INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,\n PRIMARY KEY(hub_id,world_id)\n)",
 "CREATE TABLE import_entries (\n guild_id INTEGER NOT NULL, source_kind TEXT NOT NULL, source_id INTEGER NOT NULL,\n uid TEXT NOT NULL, entry_key TEXT NOT NULL, baseline_json TEXT NOT NULL,\n source_hash TEXT NOT NULL, disposition TEXT NOT NULL DEFAULT 'active',\n PRIMARY KEY(guild_id,source_kind,source_id,uid)\n)",
 "CREATE TABLE lore (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL,\n scope_kind TEXT NOT NULL CHECK(scope_kind IN ('character','space','channel','thread')),\n scope_id INTEGER NOT NULL, content TEXT NOT NULL, keys_json TEXT NOT NULL DEFAULT '[]',\n constant INTEGER NOT NULL DEFAULT 0, insertion_order INTEGER NOT NULL DEFAULT 100,\n enabled INTEGER NOT NULL DEFAULT 1, source_message_id INTEGER,\n promoted_from INTEGER, pinned INTEGER NOT NULL DEFAULT 0\n, rule_json TEXT NOT NULL DEFAULT '{}', entry_key TEXT NOT NULL DEFAULT '', revision INTEGER NOT NULL DEFAULT 0)",
@@ -45,11 +48,15 @@
 "CREATE TABLE turn_log (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, channel_id INTEGER, message_id INTEGER,\n stage TEXT NOT NULL DEFAULT '', profile TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '',\n status TEXT NOT NULL DEFAULT '', reference_id TEXT NOT NULL DEFAULT '', error_detail TEXT NOT NULL DEFAULT '',\n request_text TEXT NOT NULL DEFAULT '', response_text TEXT NOT NULL DEFAULT '',\n input_tokens INTEGER, output_tokens INTEGER, created_at REAL NOT NULL\n)",
 "CREATE TABLE user_timezones (\n guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, timezone TEXT NOT NULL, updated_at REAL NOT NULL,\n PRIMARY KEY(guild_id,user_id)\n)",
 "CREATE TABLE webhooks (\n channel_id INTEGER NOT NULL, character_id INTEGER NOT NULL,\n webhook_id INTEGER NOT NULL, PRIMARY KEY(channel_id,character_id)\n)",
+"CREATE TRIGGER currency_ledger_no_delete BEFORE DELETE ON currency_ledger\nBEGIN SELECT RAISE(ABORT, 'The currency ledger is append-only.'); END",
+"CREATE TRIGGER currency_ledger_no_update BEFORE UPDATE ON currency_ledger\nBEGIN SELECT RAISE(ABORT, 'The currency ledger is append-only.'); END",
 "CREATE TRIGGER lore_insert_identity AFTER INSERT ON lore WHEN new.entry_key='' BEGIN\n            UPDATE lore SET entry_key='entry:'||lower(hex(randomblob(16))),revision=(random() & 4611686018427387903)+1 WHERE id=new.id;\n        END",
 "CREATE UNIQUE INDEX book_identity ON lorebook_entries(entry_key) WHERE entry_key<>''",
+"CREATE UNIQUE INDEX currency_ledger_reversal ON currency_ledger(reverses_id) WHERE reverses_id IS NOT NULL",
 "CREATE UNIQUE INDEX lore_identity ON lore(entry_key) WHERE entry_key<>''"
 ],
 "legacy_v5": [
+"CREATE INDEX currency_ledger_member ON currency_ledger(guild_id,user_id,id)",
 "CREATE INDEX model_usage_guild_time ON model_usage(guild_id, created_at)",
 "CREATE INDEX nodes_channel_time ON nodes(channel_id,created_at)",
 "CREATE INDEX nodes_root ON nodes(root_id)",
@@ -66,10 +73,12 @@
 "CREATE TABLE channels (\n channel_id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL,\n space_id INTEGER NOT NULL REFERENCES spaces(id),\n default_cast TEXT NOT NULL DEFAULT '[]', active_cast TEXT NOT NULL DEFAULT '[]',\n ambient INTEGER NOT NULL DEFAULT 0, ambient_count INTEGER NOT NULL DEFAULT 0,\n last_ambient REAL NOT NULL DEFAULT 0\n)",
 "CREATE TABLE characters (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL,\n world_id INTEGER NOT NULL REFERENCES spaces(id),\n name TEXT NOT NULL, card TEXT NOT NULL, avatar BLOB, archived INTEGER NOT NULL DEFAULT 0, avatar_manual INTEGER NOT NULL DEFAULT 0,\n UNIQUE(guild_id,name)\n)",
 "CREATE TABLE consent (\n guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, enabled INTEGER NOT NULL,\n PRIMARY KEY(guild_id,user_id)\n)",
+"CREATE TABLE currency_balances (\n guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL,\n balance INTEGER NOT NULL DEFAULT 0 CHECK(balance>=0), updated_at REAL NOT NULL,\n PRIMARY KEY(guild_id,user_id)\n)",
+"CREATE TABLE currency_ledger (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL,\n amount INTEGER NOT NULL CHECK(amount<>0), balance_after INTEGER NOT NULL CHECK(balance_after>=0),\n reason TEXT NOT NULL, actor_id INTEGER NOT NULL, source TEXT NOT NULL, reverses_id INTEGER, created_at REAL NOT NULL\n)",
 "CREATE TABLE encounters (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, character_id INTEGER NOT NULL,\n space_id INTEGER NOT NULL, content TEXT NOT NULL, source_message_id INTEGER NOT NULL,\n UNIQUE(guild_id,character_id,space_id,content)\n)",
 "CREATE TABLE evidence (\n candidate_id INTEGER NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,\n root_id INTEGER NOT NULL, source_message_id INTEGER NOT NULL,\n PRIMARY KEY(candidate_id,root_id)\n)",
 "CREATE TABLE guild_lore_entries (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL,\n scope_kind TEXT NOT NULL DEFAULT 'guild' CHECK(scope_kind='guild'),\n scope_id INTEGER NOT NULL, content TEXT NOT NULL, keys_json TEXT NOT NULL DEFAULT '[]',\n constant INTEGER NOT NULL DEFAULT 0, insertion_order INTEGER NOT NULL DEFAULT 100,\n enabled INTEGER NOT NULL DEFAULT 1, source_message_id INTEGER, promoted_from INTEGER,\n pinned INTEGER NOT NULL DEFAULT 0, rule_json TEXT NOT NULL DEFAULT '{}',\n entry_key TEXT NOT NULL UNIQUE, revision INTEGER NOT NULL DEFAULT 0\n)",
-"CREATE TABLE guild_settings (\n guild_id INTEGER PRIMARY KEY, preset_id INTEGER, preset_revision INTEGER,\n asset_channel_id INTEGER, usage_footer INTEGER NOT NULL DEFAULT 1,\n timezone TEXT NOT NULL DEFAULT '', turn_log_enabled INTEGER NOT NULL DEFAULT 0, turn_log_days INTEGER NOT NULL DEFAULT 14, catchup_anywhere INTEGER NOT NULL DEFAULT 0)",
+"CREATE TABLE guild_settings (\n guild_id INTEGER PRIMARY KEY, preset_id INTEGER, preset_revision INTEGER,\n asset_channel_id INTEGER, usage_footer INTEGER NOT NULL DEFAULT 1,\n timezone TEXT NOT NULL DEFAULT '', turn_log_enabled INTEGER NOT NULL DEFAULT 0, turn_log_days INTEGER NOT NULL DEFAULT 14, catchup_anywhere INTEGER NOT NULL DEFAULT 0, currency_name TEXT NOT NULL DEFAULT '')",
 "CREATE TABLE hub_worlds (\n hub_id INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,\n world_id INTEGER NOT NULL REFERENCES spaces(id) ON DELETE CASCADE,\n PRIMARY KEY(hub_id,world_id)\n)",
 "CREATE TABLE import_entries (\n guild_id INTEGER NOT NULL, source_kind TEXT NOT NULL, source_id INTEGER NOT NULL,\n uid TEXT NOT NULL, entry_key TEXT NOT NULL, baseline_json TEXT NOT NULL,\n source_hash TEXT NOT NULL, disposition TEXT NOT NULL DEFAULT 'active',\n PRIMARY KEY(guild_id,source_kind,source_id,uid)\n)",
 "CREATE TABLE lore (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL,\n scope_kind TEXT NOT NULL CHECK(scope_kind IN ('character','space','channel','thread')),\n scope_id INTEGER NOT NULL, content TEXT NOT NULL, keys_json TEXT NOT NULL DEFAULT '[]',\n constant INTEGER NOT NULL DEFAULT 0, insertion_order INTEGER NOT NULL DEFAULT 100,\n enabled INTEGER NOT NULL DEFAULT 1, source_message_id INTEGER,\n promoted_from INTEGER, pinned INTEGER NOT NULL DEFAULT 0\n, rule_json TEXT NOT NULL DEFAULT '{}', entry_key TEXT NOT NULL DEFAULT '', revision INTEGER NOT NULL DEFAULT 0)",
@@ -95,8 +104,11 @@
 "CREATE TABLE turn_log (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, channel_id INTEGER, message_id INTEGER,\n stage TEXT NOT NULL DEFAULT '', profile TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '',\n status TEXT NOT NULL DEFAULT '', reference_id TEXT NOT NULL DEFAULT '', error_detail TEXT NOT NULL DEFAULT '',\n request_text TEXT NOT NULL DEFAULT '', response_text TEXT NOT NULL DEFAULT '',\n input_tokens INTEGER, output_tokens INTEGER, created_at REAL NOT NULL\n)",
 "CREATE TABLE user_timezones (\n guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, timezone TEXT NOT NULL, updated_at REAL NOT NULL,\n PRIMARY KEY(guild_id,user_id)\n)",
 "CREATE TABLE webhooks (\n channel_id INTEGER NOT NULL, character_id INTEGER NOT NULL,\n webhook_id INTEGER NOT NULL, PRIMARY KEY(channel_id,character_id)\n)",
+"CREATE TRIGGER currency_ledger_no_delete BEFORE DELETE ON currency_ledger\nBEGIN SELECT RAISE(ABORT, 'The currency ledger is append-only.'); END",
+"CREATE TRIGGER currency_ledger_no_update BEFORE UPDATE ON currency_ledger\nBEGIN SELECT RAISE(ABORT, 'The currency ledger is append-only.'); END",
 "CREATE TRIGGER lore_insert_identity AFTER INSERT ON lore WHEN new.entry_key='' BEGIN\n            UPDATE lore SET entry_key='entry:'||lower(hex(randomblob(16))),revision=(random() & 4611686018427387903)+1 WHERE id=new.id;\n        END",
 "CREATE UNIQUE INDEX book_identity ON lorebook_entries(entry_key) WHERE entry_key<>''",
+"CREATE UNIQUE INDEX currency_ledger_reversal ON currency_ledger(reverses_id) WHERE reverses_id IS NOT NULL",
 "CREATE UNIQUE INDEX lore_identity ON lore(entry_key) WHERE entry_key<>''"
 ]
 }

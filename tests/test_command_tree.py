@@ -47,6 +47,35 @@ EXPECTED_COMMANDS = {
         "None",
         False,
     ),
+    "admin currency grant": (
+        "Give a member currency",
+        (
+            ("member", "user", True, "Who receives it", False, ()),
+            ("amount", "integer", True, "How much to give", False, ()),
+            ("reason", "string", True, "Why (kept in the ledger)", False, ()),
+        ),
+        1,
+        "None",
+        False,
+    ),
+    "admin currency name": (
+        "Set what this server calls its currency",
+        (("name", "string", True, "For example coins or gold (1 to 32 characters)", False, ()),),
+        1,
+        "None",
+        False,
+    ),
+    "admin currency revoke": (
+        "Take currency from a member",
+        (
+            ("member", "user", True, "Who loses it", False, ()),
+            ("amount", "integer", True, "How much to take", False, ()),
+            ("reason", "string", True, "Why (kept in the ledger)", False, ()),
+        ),
+        1,
+        "None",
+        False,
+    ),
     "admin lore add": (
         "Add lore to this channel (or thread) or to its world or hub",
         (
@@ -164,6 +193,13 @@ EXPECTED_COMMANDS = {
         "None",
         False,
     ),
+    "balance": (
+        "Show your balance, or another member's",
+        (("member", "user", False, "Whose balance to show (default: yours)", False, ()),),
+        0,
+        "None",
+        False,
+    ),
     "ambient status": ("Show this channel's ambient setting", (), 0, "None", False),
     "cast add": (
         "Add an eligible character to the active cast",
@@ -270,6 +306,7 @@ EXPECTED_GROUPS = {
     "admin ambient": ("Turn ambient participation on or off", "None", False),
     "admin cast": ("Set a channel's default cast", "None", False),
     "admin character": ("Import characters", "None", False),
+    "admin currency": ("Give, take and name the server currency", "None", False),
     "admin lore": ("Add and manage lore", "None", False),
     "admin scene": ("Delete stored scenes", "None", False),
     "admin space": ("Manage worlds, hubs and channel bindings", "None", False),

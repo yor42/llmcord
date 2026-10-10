@@ -41,7 +41,7 @@ class UpgradeTests(unittest.TestCase):
             try:
                 rows = {r['slot_key']: r['image_hash'] for r in store.all("SELECT slot_key,image_hash FROM avatar_slots WHERE slot_key IN ('neutral','happy','sad')")}
                 self.assertEqual(rows, {'neutral': digest(IMAGES['neutral']), 'happy': digest(IMAGES['happy']), 'sad': None})
-                self.assertEqual(store.one('PRAGMA user_version')[0], 11)
+                self.assertEqual(store.one('PRAGMA user_version')[0], 12)
             finally:
                 store.close()
             backups = list(Path(folder).glob('*.pre-v11-*.sqlite3'))
@@ -89,12 +89,12 @@ class UpgradeTests(unittest.TestCase):
             finally:
                 store.close()
 
-    def test_v12_file_is_refused(self):
-        """MNT-04: databases newer than v11 are rejected without a backup."""
+    def test_v13_file_is_refused(self):
+        """MNT-04: databases newer than v12 are rejected without a backup."""
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'new.sqlite3'
             with closing(sqlite3.connect(path)) as db, db:
-                db.execute('PRAGMA user_version=12')
+                db.execute('PRAGMA user_version=13')
             with self.assertRaisesRegex(ValueError, 'newer than this application'):
                 Store(path)
             self.assertEqual(list(Path(folder).glob('*.pre-*')), [])

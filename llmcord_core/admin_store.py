@@ -82,8 +82,24 @@ CREATE TABLE IF NOT EXISTS guild_settings (
  guild_id INTEGER PRIMARY KEY, preset_id INTEGER, preset_revision INTEGER,
  asset_channel_id INTEGER, usage_footer INTEGER NOT NULL DEFAULT 1,
  timezone TEXT NOT NULL DEFAULT '', turn_log_enabled INTEGER NOT NULL DEFAULT 0, turn_log_days INTEGER NOT NULL DEFAULT 14,
- catchup_anywhere INTEGER NOT NULL DEFAULT 0
+ catchup_anywhere INTEGER NOT NULL DEFAULT 0, currency_name TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS currency_balances (
+ guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
+ balance INTEGER NOT NULL DEFAULT 0 CHECK(balance>=0), updated_at REAL NOT NULL,
+ PRIMARY KEY(guild_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS currency_ledger (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
+ amount INTEGER NOT NULL CHECK(amount<>0), balance_after INTEGER NOT NULL CHECK(balance_after>=0),
+ reason TEXT NOT NULL, actor_id INTEGER NOT NULL, source TEXT NOT NULL, reverses_id INTEGER, created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS currency_ledger_member ON currency_ledger(guild_id,user_id,id);
+CREATE UNIQUE INDEX IF NOT EXISTS currency_ledger_reversal ON currency_ledger(reverses_id) WHERE reverses_id IS NOT NULL;
+CREATE TRIGGER IF NOT EXISTS currency_ledger_no_update BEFORE UPDATE ON currency_ledger
+BEGIN SELECT RAISE(ABORT, 'The currency ledger is append-only.'); END;
+CREATE TRIGGER IF NOT EXISTS currency_ledger_no_delete BEFORE DELETE ON currency_ledger
+BEGIN SELECT RAISE(ABORT, 'The currency ledger is append-only.'); END;
 CREATE TABLE IF NOT EXISTS user_timezones (
  guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, timezone TEXT NOT NULL, updated_at REAL NOT NULL,
  PRIMARY KEY(guild_id,user_id)
@@ -156,6 +172,10 @@ def valid_timezone(name):
     except Exception:
         raise ValueError(f'Unknown timezone {name!r}. Use an IANA name such as "Asia/Seoul".') from None
     return name
+
+
+class CurrencyError(ValueError):
+    """A currency change refused; the message is meant for the member or admin who asked."""
 
 
 class ConflictError(ValueError):
@@ -441,7 +461,7 @@ class AdminStore:
             'lore': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0'},
             'lorebook_entries': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0', 'pinned': 'INTEGER NOT NULL DEFAULT 0', 'source_message_id': 'INTEGER', 'promoted_from': 'INTEGER'},
             'characters': {'avatar_manual': 'INTEGER NOT NULL DEFAULT 0'},
-            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0'},
+            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0', 'currency_name': "TEXT NOT NULL DEFAULT ''"},
             'model_usage': {'channel_id': 'INTEGER', 'feature': "TEXT NOT NULL DEFAULT ''"},
         }.items():
             columns = {row[1] for row in self.db.execute(f'PRAGMA table_info({table})')}
@@ -939,6 +959,79 @@ class AdminStore:
     def set_catchup_anywhere(self, guild_id, enabled):
         with self.write_admin():
             self.db.execute('INSERT INTO guild_settings(guild_id,catchup_anywhere) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET catchup_anywhere=excluded.catchup_anywhere', (guild_id, int(bool(enabled))))
+
+    DEFAULT_CURRENCY = 'coins'
+    MAX_CURRENCY_CHANGE = 1_000_000
+    MAX_CURRENCY_BALANCE = 1_000_000_000_000
+
+    def currency_name(self, guild_id):
+        row = self.one('SELECT currency_name FROM guild_settings WHERE guild_id=?', (guild_id,))
+        return (row['currency_name'] if row else '') or self.DEFAULT_CURRENCY
+
+    def set_currency_name(self, guild_id, name):
+        name = name.strip() if isinstance(name, str) else ''
+        if not 1 <= len(name) <= 32 or not name.isprintable() or any(c in name for c in '<@`*_~|'):
+            raise ValueError('The currency name must be 1 to 32 characters on one line.')
+        with self.write_admin():
+            self.db.execute('INSERT INTO guild_settings(guild_id,currency_name) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET currency_name=excluded.currency_name', (guild_id, name))
+        return name
+
+    def balance(self, guild_id, user_id):
+        row = self.one('SELECT balance FROM currency_balances WHERE guild_id=? AND user_id=?', (guild_id, user_id))
+        return row['balance'] if row else 0
+
+    def change_balance(self, guild_id, user_id, amount, reason, actor_id, source='admin'):
+        if isinstance(amount, bool) or not isinstance(amount, int) or amount == 0 or abs(amount) > self.MAX_CURRENCY_CHANGE:
+            raise CurrencyError(f'The amount must be a whole number from 1 to {self.MAX_CURRENCY_CHANGE:,}.')
+        reason = reason.strip() if isinstance(reason, str) else ''
+        if not 1 <= len(reason) <= 200:
+            raise CurrencyError('The reason must be 1 to 200 characters.')
+        with self.write_admin():
+            return self._append_ledger(guild_id, user_id, amount, reason, actor_id, source, None)
+
+    def reverse_entry(self, guild_id, entry_id, actor_id, reason):
+        reason = reason.strip() if isinstance(reason, str) else ''
+        if not 1 <= len(reason) <= 200:
+            raise CurrencyError('The reason must be 1 to 200 characters.')
+        with self.write_admin():
+            entry = self.one('SELECT * FROM currency_ledger WHERE id=? AND guild_id=?', (entry_id, guild_id))
+            if entry is None:
+                raise CurrencyError('No such ledger entry on this server.')
+            if entry['reverses_id'] is not None:
+                raise CurrencyError('A reversal cannot be reversed.')
+            if self.one('SELECT 1 FROM currency_ledger WHERE reverses_id=?', (entry_id,)):
+                raise CurrencyError('That entry was already reversed.')
+            return self._append_ledger(guild_id, entry['user_id'], -entry['amount'], reason, actor_id, 'reversal', entry_id)
+
+    def _append_ledger(self, guild_id, user_id, amount, reason, actor_id, source, reverses_id):
+        """Inside write_admin: the read, the bounds check and both writes share one BEGIN IMMEDIATE transaction."""
+        current = self.balance(guild_id, user_id)
+        after = current + amount
+        name = self.currency_name(guild_id)
+        if after < 0:
+            raise CurrencyError(f'That would leave <@{user_id}> with a negative balance (current balance: {current:,} {name}).')
+        if after > self.MAX_CURRENCY_BALANCE:
+            raise CurrencyError(f'That would take <@{user_id}> above the maximum balance of {self.MAX_CURRENCY_BALANCE:,} {name}.')
+        now = time.time()
+        self.db.execute('INSERT INTO currency_balances(guild_id,user_id,balance,updated_at) VALUES(?,?,?,?) ON CONFLICT(guild_id,user_id) DO UPDATE SET balance=excluded.balance,updated_at=excluded.updated_at',
+            (guild_id, user_id, after, now))
+        cursor = self.db.execute('INSERT INTO currency_ledger(guild_id,user_id,amount,balance_after,reason,actor_id,source,reverses_id,created_at) VALUES(?,?,?,?,?,?,?,?,?)',
+            (guild_id, user_id, amount, after, reason, actor_id, source, reverses_id, now))
+        return dict(self.one('SELECT * FROM currency_ledger WHERE id=?', (cursor.lastrowid,)))
+
+    def ledger(self, guild_id, user_id=None, limit=50, before_id=None):
+        sql, args = 'SELECT * FROM currency_ledger WHERE guild_id=?', [guild_id]
+        if user_id is not None:
+            sql += ' AND user_id=?'
+            args.append(user_id)
+        if before_id is not None:
+            sql += ' AND id<?'
+            args.append(before_id)
+        return [dict(row) for row in self.all(sql + ' ORDER BY id DESC LIMIT ?', (*args, max(1, min(int(limit), 500))))]
+
+    def balances(self, guild_id, limit=50, offset=0):
+        return [dict(row) for row in self.all('SELECT user_id,balance,updated_at FROM currency_balances WHERE guild_id=? ORDER BY balance DESC,user_id LIMIT ? OFFSET ?',
+            (guild_id, max(1, min(int(limit), 500)), max(0, int(offset))))]
 
     def turn_log_settings(self, guild_id):
         row = self.one('SELECT turn_log_enabled,turn_log_days FROM guild_settings WHERE guild_id=?', (guild_id,))

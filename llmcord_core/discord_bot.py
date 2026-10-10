@@ -28,6 +28,7 @@ from .engine import Engine, SceneContext
 from .models import ImageInput, ModelGateway, TurnMessage
 from .prompts import time_values
 from .names import resolve, resolve_space, suggest
+from .admin_store import CurrencyError
 from .store import Store
 from .avatars import emotion_stream
 from .errors import ModelConfigError, error_detail, error_stack, reference_id, user_detail
@@ -1157,6 +1158,57 @@ def _register_time_commands(bot: SkitBot, ctx: SimpleNamespace) -> None:
     bot.tree.add_command(time_group)
 
 
+def _register_currency_commands(bot: SkitBot, ctx: SimpleNamespace, admin_currency: app_commands.Group) -> None:
+    require_guild = ctx.require_guild
+
+    async def reply(interaction: discord.Interaction, message: str) -> None:
+        await interaction.response.send_message(message, ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
+
+    @bot.tree.command(name="balance", description="Show your balance, or another member's")
+    @app_commands.describe(member="Whose balance to show (default: yours)")
+    async def balance(interaction: discord.Interaction, member: discord.Member | None = None):
+        require_guild(interaction)
+        guild_id, name = interaction.guild_id, bot.store.currency_name(interaction.guild_id)
+        if member is None or member.id == interaction.user.id:
+            await reply(interaction, f"You have {bot.store.balance(guild_id, interaction.user.id):,} {name}.")
+        else:
+            await reply(interaction, f"{member.mention} has {bot.store.balance(guild_id, member.id):,} {name}.")
+
+    async def change(interaction: discord.Interaction, member: discord.Member, amount: int, reason: str, sign: int) -> None:
+        require_guild(interaction)
+        if member.bot:
+            await reply(interaction, "Bots cannot hold a balance.")
+            return
+        try:
+            row = bot.store.change_balance(interaction.guild_id, member.id, sign * amount, reason, interaction.user.id)
+        except CurrencyError as error:
+            await reply(interaction, str(error))
+            return
+        name = bot.store.currency_name(interaction.guild_id)
+        verb = f"Gave {amount:,} {name} to {member.mention}" if sign > 0 else f"Took {amount:,} {name} from {member.mention}"
+        await reply(interaction, f"{verb}. New balance: {row['balance_after']:,} {name}.")
+
+    @admin_currency.command(name="grant", description="Give a member currency")
+    @app_commands.describe(member="Who receives it", amount="How much to give", reason="Why (kept in the ledger)")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def currency_grant(interaction: discord.Interaction, member: discord.Member, amount: app_commands.Range[int, 1, 1_000_000], reason: str):
+        await change(interaction, member, amount, reason, 1)
+
+    @admin_currency.command(name="revoke", description="Take currency from a member")
+    @app_commands.describe(member="Who loses it", amount="How much to take", reason="Why (kept in the ledger)")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def currency_revoke(interaction: discord.Interaction, member: discord.Member, amount: app_commands.Range[int, 1, 1_000_000], reason: str):
+        await change(interaction, member, amount, reason, -1)
+
+    @admin_currency.command(name="name", description="Set what this server calls its currency")
+    @app_commands.describe(name="For example coins or gold (1 to 32 characters)")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def currency_name(interaction: discord.Interaction, name: str):
+        require_guild(interaction)
+        saved = bot.store.set_currency_name(interaction.guild_id, name)
+        await reply(interaction, f"This server's currency is now called {saved}.")
+
+
 def _register_lore_commands(bot: SkitBot, ctx: SimpleNamespace, admin_lore: app_commands.Group) -> None:
     binding_for, require_guild, guild_space, space_choices, local_scope = ctx.binding_for, ctx.require_guild, ctx.guild_space, ctx.space_choices, ctx.local_scope
     lore = app_commands.Group(name="lore", description="Show the lore available here")
@@ -1404,6 +1456,7 @@ def register_commands(bot: SkitBot) -> None:
     admin_ambient = app_commands.Group(name="ambient", description="Turn ambient participation on or off", parent=admin)
     admin_lore = app_commands.Group(name="lore", description="Add and manage lore", parent=admin)
     admin_scene = app_commands.Group(name="scene", description="Delete stored scenes", parent=admin)
+    admin_currency = app_commands.Group(name="currency", description="Give, take and name the server currency", parent=admin)
 
     _register_space_commands(bot, ctx, admin_space)
     _register_character_commands(bot, ctx, admin_character)
@@ -1413,6 +1466,7 @@ def register_commands(bot: SkitBot) -> None:
     _register_catchup_command(bot)
     _register_memory_commands(bot, ctx)
     _register_time_commands(bot, ctx)
+    _register_currency_commands(bot, ctx, admin_currency)
     _register_lore_commands(bot, ctx, admin_lore)
     _register_scene_commands(bot, ctx, admin_scene)
     bot.tree.add_command(admin)

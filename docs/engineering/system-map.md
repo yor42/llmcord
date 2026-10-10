@@ -8,7 +8,7 @@ Snapshot at commit `1270c09`. This is engineer-facing; the user-facing overview 
 | --- | --- | --- | --- | --- |
 | **bot** | `llmcord.py` → `discord_bot.SkitBot` | discord.py gateway client. Events (`on_message`), slash commands (`register_commands`), webhook delivery, daily `_cleanup_loop` | `channel_locks`, `webhook_locks`, `webhook_defaults`, `checked_avatar_assets` (REL-04); one `Store`; `Models` clients | Discord gateway + REST (bot token), model providers, SQLite |
 | **web** | `web_main.py` → `web.create_app` (uvicorn, one worker) | FastAPI: OAuth, avatar GETs, redirects to `/admin`, NiceGUI mounted at `/admin` (`dashboard.mount_dashboard`) | `app.state.sessions`; `AuthService.request_locks`, `retry_at`, `refresh_locks` (SEC-04); one `Store`; NiceGUI `Client` instances | Discord OAuth + REST (user bearer tokens; bot token for channels/avatar publish), SQLite |
-| **migrate** | `migrate.py` → `Store(path).close()` | One-shot before the others (Compose ordering). Backs up, then upgrades `PRAGMA user_version` (currently 11) | — | SQLite (path from `config.resolve_database_path`: env, then YAML, then default; shared with bot and web since R1) |
+| **migrate** | `migrate.py` → `Store(path).close()` | One-shot before the others (Compose ordering). Backs up, then upgrades `PRAGMA user_version` (currently 12) | — | SQLite (path from `config.resolve_database_path`: env, then YAML, then default; shared with bot and web since R1) |
 
 The processes do not use IPC. They share one SQLite file in WAL mode with `busy_timeout=5000` (`store.py:140`). The bot reads the database fresh on each turn, so dashboard edits apply on the next turn. All sqlite calls are synchronous on each process's event loop (REL-01).
 
