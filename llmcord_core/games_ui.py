@@ -137,6 +137,53 @@ def blackjack_section(ctx):
                           enabled=lambda control: control is not soft or stand_on.value == 17)  # soft 17 only exists when the dealer stands on 17
 
 
+def doubt_section(ctx):
+    from nicegui import ui
+    from .dashboard import section
+    store, gid = ctx.store, ctx.guild_id
+    with section('I Doubt It'):
+        on = {'value': store.game_enabled(gid, 'doubt')}
+        switch = ui.switch('I Doubt It is on', value=on['value'])
+        ui.label('Off: /game start refuses I Doubt It, and open I Doubt It tables close with every ante refunded.').classes('ll-muted')
+        def save_on():
+            result = store.set_game_enabled(gid, 'doubt', bool(switch.value), on['value'])
+            on['value'] = result['enabled']
+            return result
+        def toast(result):
+            closed = len(result['closed_tables'])
+            if closed:
+                ui.notify(f"I Doubt It is off. Closed {closed} open {'table' if closed == 1 else 'tables'}.", type='positive')
+        ctx.savebar.track('I Doubt It', {switch: on['value']}, save=save_on, action='games.doubt_enabled',
+                          detail=lambda result: dict(result), success='I Doubt It setting saved',
+                          dirty=lambda: bool(switch.value) != on['value'],
+                          reset=lambda: switch.set_value(on['value']),
+                          then=toast)
+
+        rules = {'value': store.game_rules(gid, 'doubt')}
+        with ui.element('div').classes('ll-form-row ll-field-row'):
+            ante = ui.number('Ante', value=rules['value']['ante'], min=0, max=1_000_000_000, precision=0, format='%d').classes('ll-wide')
+            timeout = ui.number('Turn timeout (seconds)', value=rules['value']['turn_timeout'], min=15, max=300, precision=0, format='%d').classes('ll-wide')
+            ui.input('Claim rule', value='Sequence').props('disable').classes('ll-wide')
+        ui.label('Ante: each player pays this into the pot when joining; the winner takes the pot. 0 = no ante. Turn timeout: a player who runs out of time plays one card automatically; two automatic plays in a row forfeit the seat. Claims follow the sequence A, 2 … K, then A again. Changes apply to tables opened afterwards.').classes('ll-muted')
+        controls = (ante, timeout)
+        keys = ('ante', 'turn_timeout')
+        def current():
+            return {'claim_rule': 'sequence', 'ante': _whole(ante.value), 'turn_timeout': _whole(timeout.value)}
+        def save_rules():
+            result = store.set_game_rules(gid, 'doubt', current(), expected=rules['value'])
+            rules['value'] = result
+            return result
+        ctx.savebar.track('I Doubt It rules', {c: rules['value'][k] for c, k in zip(controls, keys)},
+                          save=save_rules, action='games.doubt_rules', detail=lambda result: dict(result), success='I Doubt It rules saved',
+                          dirty=lambda: current() != rules['value'],
+                          reset=lambda: [c.set_value(rules['value'][k]) for c, k in zip(controls, keys)])
+
+
+GAME_SECTIONS = {'blackjack': blackjack_section, 'doubt': doubt_section}
+
+
 async def games_panel(ctx):
+    from .games import registry
     all_games_section(ctx)
-    blackjack_section(ctx)
+    for key in registry.keys():
+        GAME_SECTIONS[key](ctx)

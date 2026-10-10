@@ -9,7 +9,7 @@ This guide runs the Discord bot locally. The dashboard also needs Discord OAuth 
 - A model reachable through OpenAI, Anthropic, or an OpenAI-compatible endpoint. The selected model profiles must support the calls used for dialogue, director decisions, and memory extraction.
 - A Discord server where you can invite the bot and manage its channels.
 
-In the Discord developer portal, enable **Message Content Intent** for the bot. Invite it with access to the intended channels and threads, including **View Channel**, **Read Message History**, **Send Messages**, **Use Application Commands**, and **Manage Webhooks**. Character lines are posted through per-character webhooks.
+In the Discord developer portal, enable **Message Content Intent** for the bot. Invite it with access to the intended channels and threads, including **View Channel**, **Read Message History**, **Send Messages**, **Use Application Commands**, and **Manage Webhooks**. Character lines are posted through per-character webhooks. For I Doubt It tables, also grant **Create Public Threads** and **Send Messages in Threads** in game channels.
 
 ## Install and configure
 

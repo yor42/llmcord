@@ -4290,6 +4290,44 @@ class DashboardBrowserTests(unittest.TestCase):
             self.post_hook('/_test/games', {'blackjack_rules': classic})
             context.close()
 
+    def test_games_tab_doubt_switch_and_rules_save_persist_and_conflict(self):
+        """FEAT-21 D: the I Doubt It section saves its switch and its ante/timeout rules with audit rows, shows the claim rule read-only as Sequence, persists after reload, refuses a stale save and leaves guild 2 alone."""
+        from playwright.sync_api import expect
+        default = {'claim_rule': 'sequence', 'ante': 0, 'turn_timeout': 60}
+        other = self.state()['games']['2']
+        context, page, errors = self.open_games()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            switch = page.get_by_role('switch', name='I Doubt It is on')
+            switch.wait_for(timeout=5000)
+            expect(page.get_by_label('Claim rule', exact=True)).to_be_disabled()
+            self.assertEqual(page.get_by_label('Claim rule', exact=True).input_value(), 'Sequence')
+            page.get_by_label('Ante', exact=True).fill('250')
+            page.get_by_label('Turn timeout (seconds)', exact=True).fill('90')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('I Doubt It rules saved', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['doubt_rules'], {'claim_rule': 'sequence', 'ante': 250, 'turn_timeout': 90})
+            self.assertIn('games.doubt_rules', self.audit_actions())
+            switch.click()
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('I Doubt It setting saved', exact=True).wait_for(timeout=5000)
+            self.assertFalse(self.state()['games']['1']['doubt_enabled'])
+            self.assertTrue(self.state()['games']['1']['blackjack_enabled'])
+            self.assertIn('games.doubt_enabled', self.audit_actions())
+            self.assertEqual(self.state()['games']['2'], other)
+            page.reload()
+            expect(page.get_by_role('switch', name='I Doubt It is on')).to_have_attribute('aria-checked', 'false', timeout=5000)
+            expect(page.get_by_label('Ante', exact=True)).to_have_value('250', timeout=5000)
+            page.get_by_label('Ante', exact=True).fill('300')
+            self.post_hook('/_test/games', {'doubt_rules': {'ante': 10}})
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The I Doubt It rules were changed elsewhere. Reload the page and try again.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['doubt_rules']['ante'], 10)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'doubt_rules': default, 'doubt_enabled': True})
+            context.close()
+
     def test_currency_character_wallets_cap_and_balances(self):
         """FEAT-25: the refill cap saves and persists, a stale save conflicts, a refilled character is listed (and in the ledger by name), guild 2 is untouched."""
         from playwright.sync_api import expect

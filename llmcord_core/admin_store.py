@@ -1409,7 +1409,7 @@ class AdminStore:
         closed = []
         with self.write_admin():
             if expected is not None and self.game_enabled(guild_id, game) != expected:
-                raise ConflictError(f'The {spec.name.lower()} setting was changed elsewhere. Reload the page and try again.')
+                raise ConflictError(f'The {spec.noun} setting was changed elsewhere. Reload the page and try again.')
             self.db.execute('INSERT INTO game_settings(guild_id,game,enabled,updated_at) VALUES(?,?,?,?) ON CONFLICT(guild_id,game) DO UPDATE SET enabled=excluded.enabled,updated_at=excluded.updated_at',
                 (guild_id, game, int(enabled), time.time()))
             if not enabled:
@@ -1434,7 +1434,7 @@ class AdminStore:
         expected = None if expected is None else spec.normalize_rules(expected)
         with self.write_admin():
             if expected is not None and self.game_rules(guild_id, game) != expected:
-                raise ConflictError(f'The {spec.name.lower()} rules were changed elsewhere. Reload the page and try again.')
+                raise ConflictError(f'The {spec.noun} rules were changed elsewhere. Reload the page and try again.')
             self.db.execute('INSERT INTO game_settings(guild_id,game,enabled,rules_json,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(guild_id,game) DO UPDATE SET rules_json=excluded.rules_json,updated_at=excluded.updated_at',
                 (guild_id, game, int(spec.default_enabled), self._rules_json(rules, game), time.time()))
         return rules

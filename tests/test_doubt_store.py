@@ -127,6 +127,28 @@ class OpenTests(DoubtCase):
         with self.assertRaises(GameError):
             self.store.open_table(G, CH, "doubt", BOB)
 
+    def test_switch_off_closes_open_doubt_tables_and_refunds_antes_in_this_guild_only(self):
+        """FEAT-21 D: the dashboard switch (expected=True) closes this server's doubt table, cancels the round, refunds every ante; guild 2's table is untouched."""
+        snap = self.open(ante=10)
+        rid = snap["round_id"]
+        self.seat_up(rid, (ALICE, BOB), fund=100)
+        self.assertEqual((self.store.balance(G, ALICE), self.store.balance(G, BOB)), (90, 90))
+        self.store.set_game_channel(G2, CH, True)
+        self.store.set_game_rules(G2, "doubt", {"ante": 10})
+        other = self.store.open_table(G2, CH, "doubt", CARL, seed="b")
+        self.fund(CARL, 100, G2)
+        self.store.join_round(G2, other["round_id"], CARL, 1)
+        result = self.store.set_game_enabled(G, "doubt", False, True)
+        self.assertEqual(result, {"enabled": False, "closed_tables": [snap["table_id"]]})
+        self.assertEqual((self.store.balance(G, ALICE), self.store.balance(G, BOB)), (100, 100))
+        row = self.store.db.execute("SELECT status FROM game_tables WHERE id=?", (snap["table_id"],)).fetchone()
+        self.assertNotEqual(row["status"], "open")
+        self.assertEqual(self.store.db.execute("SELECT status FROM game_rounds WHERE id=?", (rid,)).fetchone()["status"], "cancelled")
+        self.assertEqual(len([r for r in self.reasons() if r.startswith("I Doubt It refund")]), 2)
+        self.assertEqual(self.store.balance(G2, CARL), 90)
+        self.assertEqual(self.store.db.execute("SELECT status FROM game_tables WHERE id=?", (other["table_id"],)).fetchone()["status"], "open")
+        self.assertTrue(self.store.game_enabled(G2, "doubt"))
+
     def test_blackjack_off_does_not_close_doubt(self):
         self.store.set_game_enabled(G, "blackjack", False)
         self.assertEqual(self.open()["game"], "doubt")

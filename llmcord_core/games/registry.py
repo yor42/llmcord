@@ -19,6 +19,7 @@ class Game:
     max_seats: int
     default_enabled: bool
     ledger_label: str
+    noun: str = ''  # the game's name inside a sentence
     min_seats: int = 1
     ante: bool = False  # seats stake the round's ante (rules snapshot), not a bet
     public_legal: Optional[Callable] = None  # (state, can_double(), can_insure()) -> {seat: moves}
@@ -61,11 +62,11 @@ def _doubt_illegal(state, seat, move):
 
 
 _GAMES = {
-    "blackjack": Game("blackjack", "Blackjack", blackjack, blackjack.normalize_rules, blackjack.MAX_SEATS, True, "Blackjack",
+    "blackjack": Game("blackjack", "Blackjack", blackjack, blackjack.normalize_rules, blackjack.MAX_SEATS, True, "Blackjack", noun="blackjack",
                       public_legal=_bj_legal, summary=lambda state: blackjack.result(state).summary, settlements=_bj_settlements,
                       round_facts=lambda state: {'dealer_total': blackjack.hand_total(state.dealer)[0]}, fact_keys=('dealer_total',),
                       apply_move=lambda state, seat, move, can_double: blackjack.apply(state, seat, move, can_double()), illegal_text=_bj_illegal),
-    "doubt": Game("doubt", "I Doubt It", doubt, doubt.normalize_rules, doubt.MAX_SEATS, True, "I Doubt It",
+    "doubt": Game("doubt", "I Doubt It", doubt, doubt.normalize_rules, doubt.MAX_SEATS, True, "I Doubt It", noun="I Doubt It",
                   min_seats=doubt.MIN_SEATS, ante=True,
                   public_legal=lambda state, can_double, can_insure: {}, summary=lambda state: None, settlements=_doubt_settlements,
                   round_facts=lambda state: {'winner': state.winner, 'pot': sum(s.stake for s in state.seats)}, fact_keys=('winner', 'pot'),
