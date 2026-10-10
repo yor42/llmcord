@@ -1,6 +1,6 @@
 # Minigames and items: plan (proposed 2026-10-10)
 
-Status: **phase 1 approved 2026-10-10 (D26)**; later phases are a plan. Builds on FEAT-17 (currency) and FEAT-18 (daily check-in).
+Status: **phase 1 done 2026-10-10 (FEAT-19, D26)**; later phases are a plan. Builds on FEAT-17 (currency) and FEAT-18 (daily check-in).
 
 ## Principle
 

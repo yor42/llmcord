@@ -26,6 +26,7 @@ The bot reads DB state fresh each turn, so dashboard edits apply on the next tur
 | Persistence | `store.py` (scene/lore/core), `admin_store.py` (presets, lore identities, avatars, revisions) |
 | Dashboard | `web.py`, `auth.py`, `admin.py`, `dashboard.py`, `scene_ui.py`, `lore_workspace.py`, `lore_drag.{py,js}` |
 | Imports/assets | `cards.py`, `lorebooks.py`, `avatars.py` |
+| Minigames (FEAT-19) | `games/` (pure seeded rules engine, blackjack), `games_discord.py` (`/blackjack`, buttons, per-table locks and timers); store API in `admin_store.py`; dashboard settings in `currency_ui.py` |
 
 ## Commands
 - Setup: `python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt` (browser tests also need `.venv/bin/python -m playwright install chromium`).
