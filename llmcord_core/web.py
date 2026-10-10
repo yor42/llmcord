@@ -76,46 +76,7 @@ class SecurityHeaders:
         await self.app(scope, receive, wrapped)
 
 
-def create_app(database_path: str | Path, base_url: str, client_id: str,
-               client_secret: str, bot_token: str, oauth_http: httpx.AsyncClient | None = None, *, enable_dashboard: bool = True, config_path: str = "config.yaml", operator_ids: frozenset[int] = frozenset()) -> FastAPI:
-    base_url = base_url.rstrip("/")
-    parsed_url = urlparse(base_url)
-    if parsed_url.scheme != "https" or not parsed_url.hostname:
-        raise ValueError("WEB_BASE_URL must be a private HTTPS URL")
-    if not client_id or not client_secret or not bot_token:
-        raise ValueError("Discord OAuth and bot credentials are required")
-    @asynccontextmanager
-    async def lifespan(application: FastAPI):
-        try:
-            yield
-        finally:
-            application.state.store.close()
-            if application.state.owns_http:
-                await application.state.http.aclose()
-
-    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
-    app.state.store = Store(database_path)
-    app.state.http = oauth_http or httpx.AsyncClient(timeout=10)
-    app.state.owns_http = oauth_http is None
-    app.state.operator_ids = frozenset(operator_ids)
-    app.state.sessions = {}
-    app.state.states = {}
-    app.state.base_url = base_url
-    app.state.client_id = client_id
-    app.state.client_secret = client_secret
-    app.state.bot_token = bot_token
-
-    # ConflictError is a ValueError; no parent-app route writes, so none reaches here (NiceGUI actions handle it).
-    @app.exception_handler(ValueError)
-    async def invalid_value(_request: Request, error: ValueError):
-        return PlainTextResponse(f"Invalid input: {str(error)}", status_code=400)
-
-    @app.exception_handler(sqlite3.IntegrityError)
-    async def duplicate_value(_request: Request, _error: sqlite3.IntegrityError):
-        return PlainTextResponse("This name or entry already exists", status_code=409)
-
-    cacheable, versioned = set(), {}
-
+def _load_config(app: FastAPI, config_path: str) -> None:
     # config.yaml is parsed once; the Backend tab, the prompt preview and AdminService share the result. A bad file leaves empty sets and a message.
     app.state.config_profiles, app.state.config_roles, app.state.config_error = {}, {}, None
     app.state.config_models, app.state.config_limits = {}, {}
@@ -132,15 +93,11 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
     except (ValueError, OSError, yaml.YAMLError, TypeError, AttributeError) as error:
         app.state.config_profiles, app.state.config_roles = {}, {}
         app.state.config_error = str(error) if isinstance(error, ValueError) else "the file could not be read"
-    app.state.auth = AuthService(app)
-    app.state.admin = AdminService(app, config_path)
+
+
+def _register_auth_routes(app: FastAPI, base_url: str, client_id: str, client_secret: str) -> None:
     discord_get = app.state.auth.discord_get
     session_for = app.state.auth.session_for
-    require_admin = app.state.auth.require_admin
-
-    @app.get("/")
-    async def index():
-        return RedirectResponse("/admin/", status_code=303)
 
     @app.get("/login")
     async def login():
@@ -196,9 +153,9 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
         result.delete_cookie("llmcord_session")
         return result
 
-    @app.get("/guild/{guild_id}")
-    async def guild_page(guild_id: int):
-        return RedirectResponse(f"/admin/guild/{guild_id}", status_code=303)
+
+def _register_avatar_routes(app: FastAPI) -> set:
+    require_admin = app.state.auth.require_admin
 
     @app.get("/guild/{guild_id}/characters/{character_id}/avatar")
     async def character_avatar(request: Request, guild_id: int, character_id: int):
@@ -217,7 +174,62 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
             raise HTTPException(404, 'Avatar not found')
         return Response(row['image'], media_type='image/png', headers=AVATAR_CACHE)
 
-    cacheable.update((character_avatar, emotion_avatar))
+    return {character_avatar, emotion_avatar}
+
+
+def create_app(database_path: str | Path, base_url: str, client_id: str,
+               client_secret: str, bot_token: str, oauth_http: httpx.AsyncClient | None = None, *, enable_dashboard: bool = True, config_path: str = "config.yaml", operator_ids: frozenset[int] = frozenset()) -> FastAPI:
+    base_url = base_url.rstrip("/")
+    parsed_url = urlparse(base_url)
+    if parsed_url.scheme != "https" or not parsed_url.hostname:
+        raise ValueError("WEB_BASE_URL must be a private HTTPS URL")
+    if not client_id or not client_secret or not bot_token:
+        raise ValueError("Discord OAuth and bot credentials are required")
+    @asynccontextmanager
+    async def lifespan(application: FastAPI):
+        try:
+            yield
+        finally:
+            application.state.store.close()
+            if application.state.owns_http:
+                await application.state.http.aclose()
+
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+    app.state.store = Store(database_path)
+    app.state.http = oauth_http or httpx.AsyncClient(timeout=10)
+    app.state.owns_http = oauth_http is None
+    app.state.operator_ids = frozenset(operator_ids)
+    app.state.sessions = {}
+    app.state.states = {}
+    app.state.base_url = base_url
+    app.state.client_id = client_id
+    app.state.client_secret = client_secret
+    app.state.bot_token = bot_token
+
+    # ConflictError is a ValueError; no parent-app route writes, so none reaches here (NiceGUI actions handle it).
+    @app.exception_handler(ValueError)
+    async def invalid_value(_request: Request, error: ValueError):
+        return PlainTextResponse(f"Invalid input: {str(error)}", status_code=400)
+
+    @app.exception_handler(sqlite3.IntegrityError)
+    async def duplicate_value(_request: Request, _error: sqlite3.IntegrityError):
+        return PlainTextResponse("This name or entry already exists", status_code=409)
+
+    _load_config(app, config_path)
+    app.state.auth = AuthService(app)
+    app.state.admin = AdminService(app, config_path)
+
+    @app.get("/")
+    async def index():
+        return RedirectResponse("/admin/", status_code=303)
+
+    _register_auth_routes(app, base_url, client_id, client_secret)
+
+    @app.get("/guild/{guild_id}")
+    async def guild_page(guild_id: int):
+        return RedirectResponse(f"/admin/guild/{guild_id}", status_code=303)
+
+    cacheable, versioned = _register_avatar_routes(app), {}
 
     if enable_dashboard:
         from .dashboard import mount_dashboard

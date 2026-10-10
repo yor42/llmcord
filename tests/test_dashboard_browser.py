@@ -1284,6 +1284,36 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def test_server_setup_reads_eligible_characters_once_per_space_per_build(self):
+        """Characterization (MNT-10): one build of Server setup reads a space's eligible characters once however many channels share it; a rebuild re-reads, so a character added since shows in the cast options."""
+        context, page, errors = self.ux_page('/admin/guild/1')
+        post = lambda path, body: self.assertEqual(context.request.post(self.url + path, data=body).status, 200)
+        try:
+            post('/_test/memo-fixture', {})
+            def eligible_reads():
+                return context.request.get(self.url + '/_test/counters').json().get('store:eligible_characters', 0)
+            self.load(page, self.url + '/admin/guild/1', before_each=lambda: self.assertEqual(
+                context.request.post(self.url + '/_test/counters/reset').status, 200))
+            page.get_by_role('tab', name='Server setup', exact=True).click()
+            page.locator('.channel-card').nth(1).wait_for()
+            self.assertEqual(page.locator('.channel-card').count(), 2)
+            self.assertEqual(eligible_reads(), 1)
+            post('/_test/memo-fixture', {'character': 'Memo Newcomer'})
+            post('/_test/counters/reset', {})
+            self.load(page, self.url + '/admin/guild/1')
+            page.get_by_role('tab', name='Server setup', exact=True).click()
+            card = page.locator('.channel-card').nth(1)
+            card.wait_for()
+            card.locator('button.channel-toggle').click()
+            card.get_by_label('Default cast (up to five)', exact=True).click()
+            page.get_by_role('option', name='Memo Newcomer', exact=True).wait_for()
+            page.keyboard.press('Escape')
+            self.assertEqual(eligible_reads(), 1)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            post('/_test/memo-cleanup', {'characters': ['Memo Newcomer']})
+            context.close()
+
     def test_channel_selects_show_names_not_ids(self):
         """UX-01: lore owner, imports channel and presets sample-channel selects show '#scene', not '100'."""
         context, page, errors = self.ux_page('/admin/guild/1')

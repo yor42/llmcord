@@ -157,7 +157,7 @@ def main():
             return original(*args, **kwargs)
         setattr(store, name, counting)
     for name in ('list_spaces', 'list_characters', 'list_channels', 'list_lorebooks', 'thread_lore_scopes', 'lorebook_links',
-                 'usage_report', 'list_presets'):  # the last two are panel-specific (Server setup / Prompt presets): R5 step 6
+                 'usage_report', 'list_presets', 'eligible_characters'):  # the last two are panel-specific (Server setup / Prompt presets): R5 step 6
         count_store_method(name)
 
     # MNT-28: lets a test make the next turn log list read fail (/_test/fail-turn-log-page).
@@ -325,6 +325,25 @@ def main():
             store.delete_space(1, hub['id'], store.space_delete_impact(1, hub['id'])['revision'])
         store.bind_channel(1, 100, world)
         store.save_static_avatar(1, alice['id'], None, store.owner_revision(1, 'character', alice['id']))
+        return {'ok': True}
+
+    @app.post('/_test/memo-fixture')
+    async def memo_fixture(request: Request):
+        # MNT-10: bind #assets (200) to World as a second channel; with a "character" name, also add that character to World.
+        value = await request.json()
+        store.bind_channel(1, 200, world)
+        if value.get('character'):
+            store.add_character(1, world, value['character'], {'name': value['character'], 'description': 'Memo fixture'}, None, [])
+        return {'ok': True}
+
+    @app.post('/_test/memo-cleanup')
+    async def memo_cleanup(request: Request):
+        # Undo /_test/memo-fixture: unbind #assets and delete the named characters (raw SQL keeps the PERF counters alone).
+        for name in (await request.json())['characters']:
+            for row in store.all('SELECT id FROM characters WHERE guild_id = 1 AND name = ?', (name,)):
+                store.delete_character(1, row['id'], store.owner_revision(1, 'character', row['id']))
+        store.db.execute('DELETE FROM channels WHERE channel_id = 200 AND guild_id = 1')
+        store.db.commit()
         return {'ok': True}
 
     @app.post('/_test/delay-permission')

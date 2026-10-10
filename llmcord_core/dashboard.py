@@ -1496,11 +1496,9 @@ async def monitoring_panel(ctx):
     await turn_log_section(ctx, channel_label, live)
 
 
-async def setup_panel(ctx):
+def worlds_hubs_section(ctx):
     from nicegui import ui
     store, gid = ctx.store, ctx.guild_id
-    spaces = {r['id']: r['name'] + ' (' + r['kind'] + ')' for r in ctx.snapshot.spaces}
-    channel_names = ctx.channel_names
     with section('Worlds and hubs'):
         for space in ctx.snapshot.spaces:
             with ui.expansion(f"{space['name']} · {space['kind']}").classes('space-card w-full rounded-lg'):
@@ -1510,6 +1508,11 @@ async def setup_panel(ctx):
             name = ui.input('Name')
             kind = ui.select(['world', 'hub'], value='world', label='Kind')
             ctx.button('Create', lambda: store.create_space(gid, name.value or '', kind.value), 'space.create', then=lambda _: ctx.refresh())
+
+
+def hub_links_section(ctx):
+    from nicegui import ui
+    store, gid = ctx.store, ctx.guild_id
     with section('Hub links'):
         hubs, worlds = ctx.snapshot.hubs, ctx.snapshot.worlds
         with ui.element('div').classes('ll-form-row ll-field-row'):
@@ -1525,6 +1528,11 @@ async def setup_panel(ctx):
             ctx.button('Unlink', lambda: link(False), 'hub.unlink', link_detail, then=linked).props('outline')
         for ident in hubs:
             ui.label(hubs[ident] + ': ' + ', '.join(worlds.get(x, str(x)) for x in store.allowed_worlds(ident)))
+
+
+def channels_section(ctx, channel_names, spaces):
+    from nicegui import ui
+    store, gid = ctx.store, ctx.guild_id
     with section('Channels and casts'):
         with ui.element('div').classes('ll-form-row ll-field-row'):
             channel = ui.select(channel_names, label='Discord text channel')
@@ -1543,8 +1551,14 @@ async def setup_panel(ctx):
                 return ctx.refresh()
             ctx.button('Bind channel', bind, 'channel.bind', bind_detail, then=bound)
         ui.label('Rebinding a channel keeps its ambient mode and removes cast members not available in the new world or hub.').classes('ll-muted')
+        eligible = {}  # one eligible_characters read per space within this build; never kept across builds
         for binding in ctx.snapshot.channels:
-            channel_card(ctx, binding, channel_names, spaces)
+            channel_card(ctx, binding, channel_names, spaces, eligible)
+
+
+def server_settings_section(ctx, channel_names):
+    from nicegui import ui
+    store, gid = ctx.store, ctx.guild_id
     with section('Server settings'):
         footer = ui.switch('Show model and cost footer on replies', value=store.usage_footer_enabled(gid))
         catchup = ui.switch('Allow /catchup in channels without characters', value=store.catchup_anywhere(gid))
@@ -1597,6 +1611,14 @@ async def setup_panel(ctx):
             success='Server settings saved')
 
 
+async def setup_panel(ctx):
+    spaces = {r['id']: r['name'] + ' (' + r['kind'] + ')' for r in ctx.snapshot.spaces}
+    worlds_hubs_section(ctx)
+    hub_links_section(ctx)
+    channels_section(ctx, ctx.channel_names, spaces)
+    server_settings_section(ctx, ctx.channel_names)
+
+
 def channel_savers(store, gid, cid, cast_value, ambient_value, cast, ambient):
     """Save operations for a channel card's default cast and ambient mode, with a stale-overwrite guard (UI-42).
 
@@ -1635,7 +1657,7 @@ def binding_space_name(spaces, space_id):
     return spaces[space_id].rsplit(' (', 1)[0] if space_id in spaces else ''
 
 
-def channel_card(ctx, binding, channel_names, spaces):
+def channel_card(ctx, binding, channel_names, spaces, eligible=None):
     """One channel binding: a collapsed summary row that expands to a single save-bar editor (guidelines, cast, ambient)."""
     from nicegui import ui
     store, gid = ctx.store, ctx.guild_id
@@ -1650,7 +1672,14 @@ def channel_card(ctx, binding, channel_names, spaces):
         body = ui.element('div').classes('ll-stack w-full ll-collapsed')
         with body:
             control, current = guideline_editor(ctx, 'channel', cid, 'Channel guidelines', button=False)
-            options = {r['id']: r['name'] for r in store.eligible_characters(gid, binding['space_id'])}
+            space_id = binding['space_id']
+            if eligible is None or space_id not in eligible:
+                rows = store.eligible_characters(gid, space_id)
+                if eligible is not None:
+                    eligible[space_id] = rows
+            else:
+                rows = eligible[space_id]
+            options = {r['id']: r['name'] for r in rows}
             saved_cast = json.loads(binding['default_cast'])
             cast = ui.select(options, value=saved_cast, multiple=True, label='Default cast (up to five)').classes('w-full')
             ambient = ui.switch('Ambient participation', value=bool(binding['ambient']))
