@@ -272,7 +272,12 @@ class GameTables:
                 await self._deliver(paint)
 
     def _table_row(self, key):
-        return self.store.one("SELECT status,channel_id,message_id FROM game_tables WHERE id=? AND guild_id=?", (key[1], key[0]))
+        return self.store.one("SELECT status,channel_id,message_id,game FROM game_tables WHERE id=? AND guild_id=?", (key[1], key[0]))
+
+    def _foreign(self, key) -> bool:
+        """A table of another game (I Doubt It has its own tables object): blackjack never touches it."""
+        row = self._table_row(key)
+        return row is not None and row["game"] != "blackjack"
 
     def _is_open(self, key) -> bool:
         row = self._table_row(key)
@@ -367,9 +372,10 @@ class GameTables:
         return text
 
     def _round_line(self, rnd) -> str:
-        dealer = rnd["dealer_total"]
+        dealer = rnd.get("dealer_total")
         head = f"Round {rnd['number']}:" + ("" if dealer is None else f" dealer {dealer}{' bust' if dealer > 21 else ''} —")
-        return head + " " + ", ".join(f"{self._who(s)} {_sign(s['net']) or 'push'}" for s in rnd["seats"])
+        even = "even" if "winner" in rnd else "push"  # an I Doubt It row carries winner/pot, not a dealer
+        return head + " " + ", ".join(f"{self._who(s)} {_sign(s['net']) or even}" for s in rnd["seats"])
 
     def _net_line(self, rounds) -> str:
         totals: dict = {}
@@ -582,9 +588,11 @@ class GameTables:
                 if current is not None and current["id"] != table["id"] and attempt < 2:
                     continue  # a newer table opened meanwhile: release this lock and close it under its own
                 closed = self.store.set_game_channel(guild_id, channel_id, False)["closed_table"]
-                if closed is not None:
+                if closed is not None and (current or table)["game"] == "blackjack":
                     paint = self._closing((guild_id, closed), CLOSED_OFF)
                     self._forget((guild_id, closed))
+            if closed is not None and paint is None:  # another game's table: its own module says so
+                await self.bot.doubt.closed_by_channel(guild_id, closed)
             break
         return closed is not None, paint
 
@@ -614,6 +622,9 @@ class GameTables:
                 note = NO_CHARACTER_SEATS
         opened = None
         table = self.store.open_table_for(guild_id, channel_id)
+        if table is not None and table["game"] != "blackjack":
+            await self._say(interaction, "An I Doubt It table is open in this channel.")
+            return
         if table is None:
             try:
                 opened = self.store.open_table(guild_id, channel_id, "blackjack", interaction.user.id)
@@ -721,7 +732,7 @@ class GameTables:
             await self._say(interaction, self._help_text(interaction.guild_id, table_id, round_id))
             return
         guild_id = interaction.guild_id
-        if guild_id is None or interaction.user.bot:
+        if guild_id is None or interaction.user.bot or self._foreign((guild_id, table_id)):
             await self._say(interaction, STALE)
             return
         await self._ack(interaction)
@@ -829,6 +840,8 @@ class GameTables:
 
     async def on_join_timer(self, guild_id, table_id, round_id) -> None:
         key, paint = (guild_id, table_id), None
+        if self._foreign(key):
+            return
         async with self.lock(key):
             closed, paint = self._closed(key)
             if not closed:
@@ -843,6 +856,8 @@ class GameTables:
 
     async def on_turn_timer(self, guild_id, table_id, round_id, moves) -> None:
         key, paint = (guild_id, table_id), None
+        if self._foreign(key):
+            return
         async with self.lock(key):
             closed, paint = self._closed(key)
             if not closed:
@@ -863,6 +878,8 @@ class GameTables:
     async def on_character_timer(self, guild_id, table_id, round_id, moves) -> None:
         """A character seat is on turn: decide outside the table lock (a model call may take seconds), then apply under it if nothing moved meanwhile."""
         key, paint = (guild_id, table_id), None
+        if self._foreign(key):
+            return
         async with self.lock(key):
             closed, paint = self._closed(key)
             if not closed:
@@ -961,6 +978,8 @@ class GameTables:
 
     async def on_idle_timer(self, guild_id, table_id, round_id) -> None:
         key, paint = (guild_id, table_id), None
+        if self._foreign(key):
+            return
         async with self.lock(key):
             closed, paint = self._closed(key)
             if not closed:
@@ -978,9 +997,9 @@ class GameTables:
     async def recover(self) -> None:
         """Refunds and closes every table left open by a previous run, then tells the channel (best effort)."""
         store, refunded, closed, failed = self.store, 0, 0, 0
-        rounds = store.unfinished_rounds()
+        rounds = [r for r in store.unfinished_rounds() if r.get("game", "blackjack") == "blackjack"]
         tables = {(r["guild_id"], r["table_id"]): (r["channel_id"], r["message_id"]) for r in rounds}
-        for row in store.all("SELECT id,guild_id,channel_id,message_id FROM game_tables WHERE status='open'"):
+        for row in store.all("SELECT id,guild_id,channel_id,message_id FROM game_tables WHERE status='open' AND game='blackjack'"):
             tables.setdefault((row["guild_id"], row["id"]), (row["channel_id"], row["message_id"]))
         for r in rounds:
             try:

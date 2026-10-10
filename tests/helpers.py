@@ -609,3 +609,245 @@ class CoreFakeModels(CompiledAdapter):
 
     async def text(self, role, system, messages, max_tokens=None):
         return "Earlier scene summary"
+
+
+# ---- table games with public threads (FEAT-21 part B1) -------------------------------------------------
+
+def forbidden(text="Missing Permissions", code=50013) -> discord.Forbidden:
+    """A 403 as Discord sends it (``code`` 50013: Missing Permissions)."""
+    return discord.Forbidden(SimpleNamespace(status=403, reason="Forbidden"), {"message": text, "code": code})
+
+
+class FakePosted:
+    """A message posted to a ``FakeGameChannel`` / ``FakeTableThread``: records edits (``edits``: the kwargs of each),
+    pinning and deletion. ``content``/``view`` follow the last edit that set them (``view=None`` removes the buttons).
+    ``create_thread`` is available on messages of a channel."""
+
+    def __init__(self, host, ident, content, view=None, **kwargs):
+        self.host, self.id, self.content, self.view, self.kwargs = host, ident, content, view, kwargs
+        self.edits, self.pinned, self.deleted = [], False, False
+
+    def apply(self, kwargs):
+        if kwargs.get("content", discord.utils.MISSING) is not discord.utils.MISSING:
+            self.content = kwargs["content"]
+        if kwargs.get("view", discord.utils.MISSING) is not discord.utils.MISSING:
+            self.view = kwargs["view"]
+        self.edits.append(dict(kwargs))
+
+    def _alive(self):
+        if self.deleted:
+            raise not_found("Unknown Message", 10008)
+
+    async def edit(self, **kwargs):
+        await self.host.touch("edit")
+        self._alive()
+        if self.host.edit_error:
+            raise self.host.edit_error
+        self.apply(kwargs)
+        return self
+
+    async def delete(self, **kwargs):
+        await self.host.touch("delete")
+        self._alive()
+        self.deleted = True
+
+    async def pin(self, **kwargs):
+        await self.host.touch("pin")
+        self._alive()
+        if self.host.pin_error:
+            raise self.host.pin_error
+        self.pinned = True
+
+    async def create_thread(self, *, name, **kwargs):
+        self._alive()
+        return await self.host.make_thread(name, **kwargs)
+
+
+class FakePartial:
+    """``get_partial_message(id)``: edit/delete/pin/create_thread reach the posted message, or raise NotFound when it is gone."""
+
+    def __init__(self, host, ident):
+        self.host, self.id = host, ident
+
+    def _target(self):
+        message = self.host.messages.get(self.id)
+        if message is None:
+            raise not_found("Unknown Message", 10008)
+        return message
+
+    async def edit(self, **kwargs):
+        return await self._target().edit(**kwargs)
+
+    async def delete(self, **kwargs):
+        return await self._target().delete(**kwargs)
+
+    async def pin(self, **kwargs):
+        return await self._target().pin(**kwargs)
+
+    async def create_thread(self, *, name, **kwargs):
+        return await self._target().create_thread(name=name, **kwargs)
+
+
+class FakeMessageHost:
+    """Mixin for fake channels and threads that hold posted messages. ``calls`` lists every Discord call kind
+    (``send``, ``edit``, ``delete``, ``pin``, ``fetch``, ``create_thread``, ``thread_edit``); ``on_call(kind)`` is invoked for each
+    (a thread falls back to its parent channel's hook), so a test can check what was held while it ran. Errors to raise:
+    ``send_error``, ``edit_error``, ``pin_error``. Every call yields to the event loop once, like a real request."""
+
+    def _init_host(self, first_id):
+        self.messages, self.sent, self.calls = {}, [], []
+        self.on_call = self.parent_host = None
+        self.send_error = self.edit_error = self.pin_error = None
+        self._ids = first_id
+
+    def next_id(self):
+        self._ids += 1
+        return self._ids
+
+    def call(self, kind):
+        self.calls.append(kind)
+        hook = self.on_call or (self.parent_host.on_call if self.parent_host is not None else None)
+        if hook:
+            hook(kind)
+
+    async def touch(self, kind):
+        self.call(kind)
+        await asyncio.sleep(0)
+
+    def post(self, content, view=None, **kwargs):
+        """Adds a message without a Discord call (the public response of an interaction)."""
+        message = FakePosted(self, self.next_id(), content, view, **kwargs)
+        self.messages[message.id] = message
+        self.sent.append(message)
+        return message
+
+    async def send(self, content=None, **kwargs):
+        await self.touch("send")
+        if self.send_error:
+            raise self.send_error
+        return self.post(content, **kwargs)
+
+    def get_partial_message(self, ident):
+        return FakePartial(self, ident)
+
+    async def fetch_message(self, ident):
+        await self.touch("fetch")
+        message = self.messages.get(ident)
+        if message is None or message.deleted:
+            raise not_found("Unknown Message", 10008)
+        return message
+
+
+class FakeGameChannel(FakeMessageHost):
+    """A text channel for table games. The first message posted gets id 7001. ``create_thread`` (on the channel or on one
+    of its messages) makes a ``FakeTableThread`` unless ``thread_error`` is set; ``threads`` maps thread id -> thread."""
+
+    def __init__(self, ident=100, guild_id=1):
+        self.id, self.mention, self.guild_id = ident, f"<#{ident}>", guild_id
+        self._init_host(7000)
+        self.threads, self.thread_error, self._thread_seq = {}, None, 0
+
+    async def make_thread(self, name, **kwargs):
+        await self.touch("create_thread")
+        if self.thread_error:
+            raise self.thread_error
+        self._thread_seq += 1
+        thread = FakeTableThread(self.id * 100 + self._thread_seq, self, name, kwargs)
+        self.threads[thread.id] = thread
+        return thread
+
+    async def create_thread(self, *, name, message=None, **kwargs):
+        return await self.make_thread(name, **kwargs)
+
+
+class FakeTableThread(FakeMessageHost, FakeThread):
+    """A thread made by ``FakeGameChannel`` (passes ``isinstance(..., discord.Thread)``). ``edit_calls`` holds the kwargs of each
+    ``edit`` (archiving is ``edit(archived=True, locked=True)``); ``thread_edit_error`` makes it raise."""
+
+    def __init__(self, ident, parent, name, create_kwargs):
+        FakeThread.__init__(self, ident, parent.id)
+        self._init_host(ident * 1000)
+        self.parent_host, self.name, self.create_kwargs = parent, name, create_kwargs
+        self.archived = self.locked = False
+        self.guild = SimpleNamespace(id=parent.guild_id)
+        self.edit_calls, self.thread_edit_error = [], None
+
+    async def edit(self, **kwargs):
+        await self.touch("thread_edit")
+        if self.thread_edit_error:
+            raise self.thread_edit_error
+        self.edit_calls.append(dict(kwargs))
+        self.archived = kwargs.get("archived", self.archived)
+        self.locked = kwargs.get("locked", self.locked)
+        return self
+
+
+class FakeGameResponse(FakeResponse):
+    def __init__(self, click):
+        super().__init__()
+        self.click, self.edited = click, []
+
+    async def defer(self, **kwargs):
+        self.click.call("defer")
+        await super().defer(**kwargs)
+
+    async def send_message(self, content=None, **kwargs):
+        self.click.call("send_message")
+        await asyncio.sleep(0)
+        await super().send_message(content, **kwargs)
+        if not kwargs.get("ephemeral"):  # a public response is the table message
+            self.click.message = self.click.channel.post(content, **kwargs)
+
+    async def edit_message(self, **kwargs):
+        """Editing the message a component sits on (also how an ephemeral picker is replaced); counted among ``sent`` as private."""
+        self.click.call("edit_message")
+        await asyncio.sleep(0)
+        self.edited.append(kwargs)
+        self.sent.append((kwargs.get("content"), {**kwargs, "_edit": True}))
+        self._done = True
+
+
+class FakeGameFollowup(FakeFollowup):
+    def __init__(self, click, sent):
+        super().__init__()
+        self.click, self.sent = click, sent
+
+    async def send(self, content=None, **kwargs):
+        self.click.call("followup")
+        await asyncio.sleep(0)
+        self.sent.append((content, kwargs))
+        return SimpleNamespace(id=6000 + len(self.sent))
+
+
+class FakeGameClick(FakeInteraction):
+    """A slash command or button press on a table game. ``channel`` is a ``FakeGameChannel`` or ``FakeTableThread``;
+    ``message`` is the message a component sits on (``edit_original_response`` edits it). A public ``send_message`` posts into
+    the channel and becomes ``message`` (what ``original_response()`` returns). ``on_call(kind)`` sees every Discord call."""
+
+    def __init__(self, bot, user_id, *, guild_id=1, channel=None, message=None, on_call=None):
+        super().__init__(guild_id=guild_id, channel_id=None, user_id=user_id, channel=channel)
+        self.channel_id, self.client, self.message, self.on_call = channel.id, bot, message, on_call
+        self.user.mention = f"<@{user_id}>"
+        self.response, self.followup = FakeGameResponse(self), FakeGameFollowup(self, self.followup.sent)
+
+    def call(self, kind):
+        if self.on_call:
+            self.on_call(kind)
+
+    async def edit_original_response(self, **kwargs):
+        self.call("edit_original_response")
+        await asyncio.sleep(0)
+        self.response.edited.append(kwargs)
+        if self.message is not None:
+            self.message._alive()
+            self.message.apply(kwargs)
+
+    async def original_response(self):
+        return self.message
+
+
+def thread_message(thread, user_id, content="hello", *, bot=False, guild_id=1):
+    """A chat message in a table thread as ``on_message`` / ``note_thread_message`` receive it (its id follows the thread's own posts)."""
+    return SimpleNamespace(id=thread.next_id(), guild=SimpleNamespace(id=guild_id), channel=thread, content=content,
+                           author=SimpleNamespace(id=user_id, bot=bot), webhook_id=None, mentions=[], attachments=[],
+                           reference=None, created_at=datetime.now(timezone.utc))

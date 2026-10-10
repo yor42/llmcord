@@ -695,6 +695,17 @@ class TimeoutMoveTests(unittest.TestCase):
         doubt.apply(s, 1, doubt.timeout_move(s, 1, "t"))  # the next seat is on turn and the move applies
 
 
+    def test_the_view_form_agrees_with_the_state_form(self):
+        for sd in range(12):
+            s = mk(3, f"agree-{sd}")
+            for k in range(5):
+                self.assertEqual(doubt.timeout_move_for_view(doubt.view(s, 0), f"t{k}"), doubt.timeout_move(s, 0, f"t{k}"))
+        with self.assertRaises(IllegalMove):
+            doubt.timeout_move_for_view(doubt.view(mk(3), 1), "t")
+        with self.assertRaises(IllegalMove):
+            doubt.timeout_move_for_view(doubt.view(mk(3), None), "t")
+
+
 class PolicyTests(unittest.TestCase):
     def test_tendencies_are_deterministic_bounded_and_vary(self):
         seen = set()

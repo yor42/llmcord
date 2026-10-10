@@ -1575,7 +1575,7 @@ class AdminStore:
 
     def unfinished_rounds(self):
         """Every joining or playing round on every server (restart recovery); no seeds."""
-        return [dict(row) for row in self.all("SELECT r.guild_id,r.table_id,r.id AS round_id,r.status,t.channel_id,t.message_id FROM game_rounds r JOIN game_tables t ON t.id=r.table_id AND t.guild_id=r.guild_id WHERE r.status IN ('joining','playing') ORDER BY r.id")]
+        return [dict(row) for row in self.all("SELECT r.guild_id,r.table_id,r.id AS round_id,r.status,t.game,t.channel_id,t.message_id,t.thread_id FROM game_rounds r JOIN game_tables t ON t.id=r.table_id AND t.guild_id=r.guild_id WHERE r.status IN ('joining','playing') ORDER BY r.id")]
 
     def _game_table(self, guild_id, table_id):
         row = self.one('SELECT * FROM game_tables WHERE id=? AND guild_id=?', (table_id, guild_id))
@@ -1798,6 +1798,10 @@ class AdminStore:
         if isinstance(seat_index, bool) or not isinstance(seat_index, int) or not 0 <= seat_index < len(state.seats):
             raise GameError('No such seat.')
         return self._round_game(rnd).engine.view(state, seat_index)
+
+    def policy_seed(self, guild_id, round_id, tag):
+        """A deterministic seed for a character's decision, derived from the round's secret seed (never the seed itself, never from the public hash)."""
+        return seed_hash(f"{self._game_round(guild_id, round_id)['seed']}/{tag}")
 
     def member_seat_index(self, guild_id, round_id, user_id):
         row = self.one("SELECT seat_index FROM game_seats WHERE guild_id=? AND round_id=? AND kind='member' AND ref_id=?", (guild_id, round_id, user_id))

@@ -334,15 +334,21 @@ def result(state):
     return Result(state.finished, state.winner, tuple(seats), pot)
 
 
+def timeout_move_for_view(view, seed):
+    """What a member's turn timeout plays, from the seat's own view: the forced rank once if held, else one random card as a bluff."""
+    seat, w = view.seat, view.window
+    if seat is None or view.finished or not view.active[seat] or view.turn != seat or not view.hand or (w is not None and view.counts[w.claimer] == 0):
+        raise IllegalMove("that seat is not on turn")
+    if any(c[0] == view.rank for c in view.hand):
+        return f"play:{view.rank}x1"
+    return f"play:{shuffled(view.hand, seed)[0][0]}x1"
+
+
 def timeout_move(state, seat, seed):
-    """What a member's turn timeout plays: the forced rank once if held, else one random card as a bluff."""
+    """The same from a full state."""
     if not _can_play(state, seat):
         raise IllegalMove("that seat is not on turn")
-    rank = RANKS[state.rank_idx % len(RANKS)]
-    hand = state.hands[seat]
-    if any(c[0] == rank for c in hand):
-        return f"play:{rank}x1"
-    return f"play:{shuffled(hand, seed)[0][0]}x1"
+    return timeout_move_for_view(view(state, seat), seed)
 
 
 # ---- fallback policy: reads only a seat's own view ----

@@ -36,6 +36,7 @@ from .usage import capture_usage, log_attribution, log_purpose, log_scope, mask_
 from .identity import discord_identity, message_context
 from .favorites_discord import register_favorites_commands
 from .games_discord import GameButton, GameTables, register_game_commands
+from .games_doubt_discord import DoubtButton, DoubtTables, register_doubt_commands
 
 AVATAR_ASSET_CHECK_TTL = 600
 CACHE_LIMIT = 512
@@ -149,6 +150,7 @@ class SkitBot(commands.Bot):
         self.memory_tasks: dict[int, asyncio.Task] = {}
         self.note_tasks: set[asyncio.Task] = set()
         self.games = GameTables(self)
+        self.doubt = DoubtTables(self)
         register_commands(self)
 
     async def setup_hook(self):
@@ -159,7 +161,8 @@ class SkitBot(commands.Bot):
         else:
             await self.tree.sync()
         await self.games.recover()
-        self.add_dynamic_items(GameButton)
+        await self.doubt.recover()
+        self.add_dynamic_items(GameButton, DoubtButton)
         self.cleanup_task = asyncio.create_task(self._cleanup_loop())
 
     async def on_ready(self):
@@ -186,6 +189,10 @@ class SkitBot(commands.Bot):
         except Exception:
             logging.exception('Closing the game timers failed')
         try:
+            await self.doubt.close()
+        except Exception:
+            logging.exception('Closing the I Doubt It timers failed')
+        try:
             pending = [task for task in self.memory_tasks.values() if not task.done()]
             if pending:
                 _, pending = await asyncio.wait(pending, timeout=MEMORY_CLOSE_SECONDS)
@@ -210,6 +217,10 @@ class SkitBot(commands.Bot):
     async def on_message(self, message: discord.Message):
         if message.guild is None or message.author.bot or message.webhook_id:
             return
+        try:
+            await self.doubt.note_thread_message(message)
+        except Exception:
+            logging.exception("Counting a table thread message failed")
         parent_id, binding = self.location(message.channel)
         if not binding:
             return
@@ -1537,6 +1548,7 @@ def register_commands(bot: SkitBot) -> None:
     _register_time_commands(bot, ctx)
     _register_currency_commands(bot, ctx, admin_currency)
     register_game_commands(bot, ctx, admin_games)
+    register_doubt_commands(bot, ctx)
     _register_lore_commands(bot, ctx, admin_lore)
     _register_scene_commands(bot, ctx, admin_scene)
     bot.tree.add_command(admin)

@@ -97,7 +97,7 @@ Phase 3's first game, and the start of a library of multiplayer games built arou
 - **Unbound game channels** are **humans-only tables**, with at least 3 members and no character seats.
 - Joining is lobby-only. Nobody joins mid-game.
 
-**Who decides what.** D26 holds. The engine owns everything random or resulting: the shuffle, the deal, reveals, who takes the pile, the winner and the pot. A character's model picks one legal move for its seat (which cards to play, whether to doubt) from that seat's view only: its own hand, the hand counts, the pile size, the claim history and the revealed cards. The fallback is a deterministic policy with per-character bluff and suspicion tendencies seeded from the character id. It plays whenever the model is unavailable (error, timeout, daily talk limit, spending cap).
+**Who decides what.** D26 holds. The engine owns everything random or resulting: the shuffle, the deal, reveals, who takes the pile, the winner and the pot. A character's model picks one legal move for its seat (which cards to play, whether to doubt) from that seat's view only: its own hand, the hand counts, the pile size, the claim history and the revealed cards. The fallback is a deterministic policy with per-character bluff and suspicion tendencies seeded from the character id. Its per-move randomness comes from the secret round seed, never from the seed hash shown on the board, so players cannot predict a character's bluffs or doubts; it stays replayable once the seed is revealed after the game. It plays whenever the model is unavailable (error, timeout, daily talk limit, spending cap).
 
 **Doubt triage.** Asking every character "doubt?" after every play would be up to 7 model calls per play. Instead, the policy scores each character seat's suspicion from public information plus its own hand. Only the top 1–2 most suspicious seats get a model call, and the others pass. An impossible claim (more of a rank than that seat can't see) is always asked. These calls run in parallel inside the window, and the first doubt wins.
 
@@ -121,7 +121,7 @@ Phase 3's first game, and the start of a library of multiplayer games built arou
 
 **Commands.**
 
-- `/game start game:<blackjack|doubt> [ante|bet] [favorites]`
+- `/game start game:<blackjack|doubt> [bet] [favorites]`. I Doubt It has no per-table ante in v1: the server's ante (Games tab), captured when the table opens, applies, and each seat pays it on joining (refunded on leaving or cancel).
 - `/game hand` works in any table thread.
 - `/game rules game:<name>`
 - `/blackjack` stays as an alias of `/game start game:blackjack`.
