@@ -125,7 +125,7 @@ Bot settings has three tabs: **Spending** (the caps below), **Usage by server** 
 **Spending caps** apply to the whole bot, across every server, and use the same estimated USD cost as the reply footer:
 
 - **Soft cap**: when spending this period reaches it, each operator gets one Discord DM. Nothing is paused.
-- **Hard cap**: each operator gets one DM, and new character replies, ambient turns and memory updates pause until the reset day or until an operator raises the cap. A turn that already started finishes. `/summon` answers with a private notice; ambient chat stays silent. Mentions and replies stay silent unless **Post a notice in the channel** is switched on, which posts at most once an hour per channel.
+- **Hard cap**: each operator gets one DM, and new character replies, ambient turns, catch-ups and memory updates pause until the reset day or until an operator raises the cap. A turn that already started finishes. `/summon` answers with a private notice; ambient chat stays silent. Mentions and replies stay silent unless **Post a notice in the channel** is switched on, which posts at most once an hour per channel.
 - **Reset day**: the period starts on this day of the month (1–28, UTC). Both caps start off (blank); leave a field blank to turn that cap off.
 
 Calls without a cost estimate (models with no configured price, or a provider that did not report tokens) count as $0, and the panel shows how many there were this period. Set prices in `config.yaml` to include them. Daily spend totals are kept for 400 days, independent of history retention, so clearing old conversations does not lower the period's spend.

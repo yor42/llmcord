@@ -50,7 +50,7 @@ def _flat(text: str) -> str:
 
 
 def _defang(text: str) -> str:
-    return re.sub(r'<\s*(/?)\s*(transcript|focus|facts)', r'‹\1\2', text, flags=re.I)
+    return re.sub(r'<\s*(/?)\s*(transcript|focus|facts)\b', r'‹\1\2', text, flags=re.I)
 
 
 def _unmark(text: str) -> str:

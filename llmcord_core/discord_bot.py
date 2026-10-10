@@ -898,8 +898,8 @@ def _operator_text(kind: str, state) -> str:
                 f"{'off' if state.hard_cap_usd is None else _money(state.hard_cap_usd)}. The period resets on {resets} (UTC).")
     else:
         text = (f"Spending limit reached: this bot has spent {_money(state.spent_usd)} since {state.period}, "
-                f"at or past the hard cap of {_money(state.hard_cap_usd)}. Character replies, ambient turns and memory "
-                f"updates are paused until {resets} (UTC) or until an operator raises the cap in the dashboard's Bot settings.")
+                f"at or past the hard cap of {_money(state.hard_cap_usd)}. Character replies, ambient turns, catch-ups and "
+                f"memory updates are paused until {resets} (UTC) or until an operator raises the cap in the dashboard's Bot settings.")
     n = state.unpriced_calls
     if n > 0:
         text += (" 1 model call without a cost estimate was counted as $0." if n == 1
@@ -950,7 +950,7 @@ def _register_catchup_command(bot: SkitBot) -> None:
             send = interaction.followup.send if interaction.response.is_done() else interaction.response.send_message
             await send(catchup.fit(text), ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
-        if not interaction.permissions.read_message_history:
+        if not (interaction.permissions.read_message_history or interaction.permissions.administrator):
             return await reply("You can't read this channel's message history, so I can't summarize it.")
         if not bot.location(channel)[1] and not bot.store.catchup_anywhere(guild_id):
             return await reply(CATCHUP_NOT_HERE)

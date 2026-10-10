@@ -181,6 +181,7 @@ class HardCapTests(GateCase):
             self.assertTrue(texts[0].startswith("Spending limit reached"))
             self.assertIn("$3.00", texts[0])
             self.assertIn("hard cap of $2.00", texts[0])
+            self.assertIn("ambient turns, catch-ups and memory updates are paused", texts[0])
         self.assertEqual(self.users[5].sent[0][1]["allowed_mentions"].everyone, False)
 
 

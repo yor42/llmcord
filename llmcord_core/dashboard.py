@@ -87,7 +87,7 @@ def budget_panel(ctx):
         body.clear()
         with body:
             ui.label('Applies to the whole bot. Operators get a DM when spending passes each cap. At the hard cap, new character replies, '
-                     'ambient turns and memory updates pause until the reset day or until you raise the cap.').classes('ll-muted')
+                     'ambient turns, catch-ups and memory updates pause until the reset day or until you raise the cap.').classes('ll-muted')
             ui.label(f'{format_usd(state.spent_usd)} spent since {state.period}. The period resets on {state.resets_on.isoformat()} (UTC).')
             if state.hard_reached:
                 ui.label('Hard cap reached: character replies are paused.').classes('font-bold')
