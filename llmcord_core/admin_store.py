@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS guild_settings (
  catchup_anywhere INTEGER NOT NULL DEFAULT 0, currency_name TEXT NOT NULL DEFAULT '',
  daily_amount INTEGER NOT NULL DEFAULT 0, daily_streak_bonus INTEGER NOT NULL DEFAULT 0, daily_streak_days INTEGER NOT NULL DEFAULT 7,
  game_min_bet INTEGER NOT NULL DEFAULT 1, game_max_bet INTEGER NOT NULL DEFAULT 1000,
- max_cast INTEGER NOT NULL DEFAULT 5, max_favorites INTEGER NOT NULL DEFAULT 5
+ max_cast INTEGER NOT NULL DEFAULT 5, max_favorites INTEGER NOT NULL DEFAULT 5, archived_favorites INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS currency_daily (
  guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, last_day TEXT NOT NULL, streak INTEGER NOT NULL,
@@ -518,7 +518,7 @@ class AdminStore:
             'lore': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0'},
             'lorebook_entries': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0', 'pinned': 'INTEGER NOT NULL DEFAULT 0', 'source_message_id': 'INTEGER', 'promoted_from': 'INTEGER'},
             'characters': {'avatar_manual': 'INTEGER NOT NULL DEFAULT 0'},
-            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0', 'currency_name': "TEXT NOT NULL DEFAULT ''", 'daily_amount': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_bonus': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_days': 'INTEGER NOT NULL DEFAULT 7', 'game_min_bet': 'INTEGER NOT NULL DEFAULT 1', 'game_max_bet': 'INTEGER NOT NULL DEFAULT 1000', 'max_cast': 'INTEGER NOT NULL DEFAULT 5', 'max_favorites': 'INTEGER NOT NULL DEFAULT 5'},
+            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0', 'currency_name': "TEXT NOT NULL DEFAULT ''", 'daily_amount': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_bonus': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_days': 'INTEGER NOT NULL DEFAULT 7', 'game_min_bet': 'INTEGER NOT NULL DEFAULT 1', 'game_max_bet': 'INTEGER NOT NULL DEFAULT 1000', 'max_cast': 'INTEGER NOT NULL DEFAULT 5', 'max_favorites': 'INTEGER NOT NULL DEFAULT 5', 'archived_favorites': 'INTEGER NOT NULL DEFAULT 0'},
             'model_usage': {'channel_id': 'INTEGER', 'feature': "TEXT NOT NULL DEFAULT ''"},
         }.items():
             columns = {row[1] for row in self.db.execute(f'PRAGMA table_info({table})')}
@@ -1194,16 +1194,41 @@ class AdminStore:
                 (guild_id, max_cast, max_favorites))
         return {'max_cast': max_cast, 'max_favorites': max_favorites}
 
+    def archived_favorites(self, guild_id):
+        row = self.one('SELECT archived_favorites FROM guild_settings WHERE guild_id=?', (guild_id,))
+        return bool(row['archived_favorites']) if row else False
+
+    def set_archived_favorites(self, guild_id, enabled, expected=None):
+        with self.write_admin():
+            if expected is not None and self.archived_favorites(guild_id) != expected:
+                raise ConflictError('The archived favorites setting was changed elsewhere. Reload the page and try again.')
+            self.db.execute('INSERT INTO guild_settings(guild_id,archived_favorites) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET archived_favorites=excluded.archived_favorites', (guild_id, int(bool(enabled))))
+        return bool(enabled)
+
     def favorites(self, guild_id, user_id):
-        """The member's favorites in order; archived characters are hidden but kept, and reappear when restored. Positions may have gaps while some are hidden."""
-        return [dict(r) for r in self.all(
-            'SELECT f.character_id,c.name,c.world_id,f.position FROM member_favorites f JOIN characters c ON c.id=f.character_id AND c.guild_id=f.guild_id '
-            'WHERE f.guild_id=? AND f.user_id=? AND c.archived=0 ORDER BY f.position', (guild_id, user_id))]
+        """The member's favorites in order. Archived characters are hidden but kept (and reappear when restored), unless the server allows archived favorites; those carry 'archived': True. Positions may have gaps while some are hidden."""
+        return [{**dict(r), 'archived': bool(r['archived'])} for r in self.all(
+            'SELECT f.character_id,c.name,c.world_id,f.position,c.archived FROM member_favorites f JOIN characters c ON c.id=f.character_id AND c.guild_id=f.guild_id '
+            'WHERE f.guild_id=? AND f.user_id=? AND (c.archived=0 OR ?) ORDER BY f.position', (guild_id, user_id, int(self.archived_favorites(guild_id))))]
+
+    def archived_favorite_rows(self, guild_id, user_id, space_id):
+        """Character rows of the member's archived favorites that could answer in this world or hub (same link rule as eligible_characters); empty while the server switch is off."""
+        if not user_id or not self.archived_favorites(guild_id):
+            return []
+        space = self.space_by_id(space_id)
+        if not space or space['guild_id'] != guild_id:
+            return []
+        worlds = {space_id} if space['kind'] == 'world' else self.allowed_worlds(space_id)
+        if not worlds:
+            return []
+        marks = ','.join('?' for _ in worlds)
+        return self.all(f'SELECT c.* FROM member_favorites f JOIN characters c ON c.id=f.character_id AND c.guild_id=f.guild_id '
+            f'WHERE f.guild_id=? AND f.user_id=? AND c.archived=1 AND c.world_id IN ({marks}) ORDER BY f.position', (guild_id, user_id, *worlds))
 
     def add_favorite(self, guild_id, user_id, character_id):
         with self.write_admin():
             character = self.one('SELECT archived FROM characters WHERE guild_id=? AND id=?', (guild_id, character_id))
-            if not character or character['archived']:
+            if not character or (character['archived'] and not self.archived_favorites(guild_id)):
                 raise ValueError('That character is not available in this server. Choose another character.')
             if self.one('SELECT 1 FROM member_favorites WHERE guild_id=? AND user_id=? AND character_id=?', (guild_id, user_id, character_id)):
                 raise ValueError('That character is already one of your favorites.')
@@ -1240,8 +1265,8 @@ class AdminStore:
             self.db.execute('INSERT INTO member_settings(guild_id,user_id,favorites_mode,updated_at) VALUES(?,?,?,?) ON CONFLICT(guild_id,user_id) DO UPDATE SET favorites_mode=excluded.favorites_mode,updated_at=excluded.updated_at', (guild_id, user_id, mode, time.time()))
 
     def eligible_favorites(self, guild_id, user_id, space_id):
-        """The member's favorites, in order, that can appear in this world or hub."""
-        eligible = {row['id'] for row in self.eligible_characters(guild_id, space_id)}
+        """The member's favorites, in order, that can appear in this world or hub (their archived ones too while the server allows it)."""
+        eligible = {row['id'] for row in [*self.eligible_characters(guild_id, space_id), *self.archived_favorite_rows(guild_id, user_id, space_id)]}
         return [f for f in self.favorites(guild_id, user_id) if f['character_id'] in eligible]
 
     def open_table_for(self, guild_id, channel_id):

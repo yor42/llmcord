@@ -54,7 +54,7 @@ def legacy_file(folder, version=9):
             db.execute(f"ALTER TABLE guild_settings DROP COLUMN {column}")
         db.execute("DROP TABLE member_favorites")
         db.execute("DROP TABLE member_settings")
-        for column in ("max_cast", "max_favorites"):
+        for column in ("max_cast", "max_favorites", "archived_favorites"):
             db.execute(f"ALTER TABLE guild_settings DROP COLUMN {column}")
         db.execute("ALTER TABLE spaces DROP COLUMN hub_tone")
         db.execute("INSERT INTO thread_casts(thread_id,cast) VALUES(5,'[]')")

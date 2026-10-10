@@ -66,6 +66,12 @@ class Engine:
     def eligible(self, scene: SceneContext) -> list:
         return self.store.eligible_characters(scene.guild_id, scene.space_id)
 
+    def eligible_with_archived(self, scene: SceneContext) -> dict:
+        """Eligible characters plus the author's own archived favorites (FEAT-26): for lookups of speakers already chosen for this author, never for casts."""
+        rows = {row["id"]: row for row in self.eligible(scene)}
+        rows.update({row["id"]: row for row in self.store.archived_favorite_rows(scene.guild_id, scene.user_id, scene.space_id)})
+        return rows
+
     def compile(self, scene, purpose, values, history=None, contract='', images=None, max_tokens=None, protected_history_index=None, lore_injections=()):
         snapshot = scene.preset or self.store.active_preset(scene.guild_id)
         role = {'extraction': 'memory', 'summary': 'memory', 'images': 'dialogue'}.get(purpose, purpose)
@@ -109,7 +115,7 @@ class Engine:
         favorites = self.store.eligible_favorites(guild_id, user_id, space_id)
         if not favorites:
             return False
-        if self.store.favorites_mode(guild_id, user_id) == 'step_in':
+        if self.store.favorites_mode(guild_id, user_id) == 'step_in' or any(f['archived'] for f in favorites):
             return True
         cast = set(self.store.get_cast(channel_id, parent_channel_id))
         return any(f['character_id'] in cast for f in favorites)
@@ -122,16 +128,17 @@ class Engine:
                 raise ValueError("That character cannot join this world or hub.")
             forced = eligible[scene.forced_character_id]
             cast = [forced, *[row for row in cast if row["id"] != forced["id"]]]
-        favorites = [f for f in self.store.favorites(scene.guild_id, scene.user_id) if f['character_id'] in eligible] if scene.user_id else []
+        archived = {row['id']: row for row in self.store.archived_favorite_rows(scene.guild_id, scene.user_id, scene.space_id)}
+        pool = {**eligible, **archived}
+        favorites = [f for f in self.store.favorites(scene.guild_id, scene.user_id) if f['character_id'] in pool] if scene.user_id else []
         favorite_ids = {f['character_id'] for f in favorites}
         step_in = bool(favorites) and self.store.favorites_mode(scene.guild_id, scene.user_id) == 'step_in'
-        if not cast and not step_in:
+        in_cast = {row['id'] for row in cast}
+        # An archived favorite always steps in (it can never be in a cast), whatever the member's mode.
+        extra = [f['character_id'] for f in favorites if f['character_id'] not in in_cast and (step_in or f['character_id'] in archived)]
+        if not cast and not extra:
             return []
-        options_rows = list(cast)
-        if step_in:
-            in_cast = {row['id'] for row in cast}
-            extra = [f['character_id'] for f in favorites if f['character_id'] not in in_cast and f['character_id'] in eligible]
-            options_rows += [eligible[ident] for ident in extra[:self.store.cast_limits(scene.guild_id)['max_favorites']]]
+        options_rows = list(cast) + [pool[ident] for ident in extra[:self.store.cast_limits(scene.guild_id)['max_favorites']]]
         allowed = {row['id'] for row in options_rows}
         # A cheap deterministic gate avoids a model call for ambient messages with no invitation.
         if scene.ambient:
@@ -155,7 +162,7 @@ class Engine:
                 ids = [scene.forced_character_id, *[ident for ident in ids if ident != scene.forced_character_id]]
             if not ids and not scene.ambient:
                 ids = [options_rows[0]["id"]]
-            return [eligible[ident] for ident in ids[:self.settings.limits["max_speakers"]]]
+            return [pool[ident] for ident in ids[:self.settings.limits["max_speakers"]]]
         except Exception as error:
             logging.error("Director failed: %s", error_detail(error))
             return [] if scene.ambient else [options_rows[0]]
@@ -265,7 +272,7 @@ class Engine:
         location = f"You are in {'hub' if space['kind']=='hub' else 'world'} {space['name']}."
         def lore_text(items):
             return "\n".join(f"[{item.entry_key}] {item.content}" for item in items)
-        eligible = {row['id']: row for row in self.eligible(scene)}
+        eligible = self.eligible_with_archived(scene)
         group_ids = list(dict.fromkeys([*self.store.get_cast(scene.channel_id, scene.parent_channel_id), *([scene.forced_character_id] if scene.forced_character_id else []), *scene.speaker_ids]))
         values = {'char': character['name'], 'user': scene.user_label or f'User {scene.user_id}',
             'group': ', '.join(eligible[ident]['name'] for ident in group_ids if ident in eligible),

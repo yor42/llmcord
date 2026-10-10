@@ -1585,6 +1585,13 @@ def server_settings_section(ctx, channel_names):
             max_favorites = ui.number('Favorites per member', value=limits['max_favorites'], min=1, max=15, precision=0, format='%d')
         ui.label('A larger cast gives the director more characters to choose from, so more characters may answer a message. Each answer is a separate model call, and every prompt lists the cast. At most 3 characters answer one message.').classes('ll-muted')
         ui.label("With step in, a member's favorites outside the cast can also answer them, so more favorites can mean more model calls and longer prompts. Lowering a limit keeps existing casts and favorites; they can shrink but not grow.").classes('ll-muted')
+        archived_switch = ui.switch('Archived favorites can answer their members', value=store.archived_favorites(gid))
+        ui.label('When on, members can keep archived characters as favorites. An archived favorite answers only the members who chose it, in channels where its world is available. It never joins a cast, a game or /summon.').classes('ll-muted')
+        archived_saved = store.archived_favorites(gid)
+        def save_archived_favorites():
+            nonlocal archived_saved
+            archived_saved = store.set_archived_favorites(gid, bool(archived_switch.value), archived_saved)
+            return True
         def save_cast_limits():
             nonlocal limits
             whole = lambda value: int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value == int(value) else value
@@ -1615,6 +1622,8 @@ def server_settings_section(ctx, channel_names):
              'detail': lambda _: {'enabled': bool(footer.value)}},
             {'controls': {max_cast: limits['max_cast'], max_favorites: limits['max_favorites']}, 'operation': save_cast_limits, 'action': 'settings.cast_limits',
              'detail': lambda _: {'max_cast': limits['max_cast'], 'max_favorites': limits['max_favorites']}},
+            {'controls': {archived_switch: archived_saved}, 'operation': save_archived_favorites, 'action': 'settings.archived_favorites',
+             'detail': lambda _: {'enabled': bool(archived_switch.value)}},
             {'controls': {catchup: store.catchup_anywhere(gid)}, 'operation': save_catchup, 'action': 'settings.catchup',
              'detail': lambda _: {'enabled': bool(catchup.value)}},
             {'controls': {log_switch: turn_log['enabled'], log_days: turn_log['days']}, 'operation': save_turn_log, 'action': 'settings.turn_log', 'then': show_monitoring,

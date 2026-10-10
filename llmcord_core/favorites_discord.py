@@ -18,21 +18,26 @@ NO_FAVORITES = 'You have no favorites yet. Add one with /favorites add.'
 
 
 def register_favorites_commands(bot, ctx: SimpleNamespace) -> None:
-    require_guild, guild_characters, safe_choices = ctx.require_guild, ctx.guild_characters, ctx.safe_choices
+    require_guild, safe_choices = ctx.require_guild, ctx.safe_choices
     favorites = app_commands.Group(name='favorites', description='Keep favorite characters who are more likely to answer you')
 
     async def reply(interaction: discord.Interaction, text: str) -> None:
         await interaction.response.send_message(text, ephemeral=True, allowed_mentions=NO_MENTIONS)
+
+    def addable(guild_id: int):
+        return bot.store.all('SELECT * FROM characters WHERE guild_id=? AND (archived=0 OR ?) ORDER BY name', (guild_id, int(bot.store.archived_favorites(guild_id))))
+
+    add_choices = safe_choices(lambda interaction, current: suggest([row['name'] for row in addable(interaction.guild_id)], current))
 
     own_choices = safe_choices(lambda interaction, current: suggest(
         [row['name'] for row in bot.store.favorites(interaction.guild_id, interaction.user.id)], current))
 
     @favorites.command(name='add', description='Add a character to your favorites')
     @app_commands.describe(character='The character to add')
-    @app_commands.autocomplete(character=ctx.guild_character_choices)
+    @app_commands.autocomplete(character=add_choices)
     async def favorites_add(interaction: discord.Interaction, character: str):
         require_guild(interaction)
-        row = resolve(guild_characters(interaction.guild_id), character, 'character')
+        row = resolve(addable(interaction.guild_id), character, 'character')
         bot.store.add_favorite(interaction.guild_id, interaction.user.id, row['id'])
         await reply(interaction, f"Added {row['name']} to your favorites.")
 
@@ -55,8 +60,8 @@ def register_favorites_commands(bot, ctx: SimpleNamespace) -> None:
         if not rows:
             return await reply(interaction, NO_FAVORITES)
         _, binding = bot.location(interaction.channel) if interaction.channel else (None, None)
-        eligible = {r['id'] for r in bot.store.eligible_characters(interaction.guild_id, binding['space_id'])} if binding else None
-        lines = [f"{n}. {row['name']}" + (' (not available here)' if eligible is not None and row['character_id'] not in eligible else '')
+        eligible = {r['character_id'] for r in bot.store.eligible_favorites(interaction.guild_id, interaction.user.id, binding['space_id'])} if binding else None
+        lines = [f"{n}. {row['name']}" + (' (archived)' if row['archived'] else '') + (' (not available here)' if eligible is not None and row['character_id'] not in eligible else '')
                  for n, row in enumerate(rows, 1)]
         mode = bot.store.favorites_mode(interaction.guild_id, interaction.user.id)
         await reply(interaction, ('\n'.join(lines) + '\n' + MODE_LINES[mode])[:1900])

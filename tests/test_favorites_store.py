@@ -176,7 +176,7 @@ class FavoritesTests(FavoritesCase):
             self.store.add_favorite(G, ALICE, self.c(n))
         rows = self.store.favorites(G, ALICE)
         self.assertEqual([(r["name"], r["position"]) for r in rows], [("Cy", 0), ("Ann", 1), ("Bea", 2)])
-        self.assertEqual(rows[0], {"character_id": self.c("Cy"), "name": "Cy", "world_id": self.w2, "position": 0})
+        self.assertEqual(rows[0], {"character_id": self.c("Cy"), "name": "Cy", "world_id": self.w2, "position": 0, "archived": False})
 
     def test_duplicate_is_refused(self):
         self.store.add_favorite(G, ALICE, self.c("Ann"))
@@ -306,6 +306,84 @@ class EligibleTests(FavoritesCase):
         self.assertEqual(self.store.eligible_favorites(H, ALICE, self.w1), [])
         self.assertEqual(self.store.eligible_favorites(G, ALICE, self.other), [])
         self.assertEqual(self.store.eligible_favorites(G, BOB, self.w1), [])
+
+
+class ArchivedFavoritesTests(FavoritesCase):
+    """FEAT-26: the server switch for archived favorites (store side)."""
+
+    def test_default_off_set_and_stale_expected(self):
+        self.assertFalse(self.store.archived_favorites(G))
+        self.assertTrue(self.store.set_archived_favorites(G, True, expected=False))
+        with self.assertRaises(ConflictError):
+            self.store.set_archived_favorites(G, False, expected=False)
+        self.assertTrue(self.store.archived_favorites(G))
+        self.assertFalse(self.store.archived_favorites(H))
+
+    def test_add_archived_refused_off_accepted_on(self):
+        self.store.archive_character(G, self.c("Ann"), True)
+        with self.assertRaisesRegex(ValueError, "That character is not available in this server. Choose another character."):
+            self.store.add_favorite(G, ALICE, self.c("Ann"))
+        self.store.set_archived_favorites(G, True)
+        self.store.add_favorite(G, ALICE, self.c("Ann"))
+        self.assertEqual([(r["name"], r["archived"]) for r in self.store.favorites(G, ALICE)], [("Ann", True)])
+
+    def test_other_guild_character_still_refused_when_on(self):
+        self.store.set_archived_favorites(G, True)
+        self.store.archive_character(H, self.foreign, True)
+        with self.assertRaises(ValueError):
+            self.store.add_favorite(G, ALICE, self.foreign)
+
+    def test_archived_count_toward_the_limit_when_on(self):
+        self.store.set_cast_limits(G, 5, 2)
+        self.store.set_archived_favorites(G, True)
+        self.store.add_favorite(G, ALICE, self.c("Ann"))
+        self.store.add_favorite(G, ALICE, self.c("Bea"))
+        self.store.archive_character(G, self.c("Ann"), True)
+        with self.assertRaisesRegex(ValueError, "at most 2"):
+            self.store.add_favorite(G, ALICE, self.c("Cy"))
+
+    def test_off_on_off_keeps_rows(self):
+        self.store.set_archived_favorites(G, True)
+        self.store.add_favorite(G, ALICE, self.c("Ann"))
+        self.store.add_favorite(G, ALICE, self.c("Bea"))
+        self.store.archive_character(G, self.c("Ann"), True)
+        self.assertEqual(self.ids(self.store.favorites(G, ALICE)), [self.c("Ann"), self.c("Bea")])
+        self.store.set_archived_favorites(G, False)
+        self.assertEqual(self.ids(self.store.favorites(G, ALICE)), [self.c("Bea")])
+        self.assertEqual(self.store.archived_favorite_rows(G, ALICE, self.w1), [])
+        self.store.set_archived_favorites(G, True)
+        self.assertEqual(self.ids(self.store.favorites(G, ALICE)), [self.c("Ann"), self.c("Bea")])
+        self.assertFalse(self.store.favorites(G, ALICE)[1]["archived"])
+
+    def test_archived_rows_follow_the_world_and_hub_link_rule_and_owner(self):
+        self.store.set_archived_favorites(G, True)
+        for n in ("Ann", "Cy", "Di"):
+            self.store.add_favorite(G, ALICE, self.c(n))
+            self.store.archive_character(G, self.c(n), True)
+        names = lambda space, user=ALICE, guild=G: [r["name"] for r in self.store.archived_favorite_rows(guild, user, space)]
+        self.assertEqual(names(self.w1), ["Ann"])
+        self.assertEqual(names(self.hub), ["Ann", "Cy"])
+        self.assertEqual(names(self.w3), ["Di"])
+        self.assertEqual(names(self.w2), ["Cy"])
+        self.assertEqual(names(self.hub, user=BOB), [])
+        self.assertEqual(names(self.hub, guild=H), [])
+        self.assertEqual([f["character_id"] for f in self.store.eligible_favorites(G, ALICE, self.hub)], [self.c("Ann"), self.c("Cy")])
+        self.assertNotIn(self.c("Ann"), [r["id"] for r in self.store.eligible_characters(G, self.w1)])
+
+    def test_existing_v15_file_gets_the_column_on_open(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "v15.sqlite3"
+            Store(path).close()
+            with closing(sqlite3.connect(path)) as db, db:
+                db.execute("ALTER TABLE guild_settings DROP COLUMN archived_favorites")
+            store = Store(path)
+            try:
+                self.assertEqual(store.one("PRAGMA user_version")[0], 15)
+                self.assertFalse(store.archived_favorites(G))
+                store.set_archived_favorites(G, True)
+                self.assertTrue(store.archived_favorites(G))
+            finally:
+                store.close()
 
 
 if __name__ == "__main__":

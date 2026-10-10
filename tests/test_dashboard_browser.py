@@ -938,6 +938,36 @@ class DashboardBrowserTests(unittest.TestCase):
             self.post_hook('/_test/cast-limits', {'max_cast': 5, 'max_favorites': 5})
             context.close()
 
+    def test_server_archived_favorites_switch_persists_conflicts_and_guild_isolation(self):
+        """FEAT-26: 'Archived favorites can answer their members' saves through the save bar with an audit row, persists after reload, refuses a save over a change made elsewhere, never touches guild 2, and shows its note."""
+        from playwright.sync_api import expect
+        context, page, errors = self.ux_page('/admin/guild/1')
+        try:
+            page.get_by_role('tab', name='Server setup', exact=True).click()
+            bar = page.get_by_role('region', name='Unsaved changes')
+            switch = page.get_by_role('switch', name='Archived favorites can answer their members')
+            switch.wait_for(timeout=5000)
+            page.get_by_text('It never joins a cast, a game or /summon.', exact=False).wait_for(timeout=5000)
+            self.assertEqual(switch.get_attribute('aria-checked'), 'false')
+            switch.click()
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Server settings saved', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['archived_favorites'], {'1': True, '2': False})
+            rows = [r for r in self.state()['audit'] if r['action'] == 'settings.archived_favorites']
+            self.assertEqual([json.loads(r['detail_json']) for r in rows], [{'enabled': True}])
+            page.reload()
+            page.get_by_role('tab', name='Server setup', exact=True).click()
+            expect(page.get_by_role('switch', name='Archived favorites can answer their members')).to_have_attribute('aria-checked', 'true', timeout=5000)
+            page.get_by_role('switch', name='Archived favorites can answer their members').click()
+            self.post_hook('/_test/archived-favorites', {'enabled': False})
+            page.get_by_role('region', name='Unsaved changes').get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The archived favorites setting was changed elsewhere. Reload the page and try again.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['archived_favorites'], {'1': False, '2': False})
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/archived-favorites', {'enabled': False})
+            context.close()
+
     def test_server_catchup_switch_persists(self):
         """FEAT-15: toggling 'Allow /catchup in channels without characters' and saving persists it and audits settings.catchup."""
         context, page, errors = self.ux_page('/admin/guild/1')
