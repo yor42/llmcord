@@ -1,6 +1,6 @@
 # Channel kinds, favorites and character wallets: plan (proposed 2026-10-10)
 
-Status: **decided (D27); FEAT-23 in progress.** Comes before character seats (FEAT-20) because those seats use favorites and character wallets.
+Status: **decided (D27); FEAT-23 done 2026-10-10.** Comes before character seats (FEAT-20) because those seats use favorites and character wallets.
 
 ## Channel kinds
 
