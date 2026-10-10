@@ -66,11 +66,20 @@ class SeatTests(unittest.TestCase):
         Seat(1, "character", 2, 5)
         with self.assertRaises(ValueError):
             Seat(0, "bot", 1, 5)
-        with self.assertRaises(ValueError):
-            Seat(0, "member", 1, 0)
-        for bad in (-5, True, 5.0, "5", None):
+        Seat(2, "member", 3, 0)  # FEAT-21: an ante of 0 is a valid stake (games without a bet)
+        for bad in (-5, -1, True, 5.0, "5", None):
             with self.assertRaises(ValueError):
                 Seat(0, "member", 1, bad)
+
+
+class BlackjackStakeTests(unittest.TestCase):
+    def test_blackjack_still_rejects_a_zero_stake(self):
+        from llmcord_core.games import blackjack
+        blackjack.new("s", [Seat(0, "member", 1, 5)])
+        with self.assertRaises(ValueError):
+            blackjack.new("s", [Seat(0, "member", 1, 0)])
+        with self.assertRaises(ValueError):
+            blackjack.new("s", [Seat(0, "member", 1, 5), Seat(1, "member", 2, 0)])
 
 
 class PolicyTests(unittest.TestCase):

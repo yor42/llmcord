@@ -227,6 +227,8 @@ def new(seed, seats: Sequence[Seat], rules=None):
         raise ValueError(f"blackjack needs 1 to {MAX_SEATS} seats")
     if [s.index for s in seats] != list(range(len(seats))):
         raise ValueError("seat indexes must be 0..n-1 in order")
+    if any(s.stake <= 0 for s in seats):
+        raise ValueError("blackjack seat stake must be a positive int")
     shoe = new_shoe(seed)
     n = len(seats)
     # deal order: one card to each seat, dealer up card, second card to each seat, dealer hole card

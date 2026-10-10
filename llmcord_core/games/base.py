@@ -24,8 +24,8 @@ class Seat:
     def __post_init__(self):
         if self.kind not in SEAT_KINDS:
             raise ValueError(f"seat kind must be one of {SEAT_KINDS}")
-        if type(self.stake) is not int or self.stake <= 0:
-            raise ValueError("seat stake must be a positive int")
+        if type(self.stake) is not int or self.stake < 0:
+            raise ValueError("seat stake must be a non-negative int")
 
 
 class Chooser(Protocol):
