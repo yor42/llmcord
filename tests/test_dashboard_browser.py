@@ -3199,6 +3199,81 @@ class DashboardBrowserTests(unittest.TestCase):
             context.close()
             self.restore_alice(original)
 
+    def test_savebar_conflict_turns_reset_into_reload(self):
+        """MNT-22: after a conflict the bar says the character was changed elsewhere and Reset becomes Reload; Reload shows the other admin's value and the next edit saves."""
+        context, page, errors, card, description = self.open_alice()
+        original = description.input_value()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            description.fill('My edit that will conflict')
+            bar.wait_for(state='visible', timeout=5000)
+            self.assertTrue(self.context.request.post(self.url + '/_test/change-character', data={'name': 'Alice', 'description': 'Another admin was here'}).ok)
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Character changed; reload before saving', exact=True).wait_for(timeout=5000)
+            bar.get_by_text('Alice was changed somewhere else.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(bar.get_by_role('button', name='Reset', exact=True).count(), 0)
+            page.set_viewport_size({'width': 1000, 'height': 900})
+            shots = Path('/home/yor42/.claude/jobs/cf71c9e7/tmp/shots')
+            if shots.is_dir():
+                page.screenshot(path=str(shots / 'mnt22-stale.png'))
+            bar.get_by_role('button', name='Reload', exact=True).click()
+            bar.wait_for(state='hidden', timeout=5000)
+            card = page.locator('.character-card').filter(has=page.get_by_text('Alice', exact=True)).first
+            card.get_by_text('Alice', exact=True).first.click()
+            description = card.get_by_label('Description', exact=True)
+            description.wait_for()
+            self.wait_for(lambda: description.input_value() == 'Another admin was here')
+            description.fill('Edited after reload')
+            bar.wait_for(state='visible', timeout=5000)
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            bar.wait_for(state='hidden', timeout=5000)
+            self.wait_for(lambda: json.loads(self.alice_row()['card'])['description'] == 'Edited after reload')
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+            self.restore_alice(original)
+
+    def test_savebar_refuses_upload_and_confirm_dialog_while_dirty(self):
+        """MNT-22: an avatar upload (ctx.upload) and a confirm dialog action (Delete permanently) are refused while Alice is dirty; nothing is stored."""
+        context, page, errors, card, description = self.open_alice()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            description.fill(description.input_value() + ' dirty')
+            bar.wait_for(state='visible', timeout=5000)
+            before = self.state()
+            fallback = card.locator('.q-uploader').filter(has_text='Upload fallback avatar').first
+            fallback.locator('input[type=file]').set_input_files(self.png('green'))
+            page.get_by_text('Save or reset your changes to Alice first.', exact=True).first.wait_for(timeout=5000)
+            self.open_more_item(page, card, 'Alice', 'Delete character')
+            page.get_by_role('button', name='Delete permanently', exact=True).click()
+            page.get_by_text('Save or reset your changes to Alice first.', exact=True).first.wait_for(timeout=5000)
+            page.wait_for_timeout(500)
+            after = self.state()
+            self.assertEqual(after['characters'], before['characters'])
+            self.assertEqual(after['audit'], before['audit'])
+            self.assertTrue(bar.is_visible())
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
+    def test_savebar_disables_other_editors_while_dirty(self):
+        """MNT-22: while Alice is dirty the Server settings switches (another tracked editor) are disabled; Reset enables them again."""
+        context, page, errors, card, description = self.open_alice()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            description.fill(description.input_value() + ' dirty')
+            bar.wait_for(state='visible', timeout=5000)
+            page.get_by_role('tab', name='Server setup', exact=True).click()
+            footer = page.get_by_role('switch', name='Show model and cost footer on replies')
+            footer.wait_for(timeout=5000)
+            self.assertTrue(footer.is_disabled())
+            bar.get_by_role('button', name='Reset', exact=True).click()
+            bar.wait_for(state='hidden', timeout=5000)
+            self.wait_for(lambda: footer.is_enabled())
+            self.assertFalse(errors, errors)
+        finally:
+            context.close()
+
     def test_savebar_blocks_other_writes_while_dirty(self):
         """MNT-21: while Alice is dirty another write is refused (toast, alert class, no store call); edits survive a tab switch."""
         context, page, errors, card, description = self.open_alice()

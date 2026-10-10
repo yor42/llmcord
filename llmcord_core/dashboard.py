@@ -494,6 +494,7 @@ class LiveContext:
         self.channels_failed = False
         self.selector, self.containers, self.builders, self.built = None, {}, {}, set()
         self.savebar = None
+        self.failure = None  # the last _attempt's notified error, for the save bar's conflict check
 
     async def load_channel_names(self):
         # One Discord channel fetch per page render; a failure leaves the mapping empty.
@@ -580,9 +581,11 @@ class LiveContext:
     async def _attempt(self, operation, action=None, detail=None):
         """Run an operation, returning (succeeded, result); a failure is notified and yields (False, None)."""
         from nicegui import ui
+        self.failure = None
         try:
             return True, await self.service.run(self.ident, self.guild_id, operation, action, detail)
         except (ValueError, HTTPException, sqlite3.IntegrityError, TypeError, KeyError) as error:
+            self.failure = error
             message = error.detail if isinstance(error, HTTPException) else 'This name already exists' if isinstance(error, sqlite3.IntegrityError) else 'Choose valid values for all required fields' if isinstance(error, (TypeError, KeyError)) else str(error)
             ui.notify(message, type='negative', timeout=8000)
             return False, None
@@ -1705,7 +1708,7 @@ def character_card(ctx, row, worlds):
                 store.update_character(gid, row['id'], world.value, name.value or '', new, expected_revision=revision)
                 return True
             tracked = {name: row['name'], world: row['world_id'], **{control: card.get(key, '') for key, control in fields.items()}}
-            ctx.savebar.track(row['name'], tracked, save, 'character.edit', {'id': row['id']}, then=lambda _: ctx.refresh('characters'), on_reset=lambda: confirm.set_value(False))
+            ctx.savebar.track(row['name'], tracked, save, 'character.edit', {'id': row['id']}, then=lambda _: ctx.refresh('characters'), on_reset=lambda: confirm.set_value(False), reload=lambda: ctx.refresh('characters'))
             static_avatar_editor(ctx, row)
             ui.label('Emotion avatars').classes('ll-subtitle')
             ui.label('The selected emotion image is used first. If unavailable, the fallback static avatar is used.').classes('ll-muted')

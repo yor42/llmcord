@@ -5,9 +5,12 @@ import inspect
 import logging
 import types
 
+from .admin_store import ConflictError
+
 logger = logging.getLogger(__name__)
 
 _SAVE_LABEL = 'Save changes'
+_RESET_LABEL = 'Reset'
 _LEAVE_WARNING = 'window.onbeforeunload = (e) => { e.preventDefault(); e.returnValue = ""; return ""; };'
 
 
@@ -23,17 +26,18 @@ class SaveBar:
         with self.bar:
             self.text = ui.label('').classes('ll-savebar-text').props('aria-live=polite')
             with ui.element('div').classes('ll-savebar-actions'):
-                ui.button('Reset', on_click=self.reset).props('flat no-caps').classes('ll-savebar-reset')
+                self.reset_button = ui.button(_RESET_LABEL, on_click=self._reset_clicked).props('flat no-caps').classes('ll-savebar-reset')
                 self.save_button = ui.button(_SAVE_LABEL, on_click=self.save).props('no-caps')
         self.bar.set_visibility(False)
 
     def track(self, name, controls, save=None, action=None, detail=None, then=None, success=None, on_reset=None,
-              dirty=None, reset=None, save_label=_SAVE_LABEL, parts=None):
+              dirty=None, reset=None, save_label=_SAVE_LABEL, parts=None, reload=None):
         """Register an editor: controls maps each tracked control to its saved value; save runs guarded/audited on Save.
 
         dirty: optional callable replacing the per-control comparison (an exception counts as dirty).
         reset: optional callable used by Reset instead of restoring control values (on_reset still runs after).
         save_label: the bar's Save button text while this editor is active.
+        reload: optional async callable used by Reload after a save conflict (default: refresh the current tab).
         Writes made through ctx._attempt (not ctx.run/button) are never refused, so an editor may run its own
         write (e.g. Save as new) that way and then call settle().
 
@@ -59,7 +63,7 @@ class SaveBar:
             controls.update(part.controls)
         editor = types.SimpleNamespace(name=name, controls=[], save=save, action=action, detail=detail, then=then,
                                        success=success, on_reset=on_reset, dirty=dirty, reset=reset, save_label=save_label,
-                                       parts=[])
+                                       parts=[], reload=reload, stale=False)
         self.editors.append(editor)
         self.retrack(editor, controls)
         editor.parts = parts
@@ -104,7 +108,7 @@ class SaveBar:
                         for control, _ in other.controls:
                             control.disable()
                 self.ctx.selector.client.run_javascript(_LEAVE_WARNING)
-        elif self.active is editor:
+        elif self.active is editor and not editor.stale:
             self.settle()
 
     def settle(self):
@@ -112,7 +116,9 @@ class SaveBar:
         was_active, self.active = self.active, None
         self.bar.set_visibility(False)
         self.save_button.set_text(_SAVE_LABEL)
+        self.reset_button.set_text(_RESET_LABEL)
         for editor in self.editors:
+            editor.stale = False
             for control, _ in editor.controls:
                 control.enable()
         if was_active is not None:
@@ -146,6 +152,25 @@ class SaveBar:
             editor.on_reset()
         self.settle()
 
+    async def _reset_clicked(self):
+        if self.active is not None and self.active.stale:
+            await self.reload()
+        else:
+            self.reset()
+
+    async def reload(self):
+        """Discard the stale editor's local edits and rebuild it from the store (fresh values and revision)."""
+        editor = self.active
+        if editor is None:
+            return
+        self.clear()
+        await (editor.reload() if editor.reload else self.ctx.refresh(self.ctx.selector.value))
+
+    def _mark_stale(self, editor):
+        editor.stale = True
+        self.text.set_text(f'{editor.name} was changed somewhere else.')
+        self.reset_button.set_text('Reload')
+
     async def save(self):
         from nicegui import ui
         editor = self.active
@@ -162,6 +187,8 @@ class SaveBar:
             self.saving = False
             self.save_button.enable()
         if not ok:
+            if isinstance(getattr(self.ctx, 'failure', None), ConflictError):
+                self._mark_stale(editor)
             return
         if editor.success:
             ui.notify(editor.success, type='positive')

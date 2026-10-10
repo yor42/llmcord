@@ -51,7 +51,7 @@ def make():
     client = types.SimpleNamespace(run_javascript=lambda _script: None)
     bar.ctx = types.SimpleNamespace(selector=types.SimpleNamespace(client=client))
     bar.editors, bar.active, bar.saving = [], None, False
-    bar.bar, bar.text, bar.save_button = widget, Widget(), Widget()
+    bar.bar, bar.text, bar.save_button, bar.reset_button = widget, Widget(), Widget(), Widget()
     return bar
 
 
