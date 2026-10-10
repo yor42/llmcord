@@ -141,7 +141,7 @@ class SaveBar:
 
     def reset(self):
         editor = self.active
-        if editor is None:
+        if editor is None or self.saving:
             return
         if editor.reset:
             editor.reset()
@@ -161,7 +161,7 @@ class SaveBar:
     async def reload(self):
         """Discard the stale editor's local edits and rebuild it from the store (fresh values and revision)."""
         editor = self.active
-        if editor is None:
+        if editor is None or self.saving:
             return
         self.clear()
         await (editor.reload() if editor.reload else self.ctx.refresh(self.ctx.selector.value))
@@ -180,20 +180,25 @@ class SaveBar:
         self.save_button.disable()
         try:
             if editor.parts:
-                ok, result = await self._save_parts(editor)
+                ok, result, error = await self._save_parts(editor)
             else:
-                ok, result = await self.ctx._attempt(editor.save, editor.action, editor.detail)
+                outcome = await self.ctx._attempt(editor.save, editor.action, editor.detail)
+                (ok, result), error = outcome, getattr(outcome, 'error', None)
         finally:
             self.saving = False
             self.save_button.enable()
         if not ok:
-            if isinstance(getattr(self.ctx, 'failure', None), ConflictError):
+            if isinstance(error, ConflictError):
                 self._mark_stale(editor)
             return
         if editor.success:
             ui.notify(editor.success, type='positive')
         if not editor.parts or not self.differs(editor):
             self.settle()
+        elif editor.stale:
+            editor.stale = False
+            self.text.set_text(f'{editor.name} has unsaved changes.')
+            self.reset_button.set_text(_RESET_LABEL)
         if editor.then:
             followup = editor.then(result)
             if inspect.isawaitable(followup):
@@ -210,14 +215,15 @@ class SaveBar:
             sent = {control: control.value for control in part.controls}
             if all(_same(value, saved[id(control)]) for control, value in sent.items()):
                 continue
-            ok, result = await self.ctx._attempt(part.operation, part.action, part.detail)
+            outcome = await self.ctx._attempt(part.operation, part.action, part.detail)
+            ok, result = outcome
             if not ok:
                 later = [p for p in editor.parts[index + 1:]
                          if any(not _same(control.value, saved[id(control)]) for control in p.controls)]
                 if later:
                     self._warn('Your other changes were not saved. They are still pending.')
-                return False, None
+                return False, None, getattr(outcome, 'error', None)
             results.append(result)
             editor.controls = [(control, sent[control] if control in sent else value) for control, value in editor.controls]
             saved.update({id(control): value for control, value in sent.items()})
-        return True, results
+        return True, results, None

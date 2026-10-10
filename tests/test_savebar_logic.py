@@ -3,6 +3,8 @@ import types
 import unittest
 from unittest import mock
 
+from llmcord_core.admin_store import ConflictError
+from llmcord_core.dashboard import AttemptFailed
 from llmcord_core.savebar import SaveBar
 
 
@@ -227,6 +229,90 @@ class SaveBarPartsTests(unittest.IsolatedAsyncioTestCase):
     def test_save_and_parts_are_exclusive(self):
         with self.assertRaises(ValueError):
             make().track('X', {}, save=lambda: None, parts=[{'controls': {}, 'operation': None}])
+
+
+class SaveBarStaleTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.bar, self.field, self.calls = make(), Control('a'), []
+        self.outcome = (True, 'done')
+
+        async def attempt(operation, action, detail):
+            return self.outcome
+        self.bar.ctx._attempt = attempt
+        self.bar.ctx.selector.value = 'tab'
+
+        async def refresh(tab):
+            self.calls.append(('refresh', tab))
+        self.bar.ctx.refresh = refresh
+        self.editor = self.bar.track('Alice', {self.field: 'a'}, save=lambda: None)
+        self.field.set_value('b')
+
+    async def test_conflict_marks_stale_and_plain_error_does_not(self):
+        self.outcome = AttemptFailed((False, None), ValueError('bad'))
+        await self.bar.save()
+        self.assertFalse(self.editor.stale)
+        self.outcome = AttemptFailed((False, None), ConflictError('changed'))
+        await self.bar.save()
+        self.assertTrue(self.editor.stale)
+        self.assertEqual(self.bar.reset_button.label, 'Reload')
+        self.assertEqual(self.bar.text.label, 'Alice was changed somewhere else.')
+
+    async def test_stale_blocks_settle_in_check(self):
+        self.editor.stale = True
+        self.field.set_value('a')
+        self.assertIs(self.bar.active, self.editor)
+
+    async def test_reload_clears_then_uses_given_reload_or_default_refresh(self):
+        self.editor.reload = None
+        await self.bar.reload()
+        self.assertEqual(self.calls, [('refresh', 'tab')])
+        self.assertEqual((self.bar.editors, self.bar.active), ([], None))
+        other = Control('b')
+        editor = self.bar.track('Bob', {other: 'b'}, save=lambda: None, reload=lambda: self._reloaded())
+        other.set_value('c')
+        self.assertIs(self.bar.active, editor)
+        await self.bar.reload()
+        self.assertEqual(self.calls[-1], 'custom')
+        self.assertEqual(self.bar.editors, [])
+
+    async def _reloaded(self):
+        self.calls.append('custom')
+
+    async def test_success_clears_stale(self):
+        self.outcome = AttemptFailed((False, None), ConflictError('changed'))
+        await self.bar.save()
+        self.outcome = (True, 'done')
+        await self.bar.save()
+        self.assertFalse(self.editor.stale)
+        self.assertIsNone(self.bar.active)
+        self.assertEqual(self.bar.reset_button.label, 'Reset')
+
+    async def test_success_edited_during_save_clears_stale_and_restores_labels(self):
+        bar, a, b = make(), Control('a'), Control('b')
+        editor = bar.track('Server', {}, parts=[{'controls': {a: 'a'}, 'operation': 'x'}, {'controls': {b: 'b'}, 'operation': 'y'}])
+        a.set_value('a2')
+        editor.stale = True
+        bar._mark_stale(editor)
+
+        async def attempt(operation, action, detail):
+            a.value = 'a3'
+            return True, 'r'
+        bar.ctx._attempt = attempt
+        await bar.save()
+        self.assertIs(bar.active, editor)
+        self.assertFalse(editor.stale)
+        self.assertEqual(bar.reset_button.label, 'Reset')
+        self.assertEqual(bar.text.label, 'Server has unsaved changes.')
+
+    async def test_reload_and_reset_ignored_while_saving(self):
+        self.editor.stale = True
+        self.bar.saving = True
+        await self.bar.reload()
+        self.bar.reset()
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.field.value, 'b')
+        self.assertIs(self.bar.active, self.editor)
+        self.assertEqual(self.bar.editors, [self.editor])
 
 
 if __name__ == '__main__':

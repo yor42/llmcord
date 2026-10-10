@@ -473,8 +473,8 @@ class CatchupUsageTests(unittest.IsolatedAsyncioTestCase):
 
 
 class CatchupPinTests(unittest.IsolatedAsyncioTestCase):
-    async def test_profile_saved_between_model_calls_does_not_reach_the_second_call(self):
-        """MNT-32: everything inside one /catchup sees one backend snapshot; a profile saved mid-call applies to the next /catchup only."""
+    async def test_profile_saved_during_the_catchup_call_does_not_change_its_snapshot(self):
+        """MNT-32: /catchup makes one model call; a profile saved during it is not seen by the call's snapshot (reads before and after the save agree) and applies to the next /catchup only."""
         bot = SkitBot(make_settings())
         self.addCleanup(bot.store.close)
         world = bot.store.create_space(1, "Harbor", "world")

@@ -481,6 +481,14 @@ async def usage_by_server_panel(ctx, guild_names):
         await render()
 
 
+class AttemptFailed(tuple):
+    """(False, None) that remembers the error, so a caller can tell its own attempt's failure kind."""
+    def __new__(cls, pair, error):
+        self = super().__new__(cls, pair)
+        self.error = error
+        return self
+
+
 class LiveContext:
     def __init__(self, app, request, guild_id, session):
         self.app, self.guild_id = app, guild_id
@@ -494,7 +502,6 @@ class LiveContext:
         self.channels_failed = False
         self.selector, self.containers, self.builders, self.built = None, {}, {}, set()
         self.savebar = None
-        self.failure = None  # the last _attempt's notified error, for the save bar's conflict check
 
     async def load_channel_names(self):
         # One Discord channel fetch per page render; a failure leaves the mapping empty.
@@ -579,16 +586,14 @@ class LiveContext:
         return (await self._attempt(operation, action, detail))[1]
 
     async def _attempt(self, operation, action=None, detail=None):
-        """Run an operation, returning (succeeded, result); a failure is notified and yields (False, None)."""
+        """Run an operation, returning (succeeded, result); a failure is notified and yields (False, None), a tuple carrying the error as .error."""
         from nicegui import ui
-        self.failure = None
         try:
             return True, await self.service.run(self.ident, self.guild_id, operation, action, detail)
         except (ValueError, HTTPException, sqlite3.IntegrityError, TypeError, KeyError) as error:
-            self.failure = error
             message = error.detail if isinstance(error, HTTPException) else 'This name already exists' if isinstance(error, sqlite3.IntegrityError) else 'Choose valid values for all required fields' if isinstance(error, (TypeError, KeyError)) else str(error)
             ui.notify(message, type='negative', timeout=8000)
-            return False, None
+            return AttemptFailed((False, None), error)
 
     def button(self, text, operation, action=None, detail=None, then=None, success=None, prepare=None, **kwargs):
         from nicegui import ui

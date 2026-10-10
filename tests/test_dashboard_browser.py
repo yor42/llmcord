@@ -104,7 +104,10 @@ class DashboardBrowserTests(unittest.TestCase):
     def settled_height(self, locator, polls=50):
         previous = None
         for _ in range(polls):
-            height = locator.bounding_box()['height']
+            box = locator.bounding_box()
+            if box is None:
+                self.fail('Element has no layout box (hidden or detached) while measuring its height')
+            height = box['height']
             if height == previous:
                 return height
             previous = height
@@ -3212,10 +3215,6 @@ class DashboardBrowserTests(unittest.TestCase):
             page.get_by_text('Character changed; reload before saving', exact=True).wait_for(timeout=5000)
             bar.get_by_text('Alice was changed somewhere else.', exact=True).wait_for(timeout=5000)
             self.assertEqual(bar.get_by_role('button', name='Reset', exact=True).count(), 0)
-            page.set_viewport_size({'width': 1000, 'height': 900})
-            shots = Path('/home/yor42/.claude/jobs/cf71c9e7/tmp/shots')
-            if shots.is_dir():
-                page.screenshot(path=str(shots / 'mnt22-stale.png'))
             bar.get_by_role('button', name='Reload', exact=True).click()
             bar.wait_for(state='hidden', timeout=5000)
             card = page.locator('.character-card').filter(has=page.get_by_text('Alice', exact=True)).first
