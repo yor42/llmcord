@@ -21,6 +21,7 @@ from .auth import AuthService
 from .discord_api import DISCORD_API
 from .admin import AdminService
 from .config import profiles_from_models
+from .errors import register_secret_names
 
 
 AVATAR_CACHE = {"Cache-Control": "private, max-age=300"}
@@ -127,6 +128,7 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
             raise TypeError("models and limits must be mappings")
         app.state.config_profiles, app.state.config_roles = profiles_from_models(models)
         app.state.config_models, app.state.config_limits = models, limits
+        register_secret_names(p.api_key_env for p in app.state.config_profiles.values())
     except (ValueError, OSError, yaml.YAMLError, TypeError, AttributeError) as error:
         app.state.config_profiles, app.state.config_roles = {}, {}
         app.state.config_error = str(error) if isinstance(error, ValueError) else "the file could not be read"

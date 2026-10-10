@@ -61,6 +61,21 @@ class RedactRegistryTests(RegistryBase):
         # Characterization: _log_entry already passes every profile's key to the store; this pins it for non-suffix names.
         self.assertNotIn(VALUE, json.dumps(entry))
 
+    def test_web_create_app_registers_config_profile_names(self):
+        """MNT-16: the web process registers config.yaml key names too, so a dashboard error_detail redacts them."""
+        import tempfile
+        from pathlib import Path
+        from llmcord_core.web import create_app
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'config.yaml'
+            path.write_text('models:\n  profiles:\n    p: {provider: compatible, model: m, context_tokens: 16000, base_url: "http://localhost/v1", api_key_env: LLM_APIKEY}\n'
+                            '  dialogue: p\n  director: p\n  memory: p\n', encoding='utf-8')
+            self.assertIn(VALUE, error_detail(RuntimeError(VALUE)))
+            app = create_app(':memory:', 'https://example.test', 'cid', 'csecret-fake', 'tok-fake', enable_dashboard=False, config_path=str(path))
+            self.addCleanup(app.state.store.close)
+        self.assertIn('p', app.state.config_profiles)
+        self.assertNotIn(VALUE, error_detail(RuntimeError(VALUE)))
+
     def test_resolver_registers_config_profile_names(self):
         """Only the config_profiles path is proven here; a dashboard profile's name must end in _API_KEY, so the suffix rule already covers it."""
         from llmcord_core.store import Store
