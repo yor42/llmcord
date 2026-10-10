@@ -125,7 +125,9 @@ class CurrencyPanel:
                 saved['name'] = store.set_currency_name(gid, name.value, saved['name'])
                 return saved['name']
             ctx.savebar.track('Currency name', {name: saved['name']}, save=save_name, action='currency.name',
-                              detail=lambda result: {'name': result}, success='Currency name saved')
+                              detail=lambda result: {'name': result}, success='Currency name saved',
+                              dirty=lambda: (name.value or '') != saved['name'],
+                              reset=lambda: name.set_value(saved['name']))
         with section('Daily check-in'):
             daily = store.daily_settings(gid)
             with ui.element('div').classes('ll-form-row ll-field-row'):
@@ -136,8 +138,14 @@ class CurrencyPanel:
                 nonlocal daily
                 daily = save_daily(store, gid, *(f.value for f in fields), daily)
                 return daily
-            ctx.savebar.track('Daily check-in', {f: daily[key] for f, key in zip(fields, daily)}, save=save_daily_settings, action='currency.daily',
-                              detail=lambda result: dict(result), success='Daily check-in saved')
+            daily_keys = ('amount', 'streak_bonus', 'streak_days')
+            def daily_reset():
+                for f, key in zip(fields, daily_keys):
+                    f.set_value(daily[key])
+            ctx.savebar.track('Daily check-in', {f: daily[key] for f, key in zip(fields, daily_keys)}, save=save_daily_settings, action='currency.daily',
+                              detail=lambda result: dict(result), success='Daily check-in saved',
+                              dirty=lambda: [f.value for f in fields] != [daily[key] for key in daily_keys],
+                              reset=daily_reset)
         with section('Games'):
             bets = store.game_settings(gid)
             with ui.element('div').classes('ll-form-row ll-field-row'):
@@ -146,17 +154,22 @@ class CurrencyPanel:
                 nonlocal bets
                 bets = save_bets(store, gid, *(f.value for f in limits), bets)
                 return bets
-            ctx.savebar.track('Bet limits', {f: bets[key] for f, key in zip(limits, bets)}, save=save_bet_limits, action='games.bets',
+            bet_keys = ('min_bet', 'max_bet')
+            def bets_reset():
+                for f, key in zip(limits, bet_keys):
+                    f.set_value(bets[key])
+            ctx.savebar.track('Bet limits', {f: bets[key] for f, key in zip(limits, bet_keys)}, save=save_bet_limits, action='games.bets',
                               detail=lambda result: dict(result), success='Bet limits saved',
-                              dirty=lambda: [f.value for f in limits] != [bets['min_bet'], bets['max_bet']],
-                              reset=lambda: [f.set_value(bets[key]) for f, key in zip(limits, bets)])
+                              dirty=lambda: [f.value for f in limits] != [bets[key] for key in bet_keys],
+                              reset=bets_reset)
             games = store.game_channels(gid)
             options = {**{c: str(c) for c in sorted(games)}, **ctx.channel_names}
             picker = ui.select(options, value=sorted(games), multiple=True, label='Game channels').props('use-chips').classes('w-full')
             def save_game_channels():
                 nonlocal games
-                result = save_channels(store, gid, picker.value, games)
-                games = {int(c) for c in picker.value or ()}
+                wanted = {int(c) for c in picker.value or ()}
+                result = save_channels(store, gid, wanted, games)
+                games = wanted
                 return result
             ctx.savebar.track('Game channels', {picker: sorted(games)}, save=save_game_channels, action='games.channels',
                               detail=lambda result: {'channels': sorted(games), 'closed_tables': list(result['closed_tables'])},

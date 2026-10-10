@@ -3964,6 +3964,66 @@ class DashboardBrowserTests(unittest.TestCase):
             self.post_hook('/_test/games', {'min_bet': 1, 'max_bet': 1000, 'channels': []})
             context.close()
 
+    def test_currency_games_unknown_channel_and_closed_tables_toast(self):
+        """MNT-40: a saved game channel Discord does not list shows as its id and can be removed; turning off a channel with an open table toasts the closed count and refunds the seated bet."""
+        from playwright.sync_api import expect
+        member = 777000111
+        self.post_hook('/_test/games', {'channels': [100, 999]})
+        seated = self.context.request.post(self.url + '/_test/game-table', data={'channel': 100, 'user': member, 'funds': 500, 'stake': 40}).json()
+        self.assertEqual(seated['balance'], 460)
+        context, page, errors = self.open_currency()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            picker = page.get_by_label('Game channels', exact=True)
+            page.get_by_text('Members play with /blackjack in game channels.', exact=False).wait_for(timeout=5000)
+            picker.click()
+            page.get_by_role('option', name='999', exact=True).wait_for(timeout=5000)
+            expect(page.locator('.q-chip', has_text='999')).to_be_visible()
+            page.get_by_role('option', name='#scene', exact=True).click()
+            page.get_by_role('option', name='999', exact=True).click()
+            page.keyboard.press('Escape')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Game channels saved. Closed 1 open table(s) and refunded their bets.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['channels'], [])
+            self.assertEqual(self.context.request.get(self.url + '/_test/balance', params={'user': member}).json()['balance'], 500)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'channels': []})
+            self.post_hook('/_test/game-table-cleanup', {'user': member})
+            context.close()
+
+    def test_currency_saved_values_become_the_save_bar_baseline(self):
+        """MNT-40: after a save, editing the currency name or a daily check-in field back to its pre-save value shows the save bar, and Reset restores the last saved value, not the page-build one."""
+        from playwright.sync_api import expect
+        context, page, errors = self.open_currency()
+        try:
+            bar, field = page.get_by_role('region', name='Unsaved changes'), page.get_by_label('Currency name', exact=True)
+            expect(field).to_have_value('coins')
+            field.fill('gold')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Currency name saved', exact=True).wait_for(timeout=5000)
+            bar.wait_for(state='hidden', timeout=5000)
+            field.fill('coins')
+            bar.get_by_text('Currency name has unsaved changes.', exact=True).wait_for(timeout=5000)
+            bar.get_by_role('button', name='Reset', exact=True).click()
+            bar.wait_for(state='hidden', timeout=5000)
+            expect(field).to_have_value('gold')
+            amount = page.get_by_label('Amount per check-in', exact=True)
+            amount.fill('30')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Daily check-in saved', exact=True).wait_for(timeout=5000)
+            bar.wait_for(state='hidden', timeout=5000)
+            amount.fill('0')
+            bar.get_by_text('Daily check-in has unsaved changes.', exact=True).wait_for(timeout=5000)
+            bar.get_by_role('button', name='Reset', exact=True).click()
+            bar.wait_for(state='hidden', timeout=5000)
+            expect(amount).to_have_value('30')
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/currency-name', {'name': 'coins'})
+            self.post_hook('/_test/daily', {'amount': 0, 'streak_bonus': 0, 'streak_days': 7})
+            context.close()
+
     def test_currency_member_lookup_failure_falls_back_to_ids_with_one_warning(self):
         """FEAT-17 B: when the Discord member lookup fails the tab shows 'Member ...NNNN' and warns once."""
         self.post_hook('/_test/fail-members', n=1)

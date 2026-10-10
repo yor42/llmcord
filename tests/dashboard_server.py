@@ -221,6 +221,38 @@ def main():
             store.set_game_channels(body.get('guild', 1), set(body['channels']))
         return {}
 
+    @app.post('/_test/game-table')
+    async def game_table(request: Request):
+        # Seeds an open table in a game channel with one seated member (funded first); the reply holds their balance after betting.
+        body = await request.json()
+        guild, channel, user, stake = body.get('guild', 1), body['channel'], body['user'], body['stake']
+        store.change_balance(guild, user, body['funds'], 'Test funds', 1)
+        snapshot = store.open_table(guild, channel, 'blackjack', user)
+        store.join_round(guild, snapshot['round_id'], user, stake)
+        return {'balance': store.balance(guild, user)}
+
+    @app.post('/_test/game-table-cleanup')
+    async def game_table_cleanup(request: Request):
+        # Undo /_test/game-table: remove the member's tables, seats, rounds, balance and ledger rows (the ledger is append-only, so its delete trigger is dropped and restored).
+        body = await request.json()
+        guild, user = body.get('guild', 1), body['user']
+        tables = "SELECT id FROM game_tables WHERE guild_id=? AND opened_by=?"
+        rounds = f"SELECT id FROM game_rounds WHERE guild_id=? AND table_id IN ({tables})"
+        with store.write_admin():
+            store.db.execute(f"DELETE FROM game_seats WHERE guild_id=? AND round_id IN ({rounds})", (guild, guild, guild, user))
+            store.db.execute(f"DELETE FROM game_rounds WHERE guild_id=? AND table_id IN ({tables})", (guild, guild, user))
+            store.db.execute('DELETE FROM game_tables WHERE guild_id=? AND opened_by=?', (guild, user))
+            store.db.execute('DELETE FROM currency_balances WHERE guild_id=? AND user_id=?', (guild, user))
+            trigger = store.one("SELECT sql FROM sqlite_master WHERE type='trigger' AND name='currency_ledger_no_delete'")['sql']
+            store.db.execute('DROP TRIGGER currency_ledger_no_delete')
+            store.db.execute('DELETE FROM currency_ledger WHERE guild_id=? AND user_id=?', (guild, user))
+            store.db.execute(trigger)
+        return {}
+
+    @app.get('/_test/balance')
+    async def balance(user: int, guild: int = 1):
+        return {'balance': store.balance(guild, user)}
+
     @app.get('/_test/state')
     async def snapshot():
         return {'spaces': [dict(r) for r in originals['list_spaces'](1)],
