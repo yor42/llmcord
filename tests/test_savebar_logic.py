@@ -197,6 +197,36 @@ class SaveBarPartsTests(unittest.IsolatedAsyncioTestCase):
             await self.bar.save()
         notify.assert_not_called()
 
+    async def test_part_then_runs_after_its_save_before_the_rebase_and_even_if_a_later_part_fails(self):
+        """MNT-29: a part's then gets that part's result right after it saved, before its baseline is rebased, and still ran when a later part fails."""
+        seen = []
+        self.editor.parts[0].then = lambda result: seen.append((result, list(self.calls), self.bar.differs(self.editor), dict((id(c), v) for c, v in self.editor.controls)[id(self.fields[0])]))
+        self.fields[0].set_value('a2')
+        self.fields[1].set_value('b2')
+        self.fail = {'y'}
+        with mock.patch('nicegui.ui.notify'):
+            await self.bar.save()
+        self.assertEqual(seen, [('r-x', [('x', 'act-x', 'd-x')], True, 'a')])
+        self.assertEqual(dict((id(c), v) for c, v in self.editor.controls)[id(self.fields[0])], 'a2')
+        self.assertEqual([call[0] for call in self.calls], ['x', 'y'])
+        self.assertIs(self.bar.active, self.editor)
+
+    async def test_raising_part_then_is_toasted_and_does_not_block_rebase_or_later_parts(self):
+        """MNT-29: a failing part follow-up is logged and toasted; the part is still rebased, later parts run, and the bar settles."""
+        def boom(_result):
+            raise RuntimeError('refresh failed')
+        self.editor.parts[0].then = boom
+        self.editor.success = 'Saved'
+        self.fields[0].set_value('a2')
+        self.fields[1].set_value('b2')
+        with mock.patch('nicegui.ui.notify') as notify, self.assertLogs('llmcord_core.savebar', 'ERROR'):
+            await self.bar.save()
+        self.assertEqual([call[0] for call in self.calls], ['x', 'y'])
+        self.assertIsNone(self.bar.active)
+        notify.assert_any_call('Saved, but the view could not refresh. Reload the page.', type='negative', timeout=8000)
+        notify.assert_any_call('Saved', type='positive')
+        self.assertEqual(self.notes, [['r-x', 'r-y']])
+
     async def test_success_toast_on_full_success(self):
         self.editor.success = 'Saved'
         self.fields[0].set_value('a2')

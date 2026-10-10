@@ -155,6 +155,16 @@ def main():
         return original_turn_log_page(*args, **kwargs)
     store.turn_log_page = failing_turn_log_page
 
+    # MNT-29: lets a test make the next timezone save fail (/_test/fail-timezone), a Server settings part that runs after retention.
+    timezone_hooks = {'fail': 0}
+    original_set_guild_timezone = store.set_guild_timezone
+    def failing_set_guild_timezone(*args, **kwargs):
+        if timezone_hooks['fail']:
+            timezone_hooks['fail'] -= 1
+            raise ValueError('Fixture timezone failure')
+        return original_set_guild_timezone(*args, **kwargs)
+    store.set_guild_timezone = failing_set_guild_timezone
+
     @app.get('/_test/state')
     async def snapshot():
         return {'spaces': [dict(r) for r in originals['list_spaces'](1)],
@@ -365,6 +375,12 @@ def main():
     async def fail_turn_log_page(n: int = 1):
         # MNT-28: the next `n` turn log list reads raise ValueError (the dashboard shows it as an error toast).
         turn_log_hooks['fail'] = n
+        return {'ok': True}
+
+    @app.post('/_test/fail-timezone')
+    async def fail_timezone(n: int = 1):
+        # MNT-29: the next `n` server timezone saves raise ValueError (shown as an error toast).
+        timezone_hooks['fail'] = n
         return {'ok': True}
 
     @app.post('/_test/backend-profile')

@@ -1185,6 +1185,36 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             self.set_turn_log(before['enabled'], before['days'])
 
+    def test_retention_saved_before_a_failing_part_still_rebuilds_monitoring(self):
+        """MNT-29: when the retention part saves but a later Server settings part fails while Monitoring is shown, Monitoring is rebuilt with the new notes, not left blank; the failed part stays unsaved."""
+        before = self.state()['turn_log']
+        self.set_turn_log(False, 14)
+        try:
+            context, page, errors = self.ux_page('/admin/guild/1?tab=monitoring')
+            try:
+                page.get_by_text('Usage is kept for 14 days (Server settings).', exact=True).wait_for(timeout=5000)
+                page.get_by_role('tab', name='Server setup', exact=True).click()
+                page.get_by_label('Keep usage and log for', exact=True).click()
+                page.get_by_role('option', name='7 days', exact=True).click()
+                select = page.get_by_label('Server timezone', exact=True)
+                select.click()
+                select.fill('Asia/Seoul')
+                page.get_by_role('option', name='Asia/Seoul', exact=True).click()
+                page.get_by_role('tab', name='Monitoring', exact=True).click()
+                self.post_hook('/_test/fail-timezone', n=1)
+                page.get_by_role('region', name='Unsaved changes').get_by_role('button', name='Save changes', exact=True).click()
+                page.get_by_text('Fixture timezone failure', exact=True).wait_for(timeout=5000)
+                page.get_by_text('Usage is kept for 7 days (Server settings).', exact=True).wait_for(timeout=5000)
+                self.assertEqual(page.get_by_text('Entries are kept for 7 days (Server settings).', exact=False).count(), 1)
+                self.assertEqual(self.state()['turn_log']['days'], 7)
+                self.assertEqual(self.state()['guild_timezone'], '')
+                self.assertTrue(page.get_by_role('region', name='Unsaved changes').is_visible())
+            finally:
+                context.close()
+        finally:
+            self.post_hook('/_test/fail-timezone', n=0)
+            self.set_turn_log(before['enabled'], before['days'])
+
     def test_failed_filter_read_restores_the_controls(self):
         """MNT-28: when the read for a changed filter fails, the filter controls go back to the applied values so they agree with the list."""
         from playwright.sync_api import expect

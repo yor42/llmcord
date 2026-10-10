@@ -501,6 +501,7 @@ class LiveContext:
         self.channel_names, self.thread_names, self.thread_scopes = {}, {}, None
         self.channels_failed = False
         self.selector, self.containers, self.builders, self.built = None, {}, {}, set()
+        self.builds = {}  # tab -> generation of its newest build: an older build still awaiting reads must not fill the container
         self.savebar = None
 
     async def load_channel_names(self):
@@ -554,14 +555,26 @@ class LiveContext:
         self.built.add(tab)
         self.__dict__.pop('snapshot', None)
         container.clear()
+        generation = self.restart(tab)
         try:
             with container:
                 result = self.builders[tab]()
                 if inspect.isawaitable(result):
-                    await result  # builders must not otherwise await: a refresh during an awaited build would double-fill
+                    await result  # an awaiting builder must check live(tab) after each await and stop filling once a newer build began
         except BaseException:
-            self.built.discard(tab)
+            if self.builds.get(tab) == generation:
+                self.built.discard(tab)
             raise
+
+    def restart(self, tab):
+        """Start a new generation for a tab's build (also called when its panel is dropped), making older builds stale."""
+        self.builds[tab] = self.builds.get(tab, 0) + 1
+        return self.builds[tab]
+
+    def live(self, tab):
+        """A check for a builder to call at its start and after each await: False once a newer build or a refresh superseded it."""
+        generation = self.builds.get(tab, 0)
+        return lambda: self.builds.get(tab, 0) == generation
 
     async def refresh(self, tab=None, owner=None):
         """In-page replacement for a browser reload: stale every built panel, optionally switch tab, rebuild the visible one."""
@@ -574,6 +587,7 @@ class LiveContext:
             self.savebar.clear()
         for built in self.built:
             self.containers[built].clear()
+            self.restart(built)
         self.built.clear()
         if tab and tab != self.selector.value:
             self.selector.set_value(tab)  # returns before the build: the tab_panels change handler builds it
@@ -1267,7 +1281,7 @@ def turn_log_row(entry, zone_name, channel_label):
             'status': 'Error' if entry['status'] == 'error' else 'OK', 'reference': entry['reference_id'] or '', 'preview': (entry['preview'] or '').strip()}
 
 
-async def turn_log_section(ctx, channel_label):
+async def turn_log_section(ctx, channel_label, live=lambda: True):
     from nicegui import ui
     store, gid = ctx.store, ctx.guild_id
     days = store.turn_log_settings(gid)['days']
@@ -1341,8 +1355,8 @@ async def turn_log_section(ctx, channel_label):
             try:
                 page = await ctx.run(lambda: (store.turn_log_page(gid, **chosen, before_id=before, limit=TURN_LOG_PAGE), store.turn_log_settings(gid)['enabled'],
                                               store.turn_log_channels(gid) if reset else None))
-                if generation != state['gen']:
-                    return  # a newer filter was applied while this read ran
+                if generation != state['gen'] or not live():
+                    return  # a newer filter was applied, or a newer build of the panel started, while this read ran
                 if page is None:
                     if reset:  # keep the controls and the list in agreement: put the controls back without another read
                         # restore what the list shows; the handlers that follow see filters() == applied and read nothing
@@ -1397,6 +1411,7 @@ def usage_role_labels(backend_roles):
 async def monitoring_panel(ctx):
     from nicegui import ui
     store, gid = ctx.store, ctx.guild_id
+    live = ctx.live('monitoring')
     days = store.turn_log_settings(gid)['days']
     keys = usage_range_keys(days)
     roles = usage_role_labels(ctx.service.effective_backend().roles)
@@ -1417,6 +1432,8 @@ async def monitoring_panel(ctx):
             state = await ctx.service.run_operator(ctx.ident, lambda: budget.state(store))
         except HTTPException:
             state = None
+        if not live():
+            return
         if state:
             with ui.element('div').classes('ll-form-row'):
                 ui.label(f'Bot-wide spending: {format_usd(state.spent_usd)} of {format_usd(state.hard_cap_usd)} hard cap this period' if state.hard_cap_usd is not None
@@ -1454,7 +1471,7 @@ async def monitoring_panel(ctx):
                 ui.label('Tracked for this server, including internal model calls. Cost uses list rates or your configured rates; it is not a billing statement.').classes('ll-muted')
         select.on_value_change(lambda _: render())
         render()
-    await turn_log_section(ctx, channel_label)
+    await turn_log_section(ctx, channel_label, live)
 
 
 async def setup_panel(ctx):
@@ -1536,20 +1553,21 @@ async def setup_panel(ctx):
             if 'monitoring' in ctx.built:  # rebuild on next show so its retention notes and periods follow
                 ctx.containers['monitoring'].clear()
                 ctx.built.discard('monitoring')
+                ctx.restart('monitoring')
             return True
         async def configure():
             await ctx.service.avatars.configure(gid, asset_channel.value)
             return True
         async def show_monitoring(_):
-            # same in-flight caveat as refresh(): a Monitoring build still awaiting its reads when this save lands could double-fill
+            # runs as soon as the retention part saved (even if a later part fails); a build it overtook stops filling (ctx.live)
             if ctx.selector.value == 'monitoring':
                 await ctx.build('monitoring')
-        ctx.savebar.track('Server settings', {}, then=show_monitoring, parts=[
+        ctx.savebar.track('Server settings', {}, parts=[
             {'controls': {footer: store.usage_footer_enabled(gid)}, 'operation': save_footer, 'action': 'settings.footer',
              'detail': lambda _: {'enabled': bool(footer.value)}},
             {'controls': {catchup: store.catchup_anywhere(gid)}, 'operation': save_catchup, 'action': 'settings.catchup',
              'detail': lambda _: {'enabled': bool(catchup.value)}},
-            {'controls': {log_switch: turn_log['enabled'], log_days: turn_log['days']}, 'operation': save_turn_log, 'action': 'settings.turn_log',
+            {'controls': {log_switch: turn_log['enabled'], log_days: turn_log['days']}, 'operation': save_turn_log, 'action': 'settings.turn_log', 'then': show_monitoring,
              'detail': lambda _: {'enabled': bool(log_switch.value), 'days': int(log_days.value)}},
             {'controls': {timezone: current or None}, 'operation': lambda: timezone_operation(store, gid, timezone.value),
              'action': 'settings.timezone', 'detail': timezone_detail},

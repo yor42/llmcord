@@ -43,21 +43,23 @@ class SaveBar:
 
         parts: instead of save/action/detail, a list of dicts {controls, operation, action, detail=None} (a subset of
         the editor's controls mapped to their saved values, plus the operation, audit action and detail passed to
-        ctx._attempt). The tracked controls are the union of the parts' controls plus any extra `controls`. Save runs
+        ctx._attempt, and optionally then: called with the part's result right after it saved, before the
+        baseline rebase and later parts; an exception there is logged and toasted, not raised). The tracked controls are
+        the union of the parts' controls plus any extra `controls`. Save runs
         only the parts whose controls differ, in order, each its own guarded/audited write; a part that succeeds
         becomes the new saved baseline, a failure stops the rest and leaves the bar active for the unsaved parts.
         When all succeed: one success toast, settle, then then(results), results being the list of per-part
         results in run order. save and parts are mutually exclusive, and extra non-part controls are rejected with
         parts (ValueError). retrack() raises NotImplementedError for a parts editor. Operations should read control
         values at call time: the baseline is rebased to the values captured just before each part ran. If a control
-        was edited during Save the bar stays active (then still runs). On a partial failure then/success are not
-        called, even for parts that already succeeded."""
+        was edited during Save the bar stays active (then still runs). On a partial failure the editor's then/success are not
+        called, even for parts that already succeeded (those parts' own then hooks did run)."""
         if parts and save is not None:
             raise ValueError('save and parts are mutually exclusive')
         if parts and controls:
             raise ValueError('controls must be given through parts')
         parts = [types.SimpleNamespace(controls=dict(part['controls']), operation=part['operation'],
-                                       action=part.get('action'), detail=part.get('detail')) for part in parts or []]
+                                       action=part.get('action'), detail=part.get('detail'), then=part.get('then')) for part in parts or []]
         controls = {**controls}
         for part in parts:
             controls.update(part.controls)
@@ -224,6 +226,15 @@ class SaveBar:
                     self._warn('Your other changes were not saved. They are still pending.')
                 return False, None, getattr(outcome, 'error', None)
             results.append(result)
+            if part.then:  # per-part follow-up, run as soon as this part saved even if a later one fails
+                try:
+                    followup = part.then(result)
+                    if inspect.isawaitable(followup):
+                        await followup
+                except Exception:
+                    logger.exception('Save bar follow-up failed for %s', editor.name)
+                    from nicegui import ui
+                    ui.notify('Saved, but the view could not refresh. Reload the page.', type='negative', timeout=8000)
             editor.controls = [(control, sent[control] if control in sent else value) for control, value in editor.controls]
             saved.update({id(control): value for control, value in sent.items()})
         return True, results, None
