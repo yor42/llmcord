@@ -31,7 +31,7 @@ For three channels, `#world-a`, `#world-b`, and `#hub`:
 5. Set a channel's default cast with `/admin cast default` and comma-separated names in `characters`. Members can use `/cast set`, `/cast add`, and `/cast remove` to change the active cast in a channel or thread. A hub's `/summon` can invite any eligible guest for one turn without changing that cast.
 6. Mention the bot or reply to one of its character lines to begin. `/admin ambient on` is an optional admin setting per channel. Ambient participation waits for at least two human messages and a 120-second cooldown, and the director can stay silent. Test explicit turns first.
 
-World channels only admit their home world's characters. Hub channels admit characters from linked worlds, but only active cast members join ambiently. Threads inherit their parent channel's space, lore, and ambient setting; they keep separate casts and message histories.
+World channels only admit their home world's characters. Hub channels admit characters from linked worlds, but only active cast members join ambiently (and, for a member who uses step in, that member's favorites). Threads inherit their parent channel's space, lore, and ambient setting; they keep separate casts and message histories.
 
 ## Memory and lore
 

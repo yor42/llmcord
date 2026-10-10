@@ -47,6 +47,7 @@ class SceneContext:
     user_label: str = ''
     guidelines: dict | None = None
     mentioned_users: list[dict] = field(default_factory=list)
+    speaker_ids: tuple = ()
 
 
 class Engine:
@@ -99,6 +100,20 @@ class Engine:
         with log_purpose(purpose):
             return await self.models.structured_compiled(role, request, name, schema)
 
+    def favorite_available(self, guild_id, user_id, space_id, channel_id, parent_channel_id) -> bool:
+        """Cheap check for the ambient threshold: the author has a favorite in the cast, or one that could step in."""
+        if not user_id:
+            return False
+        if not self.store.favorites(guild_id, user_id):
+            return False
+        favorites = self.store.eligible_favorites(guild_id, user_id, space_id)
+        if not favorites:
+            return False
+        if self.store.favorites_mode(guild_id, user_id) == 'step_in':
+            return True
+        cast = set(self.store.get_cast(channel_id, parent_channel_id))
+        return any(f['character_id'] in cast for f in favorites)
+
     async def speakers(self, scene: SceneContext) -> list:
         eligible = {row["id"]: row for row in self.eligible(scene)}
         cast = [eligible[ident] for ident in self.store.get_cast(scene.channel_id, scene.parent_channel_id) if ident in eligible]
@@ -107,17 +122,27 @@ class Engine:
                 raise ValueError("That character cannot join this world or hub.")
             forced = eligible[scene.forced_character_id]
             cast = [forced, *[row for row in cast if row["id"] != forced["id"]]]
-        if not cast:
+        favorites = [f for f in self.store.favorites(scene.guild_id, scene.user_id) if f['character_id'] in eligible] if scene.user_id else []
+        favorite_ids = {f['character_id'] for f in favorites}
+        step_in = bool(favorites) and self.store.favorites_mode(scene.guild_id, scene.user_id) == 'step_in'
+        if not cast and not step_in:
             return []
+        options_rows = list(cast)
+        if step_in:
+            in_cast = {row['id'] for row in cast}
+            extra = [f['character_id'] for f in favorites if f['character_id'] not in in_cast and f['character_id'] in eligible]
+            options_rows += [eligible[ident] for ident in extra[:self.store.cast_limits(scene.guild_id)['max_favorites']]]
+        allowed = {row['id'] for row in options_rows}
         # A cheap deterministic gate avoids a model call for ambient messages with no invitation.
         if scene.ambient:
             lower = " ".join([*(part.get("text", "") for part in scene.recent[-2:]), scene.text]).casefold()
-            if not any(row["name"].casefold() in lower for row in cast) and not any(
+            if not any(row["name"].casefold() in lower for row in options_rows) and not any(
                 phrase in lower for phrase in ("what do you think", "join us", "come over", "your turn")
-            ):
+            ) and not (favorite_ids & allowed):
                 return []
-        options = [{"id": row["id"], "name": row["name"]} for row in cast]
-        prompt = json.dumps({"cast": options, "recent": scene.recent[-6:], "latest": scene.text,
+        options = [{"id": row["id"], "name": row["name"], **({"favorite": True} if row["id"] in favorite_ids else {})} for row in options_rows]
+        hint = {'favorites_hint': 'The latest author prefers the options marked favorite: prefer them when they fit, without ignoring other members.'} if favorite_ids & allowed else {}
+        prompt = json.dumps({"cast": options, **hint, "recent": scene.recent[-6:], "latest": scene.text,
             'latest_author': {'author_id': scene.user_id, 'author_label': scene.user_label},
             "ambient": scene.ambient, "forced": scene.forced_character_id}, ensure_ascii=False)
         try:
@@ -125,15 +150,15 @@ class Engine:
             ids = decision.get("speakers")
             if not isinstance(ids, list):
                 raise ValueError("Invalid director result")
-            ids = list(dict.fromkeys(ident for ident in ids if type(ident) is int and ident in {row["id"] for row in cast}))
+            ids = list(dict.fromkeys(ident for ident in ids if type(ident) is int and ident in allowed))
             if scene.forced_character_id is not None:
                 ids = [scene.forced_character_id, *[ident for ident in ids if ident != scene.forced_character_id]]
             if not ids and not scene.ambient:
-                ids = [cast[0]["id"]]
+                ids = [options_rows[0]["id"]]
             return [eligible[ident] for ident in ids[:self.settings.limits["max_speakers"]]]
         except Exception as error:
             logging.error("Director failed: %s", error_detail(error))
-            return [] if scene.ambient else [cast[0]]
+            return [] if scene.ambient else [options_rows[0]]
 
     def record_user(self, scene: SceneContext, stored_text: str | None = None) -> int:
         return self.store.record_node(scene.user_message_id, scene.guild_id, scene.channel_id,
@@ -241,7 +266,7 @@ class Engine:
         def lore_text(items):
             return "\n".join(f"[{item.entry_key}] {item.content}" for item in items)
         eligible = {row['id']: row for row in self.eligible(scene)}
-        group_ids = list(dict.fromkeys([*self.store.get_cast(scene.channel_id, scene.parent_channel_id), *([scene.forced_character_id] if scene.forced_character_id else [])]))
+        group_ids = list(dict.fromkeys([*self.store.get_cast(scene.channel_id, scene.parent_channel_id), *([scene.forced_character_id] if scene.forced_character_id else []), *scene.speaker_ids]))
         values = {'char': character['name'], 'user': scene.user_label or f'User {scene.user_id}',
             'group': ', '.join(eligible[ident]['name'] for ident in group_ids if ident in eligible),
             'location': location, 'description': card.get('description', ''),

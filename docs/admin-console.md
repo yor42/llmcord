@@ -18,6 +18,8 @@ Choose **Create character**, enter a name and home world, and choose **Create** 
 
 **Delete character** (in the ⋯ menu beside the character name, below **Archive**) opens a confirmation. **Delete permanently** removes the character, its owned lore, personal memories, encounters, saved avatar data, and channel/thread cast assignments. Past chat history and Discord messages remain; lore previously moved to another owner also remains. Archive is available when you want to restore a character later. Deletion rejects changes made since the page was loaded, and character IDs are never reused for a new character.
 
+Under **Server settings**, **Largest cast** and **Favorites per member** (whole numbers from 1 to 15, default 5) set how many characters a cast can hold and how many favorites a member can keep. A larger cast gives the director more characters to choose from, so more characters may answer a message; each answer is a separate model call and every prompt lists the cast. At most 3 characters answer one message. With step in, a member's favorites outside the cast can also answer them, so more favorites can mean more model calls and longer prompts. Lowering a limit keeps existing casts and favorites; they can shrink but not grow. Saved with the bar; if the limits were changed meanwhile, the save is refused and you reload. A channel's **Default cast** label shows the current largest cast.
+
 ## Lore workspace
 
 Choose an owner on each side of **Lore**: character, channel, world/hub, lorebook, or an existing thread lore owner. Search filters content and keywords; lists show 50 entries per page.

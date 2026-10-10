@@ -38,6 +38,7 @@ MEMBER_SURFACE = {
     "catchup": None,
     "memory": {"opt_in", "opt_out", "list", "forget"},
     "time": {"set", "show", "clear"},
+    "favorites": {"add", "remove", "list", "mode", "clear"},
     "balance": None,
     "daily": None,
     "blackjack": None,
@@ -74,6 +75,9 @@ ADMIN_OPTIONS = {
 }
 # Arguments for invoking each member command (DM test); everything else uses defaults.
 MEMBER_ARGS = {
+    "favorites add": ("Alice",),
+    "favorites remove": ("Alice",),
+    "favorites mode": ("lean",),
     "character info": ("Alice",),
     "cast set": ("Alice",),
     "cast add": ("Alice",),
@@ -97,9 +101,9 @@ class AdminSurfaceTests(unittest.TestCase):
         self.bot.store.close()
 
     def test_surface_table_matches_d11(self):
-        """Guard for the tests below: the expected tables have the 20 admin and 22 member (plus the admin-only /context) commands D11 lists."""
+        """Guard for the tests below: the expected tables have the 20 admin and 27 member (plus the admin-only /context) commands D11 lists."""
         self.assertEqual(len(ADMIN_PATHS), 20)
-        self.assertEqual(len(MEMBER_PATHS), 22)
+        self.assertEqual(len(MEMBER_PATHS), 27)
         self.assertEqual(set(ADMIN_OPTIONS), ADMIN_PATHS)
 
     def test_admin_group_holds_exactly_the_admin_subcommands(self):

@@ -34,6 +34,7 @@ from .avatars import emotion_stream
 from .errors import ModelConfigError, error_detail, error_stack, reference_id, user_detail
 from .usage import capture_usage, log_attribution, log_purpose, log_scope, mask_for_log, reply_footer
 from .identity import discord_identity, message_context
+from .favorites_discord import register_favorites_commands
 from .games_discord import GameButton, GameTables, register_game_commands
 
 AVATAR_ASSET_CHECK_TTL = 600
@@ -228,7 +229,9 @@ class SkitBot(commands.Bot):
             async with self.channel_locks.lock(message.channel.id):
                 self.store.count_ambient_message(message.channel.id)
                 count, last = self.store.ambient_state(message.channel.id)
-                if count < 2 or time.time() - last < self.base_settings.limits["ambient_cooldown_seconds"]:
+                if time.time() - last < self.base_settings.limits["ambient_cooldown_seconds"]:
+                    return
+                if count < 2 and not (count == 1 and self.engine.favorite_available(message.guild.id, message.author.id, binding["space_id"], message.channel.id, parent_id)):
                     return
                 # A silent director decision still consumes this ambient opportunity.
                 self.store.mark_ambient_response(message.channel.id)
@@ -485,6 +488,7 @@ class SkitBot(commands.Bot):
             scene = replace(scene, preset=scene.preset or self.store.active_preset(scene.guild_id),
                 guidelines=scene.guidelines if scene.guidelines is not None else self.store.scene_guidelines(scene.guild_id, scene.space_id, scene.parent_channel_id or scene.channel_id))
             speakers = await self.engine.speakers(scene)
+            scene = replace(scene, speaker_ids=tuple(row['id'] for row in speakers))
             if not speakers:
                 if not scene.ambient and await progress.update("No active character is available here. Use /cast set or /summon."):
                     self._delete_later(progress.message)
@@ -1511,6 +1515,7 @@ def register_commands(bot: SkitBot) -> None:
     _register_cast_commands(bot, ctx, admin_cast)
     _register_ambient_commands(bot, ctx, admin_ambient)
     _register_summon_command(bot, ctx)
+    register_favorites_commands(bot, ctx)
     _register_catchup_command(bot)
     _register_memory_commands(bot, ctx)
     _register_time_commands(bot, ctx)

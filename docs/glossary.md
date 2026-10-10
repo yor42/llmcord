@@ -11,6 +11,8 @@ These are the words the Discord commands, the admin dashboard and these docs use
 | **Link** | Let a world's characters appear in a hub (`/admin space link_world`, dashboard **Link**). **Unlink** removes them and drops them from that hub's channel casts. | "allow", "disallow" | `link_world`, `unlink_world`, `hub_worlds` |
 | **Bind** | Attach a Discord text channel to one world or hub. Scenes in that channel use its characters and lore. | | `bind_channel`, `channels` |
 | **Cast** | The characters who can speak in a channel. The **default cast** is set by admins; members change the **active cast** of a scene. | | `default_cast`, `active_cast` |
+| **Favorite** | A character a member keeps with `/favorites add`. It matters only where that character can already appear. | | `member_favorites` |
+| **Favorites mode: lean / step in** | Lean: your favorites in the cast are more likely to answer you. Step in: your favorites outside the cast can also answer you, for that message only. Set with `/favorites mode`. | | `favorites_mode` (`lean`, `step_in`) |
 | **Ambient participation** | Characters may join in without being mentioned. | | `ambient` |
 | **Lore** | Facts the bot can put into a prompt. Each lore entry belongs to one owner. | "world info" (only for SillyTavern imports) | `lore`, `world_info` |
 | **Owner** | Where a lore entry belongs: a world, hub, character, channel, thread, the server, or a lorebook. | "scope" in user text | `owner_kind`, `scope_kind` |

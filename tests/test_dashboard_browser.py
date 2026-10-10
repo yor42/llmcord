@@ -901,6 +901,43 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def test_server_cast_limits_save_validate_stale_conflict_and_guild_isolation(self):
+        """FEAT-23 B: Largest cast and Favorites per member save through the save bar with a toast and audit row, show the store's message for a bad value, refuse a save over limits changed elsewhere, never touch guild 2, and show their notes."""
+        from playwright.sync_api import expect
+        other = self.state()['cast_limits']['2']
+        context, page, errors = self.ux_page('/admin/guild/1')
+        try:
+            page.get_by_role('tab', name='Server setup', exact=True).click()
+            bar = page.get_by_role('region', name='Unsaved changes')
+            cast, favorites = page.get_by_label('Largest cast', exact=True), page.get_by_label('Favorites per member', exact=True)
+            cast.wait_for(timeout=5000)
+            page.get_by_text('At most 3 characters answer one message.', exact=False).wait_for(timeout=5000)
+            page.get_by_text('Lowering a limit keeps existing casts and favorites; they can shrink but not grow.', exact=False).wait_for(timeout=5000)
+            cast.fill('6')
+            favorites.fill('3')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Server settings saved', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['cast_limits']['1'], {'max_cast': 6, 'max_favorites': 3})
+            rows = [r for r in self.state()['audit'] if r['action'] == 'settings.cast_limits']
+            self.assertEqual([json.loads(r['detail_json']) for r in rows], [{'max_cast': 6, 'max_favorites': 3}])
+            cast.fill('16')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The limits must be whole numbers from 1 to 15.', exact=True).wait_for(timeout=5000)
+            cast.fill('8')
+            self.post_hook('/_test/cast-limits', {'max_cast': 4, 'max_favorites': 2})
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The cast limits were changed elsewhere. Reload the page and try again.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['cast_limits']['1'], {'max_cast': 4, 'max_favorites': 2})
+            bar.get_by_role('button', name='Reload', exact=True).click()
+            bar.wait_for(state='hidden', timeout=5000)
+            page.get_by_role('tab', name='Server setup', exact=True).click()
+            expect(page.get_by_label('Largest cast', exact=True)).to_have_value('4')
+            self.assertEqual(self.state()['cast_limits']['2'], other)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/cast-limits', {'max_cast': 5, 'max_favorites': 5})
+            context.close()
+
     def test_server_catchup_switch_persists(self):
         """FEAT-15: toggling 'Allow /catchup in channels without characters' and saving persists it and audits settings.catchup."""
         context, page, errors = self.ux_page('/admin/guild/1')
@@ -1305,7 +1342,7 @@ class DashboardBrowserTests(unittest.TestCase):
             card = page.locator('.channel-card').nth(1)
             card.wait_for()
             card.locator('button.channel-toggle').click()
-            card.get_by_label('Default cast (up to five)', exact=True).click()
+            card.get_by_label('Default cast (up to 5)', exact=True).click()
             page.get_by_role('option', name='Memo Newcomer', exact=True).wait_for()
             page.keyboard.press('Escape')
             self.assertEqual(eligible_reads(), 1)

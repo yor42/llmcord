@@ -1551,9 +1551,10 @@ def channels_section(ctx, channel_names, spaces):
                 return ctx.refresh()
             ctx.button('Bind channel', bind, 'channel.bind', bind_detail, then=bound)
         ui.label('Rebinding a channel keeps its ambient mode and removes cast members not available in the new world or hub.').classes('ll-muted')
+        max_cast = store.cast_limits(gid)['max_cast']
         eligible = {}  # one eligible_characters read per space within this build; never kept across builds
         for binding in ctx.snapshot.channels:
-            channel_card(ctx, binding, channel_names, spaces, eligible)
+            channel_card(ctx, binding, channel_names, spaces, eligible, max_cast)
 
 
 def server_settings_section(ctx, channel_names):
@@ -1578,6 +1579,17 @@ def server_settings_section(ctx, channel_names):
         with ui.element('div').classes('ll-form-row ll-field-row'):
             asset_channel = ui.select(channel_names, value=saved_asset, label='Private text channel')
         ui.label('Avatar asset channel: deny View Channel to @everyone and allow the bot to upload images. Images become Discord CDN assets.').classes('ll-muted')
+        limits = store.cast_limits(gid)
+        with ui.element('div').classes('ll-form-row ll-field-row'):
+            max_cast = ui.number('Largest cast', value=limits['max_cast'], min=1, max=15, precision=0, format='%d')
+            max_favorites = ui.number('Favorites per member', value=limits['max_favorites'], min=1, max=15, precision=0, format='%d')
+        ui.label('A larger cast gives the director more characters to choose from, so more characters may answer a message. Each answer is a separate model call, and every prompt lists the cast. At most 3 characters answer one message.').classes('ll-muted')
+        ui.label("With step in, a member's favorites outside the cast can also answer them, so more favorites can mean more model calls and longer prompts. Lowering a limit keeps existing casts and favorites; they can shrink but not grow.").classes('ll-muted')
+        def save_cast_limits():
+            nonlocal limits
+            whole = lambda value: int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value == int(value) else value
+            limits = store.set_cast_limits(gid, whole(max_cast.value), whole(max_favorites.value), limits)
+            return True
         def save_footer():
             store.set_usage_footer(gid, footer.value)
             return True
@@ -1601,6 +1613,8 @@ def server_settings_section(ctx, channel_names):
         ctx.savebar.track('Server settings', {}, parts=[
             {'controls': {footer: store.usage_footer_enabled(gid)}, 'operation': save_footer, 'action': 'settings.footer',
              'detail': lambda _: {'enabled': bool(footer.value)}},
+            {'controls': {max_cast: limits['max_cast'], max_favorites: limits['max_favorites']}, 'operation': save_cast_limits, 'action': 'settings.cast_limits',
+             'detail': lambda _: {'max_cast': limits['max_cast'], 'max_favorites': limits['max_favorites']}},
             {'controls': {catchup: store.catchup_anywhere(gid)}, 'operation': save_catchup, 'action': 'settings.catchup',
              'detail': lambda _: {'enabled': bool(catchup.value)}},
             {'controls': {log_switch: turn_log['enabled'], log_days: turn_log['days']}, 'operation': save_turn_log, 'action': 'settings.turn_log', 'then': show_monitoring,
@@ -1657,7 +1671,7 @@ def binding_space_name(spaces, space_id):
     return spaces[space_id].rsplit(' (', 1)[0] if space_id in spaces else ''
 
 
-def channel_card(ctx, binding, channel_names, spaces, eligible=None):
+def channel_card(ctx, binding, channel_names, spaces, eligible=None, max_cast=None):
     """One channel binding: a collapsed summary row that expands to a single save-bar editor (guidelines, cast, ambient)."""
     from nicegui import ui
     store, gid = ctx.store, ctx.guild_id
@@ -1681,7 +1695,7 @@ def channel_card(ctx, binding, channel_names, spaces, eligible=None):
                 rows = eligible[space_id]
             options = {r['id']: r['name'] for r in rows}
             saved_cast = json.loads(binding['default_cast'])
-            cast = ui.select(options, value=saved_cast, multiple=True, label='Default cast (up to five)').classes('w-full')
+            cast = ui.select(options, value=saved_cast, multiple=True, label=f"Default cast (up to {max_cast if max_cast is not None else store.cast_limits(gid)['max_cast']})").classes('w-full')
             ambient = ui.switch('Ambient participation', value=bool(binding['ambient']))
         with toggle:
             _span(name + ' ').classes('ll-block-name')

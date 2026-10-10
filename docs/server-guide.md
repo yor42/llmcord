@@ -17,9 +17,9 @@ Older saved messages from before this feature retain their user IDs; historical 
 | Bound channel | Chooses one world or hub and adds channel lore, a default cast, an active cast, and an ambient setting. Multiple channels can share one world or hub. |
 | Thread | Inherits its parent channel's world or hub, channel lore, and ambient setting. It has its own cast and conversation history. |
 
-A default cast is an administrator's starting selection for a channel. Members can change the active cast without editing that default. Setting a new default also resets the channel's active cast to it. A thread uses the parent channel's active cast until someone sets a thread cast. A cast can contain up to five eligible characters; the director selects at most three to speak in one turn.
+A default cast is an administrator's starting selection for a channel. Members can change the active cast without editing that default. Setting a new default also resets the channel's active cast to it. A thread uses the parent channel's active cast until someone sets a thread cast. A cast can contain up to the server's **largest cast** (an admin sets it in the dashboard under Server settings; default 5, at most 15) eligible characters; the director selects at most three to speak in one turn.
 
-`/summon` invites an eligible character for one turn. In a hub, this allows a linked-world guest outside the current cast to join an explicit skit. Summoning does not change the cast. A hub character outside the active cast will not join ambiently.
+`/summon` invites an eligible character for one turn. In a hub, this allows a linked-world guest outside the current cast to join an explicit skit. Summoning does not change the cast. A hub character outside the active cast will not join ambiently, unless it is a favorite of the member who posted and that member uses the step in mode (see Favorites).
 
 ## Starting and continuing scenes
 
@@ -59,6 +59,7 @@ Commands marked **Admin** live under `/admin` and require Discord server adminis
 | `/daily` | Member | Claim the daily check-in bonus (once per server day, set by an admin; the day follows the server timezone, UTC if none). Checking in on consecutive days earns an extra bonus; a missed day starts over at day 1. The reply is private and shows your balance and when the next check-in opens. Off until an admin sets an amount. |
 | `/admin currency grant`, `/admin currency revoke`, `/admin currency name` | Admin | Give a member currency or take it away (1–1,000,000 at a time, with a reason of up to 200 characters), or set what this server calls its currency (default "coins", up to 32 characters on one line, without `@`, `<` or markdown symbols). A balance never goes below zero: a revoke larger than the balance is refused. Every change is kept in the server's currency ledger with its amount, reason, admin and time; ledger entries are never edited or deleted. Balances stay when a member leaves the server. Members earn currency with `/daily` and bet it in [blackjack](#blackjack). |
 | `/admin currency daily amount [streak_bonus] [streak_days]` | Admin | Turn on the daily check-in: `amount` (0 to 1,000,000; 0 turns it off) is paid for each check-in, plus `streak_bonus` for every consecutive day after the first, for up to `streak_days` days (0 to 365, default 7). Options you leave out keep their current value. Each payout is a ledger entry with source "daily". |
+| `/favorites add`, `/favorites remove`, `/favorites list`, `/favorites mode`, `/favorites clear` | Member | Keep an ordered list of favorite characters (up to the server's favorites limit, default 5). All replies are private. `list` marks favorites that cannot appear in this channel as "(not available here)". See [Favorites](#favorites). |
 | `/blackjack bet` | Member | Join or open a blackjack table in this channel with a bet (see [Blackjack](#blackjack)). Only in channels an admin turned games on for. The table message is public and updates in place; refusals are private. |
 | `/admin games channel enabled [channel]` | Admin | Turn games on or off in a channel (default: this one). Turning them off closes that channel's open table and refunds the bets of an unfinished round. |
 | `/admin games bets min max` | Admin | Set the smallest and largest bet (1 to 100,000, smallest at most largest; default 1 to 1,000). |
@@ -93,3 +94,12 @@ The dashboard edits the main text fields of an imported card. Use the Lore works
 The bot's operators (who run the bot itself, not per-server admins) also get a **Bot settings** page with bot-wide spending caps. When the hard cap is reached, characters stop replying until the reset day; `/summon` tells the member privately, and other messages get no reply unless the operator turned on the channel notice. See [Bot settings and spending caps](admin-console.md#bot-settings-and-spending-caps).
 
 See [Admin console](admin-console.md) for the NiceGUI workspace, rule transfers, emotion avatars, and per-server prompt presets.
+
+## Favorites
+
+Each member can keep favorite characters with `/favorites add`. A favorite has an effect only in channels where that character can already appear (its world, or a hub linked to it); it never lets a character into another world. Favorites are a preference, not a personal fact, so they need no `/memory opt_in`.
+
+- **Lean** (default): when you post, favorites that are in the channel's cast are more likely to answer you, and they get a better chance at ambient replies. Other members are still answered.
+- **Step in**: a favorite who is eligible here but not in the cast can also answer you, for that message only. The saved cast does not change.
+
+Choose with `/favorites mode`. Admins set the favorites limit and the largest cast in the dashboard (Server setup, Server settings); lowering a limit keeps existing casts and favorites.
