@@ -47,6 +47,17 @@ EXPECTED_COMMANDS = {
         "None",
         False,
     ),
+    "admin currency daily": (
+        "Set the daily check-in bonus (amount 0 turns it off)",
+        (
+            ("amount", "integer", True, "Currency paid for each check-in (0 turns check-ins off)", False, ()),
+            ("streak_bonus", "integer", False, "Extra per consecutive day (default: keep the current value)", False, ()),
+            ("streak_days", "integer", False, "How many streak days earn the bonus, up to 365 (default: keep the current value)", False, ()),
+        ),
+        1,
+        "None",
+        False,
+    ),
     "admin currency grant": (
         "Give a member currency",
         (
@@ -193,6 +204,7 @@ EXPECTED_COMMANDS = {
         "None",
         False,
     ),
+    "daily": ("Claim your daily check-in bonus", (), 0, "None", False),
     "balance": (
         "Show your balance, or another member's",
         (("member", "user", False, "Whose balance to show (default: yours)", False, ()),),

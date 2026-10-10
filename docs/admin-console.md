@@ -110,7 +110,7 @@ Generation status shows the dialogue model and its tracked input-plus-output tok
 
 ## Currency
 
-The **Currency** tab manages this server's member currency (see `/balance` and `/admin currency` in the [server guide](server-guide.md#discord-commands)). Members earn and spend it in future minigames; for now admins give and take it.
+The **Currency** tab manages this server's member currency (see `/balance` and `/admin currency` in the [server guide](server-guide.md#discord-commands)). Members earn it with the daily check-in (`/daily`, off until an amount is set) and will earn and spend it in future minigames; admins can also give and take it.
 
 - **Currency name**: what this server calls its currency (default "coins"; 1 to 32 characters on one line, without `@`, `<` or markdown symbols). Save it with the bar at the bottom. If it was renamed meanwhile (in another tab, by another admin, or with `/admin currency name`), the save is refused; reload and try again.
 - **Balances**: members with a balance, highest first, 50 per page. Names come from Discord; a member who left shows as "Member …NNNN" (the last digits of their ID). If Discord names cannot be loaded, the tab shows IDs.

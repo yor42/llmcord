@@ -25,7 +25,7 @@ ADMIN_SURFACE = {
     "ambient": {"on", "off"},
     "lore": {"add", "pin", "edit", "promote", "delete"},
     "scene": {"delete"},
-    "currency": {"grant", "revoke", "name"},
+    "currency": {"grant", "revoke", "name", "daily"},
 }
 # D11: member group -> subcommands; ``None`` marks a top-level command without subcommands.
 MEMBER_SURFACE = {
@@ -38,6 +38,7 @@ MEMBER_SURFACE = {
     "memory": {"opt_in", "opt_out", "list", "forget"},
     "time": {"set", "show", "clear"},
     "balance": None,
+    "daily": None,
     "lore": {"list"},
     "scene": {"reset"},
 }
@@ -65,6 +66,7 @@ ADMIN_OPTIONS = {
     "admin currency grant": ["member", "amount", "reason"],
     "admin currency revoke": ["member", "amount", "reason"],
     "admin currency name": ["name"],
+    "admin currency daily": ["amount", "streak_bonus", "streak_days"],
 }
 # Arguments for invoking each member command (DM test); everything else uses defaults.
 MEMBER_ARGS = {
@@ -90,9 +92,9 @@ class AdminSurfaceTests(unittest.TestCase):
         self.bot.store.close()
 
     def test_surface_table_matches_d11(self):
-        """Guard for the tests below: the expected tables have the 17 admin and 20 member (plus the admin-only /context) commands D11 lists."""
-        self.assertEqual(len(ADMIN_PATHS), 17)
-        self.assertEqual(len(MEMBER_PATHS), 20)
+        """Guard for the tests below: the expected tables have the 18 admin and 21 member (plus the admin-only /context) commands D11 lists."""
+        self.assertEqual(len(ADMIN_PATHS), 18)
+        self.assertEqual(len(MEMBER_PATHS), 21)
         self.assertEqual(set(ADMIN_OPTIONS), ADMIN_PATHS)
 
     def test_admin_group_holds_exactly_the_admin_subcommands(self):

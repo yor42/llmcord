@@ -205,7 +205,7 @@ class CurrencyMigrationTests(unittest.TestCase):
             path = v11_file(folder)
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 12)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 13)
                 self.assertEqual(store.currency_name(1), "coins")
                 self.assertFalse(store.usage_footer_enabled(1))
                 store.change_balance(1, 5, 3, "ok", 9)
@@ -226,11 +226,11 @@ class CurrencyMigrationTests(unittest.TestCase):
             Store(path).close()
             self.assertEqual(len(list(Path(folder).glob("*.pre-*"))), 1)
 
-    def test_v13_file_is_refused(self):
+    def test_v14_file_is_refused(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "new.sqlite3"
             with closing(sqlite3.connect(path)) as db, db:
-                db.execute("PRAGMA user_version=13")
+                db.execute("PRAGMA user_version=14")
             with self.assertRaisesRegex(ValueError, "newer than this application"):
                 Store(path)
             self.assertEqual(list(Path(folder).glob("*.pre-*")), [])

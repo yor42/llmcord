@@ -6,7 +6,7 @@ from dataclasses import asdict
 import math
 import sqlite3
 import uuid
-from datetime import datetime
+from datetime import date, datetime, timedelta, time as dt_time
 import time
 from zoneinfo import ZoneInfo
 from contextlib import contextmanager
@@ -82,7 +82,12 @@ CREATE TABLE IF NOT EXISTS guild_settings (
  guild_id INTEGER PRIMARY KEY, preset_id INTEGER, preset_revision INTEGER,
  asset_channel_id INTEGER, usage_footer INTEGER NOT NULL DEFAULT 1,
  timezone TEXT NOT NULL DEFAULT '', turn_log_enabled INTEGER NOT NULL DEFAULT 0, turn_log_days INTEGER NOT NULL DEFAULT 14,
- catchup_anywhere INTEGER NOT NULL DEFAULT 0, currency_name TEXT NOT NULL DEFAULT ''
+ catchup_anywhere INTEGER NOT NULL DEFAULT 0, currency_name TEXT NOT NULL DEFAULT '',
+ daily_amount INTEGER NOT NULL DEFAULT 0, daily_streak_bonus INTEGER NOT NULL DEFAULT 0, daily_streak_days INTEGER NOT NULL DEFAULT 7
+);
+CREATE TABLE IF NOT EXISTS currency_daily (
+ guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, last_day TEXT NOT NULL, streak INTEGER NOT NULL,
+ PRIMARY KEY(guild_id,user_id)
 );
 CREATE TABLE IF NOT EXISTS currency_balances (
  guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
@@ -461,7 +466,7 @@ class AdminStore:
             'lore': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0'},
             'lorebook_entries': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0', 'pinned': 'INTEGER NOT NULL DEFAULT 0', 'source_message_id': 'INTEGER', 'promoted_from': 'INTEGER'},
             'characters': {'avatar_manual': 'INTEGER NOT NULL DEFAULT 0'},
-            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0', 'currency_name': "TEXT NOT NULL DEFAULT ''"},
+            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0', 'currency_name': "TEXT NOT NULL DEFAULT ''", 'daily_amount': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_bonus': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_days': 'INTEGER NOT NULL DEFAULT 7'},
             'model_usage': {'channel_id': 'INTEGER', 'feature': "TEXT NOT NULL DEFAULT ''"},
         }.items():
             columns = {row[1] for row in self.db.execute(f'PRAGMA table_info({table})')}
@@ -1020,6 +1025,49 @@ class AdminStore:
         cursor = self.db.execute('INSERT INTO currency_ledger(guild_id,user_id,amount,balance_after,reason,actor_id,source,reverses_id,created_at) VALUES(?,?,?,?,?,?,?,?,?)',
             (guild_id, user_id, amount, after, reason, actor_id, source, reverses_id, now))
         return dict(self.one('SELECT * FROM currency_ledger WHERE id=?', (cursor.lastrowid,)))
+
+    DAILY_LIMITS = {'amount': 1_000_000, 'streak_bonus': 1_000_000, 'streak_days': 365}
+
+    def daily_settings(self, guild_id):
+        row = self.one('SELECT daily_amount,daily_streak_bonus,daily_streak_days FROM guild_settings WHERE guild_id=?', (guild_id,))
+        return {'amount': row['daily_amount'], 'streak_bonus': row['daily_streak_bonus'], 'streak_days': row['daily_streak_days']} if row else {'amount': 0, 'streak_bonus': 0, 'streak_days': 7}
+
+    def set_daily_settings(self, guild_id, amount, streak_bonus, streak_days, expected=None):
+        values = {'amount': amount, 'streak_bonus': streak_bonus, 'streak_days': streak_days}
+        for field, value in values.items():
+            if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= self.DAILY_LIMITS[field]:
+                raise ValueError(f'The daily {field.replace("_", " ")} must be a whole number from 0 to {self.DAILY_LIMITS[field]:,}.')
+        with self.write_admin():
+            if expected is not None and self.daily_settings(guild_id) != expected:
+                raise ConflictError('The daily check-in settings were changed elsewhere. Reload the page and try again.')
+            self.db.execute('INSERT INTO guild_settings(guild_id,daily_amount,daily_streak_bonus,daily_streak_days) VALUES(?,?,?,?) ON CONFLICT(guild_id) DO UPDATE SET daily_amount=excluded.daily_amount,daily_streak_bonus=excluded.daily_streak_bonus,daily_streak_days=excluded.daily_streak_days',
+                (guild_id, amount, streak_bonus, streak_days))
+        return values
+
+    def claim_daily(self, guild_id, user_id, now=None):
+        """One payout per member per server day (the server timezone, UTC if unset or invalid). Returns {'status': 'off'|'already'|'paid', 'reset': next local midnight as a Unix time, ...};
+        the claim record, balance and ledger row share one transaction, so a refused balance (CurrencyError) records nothing."""
+        now = time.time() if now is None else now
+        try:
+            zone = ZoneInfo(self.guild_timezone(guild_id) or 'UTC')
+        except Exception:
+            zone = ZoneInfo('UTC')
+        today = datetime.fromtimestamp(now, zone).date()
+        reset = datetime.combine(today + timedelta(days=1), dt_time.min, zone).timestamp()
+        with self.write_admin():
+            settings = self.daily_settings(guild_id)
+            if settings['amount'] == 0:
+                return {'status': 'off', 'reset': reset}
+            last = self.one('SELECT last_day,streak FROM currency_daily WHERE guild_id=? AND user_id=?', (guild_id, user_id))
+            last_day = date.fromisoformat(last['last_day']) if last else None
+            if last_day is not None and today <= last_day:
+                return {'status': 'already', 'reset': max(reset, datetime.combine(last_day + timedelta(days=1), dt_time.min, zone).timestamp())}
+            streak = last['streak'] + 1 if last_day is not None and last_day == today - timedelta(days=1) else 1
+            payout = min(settings['amount'] + settings['streak_bonus'] * min(streak - 1, settings['streak_days']), self.MAX_CURRENCY_CHANGE)
+            entry = self._append_ledger(guild_id, user_id, payout, f'Daily check-in (day {streak})', user_id, 'daily', None)
+            self.db.execute('INSERT INTO currency_daily(guild_id,user_id,last_day,streak) VALUES(?,?,?,?) ON CONFLICT(guild_id,user_id) DO UPDATE SET last_day=excluded.last_day,streak=excluded.streak',
+                (guild_id, user_id, today.isoformat(), streak))
+        return {'status': 'paid', 'entry': entry, 'payout': payout, 'streak': streak, 'balance': entry['balance_after'], 'reset': reset}
 
     def ledger(self, guild_id, user_id=None, limit=50, before_id=None):
         sql, args = 'SELECT * FROM currency_ledger WHERE guild_id=?', [guild_id]

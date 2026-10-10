@@ -28,7 +28,7 @@ from .engine import Engine, SceneContext
 from .models import ImageInput, ModelGateway, TurnMessage
 from .prompts import time_values
 from .names import resolve, resolve_space, suggest
-from .admin_store import CurrencyError
+from .admin_store import ConflictError, CurrencyError
 from .store import Store
 from .avatars import emotion_stream
 from .errors import ModelConfigError, error_detail, error_stack, reference_id, user_detail
@@ -1173,6 +1173,45 @@ def _register_currency_commands(bot: SkitBot, ctx: SimpleNamespace, admin_curren
             await reply(interaction, f"You have {bot.store.balance(guild_id, interaction.user.id):,} {name}.")
         else:
             await reply(interaction, f"{member.mention} has {bot.store.balance(guild_id, member.id):,} {name}.")
+
+    @bot.tree.command(name="daily", description="Claim your daily check-in bonus")
+    async def daily(interaction: discord.Interaction):
+        require_guild(interaction)
+        guild_id = interaction.guild_id
+        try:
+            result = bot.store.claim_daily(guild_id, interaction.user.id)
+        except CurrencyError as error:
+            await reply(interaction, str(error))
+            return
+        name = bot.store.currency_name(guild_id)
+        if result["status"] == "off":
+            await reply(interaction, "Daily check-ins are off on this server.")
+        elif result["status"] == "already":
+            await reply(interaction, f"You already checked in today. Next check-in <t:{int(result['reset'])}:R>.")
+        else:
+            await reply(interaction, f"Checked in: +{result['payout']:,} {name} (day {result['streak']} streak). Balance: {result['balance']:,} {name}. Next check-in <t:{int(result['reset'])}:R>.")
+
+    @admin_currency.command(name="daily", description="Set the daily check-in bonus (amount 0 turns it off)")
+    @app_commands.describe(amount="Currency paid for each check-in (0 turns check-ins off)", streak_bonus="Extra per consecutive day (default: keep the current value)",
+        streak_days="How many streak days earn the bonus, up to 365 (default: keep the current value)")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def currency_daily(interaction: discord.Interaction, amount: app_commands.Range[int, 0, 1_000_000],
+            streak_bonus: app_commands.Range[int, 0, 1_000_000] | None = None, streak_days: app_commands.Range[int, 0, 365] | None = None):
+        require_guild(interaction)
+        current = bot.store.daily_settings(interaction.guild_id)
+        try:
+            saved = bot.store.set_daily_settings(interaction.guild_id, amount, current["streak_bonus"] if streak_bonus is None else streak_bonus,
+                current["streak_days"] if streak_days is None else streak_days, expected=current)
+        except ConflictError:
+            await reply(interaction, "The daily check-in settings were changed elsewhere. Run the command again.")
+            return
+        name = bot.store.currency_name(interaction.guild_id)
+        if saved["amount"] == 0:
+            await reply(interaction, "Daily check-ins are now off.")
+        elif saved["streak_bonus"] == 0 or saved["streak_days"] == 0:
+            await reply(interaction, f"Daily check-in: {saved['amount']:,} {name}, no streak bonus.")
+        else:
+            await reply(interaction, f"Daily check-in: {saved['amount']:,} {name}, +{saved['streak_bonus']:,} per streak day for up to {saved['streak_days']:,} days.")
 
     async def change(interaction: discord.Interaction, member: discord.Member, amount: int, reason: str, sign: int) -> None:
         require_guild(interaction)

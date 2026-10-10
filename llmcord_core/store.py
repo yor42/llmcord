@@ -194,16 +194,16 @@ class Store(AdminStore):
 
     def _upgrade(self, path: str | Path, existing: bool) -> None:
         """The whole schema upgrade, backup included, in one write-locked transaction: a failure leaves the old file as it was,
-        and a second process opening the same file waits, then finds version 12 and does nothing. executescript commits, so scripts run per statement."""
+        and a second process opening the same file waits, then finds version 13 and does nothing. executescript commits, so scripts run per statement."""
         self.db.execute("BEGIN IMMEDIATE")
         try:
             old_version = self.db.execute("PRAGMA user_version").fetchone()[0]
-            if old_version > 12:
+            if old_version > 13:
                 raise ValueError('The database is newer than this application. Update the application.')
             node_columns = {row[1] for row in self.db.execute('PRAGMA table_info(nodes)')}
             needs_identities = bool(node_columns) and not {'author_label', 'mentions_json'} <= node_columns
-            if existing and (old_version < 12 or needs_identities):
-                upgrade = 'v3' if old_version < 3 else 'identities' if needs_identities else 'v4' if old_version == 3 else 'v5' if old_version == 4 else 'v6' if old_version == 5 else 'v7' if old_version == 6 else 'v8' if old_version == 7 else 'v9' if old_version == 8 else 'v10' if old_version == 9 else 'v11' if old_version == 10 else 'v12'
+            if existing and (old_version < 13 or needs_identities):
+                upgrade = 'v3' if old_version < 3 else 'identities' if needs_identities else 'v4' if old_version == 3 else 'v5' if old_version == 4 else 'v6' if old_version == 5 else 'v7' if old_version == 6 else 'v8' if old_version == 7 else 'v9' if old_version == 8 else 'v10' if old_version == 9 else 'v11' if old_version == 10 else 'v12' if old_version == 11 else 'v13'
                 backup = Path(str(path) + f".pre-{upgrade}-{time.time_ns()}.sqlite3")
                 # Connection.backup from the connection holding the write lock never finishes; a second reader sees the committed file (the lock excludes other writers).
                 with closing(sqlite3.connect(path, timeout=30)) as reader, closing(sqlite3.connect(backup)) as target:
@@ -233,7 +233,7 @@ class Store(AdminStore):
                 self.db.execute('ALTER TABLE avatar_slots ADD COLUMN image_hash TEXT')
             if added or old_version < 11:
                 self._backfill_avatar_hashes()
-            self.db.execute("PRAGMA user_version=12")
+            self.db.execute("PRAGMA user_version=13")
             self.db.commit()
         except BaseException:
             self.db.rollback()
