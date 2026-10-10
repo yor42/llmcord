@@ -193,6 +193,17 @@ class CurrencyPanel:
                               detail=lambda result: {'enabled': result}, success='Character table talk saved',
                               dirty=lambda: bool(talk_switch.value) != talk['value'],
                               reset=lambda: talk_switch.set_value(talk['value']))
+            limit = {'value': store.game_talk_daily_limit(gid)}
+            limit_field = ui.number('Table talk calls per day', value=limit['value'], min=1, precision=0, format='%d')
+            ui.label(f"After about this many table talk calls in a server day (approximate when several tables play at once), characters play by the house rule and stay quiet until the next day. Used today: {store.game_talk_calls_today(gid):,}.").classes('ll-muted')
+            def save_limit():
+                value = limit_field.value
+                limit['value'] = store.set_game_talk_daily_limit(gid, int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value == int(value) else value, limit['value'])
+                return limit['value']
+            ctx.savebar.track('Table talk limit', {limit_field: limit['value']}, save=save_limit, action='games.talk_daily_limit',
+                              detail=lambda result: {'limit': result}, success='Table talk limit saved',
+                              dirty=lambda: limit_field.value != limit['value'],
+                              reset=lambda: limit_field.set_value(limit['value']))
             games = store.game_channels(gid)
             options = {**{c: str(c) for c in sorted(games)}, **ctx.channel_names}
             picker = ui.select(options, value=sorted(games), multiple=True, label='Game channels').props('use-chips').classes('w-full')

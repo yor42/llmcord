@@ -1,6 +1,7 @@
 """FEAT-20 part B: character seats in blackjack on Discord (favorites option, rendering, character turns, table talk). Offline: fake model, fake webhook."""
 import asyncio
 import json
+import time
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -10,6 +11,7 @@ from helpers import invoke
 from test_games_discord import ALICE, BOB, CH, G, GameCase, Click
 
 from llmcord_core import game_chooser
+from llmcord_core.admin_store import ConflictError
 from llmcord_core.budget import BudgetExceeded
 from llmcord_core.games_discord import GameButton, GameTables, NOT_YOUR_TURN
 from llmcord_core.usage import log_attribution
@@ -265,6 +267,68 @@ class CharacterTurnTests(SeatCase):
         with mock.patch.object(self.store, "play", refuse_first):
             await self.fire()
         self.assertEqual((calls, self.actors()[-1], self.webhook.sent, len(self.calls)), (["stand", "hit"], (1, "hit", "character"), [], 1))
+
+    def add_usage(self, count):
+        for _ in range(count):
+            self.store.db.execute("INSERT INTO model_usage(guild_id,profile,model,role,cached_tokens,reasoning_tokens,cost_basis,created_at,feature) VALUES(?,?,?,?,0,0,?,?,?)", (G, "p", "m", "director", "none", time.time(), "game"))
+        self.store.db.commit()
+
+    async def test_at_the_daily_limit_no_model_call_and_the_house_rule_plays(self):
+        self.store.set_game_talk_daily_limit(G, 2)
+        self.add_usage(2)
+        await self.start()
+        await self.fire()
+        self.assertEqual((self.calls, self.webhook.sent, self.actors()[-1]), ([], [], (1, "hit", "character")))
+
+    async def test_below_the_daily_limit_the_model_is_asked(self):
+        self.store.set_game_talk_daily_limit(G, 2)
+        self.add_usage(1)
+        await self.start()
+        await self.fire()
+        self.assertEqual((len(self.calls), self.actors()[-1]), (1, (1, "stand", "character")))
+
+    async def test_a_timed_out_attempt_counts_toward_the_daily_limit(self):
+        self.store.set_game_talk_daily_limit(G, 1)
+        self.games.MODEL_SECONDS = 0.01
+
+        async def slow():
+            await asyncio.sleep(5)
+        self.bot.models.structured_compiled = self.fake_model(slow)
+        await self.start()
+        await self.fire()
+        self.assertEqual(len(self.calls), 1)
+        self.bot.models.structured_compiled = self.fake_model({"move": "stand", "line": "x"})
+        await self.fresh_round()
+        await self.fire()
+        self.assertEqual((self.calls[1:], self.actors()[-1]), ([], (1, "hit", "character")))
+
+    async def test_a_conflict_on_the_house_move_does_not_cancel(self):
+        from llmcord_core.admin_store import GameError
+        await self.start()
+        errors = [GameError("nope"), ConflictError("moved")]
+        with mock.patch.object(self.store, "play", side_effect=errors):
+            await self.fire()
+        self.assertEqual(self.latest()["status"], "playing")
+
+    async def test_a_refused_house_move_cancels_the_round_with_refunds_and_repaints(self):
+        from llmcord_core.admin_store import GameError
+        alice = self.store.balance(G, ALICE)
+        await self.start()
+        key = (G, self.latest()["table_id"])
+        before = len(self.channel.edits)
+        with mock.patch.object(self.store, "play", side_effect=GameError("nope")):
+            await self.fire()
+        latest = self.latest()
+        self.assertEqual(latest["status"], "cancelled")
+        self.assertEqual((self.store.balance(G, ALICE), self.store.character_balance(G, self.ann)), (alice, 100))
+        self.assertEqual([r["amount"] for r in self.store.ledger(G, character_id=self.ann)][:2], [10, -10])
+        self.assertEqual([r["amount"] for r in self.store.ledger(G, ALICE)][:2], [10, -10])
+        self.assertEqual({s["outcome"] for s in latest["seats"]}, {"refund"})
+        self.assertEqual(len(self.channel.edits), before + 1)
+        content = self.channel.edits[-1][1]["content"]
+        self.assertIn("Round cancelled. Bets are refunded.\nPlay again or leave. The table closes", content)
+        self.assertEqual(sorted(i.item.label for i in self.channel.edits[-1][1]["view"].children), ["Leave table", "Play again (same bet)"])
+        self.assertEqual([name.get_name() for name in self.games.timers.values()], [f"blackjack-idle-{key[1]}"])
 
     async def test_a_slow_webhook_post_is_given_up(self):
         class Slow(Webhook):

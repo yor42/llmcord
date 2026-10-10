@@ -126,6 +126,8 @@ class GameTables:
         self.tables: dict[tuple[int, int], _Table] = {}
         self.sweeper: asyncio.Task | None = None
         self.closed = False
+        self.talk_capped: set[tuple[int, object]] = set()
+        self.talk_failed: dict[tuple[int, object], int] = {}  # attempts without a usage row, per (guild, server day)
 
     @property
     def store(self):
@@ -215,7 +217,7 @@ class GameTables:
             turn = snap["view"]["turn"] if snap["view"] else None
             character = turn is not None and snap["seats"][turn]["kind"] == "character"
             self.arm(key, "character" if character else "turn", snap["round_id"], snap["moves"])
-        elif status == "settled":
+        elif status in ("settled", "cancelled"):
             table.present = {seat["ref_id"] for seat in snap["seats"] if seat["kind"] == "member"}
             self.arm(key, "idle", snap["round_id"])
         else:
@@ -371,9 +373,11 @@ class GameTables:
                 lines.append(f"On turn: {self._who({**on_turn, 'brought_by': None})}.")
             else:
                 lines.append(f"On turn: <@{on_turn['ref_id']}>" + (f" — decide {stamp}." if stamp else "."))
-        elif status == "settled":
+        elif status in ("settled", "cancelled"):
+            if status == "cancelled":
+                lines.append("Round cancelled. Bets are refunded.")
             lines.append(f"Play again or leave. The table closes {stamp} if nobody plays again." if stamp else "Play again or leave.")
-        if status == "settled" and snap["seed"]:
+        if status in ("settled", "cancelled") and snap["seed"]:
             lines.append(f"-# Seed: {snap['seed']} (hash {snap['seed_hash'][:12]})")
         else:
             lines.append(f"-# Seed hash: {snap['seed_hash'][:12]}")
@@ -390,7 +394,7 @@ class GameTables:
             if turn is not None and snap["seats"][turn]["kind"] == "character":
                 legal = ()  # members cannot press for a character
             spec = [(m, m.capitalize(), discord.ButtonStyle.primary if m == "hit" else discord.ButtonStyle.secondary) for m in ("hit", "stand", "double") if m in legal]
-        elif status == "settled":
+        elif status in ("settled", "cancelled"):
             spec = [("again", "Play again (same bet)", discord.ButtonStyle.success), ("close", "Leave table", discord.ButtonStyle.secondary)]
         if not spec:
             return None
@@ -764,9 +768,12 @@ class GameTables:
                     move, line = self._house_move(now, seat, legal), ""
                     try:
                         snap = self.store.play(guild_id, round_id, seat, move, "character", moves)
-                    except (ConflictError, GameError) as again:
-                        logging.warning("Blackjack character house move refused (%s)", type(again).__name__)
+                    except ConflictError:
                         return
+                    except GameError as again:
+                        logging.warning("Blackjack character house move refused (%s); cancelling the round", type(again).__name__)
+                        snap = self.store.cancel_round(guild_id, round_id, "a character could not move")
+                        line = ""
                 self._after(key, snap)
                 paint = self._paint(key, snap)
         if paint is not None:
@@ -783,6 +790,15 @@ class GameTables:
         house = self._house_move(snap, seat, legal)
         if not self.store.game_character_talk(guild_id):
             return house, ""
+        marker = (guild_id, self.store._server_day(guild_id, time.time())[1])
+        if self.talk_failed.keys() - {marker}:
+            self.talk_failed = {m: n for m, n in self.talk_failed.items() if m == marker}
+        used, limit = self.store.game_talk_calls_today(guild_id) + self.talk_failed.get(marker, 0), self.store.game_talk_daily_limit(guild_id)
+        if used >= limit:
+            if marker not in self.talk_capped:
+                self.talk_capped = {m for m in self.talk_capped if m[1] == marker[1]} | {marker}
+                logging.info("Blackjack table talk reached its daily limit (%d) in guild %s; characters play by the house rule", limit, guild_id)
+            return house, ""
         try:
             character = self.store.character_by_id(seated["character_id"])
             if character is None or character["guild_id"] != guild_id:
@@ -790,9 +806,11 @@ class GameTables:
             result = await asyncio.wait_for(game_chooser.ask(self.bot, guild_id, snap["channel_id"], character, snap, seat, legal), self.MODEL_SECONDS)
         except Exception as error:
             logging.warning("Blackjack character decision fell back to the house rule (%s)", type(error).__name__)
+            self.talk_failed[marker] = self.talk_failed.get(marker, 0) + 1
             return house, ""
         move = result.get("move") if isinstance(result, dict) else None
         if not isinstance(move, str) or move not in legal:
+            self.talk_failed[marker] = self.talk_failed.get(marker, 0) + 1
             return house, ""
         return move, game_chooser.clean_line(result.get("line"))
 

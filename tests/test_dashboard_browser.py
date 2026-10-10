@@ -4097,6 +4097,36 @@ class DashboardBrowserTests(unittest.TestCase):
             self.post_hook('/_test/games', {'character_talk': True})
             context.close()
 
+    def test_currency_table_talk_daily_limit_persists_conflicts_and_guild_isolation(self):
+        """MNT-42: 'Table talk calls per day' saves through the save bar with an audit row, persists after reload, refuses a stale save, shows its note and today's count, and never touches guild 2."""
+        from playwright.sync_api import expect
+        other = self.state()['games']['2']
+        context, page, errors = self.open_currency()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            field = page.get_by_label('Table talk calls per day')
+            field.wait_for(timeout=5000)
+            page.get_by_text('After about this many table talk calls in a server day (approximate when several tables play at once), characters play by the house rule and stay quiet until the next day. Used today: 0.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(field.input_value(), '100')
+            field.fill('7')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Table talk limit saved', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['talk_limit'], 7)
+            rows = [r for r in self.state()['audit'] if r['action'] == 'games.talk_daily_limit']
+            self.assertEqual([json.loads(r['detail_json']) for r in rows], [{'limit': 7}])
+            page.reload()
+            expect(page.get_by_label('Table talk calls per day')).to_have_value('7', timeout=5000)
+            page.get_by_label('Table talk calls per day').fill('9')
+            self.post_hook('/_test/games', {'talk_limit': 50})
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The table talk daily limit was changed elsewhere. Reload the page and try again.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['talk_limit'], 50)
+            self.assertEqual(self.state()['games']['2'], other)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'talk_limit': 100})
+            context.close()
+
     def test_currency_games_unknown_channel_and_closed_tables_toast(self):
         """MNT-40: a saved game channel Discord does not list shows as its id and can be removed; turning off a channel with an open table toasts the closed count and refunds the seated bet."""
         from playwright.sync_api import expect

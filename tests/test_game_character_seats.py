@@ -386,6 +386,40 @@ class TalkSettingTests(SeatCase):
         self.assertTrue(s.game_character_talk(G))
 
 
+class TalkLimitTests(SeatCase):
+    def usage(self, guild, at, feature="game"):
+        self.store.db.execute("INSERT INTO model_usage(guild_id,profile,model,role,cached_tokens,reasoning_tokens,cost_basis,created_at,feature) VALUES(?,?,?,?,0,0,?,?,?)", (guild, "p", "m", "director", "none", at, feature))
+        self.store.db.commit()
+
+    def test_default_set_validate_and_conflict(self):
+        s = self.store
+        self.assertEqual((s.game_talk_daily_limit(G), s.game_talk_daily_limit(999)), (100, 100))
+        self.assertEqual(s.set_game_talk_daily_limit(G, 5, 100), 5)
+        self.assertEqual((s.game_talk_daily_limit(G), s.game_talk_daily_limit(2)), (5, 100))
+        with self.assertRaisesRegex(ConflictError, "The table talk daily limit was changed elsewhere. Reload the page and try again."):
+            s.set_game_talk_daily_limit(G, 6, 100)
+        for bad in (0, -1, 10001, 1.5, "7", None, True):
+            with self.assertRaisesRegex(ValueError, "The daily limit must be a whole number from 1 to 10,000."):
+                s.set_game_talk_daily_limit(G, bad)
+        self.assertEqual(s.set_game_talk_daily_limit(G, 10000), 10000)
+        s.set_game_character_talk(G, False)
+        self.assertEqual(s.game_talk_daily_limit(G), 10000)
+
+    def test_calls_today_counts_this_guilds_game_rows_since_the_server_day_start(self):
+        s, now = self.store, 1_700_000_000  # 2023-11-14 22:13 UTC
+        s.set_guild_timezone(G, "Asia/Seoul")  # local 2023-11-15 07:13; the day began 2023-11-14 15:00 UTC
+        start = 1_699_974_000
+        self.usage(G, start - 1)
+        self.usage(G, start)
+        self.usage(G, now)
+        self.usage(G, now, "chat")
+        self.usage(2, now)
+        self.assertEqual(s.game_talk_calls_today(G, now), 2)
+        self.assertEqual(s.game_talk_calls_today(G, start + 86400), 0)
+        self.assertEqual(s.game_talk_calls_today(2, now), 1)
+        self.assertEqual(s.game_talk_calls_today(3, now), 0)
+
+
 class MigrationTests(unittest.TestCase):
     def test_a_v16_file_without_the_new_columns_gets_them_on_open(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -393,10 +427,12 @@ class MigrationTests(unittest.TestCase):
             Store(path).close()
             with closing(sqlite3.connect(path)) as db, db:
                 db.execute("ALTER TABLE guild_settings DROP COLUMN game_character_talk")
+                db.execute("ALTER TABLE guild_settings DROP COLUMN game_talk_daily_limit")
                 db.execute("ALTER TABLE game_seats DROP COLUMN brought_by")
                 db.execute("INSERT INTO guild_settings(guild_id) VALUES(1)")
             store = Store(path)
             self.assertTrue(store.game_character_talk(1))
+            self.assertEqual(store.game_talk_daily_limit(1), 100)
             self.assertIn("brought_by", [r[1] for r in store.db.execute("PRAGMA table_info(game_seats)")])
             store.close()
             Store(path).close()
@@ -405,6 +441,7 @@ class MigrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             store = Store(legacy_file(folder, 5))
             self.assertTrue(store.game_character_talk(1))
+            self.assertEqual(store.game_talk_daily_limit(1), 100)
             self.assertIn("brought_by", [r[1] for r in store.db.execute("PRAGMA table_info(game_seats)")])
             store.close()
 

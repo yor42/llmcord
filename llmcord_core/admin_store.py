@@ -87,7 +87,8 @@ CREATE TABLE IF NOT EXISTS guild_settings (
  daily_amount INTEGER NOT NULL DEFAULT 0, daily_streak_bonus INTEGER NOT NULL DEFAULT 0, daily_streak_days INTEGER NOT NULL DEFAULT 7,
  game_min_bet INTEGER NOT NULL DEFAULT 1, game_max_bet INTEGER NOT NULL DEFAULT 1000,
  max_cast INTEGER NOT NULL DEFAULT 5, max_favorites INTEGER NOT NULL DEFAULT 5, archived_favorites INTEGER NOT NULL DEFAULT 0,
- character_refill_cap INTEGER NOT NULL DEFAULT 1000, game_character_talk INTEGER NOT NULL DEFAULT 1
+ character_refill_cap INTEGER NOT NULL DEFAULT 1000, game_character_talk INTEGER NOT NULL DEFAULT 1,
+ game_talk_daily_limit INTEGER NOT NULL DEFAULT 100
 );
 CREATE TABLE IF NOT EXISTS currency_daily (
  guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, last_day TEXT NOT NULL, streak INTEGER NOT NULL,
@@ -526,7 +527,7 @@ class AdminStore:
             'lore': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0'},
             'lorebook_entries': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0', 'pinned': 'INTEGER NOT NULL DEFAULT 0', 'source_message_id': 'INTEGER', 'promoted_from': 'INTEGER'},
             'characters': {'avatar_manual': 'INTEGER NOT NULL DEFAULT 0'},
-            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0', 'currency_name': "TEXT NOT NULL DEFAULT ''", 'daily_amount': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_bonus': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_days': 'INTEGER NOT NULL DEFAULT 7', 'game_min_bet': 'INTEGER NOT NULL DEFAULT 1', 'game_max_bet': 'INTEGER NOT NULL DEFAULT 1000', 'max_cast': 'INTEGER NOT NULL DEFAULT 5', 'max_favorites': 'INTEGER NOT NULL DEFAULT 5', 'archived_favorites': 'INTEGER NOT NULL DEFAULT 0', 'character_refill_cap': 'INTEGER NOT NULL DEFAULT 1000', 'game_character_talk': 'INTEGER NOT NULL DEFAULT 1'},
+            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0', 'currency_name': "TEXT NOT NULL DEFAULT ''", 'daily_amount': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_bonus': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_days': 'INTEGER NOT NULL DEFAULT 7', 'game_min_bet': 'INTEGER NOT NULL DEFAULT 1', 'game_max_bet': 'INTEGER NOT NULL DEFAULT 1000', 'max_cast': 'INTEGER NOT NULL DEFAULT 5', 'max_favorites': 'INTEGER NOT NULL DEFAULT 5', 'archived_favorites': 'INTEGER NOT NULL DEFAULT 0', 'character_refill_cap': 'INTEGER NOT NULL DEFAULT 1000', 'game_character_talk': 'INTEGER NOT NULL DEFAULT 1', 'game_talk_daily_limit': 'INTEGER NOT NULL DEFAULT 100'},
             'game_seats': {'brought_by': 'INTEGER'},
             'currency_ledger': {'holder_kind': "TEXT NOT NULL DEFAULT 'member' CHECK(holder_kind IN ('member','character'))"},
             'model_usage': {'channel_id': 'INTEGER', 'feature': "TEXT NOT NULL DEFAULT ''"},
@@ -1344,6 +1345,28 @@ class AdminStore:
                 raise ConflictError('The character table talk setting was changed elsewhere. Reload the page and try again.')
             self.db.execute('INSERT INTO guild_settings(guild_id,game_character_talk) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET game_character_talk=excluded.game_character_talk', (guild_id, int(bool(enabled))))
         return bool(enabled)
+
+    GAME_TALK_LIMIT = 10_000
+
+    def game_talk_daily_limit(self, guild_id):
+        row = self.one('SELECT game_talk_daily_limit FROM guild_settings WHERE guild_id=?', (guild_id,))
+        return row['game_talk_daily_limit'] if row else 100
+
+    def set_game_talk_daily_limit(self, guild_id, limit, expected=None):
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= self.GAME_TALK_LIMIT:
+            raise ValueError('The daily limit must be a whole number from 1 to 10,000.')
+        with self.write_admin():
+            if expected is not None and self.game_talk_daily_limit(guild_id) != expected:
+                raise ConflictError('The table talk daily limit was changed elsewhere. Reload the page and try again.')
+            self.db.execute('INSERT INTO guild_settings(guild_id,game_talk_daily_limit) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET game_talk_daily_limit=excluded.game_talk_daily_limit', (guild_id, limit))
+        return limit
+
+    def game_talk_calls_today(self, guild_id, now=None):
+        """Table talk model calls this server has made since the start of the current server day."""
+        now = time.time() if now is None else now
+        zone, today = self._server_day(guild_id, now)
+        start = datetime.combine(today, dt_time.min, zone).timestamp()
+        return self.one("SELECT COUNT(*) AS n FROM model_usage WHERE guild_id=? AND feature='game' AND created_at>=?", (guild_id, start))['n']
 
     MAX_CAST_LIMIT = 15
 
