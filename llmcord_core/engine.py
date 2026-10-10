@@ -22,6 +22,13 @@ def tail_tokens(text: str, budget: int) -> str:
     return text if estimate_tokens(text) <= budget else data[-3 * budget:].decode('utf-8', 'ignore')
 
 
+def structured_contract(schema) -> str:
+    return 'Return only the required structured result. Output schema: ' + json.dumps(schema)
+
+
+EXTRACTION_CONTRACT = structured_contract(MEMORY_SCHEMA)
+
+
 @dataclass(frozen=True)
 class SceneContext:
     guild_id: int
@@ -87,7 +94,7 @@ class Engine:
             return await self.models.text_compiled(role, request, max_tokens)
 
     async def purpose_structured(self, scene, purpose, payload, name, schema):
-        request = self.compile(scene, purpose, {'payload': payload, 'speaker_identity': self.identities(scene)}, contract='Return only the required structured result. Output schema: ' + json.dumps(schema))
+        request = self.compile(scene, purpose, {'payload': payload, 'speaker_identity': self.identities(scene)}, contract=structured_contract(schema))
         role = 'director' if purpose == 'director' else 'memory'
         with log_purpose(purpose):
             return await self.models.structured_compiled(role, request, name, schema)
@@ -166,11 +173,7 @@ class Engine:
 
     async def _history(self, scene: SceneContext, target_character_id: int):
         nodes = self.store.ancestors(scene.user_message_id)
-        summary = ""
-        summary_index = -1
-        for index, node in enumerate(nodes[:-1]):
-            if saved := self.store.summary(node["message_id"]):
-                summary, summary_index = saved, index
+        summary, summary_index = self.prior_summary(nodes)
         unsummarized = nodes[summary_index + 1:]
         current_summary = self.store.summary(scene.user_message_id)
         expanded = self.history_messages(unsummarized, target_character_id)[0]
@@ -179,15 +182,22 @@ class Engine:
             unsummarized = unsummarized[-12:]
         elif len(unsummarized) > 12 and (len(expanded) > 20 or sum(estimate_tokens(message.text) for message in expanded) > 5000):
             older, unsummarized = unsummarized[:-12], unsummarized[-12:]
-            payload = '\n'.join(message.text for message in self.history_messages(older, target_character_id)[0])
-            if summary:
-                payload = f"Previous summary: {summary}\n{payload}"
+            output = self.limit('memory_output_tokens')
+            older_text = '\n'.join(message.text for message in self.history_messages(older, target_character_id)[0])
             try:
-                summary = await self.purpose_text(scene, 'summary', payload, 600)
-                self.store.save_summary(scene.user_message_id, summary)
+                budget = self.memory_input_budget(scene, 'summary', output, extra=estimate_tokens(summary) if summary else 0)
+                if budget <= 0:
+                    self.no_room('summary')
+                    summary = (summary + "\n" + older_text)[-2000:]
+                else:
+                    payload = tail_tokens(older_text, budget)
+                    if summary:
+                        payload = f"Previous summary: {summary}\n{payload}"
+                    summary = await self.purpose_text(scene, 'summary', payload, output)
+                    self.store.save_summary(scene.user_message_id, summary)
             except Exception as error:
                 logging.error("Branch summarization failed: %s", error_detail(error))
-                summary = (summary + "\n" + payload)[-2000:]
+                summary = (summary + "\n" + older_text)[-2000:]
         history, history_ids = self.history_messages(unsummarized, target_character_id)
         if scene.images and history:
             history[-1] = TurnMessage(history[-1].role, history[-1].text, scene.images)
@@ -280,6 +290,28 @@ class Engine:
     def limit(self, key: str) -> int:
         return self.settings.limits.get(key, LIMIT_DEFAULTS[key])
 
+    def prior_summary(self, nodes) -> tuple[str, int]:
+        """Newest saved summary on ``nodes[:-1]`` and its index (-1 if none); falls back to a bounded lookup above the ancestors window."""
+        summary, index = "", -1
+        for position, node in enumerate(nodes[:-1]):
+            if saved := self.store.summary(node["message_id"]):
+                summary, index = saved, position
+        if index < 0 and nodes and nodes[0]["parent_id"] is not None:
+            summary = self.store.latest_summary_at_or_above(nodes[0]["guild_id"], nodes[0]["parent_id"]) or ""
+        return summary, index
+
+    def memory_input_budget(self, scene, purpose: str, max_tokens: int, extra: int = 0, values=None, contract: str = '') -> int:
+        """memory_input_tokens clamped to what the memory profile's context leaves after the fixed prompt, output and a margin; <= 0 when nothing fits."""
+        s = self.settings
+        limit = s.limits.get('memory_input_tokens', LIMIT_DEFAULTS['memory_input_tokens'])
+        values = {'payload': '', **({'speaker_identity': self.identities(scene)} if scene.user_id or purpose == 'extraction' else {}), **(values or {})}
+        fixed = self.compile(scene, purpose, values, contract=contract, max_tokens=max_tokens).estimated_tokens
+        window = min(s.limits['max_input_tokens'], s.profile('memory').context_tokens - max_tokens)
+        return min(limit, window - fixed - extra - max(64, window // 20))
+
+    def no_room(self, purpose: str) -> None:
+        logging.warning("Skipping memory %s: no input room in memory profile %s", purpose, self.settings.memory)
+
     def recent_transcript(self, nodes, budget: int) -> str:
         """Newest whole nodes whose transcript fits ``budget`` tokens; a lone oversize node keeps its end."""
         history, ids = self.history_messages(nodes, 0)
@@ -300,18 +332,20 @@ class Engine:
 
     async def summarize_scene(self, last_message_id: int, scene: SceneContext | None = None) -> None:
         nodes = self.store.ancestors(last_message_id)
-        prior_summary, start = "", 0
-        for index, node in enumerate(nodes[:-1]):
-            if saved := self.store.summary(node["message_id"]):
-                prior_summary, start = saved, index + 1
+        prior_summary, found = self.prior_summary(nodes)
+        start = found + 1
         if len(nodes) - start < self.limit('summary_every_messages'):
             return
         try:
-            transcript = self.recent_transcript(nodes[start:], self.limit('memory_input_tokens'))
             if scene is None:
                 node = nodes[-1]
                 scene = SceneContext(node['guild_id'], node['channel_id'], None, 0, 0, last_message_id, '', None, [], [])
-            summary = await self.purpose_text(scene, 'summary', f'Previous summary: {prior_summary}\nNew exchange:\n{transcript}', self.limit('memory_output_tokens'))
+            output = self.limit('memory_output_tokens')
+            budget = self.memory_input_budget(scene, 'summary', output, extra=estimate_tokens(prior_summary))
+            if budget <= 0:
+                return self.no_room('summary')
+            transcript = self.recent_transcript(nodes[start:], budget)
+            summary = await self.purpose_text(scene, 'summary', f'Previous summary: {prior_summary}\nNew exchange:\n{transcript}', output)
             if summary.strip():
                 self.store.save_summary(last_message_id, summary.strip())
         except Exception as error:
@@ -325,7 +359,9 @@ class Engine:
             return
         try:
             head = user_line(scene.user_id, scene.user_label, scene.text)
-            budget = self.limit('memory_input_tokens')
+            budget = self.memory_input_budget(scene, 'extraction', self.limit('max_output_tokens'), contract=EXTRACTION_CONTRACT)
+            if budget <= 0:
+                return self.no_room('extraction')
             rest = budget - estimate_tokens(head + '\n')
             body = '\n'.join(f"{name}: {line}" for name, line in lines)
             text = tail_tokens(head + '\n' + body, budget) if rest <= 0 else head + '\n' + tail_tokens(body, rest)

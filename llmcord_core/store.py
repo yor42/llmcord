@@ -484,6 +484,16 @@ class Store(AdminStore):
         self.execute("INSERT INTO summaries(node_id,content) SELECT message_id,? FROM nodes WHERE message_id=? "
                      "ON CONFLICT(node_id) DO UPDATE SET content=excluded.content", (content, node_id))
 
+    def latest_summary_at_or_above(self, guild_id: int, message_id: int, max_depth: int = 5000) -> str | None:
+        """Nearest saved summary on the branch from ``message_id`` up through its parents, within ``guild_id``; the walk is depth-bounded."""
+        row = self.one("""WITH RECURSIVE chain(message_id, parent_id, depth) AS (
+            SELECT message_id, parent_id, 0 FROM nodes WHERE message_id=? AND guild_id=?
+            UNION ALL SELECT n.message_id, n.parent_id, chain.depth + 1 FROM nodes n
+            JOIN chain ON n.message_id=chain.parent_id WHERE n.guild_id=? AND chain.depth < ?)
+            SELECT s.content FROM chain JOIN summaries s ON s.node_id=chain.message_id ORDER BY chain.depth LIMIT 1""",
+                       (message_id, guild_id, guild_id, max_depth))
+        return row["content"] if row else None
+
     def summary(self, node_id: int) -> str | None:
         row = self.one("SELECT content FROM summaries WHERE node_id=?", (node_id,))
         return row["content"] if row else None

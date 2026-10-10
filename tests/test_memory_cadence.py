@@ -7,6 +7,8 @@ Seams: the public ``Engine.summarize_scene`` / ``Engine.extract_memories`` with 
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from helpers import MemoryModels, make_settings
@@ -351,6 +353,103 @@ class MemoryLimitConfigTests(unittest.TestCase):
         for key in ("summary_every_messages", "extraction_every_turns"):
             with self.assertRaises(ValueError, msg=f"{key}=101"):
                 settings_for(extra=f"limits:\n  {key}: 101\n")
+
+
+def small_settings(context_tokens=4096, **limits):
+    settings = make_settings(**limits)
+    profile = settings.profiles["test"]
+    return replace(settings, profiles={"test": replace(profile, context_tokens=context_tokens)})
+
+
+class MemoryLimitDefectTests(MemoryCase):
+    """MNT-15: memory budget vs the memory profile's context, prior summary beyond the ancestors window, inline limits."""
+
+    def long_chain(self, count, start=1000, parent=None, size=600):
+        for ident in range(start, start + count):
+            self.store.record_node(ident, 1, 100, parent, USER, None, f"n{ident} " + "x" * size, created_at=1_700_000_000.0)
+            parent = ident
+        return parent
+
+    async def test_summary_fits_small_memory_context(self):
+        """MNT-15 (a): default memory_input_tokens (6000) on a 4096-token memory profile is clamped, so the summary is made."""
+        models = MemoryModels()
+        last = self.long_chain(60)
+        await Engine(self.store, models, small_settings()).summarize_scene(last)
+        self.assertEqual(len(models.summaries), 1)
+        self.assertEqual(self.store.summary(last), "Fresh summary")
+
+    async def test_extraction_fits_small_memory_context(self):
+        """MNT-15 (a): extraction input is clamped to the memory profile's context too."""
+        models = MemoryModels()
+        self.store.record_node(1000, 1, 100, None, USER, None, "hi")
+        lines = [("Courier", "y" * 600) for _ in range(40)]
+        await Engine(self.store, models, small_settings()).extract_memories(self.scene(1000), self.characters(self.courier), lines, 1000)
+        self.assertEqual(len(models.extractions), 1)
+
+    async def test_prior_summary_found_beyond_ancestors_window(self):
+        """MNT-15 (b): a summary on a node older than the 200-node ancestors window is still used as the prior summary."""
+        models = MemoryModels()
+        last = self.chain(250)
+        self.store.save_summary(1010, "Ancient summary")
+        await self.engine(models).summarize_scene(last)
+        self.assertIn("Ancient summary", models.summaries[0]["text"])
+
+    async def test_prior_summary_lookup_is_guild_scoped(self):
+        """MNT-15 (b): the beyond-window lookup never returns another guild's summary."""
+        self.assertIsNone(self.store.latest_summary_at_or_above(2, 1000))
+        last = self.chain(3)
+        self.store.save_summary(1000, "Mine")
+        self.assertEqual(self.store.latest_summary_at_or_above(1, last), "Mine")
+        self.assertIsNone(self.store.latest_summary_at_or_above(2, last))
+
+    async def test_inline_branch_summary_uses_configured_limits(self):
+        """MNT-15 (c): _history's inline summary uses memory_output_tokens and a memory_input_tokens-bounded payload."""
+        models = MemoryModels()
+        last = self.long_chain(40)
+        engine = self.engine(models, memory_input_tokens=300, memory_output_tokens=77)
+        await engine._history(self.scene(last, parent=None), self.courier)
+        self.assertEqual(len(models.summaries), 1)
+        self.assertEqual(models.summaries[0]["max_tokens"], 77)
+        self.assertLess(len(models.summaries[0]["text"]), 3 * 300 + 3000)
+
+    async def test_inline_branch_summary_sees_prior_summary_beyond_window(self):
+        """MNT-15 (b)+(c): inline summarization carries a prior summary older than the ancestors window."""
+        models = MemoryModels()
+        last = self.long_chain(250, size=100)
+        self.store.save_summary(1010, "Ancient summary")
+        await self.engine(models)._history(self.scene(last), self.courier)
+        self.assertIn("Ancient summary", models.summaries[0]["text"])
+
+    async def test_no_room_skips_model_call_and_saves_nothing(self):
+        """MNT-15: when the fixed prompt fills the memory window, summary and extraction log a WARNING and skip; _history falls back without a call."""
+        models = MemoryModels()
+        engine = Engine(self.store, models, small_settings())
+        last = self.long_chain(60)
+        fixed = SimpleNamespace(estimated_tokens=3500)  # the fixed prompt fills the 3546-token window
+        with patch.object(Engine, "compile", return_value=fixed), self.assertLogs(level="WARNING") as logs:
+            await engine.summarize_scene(last)
+            await engine.extract_memories(self.scene(last), self.characters(self.courier), [("Courier", "hello there")], last)
+            summary, _, _, _ = await engine._history(self.scene(last), self.courier)
+        self.assertEqual((models.summaries, models.extractions), ([], []))
+        self.assertIsNone(self.store.summary(last))
+        self.assertGreaterEqual(sum("no input room" in line for line in logs.output), 3)
+        self.assertLessEqual(len(summary), 2000)
+
+    async def test_far_ancestor_lookup_ignores_sibling_branch(self):
+        """MNT-15 (b): a summary on a sibling branch is never used for the beyond-window lookup."""
+        models = MemoryModels()
+        self.chain(3)
+        self.store.save_summary(1002, "Sibling summary")
+        last = self.chain(250, start=2000, parent=1000)
+        await self.engine(models).summarize_scene(last)
+        self.assertNotIn("Sibling summary", models.summaries[0]["text"])
+
+    def test_summary_lookup_max_depth_bounds_walk(self):
+        """MNT-15 (b): max_depth=2 does not reach a summary three parents up."""
+        last = self.chain(4)
+        self.store.save_summary(1000, "Deep")
+        self.assertIsNone(self.store.latest_summary_at_or_above(1, last, max_depth=2))
+        self.assertEqual(self.store.latest_summary_at_or_above(1, last, max_depth=3), "Deep")
 
 
 if __name__ == "__main__":
