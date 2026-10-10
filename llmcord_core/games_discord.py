@@ -23,6 +23,7 @@ import discord
 from discord import app_commands
 
 from .admin_store import ConflictError, GameError
+from . import game_chooser
 from .games import DefaultPolicy, blackjack
 
 STALE = "That table has moved on — use the latest buttons."
@@ -31,6 +32,8 @@ BUSY = "A round is being played; join the next one with /blackjack when it ends.
 LEAVE_BUSY = "You can leave when this round ends."
 NOT_SEATED = "You're not seated at this table."
 NOT_YOUR_TURN = "It's not your turn."
+NO_CHARACTER_SEATS = "Characters can't sit at tables in this channel."
+SKIPPED = {"seated": "already at the table", "full": "table full", "archived": "archived"}
 CLOSED_OFF = "Table closed: games were turned off here."
 CLOSED = "Table closed."
 MAX_BET = 100_000
@@ -64,6 +67,7 @@ class _Out:
     paints: list = field(default_factory=list)
     opened: bool = False
     joined: bool = False
+    note: str = ""  # the favorites part of the join reply
 
 
 @dataclass
@@ -108,6 +112,9 @@ class GameTables:
     JOIN_SECONDS = 30
     TURN_SECONDS = 60
     IDLE_SECONDS = 120
+    CHARACTER_SECONDS = 2
+    MODEL_SECONDS = 20
+    POST_SECONDS = 10
     RETRY_SECONDS = 5
     SWEEP_SECONDS = 30
 
@@ -148,7 +155,7 @@ class GameTables:
     def arm(self, key, kind: str, round_id: int, moves: int = 0) -> None:
         if self.closed:
             return
-        delay = {"join": self.JOIN_SECONDS, "turn": self.TURN_SECONDS, "idle": self.IDLE_SECONDS}[kind]
+        delay = {"join": self.JOIN_SECONDS, "turn": self.TURN_SECONDS, "idle": self.IDLE_SECONDS, "character": self.CHARACTER_SECONDS}[kind]
         self.disarm(key)
         self.table(key).deadline = self.clock() + delay
         task = self.timers[key] = asyncio.create_task(self._timer(key, kind, round_id, moves, delay), name=f"blackjack-{kind}-{key[1]}")
@@ -170,6 +177,8 @@ class GameTables:
                     await self.on_join_timer(*key, round_id)
                 elif kind == "turn":
                     await self.on_turn_timer(*key, round_id, moves)
+                elif kind == "character":
+                    await self.on_character_timer(*key, round_id, moves)
                 else:
                     await self.on_idle_timer(*key, round_id)
                 return
@@ -203,9 +212,11 @@ class GameTables:
                 table.join_round = snap["round_id"]
                 self.arm(key, "join", snap["round_id"])
         elif status == "playing":
-            self.arm(key, "turn", snap["round_id"], snap["moves"])
+            turn = snap["view"]["turn"] if snap["view"] else None
+            character = turn is not None and snap["seats"][turn]["kind"] == "character"
+            self.arm(key, "character" if character else "turn", snap["round_id"], snap["moves"])
         elif status == "settled":
-            table.present = {seat["ref_id"] for seat in snap["seats"]}
+            table.present = {seat["ref_id"] for seat in snap["seats"] if seat["kind"] == "member"}
             self.arm(key, "idle", snap["round_id"])
         else:
             self.disarm(key)
@@ -316,6 +327,13 @@ class GameTables:
 
     # --- rendering --------------------------------------------------------------------------
 
+    @staticmethod
+    def _who(seat) -> str:
+        if seat["kind"] != "character":
+            return f"<@{seat['ref_id']}>"
+        who = f"**{discord.utils.escape_markdown(discord.utils.escape_mentions(seat['name']))}**"
+        return who + (f" (with <@{seat['brought_by']}>)" if seat["brought_by"] else "")
+
     def render(self, snap) -> str:
         key = (snap["guild_id"], snap["table_id"])
         table, store, guild_id = self.table(key), self.store, snap["guild_id"]
@@ -325,7 +343,7 @@ class GameTables:
         lines = ["**Blackjack**"]
         for seat in snap["seats"]:
             i = seat["index"]
-            line = f"{i + 1}. <@{seat['ref_id']}> bet {(view['stakes'][i] if view else seat['stake']):,} {name}"
+            line = f"{i + 1}. {self._who(seat)} bet {(view['stakes'][i] if view else seat['stake']):,} {name}"
             if view:
                 cards = view["hands"][i]
                 line += f" — {blackjack.hand_str(cards)} ({blackjack.total_str(cards)})"
@@ -348,7 +366,11 @@ class GameTables:
             lines.append(f"Join with /blackjack <bet> — dealing {stamp}." if stamp else "Join with /blackjack <bet>.")
             lines.append(f"Bets: {limits['min_bet']:,} to {limits['max_bet']:,} {name}.")
         elif status == "playing" and view and view["turn"] is not None:
-            lines.append(f"On turn: <@{snap['seats'][view['turn']]['ref_id']}>" + (f" — decide {stamp}." if stamp else "."))
+            on_turn = snap["seats"][view["turn"]]
+            if on_turn["kind"] == "character":
+                lines.append(f"On turn: {self._who({**on_turn, 'brought_by': None})}.")
+            else:
+                lines.append(f"On turn: <@{on_turn['ref_id']}>" + (f" — decide {stamp}." if stamp else "."))
         elif status == "settled":
             lines.append(f"Play again or leave. The table closes {stamp} if nobody plays again." if stamp else "Play again or leave.")
         if status == "settled" and snap["seed"]:
@@ -364,6 +386,9 @@ class GameTables:
             spec = [("deal", "Deal now", discord.ButtonStyle.primary), ("leave", "Leave", discord.ButtonStyle.secondary)]
         elif status == "playing":
             legal = next(iter(snap["legal"].values()), ())
+            turn = snap["view"]["turn"] if snap["view"] else None
+            if turn is not None and snap["seats"][turn]["kind"] == "character":
+                legal = ()  # members cannot press for a character
             spec = [(m, m.capitalize(), discord.ButtonStyle.primary if m == "hit" else discord.ButtonStyle.secondary) for m in ("hit", "stand", "double") if m in legal]
         elif status == "settled":
             spec = [("again", "Play again (same bet)", discord.ButtonStyle.success), ("close", "Leave table", discord.ButtonStyle.secondary)]
@@ -460,7 +485,7 @@ class GameTables:
 
     # --- /blackjack -------------------------------------------------------------------------
 
-    async def play_command(self, interaction: discord.Interaction, bet: int) -> None:
+    async def play_command(self, interaction: discord.Interaction, bet: int, favorites: bool = False) -> None:
         # Not deferred: the first opener's table message is the public response, which an ephemeral defer would
         # make impossible. The table lock is held for store work only (no HTTP), and `_finish` answers before any
         # table edit goes out, so the response does not wait for the edit queue or the channel HTTP.
@@ -472,6 +497,13 @@ class GameTables:
         if channel_id not in self.store.game_channels(guild_id):
             await self._say(interaction, OFF_HERE)
             return
+        space_id, note = None, ""
+        if favorites:
+            _, binding = self.bot.location(interaction.channel)
+            if binding:
+                space_id = binding["space_id"]
+            else:
+                note = NO_CHARACTER_SEATS
         opened = None
         table = self.store.open_table_for(guild_id, channel_id)
         if table is None:
@@ -483,13 +515,24 @@ class GameTables:
             table = {"id": opened["table_id"]}
         key = (guild_id, table["id"])
         async with self.lock(key):
-            out = self._join(interaction.user.id, key, bet, opened)
+            out = self._join(interaction.user.id, key, bet, opened, space_id=space_id, note=note)
         if out.opened:
             await self._open_message(interaction, key, out.paints[0])
+            if out.note:
+                await self._say(interaction, out.note)
         else:
             await self._finish(interaction, out)
 
-    def _join(self, user_id, key, bet, opened) -> _Out:
+    def _favorites_note(self, result, note) -> str:
+        name, parts = self.store.currency_name(result["snapshot"]["guild_id"]), []
+        if result["seated"]:
+            parts.append("Your favorites joined too: " + ", ".join(f"{s['name']} ({s['stake']:,})" for s in result["seated"]) + ".")
+        if result["skipped"]:
+            why = lambda reason: f"not enough {name}" if reason == "broke" else SKIPPED[reason]
+            parts.append("Not seated: " + ", ".join(f"{s['name']} ({why(s['reason'])})" for s in result["skipped"]) + ".")
+        return " ".join([*parts, note] if note else parts)
+
+    def _join(self, user_id, key, bet, opened, space_id=None, note="") -> _Out:
         guild_id = key[0]
         if opened is None and (out := self._if_closed(key, OFF_HERE)) is not None:
             return out
@@ -501,7 +544,11 @@ class GameTables:
             if fresh:
                 snap = self.store.next_round(*key)
             try:
-                snap = self.store.join_round(guild_id, snap["round_id"], user_id, bet)
+                if space_id is not None:
+                    result = self.store.join_with_favorites(guild_id, snap["round_id"], user_id, bet, space_id)
+                    snap, note = result["snapshot"], self._favorites_note(result, note)
+                else:
+                    snap = self.store.join_round(guild_id, snap["round_id"], user_id, bet)
             except GameError:
                 if fresh and opened is None:
                     self.store.cancel_round(guild_id, snap["round_id"], "nobody joined")
@@ -515,8 +562,8 @@ class GameTables:
         self._after(key, snap)
         paint = self._paint(key, snap)
         if opened is not None:
-            return _Out(paints=[paint], opened=True)
-        return _Out(f"You joined the table with {bet:,} {self.store.currency_name(guild_id)}.", [paint], joined=True)
+            return _Out(paints=[paint], opened=True, note=note)
+        return _Out(f"You joined the table with {bet:,} {self.store.currency_name(guild_id)}." + (f" {note}" if note else ""), [paint], joined=True)
 
     async def _open_message(self, interaction, key, paint: Paint) -> None:
         """Posts the table message (the public response). Edits of this table wait behind it, so none is lost to a missing message id."""
@@ -681,6 +728,89 @@ class GameTables:
         if paint is not None:
             await self._deliver(paint)
 
+    async def on_character_timer(self, guild_id, table_id, round_id, moves) -> None:
+        """A character seat is on turn: decide outside the table lock (a model call may take seconds), then apply under it if nothing moved meanwhile."""
+        key, paint = (guild_id, table_id), None
+        async with self.lock(key):
+            closed, paint = self._closed(key)
+            if not closed:
+                snap = self.store.round_snapshot(guild_id, round_id)
+                if snap["status"] != "playing" or snap["moves"] != moves or not snap["legal"]:
+                    return
+                seat, legal = next(iter(snap["legal"].items()))
+                seated = self.store.character_seat_context(guild_id, round_id, seat)
+                if seated is None:
+                    return
+        if closed:
+            if paint is not None:
+                await self._deliver(paint)
+            return
+        move, line = await self._character_move(guild_id, snap, seat, legal, seated)
+        async with self.lock(key):
+            closed, paint = self._closed(key)
+            if not closed:
+                now = self.store.round_snapshot(guild_id, round_id)
+                if now["status"] != "playing" or now["moves"] != moves or seat not in now["legal"]:
+                    return
+                legal = now["legal"][seat]
+                if move not in legal:
+                    move, line = self._house_move(now, seat, legal), ""
+                try:
+                    snap = self.store.play(guild_id, round_id, seat, move, "character", moves)
+                except ConflictError:
+                    return
+                except GameError as error:
+                    logging.warning("Blackjack character move refused (%s); playing the house rule", type(error).__name__)
+                    move, line = self._house_move(now, seat, legal), ""
+                    try:
+                        snap = self.store.play(guild_id, round_id, seat, move, "character", moves)
+                    except (ConflictError, GameError) as again:
+                        logging.warning("Blackjack character house move refused (%s)", type(again).__name__)
+                        return
+                self._after(key, snap)
+                paint = self._paint(key, snap)
+        if paint is not None:
+            await self._deliver(paint)
+        if line and not closed:
+            await self._post_line(snap["channel_id"], guild_id, seated, line)
+
+    @staticmethod
+    def _house_move(snap, seat, legal) -> str:
+        return DefaultPolicy.pick(SimpleNamespace(total=blackjack.hand_total(snap["view"]["hands"][seat])[0]), legal)
+
+    async def _character_move(self, guild_id, snap, seat, legal, seated) -> tuple[str, str]:
+        """(move, line): the model's choice when table talk is on and the call works, else the house rule with no line."""
+        house = self._house_move(snap, seat, legal)
+        if not self.store.game_character_talk(guild_id):
+            return house, ""
+        try:
+            character = self.store.character_by_id(seated["character_id"])
+            if character is None or character["guild_id"] != guild_id:
+                return house, ""
+            result = await asyncio.wait_for(game_chooser.ask(self.bot, guild_id, snap["channel_id"], character, snap, seat, legal), self.MODEL_SECONDS)
+        except Exception as error:
+            logging.warning("Blackjack character decision fell back to the house rule (%s)", type(error).__name__)
+            return house, ""
+        move = result.get("move") if isinstance(result, dict) else None
+        if not isinstance(move, str) or move not in legal:
+            return house, ""
+        return move, game_chooser.clean_line(result.get("line"))
+
+    async def _post_line(self, channel_id, guild_id, seated, line) -> None:
+        """Best effort: the character says its line in the table's channel; a failure is logged and never blocks the game. Nothing is saved to scene history."""
+        try:
+            character = self.store.character_by_id(seated["character_id"])
+            if character is None or character["guild_id"] != guild_id:
+                return
+            channel = self.bot.get_channel(channel_id) or await self.bot.fetch_channel(channel_id)
+            webhook = await self.bot._webhook(channel, character)
+            slots = {row["slot_key"]: row for row in self.store.usable_avatars(guild_id, character["id"])}
+            avatar = (await self.bot.resolve_avatar(slots["neutral"]))["url"] if "neutral" in slots else None
+            thread = {"thread": channel} if isinstance(channel, discord.Thread) else {}
+            await asyncio.wait_for(webhook.send(line, **thread, username=character["name"], avatar_url=avatar, allowed_mentions=NO_MENTIONS), self.POST_SECONDS)
+        except Exception as error:
+            logging.warning("Blackjack character line not posted (%s)", type(error).__name__)
+
     async def on_idle_timer(self, guild_id, table_id, round_id) -> None:
         key, paint = (guild_id, table_id), None
         async with self.lock(key):
@@ -731,10 +861,10 @@ def register_game_commands(bot, ctx: SimpleNamespace, admin_games: app_commands.
         await interaction.response.send_message(message, ephemeral=True, allowed_mentions=NO_MENTIONS)
 
     @bot.tree.command(name="blackjack", description="Join or open a blackjack table in this channel")
-    @app_commands.describe(bet="How much to bet")
-    async def blackjack_command(interaction: discord.Interaction, bet: app_commands.Range[int, 1, MAX_BET]):
+    @app_commands.describe(bet="How much to bet", favorites="Bring your favorite characters to the table")
+    async def blackjack_command(interaction: discord.Interaction, bet: app_commands.Range[int, 1, MAX_BET], favorites: bool = False):
         require_guild(interaction)
-        await bot.games.play_command(interaction, bet)
+        await bot.games.play_command(interaction, bet, favorites)
 
     @admin_games.command(name="channel", description="Turn games on or off in a channel")
     @app_commands.describe(enabled="On or off", channel="The channel (default: this one)")

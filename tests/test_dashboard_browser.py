@@ -4067,6 +4067,36 @@ class DashboardBrowserTests(unittest.TestCase):
             self.post_hook('/_test/games', {'min_bet': 1, 'max_bet': 1000, 'channels': []})
             context.close()
 
+    def test_currency_character_table_talk_switch_persists_conflicts_and_guild_isolation(self):
+        """FEAT-20: 'Characters talk at the table' saves through the save bar with an audit row, persists after reload, refuses a save over a change made elsewhere, never touches guild 2, and shows its note."""
+        from playwright.sync_api import expect
+        other = self.state()['games']['2']
+        context, page, errors = self.open_currency()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            switch = page.get_by_role('switch', name='Characters talk at the table')
+            switch.wait_for(timeout=5000)
+            page.get_by_text('Off: characters play by the house rule (hit below 17) and stay quiet.', exact=False).wait_for(timeout=5000)
+            self.assertEqual(switch.get_attribute('aria-checked'), 'true')
+            switch.click()
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Character table talk saved', exact=True).wait_for(timeout=5000)
+            self.assertFalse(self.state()['games']['1']['character_talk'])
+            rows = [r for r in self.state()['audit'] if r['action'] == 'games.character_talk']
+            self.assertEqual([json.loads(r['detail_json']) for r in rows], [{'enabled': False}])
+            page.reload()
+            expect(page.get_by_role('switch', name='Characters talk at the table')).to_have_attribute('aria-checked', 'false', timeout=5000)
+            page.get_by_role('switch', name='Characters talk at the table').click()
+            self.post_hook('/_test/games', {'character_talk': True})
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The character table talk setting was changed elsewhere. Reload the page and try again.', exact=True).wait_for(timeout=5000)
+            self.assertTrue(self.state()['games']['1']['character_talk'])
+            self.assertEqual(self.state()['games']['2'], other)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'character_talk': True})
+            context.close()
+
     def test_currency_games_unknown_channel_and_closed_tables_toast(self):
         """MNT-40: a saved game channel Discord does not list shows as its id and can be removed; turning off a channel with an open table toasts the closed count and refunds the seated bet."""
         from playwright.sync_api import expect

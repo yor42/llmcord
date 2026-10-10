@@ -1035,8 +1035,8 @@ class HardeningTests(GameCase):
         await self.bet(ALICE, 10)
         real = self.games._join
 
-        def join_then_close(user_id, key, bet, opened):
-            out = real(user_id, key, bet, opened)
+        def join_then_close(user_id, key, bet, opened, **kwargs):
+            out = real(user_id, key, bet, opened, **kwargs)
             self.games._close_in_store(key)  # the opener's post failed after this join
             return out
         with mock.patch.object(self.games, "_join", join_then_close):

@@ -1212,7 +1212,7 @@ def format_usd(value):
 
 
 RETENTION_OPTIONS = {7: '7 days', 14: '14 days', 30: '30 days', 0: 'Full month'}
-USAGE_FEATURES = {'reply': 'Replies', 'ambient': 'Ambient turns', 'summon': 'Summons', 'memory': 'Memory updates', 'catchup': 'Catch-ups'}
+USAGE_FEATURES = {'reply': 'Replies', 'ambient': 'Ambient turns', 'summon': 'Summons', 'memory': 'Memory updates', 'catchup': 'Catch-ups', 'game': 'Blackjack table talk'}
 USAGE_RANGES = {'day': ('Last 24 hours', 1), '7': ('Last 7 days', 7), '14': ('Last 14 days', 14), '30': ('Last 30 days', 30), 'month': ('This month', 31)}
 USAGE_UNKNOWN = 'Unknown (before this update)'
 

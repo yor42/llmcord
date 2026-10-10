@@ -244,7 +244,10 @@ EXPECTED_COMMANDS = {
     "daily": ("Claim your daily check-in bonus", (), 0, "None", False),
     "blackjack": (
         "Join or open a blackjack table in this channel",
-        (("bet", "integer", True, "How much to bet", False, ()),),
+        (
+            ("bet", "integer", True, "How much to bet", False, ()),
+            ("favorites", "boolean", False, "Bring your favorite characters to the table", False, ()),
+        ),
         0,
         "None",
         False,

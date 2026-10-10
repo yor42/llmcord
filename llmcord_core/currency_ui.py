@@ -183,6 +183,16 @@ class CurrencyPanel:
                               detail=lambda result: dict(result), success='Bet limits saved',
                               dirty=lambda: [f.value for f in limits] != [bets[key] for key in bet_keys],
                               reset=bets_reset)
+            talk = {'value': store.game_character_talk(gid)}
+            talk_switch = ui.switch('Characters talk at the table', value=talk['value'])
+            ui.label('On: a character at a blackjack table asks the model for its move and may say a short line, one model call per decision. Off: characters play by the house rule (hit below 17) and stay quiet.').classes('ll-muted')
+            def save_talk():
+                talk['value'] = store.set_game_character_talk(gid, bool(talk_switch.value), talk['value'])
+                return talk['value']
+            ctx.savebar.track('Character table talk', {talk_switch: talk['value']}, save=save_talk, action='games.character_talk',
+                              detail=lambda result: {'enabled': result}, success='Character table talk saved',
+                              dirty=lambda: bool(talk_switch.value) != talk['value'],
+                              reset=lambda: talk_switch.set_value(talk['value']))
             games = store.game_channels(gid)
             options = {**{c: str(c) for c in sorted(games)}, **ctx.channel_names}
             picker = ui.select(options, value=sorted(games), multiple=True, label='Game channels').props('use-chips').classes('w-full')
