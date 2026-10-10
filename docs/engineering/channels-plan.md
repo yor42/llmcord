@@ -1,6 +1,6 @@
 # Channel kinds, favorites and character wallets: plan (proposed 2026-10-10)
 
-Status: **decided (D27), not started.** Comes before character seats (FEAT-20) because those seats use favorites and character wallets.
+Status: **decided (D27); FEAT-23 in progress.** Comes before character seats (FEAT-20) because those seats use favorites and character wallets.
 
 ## Channel kinds
 
@@ -27,7 +27,7 @@ The tone changes only the prompt instruction for scenes in that hub's channels. 
 
 ## Favorites (per member)
 
-- Each member keeps an ordered list of favorite characters for each server, up to 5.
+- Each member keeps an ordered list of favorite characters for each server, up to the server's **favorites limit**.
 - Commands are `/favorites add|remove|list|mode`, plus the member's own page later if one exists. Replies are ephemeral, so only the owner sees the list.
 - A favorite has an effect only in channels where that character can already appear (the world or hub eligibility rules). A favorite from world A never appears in world B's channels.
 - The list is a preference, not a personal fact, so it needs no `/memory opt_in`. It is deleted on request and when the character is deleted.
@@ -46,22 +46,31 @@ The tone changes only the prompt instruction for scenes in that hub's channels. 
 - **Betting:** a character bets the same amount as the member who brought it, lowered to its balance and the table's largest bet. It doesn't sit if it can't cover the smallest bet.
 - **Visibility:** admins see character balances and ledger entries in the Currency tab; members see a character's balance with `/balance character:<name>`.
 
+## Limits (per server, user 2026-10-10)
+
+Two server settings in the dashboard, each a whole number from 1 to 15 (default 5), each with a note on cost:
+
+- **Largest cast** (replaces the fixed limit of 5 characters per cast). Note: "A larger cast gives the director more characters to choose from, so more characters may answer a message. Each answer is a separate model call, and every prompt lists the cast."
+- **Favorites per member.** Note: "With "step in", a member's favorites outside the cast can answer too, so more favorites can mean more model calls."
+
+Lowering a limit keeps existing casts and favorite lists. They can shrink but not grow until they are within the limit.
+
 ## Schema
 
-One **v15** migration for all three parts, with a backup before the upgrade like v13 and v14:
+**v15** (FEAT-23), with a backup before the upgrade like v13 and v14:
 
-- `spaces.hub_tone`
 - `member_favorites(guild_id, user_id, character_id, position)`
 - the member's favorites mode
-- character balances and refill day
-- the ledger holder kind (an added column; existing rows count as member rows)
-- `guild_settings.character_refill_cap`
+- `guild_settings` max cast and max favorites
+- `spaces.hub_tone` (used by FEAT-24)
+
+**v16** (FEAT-25): character balances, refill day, ledger holder kind and the refill cap. These get their own migration and review, since they touch the money tables.
 
 ## Items and order
 
 | Item | Content | Review |
 | --- | --- | --- |
-| FEAT-23 | Schema v15 + favorites: store, `/favorites`, director hint and ambient weighting, the "step in" mode | Opus (migration, isolation) |
+| FEAT-23 | Schema v15 + favorites: store, `/favorites`, director hint and ambient weighting, the "step in" mode, cast and favorites limits | Opus (migration, isolation) |
 | FEAT-24 | Hub tone: setting, prompt instruction, dashboard and `/admin space` | Sonnet |
-| FEAT-25 | Character wallets: balances, lazy refill, refill cap setting, Currency tab view, `/balance character:` | Opus (money) |
+| FEAT-25 | Schema v16 + character wallets: balances, lazy refill, refill cap setting, Currency tab view, `/balance character:` | Opus (money) |
 | FEAT-20 | Character seats in blackjack: "bring favorites" at join, stakes from the wallet, the model picks a legal move, an in-character line through the webhook | Opus (money, concurrency) |
