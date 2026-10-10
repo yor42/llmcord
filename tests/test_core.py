@@ -5,6 +5,7 @@ import struct
 import tempfile
 import unittest
 from io import BytesIO
+from unittest import mock
 from pathlib import Path
 
 from PIL import Image, PngImagePlugin
@@ -163,6 +164,66 @@ class CoreTests(unittest.TestCase):
         self.assertEqual(len(self.store.encounters(1, self.alice, self.a)), 1)
         self.store.set_consent(1, 9, False)
         self.assertEqual(self.store.personal(1, 9), [])
+
+    def test_add_personal_stores_only_with_consent(self):
+        """MNT-06: add_personal stores nothing without a consent row or after opt-out, and dedupes once opted in."""
+        self.store.record_node(1, 1, 100, None, 9, None, 'src')
+        self.store.add_personal(1, 9, self.alice, "no row", 1)
+        self.assertEqual(self.store.personal(1, 9), [])
+        self.store.set_consent(1, 9, True)
+        self.store.set_consent(1, 9, False)
+        self.store.add_personal(1, 9, self.alice, "opted out", 1)
+        self.assertEqual(self.store.personal(1, 9), [])
+        self.store.set_consent(1, 9, True)
+        self.store.add_personal(1, 9, self.alice, "likes tea", 1)
+        self.store.add_personal(1, 9, self.alice, "likes tea", 1)
+        self.assertEqual([r["content"] for r in self.store.personal(1, 9)], ["likes tea"])
+
+    def test_add_personal_ignores_stale_consent_read(self):
+        """MNT-06 (ARCH-05): the consent check is part of the insert statement, so a stale earlier read
+        (simulated by has_consent returning True) cannot store a fact for an opted-out member; the real
+        cross-process race cannot be interleaved deterministically."""
+        self.store.record_node(1, 1, 100, None, 9, None, 'src')
+        self.store.set_consent(1, 9, True)
+        self.store.set_consent(1, 9, False)
+        with mock.patch.object(Store, "has_consent", return_value=True):
+            self.store.add_personal(1, 9, self.alice, "stale", 1)
+        self.assertEqual(self.store.personal(1, 9), [])
+        with mock.patch.object(Store, "has_consent", return_value=True):
+            self.store.add_personal(1, 8, self.alice, "no row", 1)
+        self.assertEqual(self.store.personal(1, 8), [])
+
+    def test_add_personal_consent_is_guild_scoped(self):
+        """MNT-06: consent in one guild does not allow storing a personal fact in another guild."""
+        self.store.record_node(1, 1, 100, None, 9, None, 'src')
+        self.store.record_node(2, 2, 500, None, 9, None, 'src')
+        self.store.set_consent(1, 9, True)
+        self.store.add_personal(2, 9, self.alice, "wrong guild", 2)
+        self.assertEqual(self.store.personal(2, 9), [])
+        self.store.set_consent(2, 9, True)
+        self.store.add_personal(2, 9, self.alice, "right guild", 2)
+        self.assertEqual([r["content"] for r in self.store.personal(2, 9)], ["right guild"])
+
+    def test_add_personal_sees_cross_connection_opt_out(self):
+        """MNT-06: consent is read from the database, not cached; an opt-out committed through another
+        connection deletes the stored fact and blocks later stores on this connection."""
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "t.db")
+            first = Store(path)
+            second = Store(path)
+            try:
+                space = first.create_space(1, "W", "world")
+                char = first.add_character(1, space, "Al", {"name": "Al"}, None, [])
+                first.record_node(1, 1, 100, None, 9, None, 'src')
+                first.set_consent(1, 9, True)
+                first.add_personal(1, 9, char, "kept?", 1)
+                self.assertEqual([r["content"] for r in first.personal(1, 9)], ["kept?"])
+                second.set_consent(1, 9, False)
+                first.add_personal(1, 9, char, "after opt-out", 1)
+                self.assertEqual(first.personal(1, 9), [])
+            finally:
+                second.close()
+                first.close()
 
     def test_history_retention_keeps_durable_lore(self):
         self.store.record_node(7000, 1, 100, None, 9, None, "old raw chat", created_at=100)

@@ -467,9 +467,10 @@ class Store(AdminStore):
         return bool(row and row["enabled"])
 
     def add_personal(self, guild_id: int, user_id: int, character_id: int, content: str, source_id: int) -> None:
-        if self.has_consent(guild_id, user_id):
-            self.execute("INSERT OR IGNORE INTO personal_memories(guild_id,user_id,character_id,content,source_message_id) "
-                         "SELECT ?,?,?,?,message_id FROM nodes WHERE guild_id=? AND message_id=?", (guild_id, user_id, character_id, content, guild_id, source_id))
+        self.execute("INSERT OR IGNORE INTO personal_memories(guild_id,user_id,character_id,content,source_message_id) "
+                     "SELECT ?,?,?,?,n.message_id FROM nodes n WHERE n.guild_id=? AND n.message_id=? "
+                     "AND EXISTS (SELECT 1 FROM consent c WHERE c.guild_id=? AND c.user_id=? AND c.enabled=1)",
+                     (guild_id, user_id, character_id, content, guild_id, source_id, guild_id, user_id))
 
     def personal(self, guild_id: int, user_id: int, character_id: int | None = None) -> list[sqlite3.Row]:
         if character_id is None:
