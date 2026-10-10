@@ -16,6 +16,7 @@ PRAGMA foreign_keys=ON;
 CREATE TABLE IF NOT EXISTS spaces (
  id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, name TEXT NOT NULL,
  kind TEXT NOT NULL CHECK(kind IN ('world','hub')),
+ hub_tone TEXT NOT NULL DEFAULT 'in_character',
  UNIQUE(guild_id,name)
 );
 CREATE TABLE IF NOT EXISTS hub_worlds (
@@ -194,22 +195,25 @@ class Store(AdminStore):
 
     def _upgrade(self, path: str | Path, existing: bool) -> None:
         """The whole schema upgrade, backup included, in one write-locked transaction: a failure leaves the old file as it was,
-        and a second process opening the same file waits, then finds version 14 and does nothing. executescript commits, so scripts run per statement."""
+        and a second process opening the same file waits, then finds version 15 and does nothing. executescript commits, so scripts run per statement."""
         self.db.execute("BEGIN IMMEDIATE")
         try:
             old_version = self.db.execute("PRAGMA user_version").fetchone()[0]
-            if old_version > 14:
+            if old_version > 15:
                 raise ValueError('The database is newer than this application. Update the application.')
             node_columns = {row[1] for row in self.db.execute('PRAGMA table_info(nodes)')}
             needs_identities = bool(node_columns) and not {'author_label', 'mentions_json'} <= node_columns
-            if existing and (old_version < 14 or needs_identities):
-                upgrade = 'v3' if old_version < 3 else 'identities' if needs_identities else 'v4' if old_version == 3 else 'v5' if old_version == 4 else 'v6' if old_version == 5 else 'v7' if old_version == 6 else 'v8' if old_version == 7 else 'v9' if old_version == 8 else 'v10' if old_version == 9 else 'v11' if old_version == 10 else 'v12' if old_version == 11 else 'v13' if old_version == 12 else 'v14'
+            if existing and (old_version < 15 or needs_identities):
+                upgrade = 'v3' if old_version < 3 else 'identities' if needs_identities else 'v4' if old_version == 3 else 'v5' if old_version == 4 else 'v6' if old_version == 5 else 'v7' if old_version == 6 else 'v8' if old_version == 7 else 'v9' if old_version == 8 else 'v10' if old_version == 9 else 'v11' if old_version == 10 else 'v12' if old_version == 11 else 'v13' if old_version == 12 else 'v14' if old_version == 13 else 'v15'
                 backup = Path(str(path) + f".pre-{upgrade}-{time.time_ns()}.sqlite3")
                 # Connection.backup from the connection holding the write lock never finishes; a second reader sees the committed file (the lock excludes other writers).
                 with closing(sqlite3.connect(path, timeout=30)) as reader, closing(sqlite3.connect(backup)) as target:
                     backup.chmod(0o600)
                     reader.backup(target)
             run_script(self.db, SCHEMA)
+            columns = {row[1] for row in self.db.execute("PRAGMA table_info(spaces)")}
+            if "hub_tone" not in columns:
+                self.db.execute("ALTER TABLE spaces ADD COLUMN hub_tone TEXT NOT NULL DEFAULT 'in_character'")
             columns = {row[1] for row in self.db.execute("PRAGMA table_info(characters)")}
             if "archived" not in columns:
                 self.db.execute("ALTER TABLE characters ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
@@ -233,7 +237,7 @@ class Store(AdminStore):
                 self.db.execute('ALTER TABLE avatar_slots ADD COLUMN image_hash TEXT')
             if added or old_version < 11:
                 self._backfill_avatar_hashes()
-            self.db.execute("PRAGMA user_version=14")
+            self.db.execute("PRAGMA user_version=15")
             self.db.commit()
         except BaseException:
             self.db.rollback()
@@ -416,11 +420,12 @@ class Store(AdminStore):
 
     def set_cast(self, channel_id: int, parent_id: int | None, cast: list[int], default: bool = False) -> None:
         cast = list(dict.fromkeys(cast))
-        if len(cast) > 5:
-            raise ValueError("A cast can have at most five characters.")
         binding = self.binding(channel_id, parent_id)
         if not binding:
             raise ValueError("This channel is not bound to a world or hub.")
+        limit = self.cast_limits(binding["guild_id"])["max_cast"]
+        if len(cast) > limit and len(cast) > len(json.loads(binding["default_cast"]) if default else self.get_cast(channel_id, parent_id)):
+            raise ValueError(f"A cast can have at most {limit} characters.")
         eligible = {row["id"] for row in self.eligible_characters(binding["guild_id"], binding["space_id"])}
         if not set(cast) <= eligible:
             raise ValueError("That character is not available in this world or hub.")

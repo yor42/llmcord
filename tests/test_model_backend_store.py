@@ -33,13 +33,13 @@ class MigrationTests(unittest.TestCase):
             connection.execute('PRAGMA user_version=8')
 
     def test_v8_file_upgrades_with_backup_and_keeps_data(self):
-        """FEAT-09 (D24): a v8 file gets a pre-v9 backup, user_version 14, the new tables, and keeps its rows."""
+        """FEAT-09 (D24): a v8 file gets a pre-v9 backup, user_version 15, the new tables, and keeps its rows."""
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'old.sqlite3'
             self._make_v8(path)
             store = Store(path)
             try:
-                self.assertEqual(store.one('PRAGMA user_version')[0], 14)
+                self.assertEqual(store.one('PRAGMA user_version')[0], 15)
                 self.assertEqual(store.one('SELECT COUNT(*) FROM spaces')[0], 1)
                 self.assertEqual(store.model_profile_rows(), [])
                 roles = store.model_roles()
@@ -61,17 +61,17 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual(len(list(Path(folder).glob('*.pre-*'))), 1)
             store = Store(path)
             try:
-                self.assertEqual(store.one('PRAGMA user_version')[0], 14)
+                self.assertEqual(store.one('PRAGMA user_version')[0], 15)
             finally:
                 store.close()
             self.assertEqual(len(list(Path(folder).glob('*.pre-*'))), 1)
 
-    def test_v15_file_is_refused(self):
-        """FEAT-09 (D24): databases newer than v14 are rejected."""
+    def test_v16_file_is_refused(self):
+        """FEAT-09 (D24): databases newer than v15 are rejected."""
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'new.sqlite3'
             with closing(sqlite3.connect(path)) as connection, connection:
-                connection.execute('PRAGMA user_version=15')
+                connection.execute('PRAGMA user_version=16')
             with self.assertRaisesRegex(ValueError, 'newer than this application'):
                 Store(path)
 

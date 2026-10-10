@@ -129,7 +129,7 @@ class AdministrationTests(unittest.TestCase):
                 connection.executescript(SCHEMA)
                 connection.execute('ALTER TABLE characters ADD COLUMN archived INTEGER NOT NULL DEFAULT 0')
                 connection.execute("ALTER TABLE lore ADD COLUMN rule_json TEXT NOT NULL DEFAULT '{}'")
-                connection.execute("INSERT INTO spaces VALUES(1,1,'World','world')")
+                connection.execute("INSERT INTO spaces(id,guild_id,name,kind) VALUES(1,1,'World','world')")
                 connection.execute('INSERT INTO characters(id,guild_id,world_id,name,card,avatar) VALUES(5,1,1,?,?,?)', ('Legacy', json.dumps(raw_card), png()))
                 connection.execute("INSERT INTO lore(id,guild_id,scope_kind,scope_id,content,constant,rule_json) VALUES(4,1,'character',5,'Legacy fact',1,?)", (json.dumps(rule),))
                 connection.execute("INSERT INTO trace VALUES(99,'{\"legacy\":true}')")

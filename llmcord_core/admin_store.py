@@ -85,7 +85,8 @@ CREATE TABLE IF NOT EXISTS guild_settings (
  timezone TEXT NOT NULL DEFAULT '', turn_log_enabled INTEGER NOT NULL DEFAULT 0, turn_log_days INTEGER NOT NULL DEFAULT 14,
  catchup_anywhere INTEGER NOT NULL DEFAULT 0, currency_name TEXT NOT NULL DEFAULT '',
  daily_amount INTEGER NOT NULL DEFAULT 0, daily_streak_bonus INTEGER NOT NULL DEFAULT 0, daily_streak_days INTEGER NOT NULL DEFAULT 7,
- game_min_bet INTEGER NOT NULL DEFAULT 1, game_max_bet INTEGER NOT NULL DEFAULT 1000
+ game_min_bet INTEGER NOT NULL DEFAULT 1, game_max_bet INTEGER NOT NULL DEFAULT 1000,
+ max_cast INTEGER NOT NULL DEFAULT 5, max_favorites INTEGER NOT NULL DEFAULT 5
 );
 CREATE TABLE IF NOT EXISTS currency_daily (
  guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, last_day TEXT NOT NULL, streak INTEGER NOT NULL,
@@ -142,6 +143,16 @@ BEGIN SELECT RAISE(ABORT, 'The game move log is append-only.'); END;
 CREATE TABLE IF NOT EXISTS user_timezones (
  guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, timezone TEXT NOT NULL, updated_at REAL NOT NULL,
  PRIMARY KEY(guild_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS member_settings (
+ guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, favorites_mode TEXT NOT NULL DEFAULT 'lean', updated_at REAL NOT NULL,
+ PRIMARY KEY(guild_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS member_favorites (
+ guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
+ character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+ position INTEGER NOT NULL, created_at REAL NOT NULL,
+ PRIMARY KEY(guild_id,user_id,character_id)
 );
 CREATE TABLE IF NOT EXISTS turn_log (
  id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, channel_id INTEGER, message_id INTEGER,
@@ -219,6 +230,9 @@ class CurrencyError(ValueError):
 
 class GameError(ValueError):
     """A game action refused; the message is meant for the member or admin who asked."""
+
+
+DEFAULT_CAST_LIMITS = {'max_cast': 5, 'max_favorites': 5}
 
 
 class ConflictError(ValueError):
@@ -504,7 +518,7 @@ class AdminStore:
             'lore': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0'},
             'lorebook_entries': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0', 'pinned': 'INTEGER NOT NULL DEFAULT 0', 'source_message_id': 'INTEGER', 'promoted_from': 'INTEGER'},
             'characters': {'avatar_manual': 'INTEGER NOT NULL DEFAULT 0'},
-            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0', 'currency_name': "TEXT NOT NULL DEFAULT ''", 'daily_amount': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_bonus': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_days': 'INTEGER NOT NULL DEFAULT 7', 'game_min_bet': 'INTEGER NOT NULL DEFAULT 1', 'game_max_bet': 'INTEGER NOT NULL DEFAULT 1000'},
+            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0', 'currency_name': "TEXT NOT NULL DEFAULT ''", 'daily_amount': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_bonus': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_days': 'INTEGER NOT NULL DEFAULT 7', 'game_min_bet': 'INTEGER NOT NULL DEFAULT 1', 'game_max_bet': 'INTEGER NOT NULL DEFAULT 1000', 'max_cast': 'INTEGER NOT NULL DEFAULT 5', 'max_favorites': 'INTEGER NOT NULL DEFAULT 5'},
             'model_usage': {'channel_id': 'INTEGER', 'feature': "TEXT NOT NULL DEFAULT ''"},
         }.items():
             columns = {row[1] for row in self.db.execute(f'PRAGMA table_info({table})')}
@@ -1162,6 +1176,73 @@ class AdminStore:
             self.db.execute('INSERT INTO guild_settings(guild_id,game_min_bet,game_max_bet) VALUES(?,?,?) ON CONFLICT(guild_id) DO UPDATE SET game_min_bet=excluded.game_min_bet,game_max_bet=excluded.game_max_bet',
                 (guild_id, min_bet, max_bet))
         return {'min_bet': min_bet, 'max_bet': max_bet}
+
+    MAX_CAST_LIMIT = 15
+
+    def cast_limits(self, guild_id):
+        row = self.one('SELECT max_cast,max_favorites FROM guild_settings WHERE guild_id=?', (guild_id,))
+        return {'max_cast': row['max_cast'], 'max_favorites': row['max_favorites']} if row else dict(DEFAULT_CAST_LIMITS)
+
+    def set_cast_limits(self, guild_id, max_cast, max_favorites, expected=None):
+        for value in (max_cast, max_favorites):
+            if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= self.MAX_CAST_LIMIT:
+                raise ValueError(f'The limits must be whole numbers from 1 to {self.MAX_CAST_LIMIT}.')
+        with self.write_admin():
+            if expected is not None and self.cast_limits(guild_id) != expected:
+                raise ConflictError('The cast limits were changed elsewhere. Reload the page and try again.')
+            self.db.execute('INSERT INTO guild_settings(guild_id,max_cast,max_favorites) VALUES(?,?,?) ON CONFLICT(guild_id) DO UPDATE SET max_cast=excluded.max_cast,max_favorites=excluded.max_favorites',
+                (guild_id, max_cast, max_favorites))
+        return {'max_cast': max_cast, 'max_favorites': max_favorites}
+
+    def favorites(self, guild_id, user_id):
+        """The member's favorites in order; archived characters are hidden but kept, and reappear when restored. Positions may have gaps while some are hidden."""
+        return [dict(r) for r in self.all(
+            'SELECT f.character_id,c.name,c.world_id,f.position FROM member_favorites f JOIN characters c ON c.id=f.character_id AND c.guild_id=f.guild_id '
+            'WHERE f.guild_id=? AND f.user_id=? AND c.archived=0 ORDER BY f.position', (guild_id, user_id))]
+
+    def add_favorite(self, guild_id, user_id, character_id):
+        with self.write_admin():
+            character = self.one('SELECT archived FROM characters WHERE guild_id=? AND id=?', (guild_id, character_id))
+            if not character or character['archived']:
+                raise ValueError('That character is not available in this server. Choose another character.')
+            if self.one('SELECT 1 FROM member_favorites WHERE guild_id=? AND user_id=? AND character_id=?', (guild_id, user_id, character_id)):
+                raise ValueError('That character is already one of your favorites.')
+            last = self.db.execute('SELECT COALESCE(MAX(position),-1) FROM member_favorites WHERE guild_id=? AND user_id=?', (guild_id, user_id)).fetchone()[0]
+            count = len(self.favorites(guild_id, user_id))
+            limit = self.cast_limits(guild_id)['max_favorites']
+            if count >= limit:
+                raise ValueError(f'You can have at most {limit} favorites. Remove one first.')
+            self.db.execute('INSERT INTO member_favorites(guild_id,user_id,character_id,position,created_at) VALUES(?,?,?,?,?)', (guild_id, user_id, character_id, last + 1, time.time()))
+
+    def remove_favorite(self, guild_id, user_id, character_id):
+        with self.write_admin():
+            if not self.db.execute('DELETE FROM member_favorites WHERE guild_id=? AND user_id=? AND character_id=?', (guild_id, user_id, character_id)).rowcount:
+                return False
+            rows = self.all('SELECT character_id FROM member_favorites WHERE guild_id=? AND user_id=? ORDER BY position', (guild_id, user_id))
+            for position, row in enumerate(rows):
+                self.db.execute('UPDATE member_favorites SET position=? WHERE guild_id=? AND user_id=? AND character_id=?', (position, guild_id, user_id, row['character_id']))
+            return True
+
+    def clear_favorites(self, guild_id, user_id):
+        with self.write_admin():
+            visible = len(self.favorites(guild_id, user_id))
+            self.db.execute('DELETE FROM member_favorites WHERE guild_id=? AND user_id=?', (guild_id, user_id))
+            return visible
+
+    def favorites_mode(self, guild_id, user_id):
+        row = self.one('SELECT favorites_mode FROM member_settings WHERE guild_id=? AND user_id=?', (guild_id, user_id))
+        return row['favorites_mode'] if row else 'lean'
+
+    def set_favorites_mode(self, guild_id, user_id, mode):
+        if mode not in ('lean', 'step_in'):
+            raise ValueError('Choose "lean" or "step in" for your favorites.')
+        with self.write_admin():
+            self.db.execute('INSERT INTO member_settings(guild_id,user_id,favorites_mode,updated_at) VALUES(?,?,?,?) ON CONFLICT(guild_id,user_id) DO UPDATE SET favorites_mode=excluded.favorites_mode,updated_at=excluded.updated_at', (guild_id, user_id, mode, time.time()))
+
+    def eligible_favorites(self, guild_id, user_id, space_id):
+        """The member's favorites, in order, that can appear in this world or hub."""
+        eligible = {row['id'] for row in self.eligible_characters(guild_id, space_id)}
+        return [f for f in self.favorites(guild_id, user_id) if f['character_id'] in eligible]
 
     def open_table_for(self, guild_id, channel_id):
         row = self.one("SELECT * FROM game_tables WHERE guild_id=? AND channel_id=? AND status='open'", (guild_id, channel_id))
