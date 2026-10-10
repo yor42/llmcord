@@ -84,7 +84,7 @@ class _Table:
     sender: _Sender | None = None
 
 
-class GameButton(discord.ui.DynamicItem[discord.ui.Button], template=PREFIX + r":(?P<action>[a-z]+):(?P<table>\d+):(?P<round>\d+):(?P<moves>\d+)"):
+class GameButton(discord.ui.DynamicItem[discord.ui.Button], template=PREFIX + r":(?P<action>[a-z_]+):(?P<table>\d+):(?P<round>\d+):(?P<moves>\d+)"):
     """One button; its custom_id carries the table, the round and the move count the message showed."""
 
     def __init__(self, action: str, table_id: int, round_id: int, moves: int, label: str = "", style=discord.ButtonStyle.secondary):
@@ -103,13 +103,18 @@ def _sign(net: int) -> str:
     return f"+{net:,}" if net > 0 else f"−{-net:,}" if net < 0 else ""
 
 
-def _outcome(seat: dict) -> str:
-    outcome, net = seat["outcome"], (seat["payout"] or 0) - seat["stake"] - (seat.get("insurance") or 0)
-    if outcome == "push":
-        return "push"
+def _outcome(seat: dict, natural: bool = False) -> str:
+    """The result words and net of a settled seat; an insurance bet is shown apart from the main bet (``natural``: the dealer had blackjack)."""
+    outcome, cost = seat["outcome"], seat.get("insurance") or 0
+    net = (seat["payout"] or 0) - seat["stake"] - cost
     if outcome == "refund":
         return "refunded"
-    return f"{outcome} {_sign(net)}".strip()
+    word = {"surrender": "surrendered", "even_money": "even money"}.get(outcome, outcome)
+    main = f"{word} {_sign(net)}".strip()
+    if not cost:
+        return main
+    gain = 2 * cost if natural else -cost
+    return f"{word} {_sign(net - gain)}".strip() + f", insurance {_sign(gain)}"
 
 
 class GameTables:
@@ -437,11 +442,12 @@ class GameTables:
                 cards = view["hands"][i]
                 line += f" — {blackjack.hand_str(cards)} ({blackjack.total_str(cards)})"
                 if status == "playing":
-                    word = {"stand": "stands", "bust": "bust", "blackjack": "blackjack"}.get(view["status"][i])
+                    word = {"stand": "stands", "bust": "bust", "blackjack": "blackjack", "surrender": "surrendered"}.get(view["status"][i])
                     line += f" {word}" if word else ""
+                    line += " (even money)" if view.get("even_money") and view["even_money"][i] else f" (insured {seat['insurance']:,})" if seat.get("insurance") else ""
                     line += " (timed out)" if (snap["round_id"], i) in table.timeouts else ""
             if status == "settled":
-                line += f" — {_outcome(seat)}"
+                line += f" — {_outcome(seat, bool(view) and blackjack.is_natural(view['dealer']))}"
                 line += " (timed out)" if (snap["round_id"], i) in table.timeouts else ""
             lines.append(line)
         if view:
@@ -456,6 +462,8 @@ class GameTables:
             lines.append(f"Bets: {limits['min_bet']:,} to {limits['max_bet']:,} {name}.")
         elif status == "playing" and view and view["turn"] is not None:
             on_turn = snap["seats"][view["turn"]]
+            if snap.get("phase") == "insurance":
+                lines.append("Dealer shows an ace. Insurance?")
             if on_turn["kind"] == "character":
                 lines.append(f"On turn: {self._who({**on_turn, 'brought_by': None})}.")
             else:
@@ -466,7 +474,7 @@ class GameTables:
             lines.append(f"Play again or leave. The table closes {stamp} if nobody plays again." if stamp else "Play again or leave.")
         if shown is not None:
             lines.append("Dealer plays.")
-        lines.append("-# " + blackjack.rules_text())
+        lines.append("-# " + blackjack.rules_text(snap.get("rules")))
         if status in ("settled", "cancelled") and snap["seed"]:
             lines.append(f"-# Seed: {snap['seed']} (hash {snap['seed_hash'][:12]})")
         else:
@@ -483,7 +491,9 @@ class GameTables:
             turn = snap["view"]["turn"] if snap["view"] else None
             if turn is not None and snap["seats"][turn]["kind"] == "character":
                 legal = ()  # members cannot press for a character
-            spec = [(m, m.capitalize(), discord.ButtonStyle.primary if m == "hit" else discord.ButtonStyle.secondary) for m in ("hit", "stand", "double") if m in legal]
+            cost = snap["view"]["stakes"][turn] // 2 if turn is not None else 0
+            labels = {"hit": "Hit", "stand": "Stand", "double": "Double", "surrender": "Surrender", "insure": f"Insure ({cost:,})", "even_money": "Even money", "no_insurance": "No insurance"}
+            spec = [(m, labels[m], discord.ButtonStyle.primary if m in ("hit", "insure") else discord.ButtonStyle.secondary) for m in labels if m in legal]
         elif status in ("settled", "cancelled"):
             spec = [("again", "Play again (same bet)", discord.ButtonStyle.success), ("close", "Leave table", discord.ButtonStyle.secondary)]
         if not spec and status not in ("joining", "playing", "settled", "cancelled"):
@@ -688,12 +698,27 @@ class GameTables:
     # --- buttons ----------------------------------------------------------------------------
 
     @staticmethod
-    def how_to_play() -> str:
-        return blackjack.how_to_play() + "\n" + HOW_TO_JOIN
+    def how_to_play(rules=None) -> str:
+        return blackjack.how_to_play(rules) + "\n" + HOW_TO_JOIN
+
+    def _help_text(self, guild_id, table_id, round_id) -> str:
+        """The guide for the rules the table's round was dealt with; the server's current rules when the round is unknown or has none."""
+        if guild_id is None:
+            return self.how_to_play()
+        rules = None
+        try:
+            snap = self.store.round_snapshot(guild_id, round_id)
+            rules = snap["rules"] if snap["table_id"] == table_id else None
+            return self.how_to_play(rules or self.store.blackjack_rules(guild_id))
+        except GameError:
+            return self.how_to_play(rules or self.store.blackjack_rules(guild_id))
+        except Exception:
+            logging.exception("Could not build the blackjack guide for table %s", table_id)
+            return self.how_to_play()
 
     async def press(self, interaction: discord.Interaction, action: str, table_id: int, round_id: int, moves: int) -> None:
         if action == "help":  # a guide, not a move: no state, no seat needed, works on old messages
-            await self._say(interaction, self.how_to_play())
+            await self._say(interaction, self._help_text(interaction.guild_id, table_id, round_id))
             return
         guild_id = interaction.guild_id
         if guild_id is None or interaction.user.bot:
@@ -720,7 +745,7 @@ class GameTables:
         if seat is None:
             return _Out(NOT_SEATED)
         try:
-            if action in ("hit", "stand", "double"):
+            if action in ("hit", "stand", "double", "surrender", "insure", "even_money", "no_insurance"):
                 return self._move(key, snap, seat, action, moves)
             if action == "deal":
                 return self._deal(key, snap)
@@ -826,8 +851,10 @@ class GameTables:
                     return
                 seat, legal = next(iter(snap["legal"].items()))
                 move = DefaultPolicy.pick(SimpleNamespace(total=blackjack.hand_total(snap["view"]["hands"][seat])[0]), legal)
+                asked_insurance = snap["phase"] == "insurance"
                 snap = self.store.play(guild_id, round_id, seat, move, "timeout", moves)
-                self.table(key).timeouts.add((round_id, seat))
+                if not asked_insurance:  # declining insurance is not a missed turn
+                    self.table(key).timeouts.add((round_id, seat))
                 self._after(key, snap)
                 paint = self._paint(key, snap)
         if paint is not None:

@@ -136,6 +136,7 @@ The **Smallest bet** and **Largest bet** (whole numbers from 1 to 100,000; the s
 **Blackjack**
 
 - **Blackjack is on** (on by default; saved as "Blackjack setting saved", audited as `games.blackjack_enabled`): off, `/blackjack` is refused with "Blackjack is off on this server." and the server's open blackjack tables close with every bet refunded; the toast says "Blackjack is off. Closed 1 open table." or "Blackjack is off. Closed N open tables." The tables close in the same step as the switch. The bot repaints a table message closed from the dashboard ("Table closed: blackjack was turned off on this server.") within about 30 seconds (its sweep), and at once when someone presses a button on it. Only on the dashboard; `/admin games` has no switch for it.
+- **Blackjack rules** (saved as "Blackjack rules saved", audited as `games.blackjack_rules` with the full rules): **Dealer stands on** (16, 17 or 18), **Dealer hits soft 17** (a switch, available only when the dealer stands on 17), **Blackjack pays** (3:2 or 6:5), **Ties** (Push: bet comes back, or Dealer wins), **Insurance and even money** and **Late surrender** (switches). A gray "Table rules line" under the controls previews the line members see on the table. Rule changes apply from the next round; open rounds keep the rules they were dealt with. If the rules were changed elsewhere meanwhile, the save is refused ("The blackjack rules were changed elsewhere. Reload the page and try again.")
 
 ## Reply footer and cost estimates
 

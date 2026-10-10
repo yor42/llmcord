@@ -4238,6 +4238,51 @@ class DashboardBrowserTests(unittest.TestCase):
             self.post_hook('/_test/game-table-cleanup', {'guild': 2, 'user': other_member})
             context.close()
 
+    def test_games_tab_blackjack_rules_save_preview_persist_and_conflict(self):
+        """FEAT-28: the rule controls save as one 'Blackjack rules' part with an audit row, preview the rules line, persist after reload, keep soft 17 for a 17 dealer only, refuse a stale save, and leave guild 2 alone."""
+        from playwright.sync_api import expect
+        classic = {'stand_on': 17, 'hit_soft_17': False, 'blackjack_pays': '3:2', 'ties': 'push', 'insurance': False, 'surrender': False}
+        other = self.state()['games']['2']
+        context, page, errors = self.open_games()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            switch = page.get_by_role('switch', name='Insurance and even money')
+            switch.wait_for(timeout=5000)
+            page.get_by_text('Rule changes apply from the next round. Open rounds keep the rules they were dealt with.', exact=True).wait_for(timeout=5000)
+            page.get_by_text('Table rules line: Dealer stands on all 17s', exact=False).wait_for(timeout=5000)
+            soft = page.get_by_role('switch', name='Dealer hits soft 17')
+            expect(soft).to_be_enabled()
+            switch.click()
+            page.get_by_role('switch', name='Late surrender').click()
+            page.get_by_label('Blackjack pays', exact=True).click()
+            page.get_by_role('option', name='6:5', exact=True).click()
+            page.get_by_label('Ties', exact=True).click()
+            page.get_by_role('option', name='Dealer wins', exact=True).click()
+            page.get_by_label('Dealer stands on', exact=True).click()
+            page.get_by_role('option', name='18', exact=True).click()
+            expect(soft).to_be_disabled()
+            page.get_by_text('Table rules line: Dealer stands on 18 \u00b7 Blackjack pays 6:5 \u00b7 Dealer wins ties', exact=False).wait_for(timeout=5000)
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Blackjack rules saved', exact=True).wait_for(timeout=5000)
+            want = {'stand_on': 18, 'hit_soft_17': False, 'blackjack_pays': '6:5', 'ties': 'dealer', 'insurance': True, 'surrender': True}
+            self.assertEqual(self.state()['games']['1']['blackjack_rules'], want)
+            self.assertIn('games.blackjack_rules', self.audit_actions())
+            self.assertEqual(self.state()['games']['2'], other)
+            expect(soft).to_be_disabled()
+            page.reload()
+            expect(page.get_by_role('switch', name='Insurance and even money')).to_have_attribute('aria-checked', 'true', timeout=5000)
+            page.get_by_text('Insurance \u00b7 Late surrender', exact=False).wait_for(timeout=5000)
+            page.get_by_role('switch', name='Late surrender').click()
+            self.post_hook('/_test/games', {'blackjack_rules': {'ties': 'dealer'}})
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The blackjack rules were changed elsewhere. Reload the page and try again.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['blackjack_rules']['ties'], 'dealer')
+            self.assertFalse(self.state()['games']['1']['blackjack_rules']['insurance'])
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'blackjack_rules': classic})
+            context.close()
+
     def test_currency_character_wallets_cap_and_balances(self):
         """FEAT-25: the refill cap saves and persists, a stale save conflicts, a refilled character is listed (and in the ledger by name), guild 2 is untouched."""
         from playwright.sync_api import expect

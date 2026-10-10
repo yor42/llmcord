@@ -40,6 +40,12 @@ def persona(character) -> str:
     return "\n".join(parts)
 
 
+MOVE_HELP = {"insure": "insure: put up half your bet that the dealer has blackjack (pays 2 to 1)",
+             "even_money": "even_money: take your bet back plus the same again now, instead of risking a dealer blackjack",
+             "no_insurance": "no_insurance: decline",
+             "surrender": "surrender: give up the hand and get half your bet back"}
+
+
 def table_text(snap, seat, legal) -> str:
     view = snap["view"]
     hands, dealer = view["hands"], view["dealer"]
@@ -49,11 +55,14 @@ def table_text(snap, seat, legal) -> str:
     for i, other in enumerate(snap["seats"]):
         if i != seat:
             who = other["name"] if other["kind"] == "character" else "A player"
-            word = {"stand": " stands", "bust": " bust", "blackjack": " blackjack"}.get(view["status"][i], "")
+            word = {"stand": " stands", "bust": " bust", "blackjack": " blackjack", "surrender": " surrendered"}.get(view["status"][i], "")
             others.append(f"{who}: {blackjack.hand_str(hands[i])} ({blackjack.total_str(hands[i])}){word}")
     if others:
         lines.append("Other seats: " + "; ".join(others))
+    if snap.get("phase") == "insurance":
+        lines.append("The dealer shows an ace. Insurance?")
     lines.append("Legal moves: " + ", ".join(legal))
+    lines.extend(MOVE_HELP[m] for m in legal if m in MOVE_HELP)
     return "\n".join(lines)
 
 

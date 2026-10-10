@@ -77,9 +77,9 @@ def all_games_section(ctx):
 
 
 def blackjack_section(ctx):
-    """FEAT-28 adds the rule options here."""
     from nicegui import ui
     from .dashboard import section
+    from .games import blackjack
     store, gid = ctx.store, ctx.guild_id
     with section('Blackjack'):
         on = {'value': store.blackjack_enabled(gid)}
@@ -98,6 +98,42 @@ def blackjack_section(ctx):
                           dirty=lambda: bool(switch.value) != on['value'],
                           reset=lambda: switch.set_value(on['value']),
                           then=toast)
+
+        rules = {'value': store.blackjack_rules(gid)}
+        ties = {'push': 'Push: bet comes back', 'dealer': 'Dealer wins'}
+        with ui.element('div').classes('ll-form-row ll-field-row'):
+            stand_on = ui.select({16: '16', 17: '17', 18: '18'}, value=rules['value']['stand_on'], label='Dealer stands on').classes('ll-wide')
+            pays = ui.select({'3:2': '3:2', '6:5': '6:5'}, value=rules['value']['blackjack_pays'], label='Blackjack pays')
+            tie = ui.select(ties, value=rules['value']['ties'], label='Ties').classes('ll-wide')
+        soft = ui.switch('Dealer hits soft 17', value=rules['value']['hit_soft_17'])
+        insurance = ui.switch('Insurance and even money', value=rules['value']['insurance'])
+        surrender = ui.switch('Late surrender', value=rules['value']['surrender'])
+        soft.enable = lambda: soft.set_enabled(stand_on.value == 17)  # the save bar re-enables every tracked control; soft 17 only exists when the dealer stands on 17
+        controls = (stand_on, soft, pays, tie, insurance, surrender)
+        def current():
+            return {'stand_on': stand_on.value, 'hit_soft_17': bool(soft.value) and stand_on.value == 17, 'blackjack_pays': pays.value, 'ties': tie.value,
+                    'insurance': bool(insurance.value), 'surrender': bool(surrender.value)}
+        preview = ui.label().classes('ll-muted')
+        def refresh(_=None):
+            if stand_on.value != 17:
+                soft.set_value(False)
+            soft.set_enabled(stand_on.value == 17 and (ctx.savebar.active is None or ctx.savebar.active.name == 'Blackjack rules'))
+            preview.set_text('Table rules line: ' + blackjack.rules_text(current()))
+        for control in controls:
+            control.on_value_change(refresh)
+        refresh()
+        ui.label('Rule changes apply from the next round. Open rounds keep the rules they were dealt with.').classes('ll-muted')
+        def save_rules():
+            result = store.set_blackjack_rules(gid, current(), expected=rules['value'])
+            rules['value'] = result
+            return result
+        def reset_rules():
+            saved = rules['value']
+            for control, key in zip(controls, ('stand_on', 'hit_soft_17', 'blackjack_pays', 'ties', 'insurance', 'surrender')):
+                control.set_value(saved[key])
+        ctx.savebar.track('Blackjack rules', {c: rules['value'][k] for c, k in zip(controls, ('stand_on', 'hit_soft_17', 'blackjack_pays', 'ties', 'insurance', 'surrender'))},
+                          save=save_rules, action='games.blackjack_rules', detail=lambda result: dict(result), success='Blackjack rules saved',
+                          dirty=lambda: current() != rules['value'], reset=reset_rules, then=lambda result: refresh())
 
 
 async def games_panel(ctx):

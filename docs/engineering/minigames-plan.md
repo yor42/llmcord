@@ -27,7 +27,7 @@ The game engine decides everything that has a result: the deck order, legal move
 
 ## Blackjack rules proposed for phase 1
 
-Six-deck shoe shuffled per round from the seed; dealer stands on soft 17; blackjack pays 3:2 (rounded down); hit, stand, double down on the first two cards; no split or insurance in phase 1 (split can follow). Push returns the stake. A round settles when every seat has stood, busted, or timed out.
+Six-deck shoe shuffled per round from the seed; dealer stands on soft 17; blackjack pays 3:2 (rounded down); hit, stand, double down on the first two cards; no split in phase 1 (split can follow); insurance, even money, surrender and the other rule options came with FEAT-28 (D28). Push returns the stake. A round settles when every seat has stood, busted, or timed out.
 
 ## Decisions (D26, user 2026-10-10)
 
