@@ -38,7 +38,8 @@ AVATAR_ASSET_CHECK_TTL = 600
 CACHE_LIMIT = 512
 UNKNOWN_WEBHOOK = 10015
 MEMORY_WAIT_SECONDS = 15
-PROVIDER_STAGES = {'speaker selection', 'image description', 'dialogue generation'}
+STAGE_SPEAKER_SELECTION, STAGE_IMAGE_DESCRIPTION, STAGE_DIALOGUE = 'speaker selection', 'image description', 'dialogue generation'
+PROVIDER_STAGES = frozenset({STAGE_SPEAKER_SELECTION, STAGE_IMAGE_DESCRIPTION, STAGE_DIALOGUE})
 MEMORY_CLOSE_SECONDS = 5
 NO_CHARACTER_NOTE_SECONDS = 15
 LORE_NOT_FOUND = "Lore entry not found. Check the number with /lore list."
@@ -468,7 +469,7 @@ class SkitBot(commands.Bot):
     async def _run_scene(self, scene: SceneContext, channel, interaction=None):
         model_label = discord.utils.escape_markdown(self.settings.profile('dialogue').model[:120])
         progress = _SceneProgress(self.store, self.settings, scene, channel, model_label)
-        stage = _Stage('speaker selection')
+        stage = _Stage(STAGE_SPEAKER_SELECTION)
         try:
             if not scene.ambient:
                 await progress.update(progress.status('Generating a reply…'))
@@ -482,7 +483,7 @@ class SkitBot(commands.Bot):
                 return
             if scene.ambient:
                 await progress.update(progress.status('Generating a reply…'))
-            stage.name = 'image description'
+            stage.name = STAGE_IMAGE_DESCRIPTION
             image_description = await self.engine.describe_images(scene)
             stored_text = scene.text + (f"\n[Image description: {image_description}]" if image_description else "")
             stage.name = 'saving scene input'
@@ -525,7 +526,7 @@ class SkitBot(commands.Bot):
                 username=character['name'], avatar_url=chosen_avatar['url'], allowed_mentions=discord.AllowedMentions.none())
 
         try:
-            stage.name = 'dialogue generation'
+            stage.name = STAGE_DIALOGUE
             await progress.update(progress.status(f'Streaming **{name}**'))
             with capture_usage() as usage_records:
                 async with contextlib.aclosing(self.models.stream_compiled('dialogue', request)) as stream:
@@ -545,7 +546,7 @@ class SkitBot(commands.Bot):
                                 webhook = await self._webhook(channel, character)
                                 stage.name = 'webhook delivery'
                                 placeholder = await send_placeholder()
-                            stage.name = 'dialogue generation'
+                            stage.name = STAGE_DIALOGUE
                             continue
                         pieces.append(event.text)
                         current = "".join(pieces)
@@ -553,7 +554,7 @@ class SkitBot(commands.Bot):
                             stage.name = 'webhook delivery'
                             await placeholder.edit(content=current + " ▌", allowed_mentions=discord.AllowedMentions.none())
                             last_edit = time.monotonic()
-                            stage.name = 'dialogue generation'
+                            stage.name = STAGE_DIALOGUE
             line = re.sub(r'<emotion>[^\n]*?</emotion>\s*', '', "".join(pieces)).strip()
             usage = usage_records[-1] if usage_records else None
             footer = reply_footer(model_label, usage) if self.store.usage_footer_enabled(scene.guild_id) else ''

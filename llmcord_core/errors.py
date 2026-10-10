@@ -18,9 +18,19 @@ class ModelConfigError(RuntimeError):
     """A model profile cannot be used as saved. The message names the profile, host or variable, never a key value."""
 
 
+# Process-global and grow-only: tests that load settings or build a BackendResolver should patch it (see test_secret_registry).
+_SECRET_NAMES: set[str] = set()
+
+
+def register_secret_names(names) -> None:
+    # Env variable names that hold a key whatever they are called (any profile's api_key_env); only names are kept.
+    _SECRET_NAMES.update(n for n in names if n)
+
+
 def redact(text: str, extra_values=(), strict: bool = False) -> str:
     # Secret env values, caller-supplied values and credentials; strict only matches token-shaped ones so prose survives.
     values = [v for n, v in os.environ.items() if len(v) >= 8 and n.endswith(('_TOKEN', '_KEY', '_SECRET'))]
+    values += [v for n in tuple(_SECRET_NAMES) if len(v := os.environ.get(n, '')) >= 8]
     values += [v for v in extra_values if v]
     for value in sorted(set(values), key=len, reverse=True):
         text = text.replace(value, '[redacted]')

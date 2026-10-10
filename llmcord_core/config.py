@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from .errors import register_secret_names
+
 
 def prompt_provider(provider: str, base_url: str | None = None) -> str:
     """Use Gemini's system-instruction rules for its official compatible endpoint."""
@@ -310,6 +312,7 @@ def load_settings(path: str | Path = "config.yaml") -> Settings:
     for name, profile in profiles.items():
         if name in choices.values() and (profile.provider != "compatible" or profile.api_key_env) and not os.environ.get(profile.api_key_env or ""):
             raise ValueError(f"API key environment variable is missing for {name}")
+    register_secret_names(p.api_key_env for p in profiles.values())
     limits = {key: int(raw.get("limits", {}).get(key, value)) for key, value in LIMIT_DEFAULTS.items()}
     if any(value <= 0 for value in limits.values()) or limits["max_speakers"] > 3:
         raise ValueError("Limits must be positive and max_speakers cannot exceed 3")

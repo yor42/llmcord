@@ -11,7 +11,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .config import ModelProfile, Settings, check_key_pin, key_hosts_from_env, profile_from_mapping, validate_profile_name
-from .errors import error_detail, is_timeout, redact
+from .errors import error_detail, is_timeout, redact, register_secret_names
 
 ROLES = ('dialogue', 'director', 'memory')
 PROBE_TIMEOUT_SECONDS = 25
@@ -83,6 +83,7 @@ class BackendResolver:
         self.config_profiles = dict(base_settings.profiles if config_profiles is None else config_profiles)
         self.config_roles = dict(config_roles) if config_roles is not None else {role: getattr(base_settings, role) for role in ROLES}
         self.key_hosts = key_hosts_from_env()
+        register_secret_names(p.api_key_env for p in self.config_profiles.values())
         self._cached: tuple[int, Settings] | None = None
         self._pinned = contextvars.ContextVar(f'backend_snapshot_{id(self)}', default=None)
 
@@ -98,6 +99,7 @@ class BackendResolver:
         for problem in backend.problems:
             logging.warning('Model backend: %s', problem)
         settings = apply_backend(self.base, backend)
+        register_secret_names(p.api_key_env for p in settings.profiles.values())
         self._cached = (version, settings)
         return settings
 
