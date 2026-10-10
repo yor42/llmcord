@@ -41,6 +41,22 @@ def save_daily(store, gid, amount, streak_bonus, streak_days, expected):
     return store.set_daily_settings(gid, whole(amount), whole(streak_bonus), whole(streak_days), expected)
 
 
+def save_bets(store, gid, min_bet, max_bet, expected):
+    """Save the game bet limits; blank or fractional input reaches the store as-is so its message is shown."""
+    whole = lambda value: int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value == int(value) else value
+    return store.set_game_settings(gid, whole(min_bet), whole(max_bet), expected)
+
+
+def save_channels(store, gid, channel_ids, expected):
+    """Save the game channels; the result carries the ids of the tables this closed."""
+    return store.set_game_channels(gid, {int(c) for c in channel_ids or ()}, set(expected))
+
+
+def channels_toast(result):
+    closed = len(result['closed_tables'])
+    return f'Game channels saved. Closed {closed} open table(s) and refunded their bets.' if closed else 'Game channels saved'
+
+
 def member_label(names, user_id):
     return names.get(user_id) or f'Member …{str(user_id)[-4:]}'
 
@@ -122,6 +138,32 @@ class CurrencyPanel:
                 return daily
             ctx.savebar.track('Daily check-in', {f: daily[key] for f, key in zip(fields, daily)}, save=save_daily_settings, action='currency.daily',
                               detail=lambda result: dict(result), success='Daily check-in saved')
+        with section('Games'):
+            bets = store.game_settings(gid)
+            with ui.element('div').classes('ll-form-row ll-field-row'):
+                limits = [ui.number(label, value=bets[key], min=1, precision=0, format='%d') for label, key in (('Smallest bet', 'min_bet'), ('Largest bet', 'max_bet'))]
+            def save_bet_limits():
+                nonlocal bets
+                bets = save_bets(store, gid, *(f.value for f in limits), bets)
+                return bets
+            ctx.savebar.track('Bet limits', {f: bets[key] for f, key in zip(limits, bets)}, save=save_bet_limits, action='games.bets',
+                              detail=lambda result: dict(result), success='Bet limits saved',
+                              dirty=lambda: [f.value for f in limits] != [bets['min_bet'], bets['max_bet']],
+                              reset=lambda: [f.set_value(bets[key]) for f, key in zip(limits, bets)])
+            games = store.game_channels(gid)
+            options = {**{c: str(c) for c in sorted(games)}, **ctx.channel_names}
+            picker = ui.select(options, value=sorted(games), multiple=True, label='Game channels').props('use-chips').classes('w-full')
+            def save_game_channels():
+                nonlocal games
+                result = save_channels(store, gid, picker.value, games)
+                games = {int(c) for c in picker.value or ()}
+                return result
+            ctx.savebar.track('Game channels', {picker: sorted(games)}, save=save_game_channels, action='games.channels',
+                              detail=lambda result: {'channels': sorted(games), 'closed_tables': list(result['closed_tables'])},
+                              dirty=lambda: {int(c) for c in picker.value or ()} != games,
+                              reset=lambda: picker.set_value(sorted(games)),
+                              then=lambda result: ui.notify(channels_toast(result), type='positive'))
+            ui.label('Members play with /blackjack in game channels. Bets are taken when a member joins and paid when the round ends. Turning a channel off closes its open table and refunds the bets.').classes('ll-muted')
         with section('Balances'):
             self.balances_body = ui.column().classes('w-full gap-2')
         with section('Give or take currency'):

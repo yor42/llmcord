@@ -173,6 +173,48 @@ class ChannelAndSettingsTests(TableCase):
         self.assertEqual(self.store.game_settings(G), {"min_bet": 5, "max_bet": 200})
 
 
+class SetGameChannelsTests(TableCase):
+    def test_adds_and_removes_in_one_call_and_returns_closed_tables(self):
+        self.assertEqual(self.store.set_game_channels(G, {CH, 101, 102}), {"closed_tables": []})
+        self.assertEqual(self.store.game_channels(G), {CH, 101, 102})
+        self.assertEqual(self.store.set_game_channels(G, [101]), {"closed_tables": []})
+        self.assertEqual(self.store.game_channels(G), {101})
+
+    def test_removing_a_channel_closes_its_table_and_refunds(self):
+        snap = self.started(["10", "9", "10", "8"])
+        self.assertEqual(self.store.balance(G, ALICE), 90)
+        self.store.set_game_channel(G, 101, True)
+        out = self.store.set_game_channels(G, {101}, expected={CH, 101})
+        self.assertEqual(out, {"closed_tables": [snap["table_id"]]})
+        self.assertEqual(self.store.balance(G, ALICE), 100)
+        self.assertIsNone(self.store.open_table_for(G, CH))
+        self.assertEqual(self.store.game_channels(G), {101})
+        self.assertEqual(sum(r["amount"] for r in self.game_ledger()), 0)
+
+    def test_stale_expected_set_is_refused_and_writes_nothing(self):
+        self.table()
+        self.store.set_game_channel(G, 101, True)
+        with self.assertRaisesRegex(ConflictError, "game channels were changed elsewhere"):
+            self.store.set_game_channels(G, {555}, expected={CH})
+        self.assertEqual(self.store.game_channels(G), {CH, 101})
+        self.assertIsNotNone(self.store.open_table_for(G, CH))
+
+    def test_bad_ids_are_refused(self):
+        for bad in ({"x"}, {True}, {1.5}, {0}, {-3}, {2 ** 63}, {None}):
+            with self.subTest(bad=bad), self.assertRaises(GameError):
+                self.store.set_game_channels(G, bad)
+        self.assertEqual(self.store.game_channels(G), {CH})
+
+    def test_other_guilds_are_untouched(self):
+        self.store.set_game_channel(2, CH, True)
+        other = self.store.open_table(2, CH, "blackjack", 1)
+        self.store.set_game_channels(G, set())
+        self.assertEqual(self.store.game_channels(2), {CH})
+        self.assertEqual(self.store.open_table_for(2, CH)["id"], other["table_id"])
+        self.store.set_game_channels(2, {7}, expected={CH})
+        self.assertEqual(self.store.game_channels(G), set())
+
+
 class JoinLeaveTests(TableCase):
     def test_open_creates_round_one_joining_with_a_seed_hash(self):
         snap = self.table(seed="abc")

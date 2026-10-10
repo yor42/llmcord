@@ -7,7 +7,7 @@ import httpx
 
 from llmcord_core.admin_store import ConflictError, CurrencyError
 from llmcord_core.avatars import AvatarPublisher
-from llmcord_core.currency_ui import CurrencyPanel, friendly, save_daily, ledger_rows, member_label, parse_amount, parse_member_id, plain_mentions
+from llmcord_core.currency_ui import CurrencyPanel, channels_toast, save_bets, save_channels, friendly, save_daily, ledger_rows, member_label, parse_amount, parse_member_id, plain_mentions
 from llmcord_core.store import Store
 
 
@@ -165,6 +165,47 @@ class DailySaveTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'whole number from 0 to'):
                 save_daily(self.store, 1, bad, 0, 7, before)
         self.assertEqual(self.store.daily_settings(1), before)
+
+
+class GamesSaveTests(unittest.TestCase):
+    def setUp(self):
+        self.store = Store()
+        self.addCleanup(self.store.close)
+
+    def test_bet_limits_save_whole_numbers_and_stay_per_guild(self):
+        before = self.store.game_settings(1)
+        self.assertEqual(save_bets(self.store, 1, 5.0, 500, before), {'min_bet': 5, 'max_bet': 500})
+        self.assertEqual(self.store.game_settings(1), {'min_bet': 5, 'max_bet': 500})
+        self.assertEqual(self.store.game_settings(2), before)
+
+    def test_stale_bet_limits_are_refused(self):
+        stale = self.store.game_settings(1)
+        self.store.set_game_settings(1, 2, 50)
+        with self.assertRaises(ConflictError):
+            save_bets(self.store, 1, 5, 500, stale)
+        self.assertEqual(self.store.game_settings(1), {'min_bet': 2, 'max_bet': 50})
+
+    def test_bad_bet_limits_show_the_store_message(self):
+        before = self.store.game_settings(1)
+        for low, high in ((None, 5), (2.5, 5), (0, 5), (10, 5), (1, 100_001)):
+            with self.subTest(low=low, high=high), self.assertRaisesRegex(ValueError, 'bet limits must'):
+                save_bets(self.store, 1, low, high, before)
+        self.assertEqual(self.store.game_settings(1), before)
+
+    def test_game_channels_save_closes_tables_and_stays_per_guild(self):
+        self.store.set_game_channel(1, 10, True)
+        self.store.set_game_channel(2, 10, True)
+        table = self.store.open_table(1, 10, 'blackjack', 1)
+        result = save_channels(self.store, 1, [20, 21], {10})
+        self.assertEqual(result, {'closed_tables': [table['table_id']]})
+        self.assertEqual((self.store.game_channels(1), self.store.game_channels(2)), ({20, 21}, {10}))
+        with self.assertRaises(ConflictError):
+            save_channels(self.store, 1, [30], {10})
+        self.assertEqual(self.store.game_channels(1), {20, 21})
+
+    def test_channels_toast_mentions_closed_tables_only_when_there_are_some(self):
+        self.assertEqual(channels_toast({'closed_tables': []}), 'Game channels saved')
+        self.assertEqual(channels_toast({'closed_tables': [4, 5]}), 'Game channels saved. Closed 2 open table(s) and refunded their bets.')
 
 
 class CurrencyNameGuardTests(unittest.TestCase):

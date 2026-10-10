@@ -3917,6 +3917,53 @@ class DashboardBrowserTests(unittest.TestCase):
             self.post_hook('/_test/daily', {'amount': 0, 'streak_bonus': 0, 'streak_days': 7})
             context.close()
 
+    def test_currency_games_bets_and_channels_save_stale_conflict_and_guild_isolation(self):
+        """FEAT-19 D: the Games section saves bet limits and game channels through the save bar with toasts and audit rows, shows the store's message for bad limits, refuses saves over settings changed elsewhere, and never touches guild 2."""
+        from playwright.sync_api import expect
+        other = self.state()['games']['2']
+        context, page, errors = self.open_currency()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            low, high = page.get_by_label('Smallest bet', exact=True), page.get_by_label('Largest bet', exact=True)
+            page.get_by_text('Members play with /blackjack in game channels.', exact=False).wait_for(timeout=5000)
+            low.fill('5')
+            high.fill('500')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Bet limits saved', exact=True).wait_for(timeout=5000)
+            self.assertEqual({k: self.state()['games']['1'][k] for k in ('min_bet', 'max_bet')}, {'min_bet': 5, 'max_bet': 500})
+            self.assertIn('games.bets', self.audit_actions())
+            high.fill('200000')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The bet limits must satisfy', exact=False).wait_for(timeout=5000)
+            high.fill('600')
+            self.post_hook('/_test/games', {'min_bet': 2, 'max_bet': 50})
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The game settings were changed elsewhere. Reload the page and try again.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['max_bet'], 50)
+            bar.get_by_role('button', name='Reload', exact=True).click()
+            bar.wait_for(state='hidden', timeout=5000)
+            expect(page.get_by_label('Largest bet', exact=True)).to_have_value('50')
+            picker = page.get_by_label('Game channels', exact=True)
+            picker.click()
+            page.get_by_role('option', name='#scene', exact=True).click()
+            page.keyboard.press('Escape')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Game channels saved', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['channels'], [100])
+            self.assertIn('games.channels', self.audit_actions())
+            self.post_hook('/_test/games', {'channels': [100, 200]})
+            picker.click()
+            page.get_by_role('option', name='#assets', exact=True).click()
+            page.keyboard.press('Escape')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The game channels were changed elsewhere. Reload the page and try again.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['channels'], [100, 200])
+            self.assertEqual(self.state()['games']['2'], other)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'min_bet': 1, 'max_bet': 1000, 'channels': []})
+            context.close()
+
     def test_currency_member_lookup_failure_falls_back_to_ids_with_one_warning(self):
         """FEAT-17 B: when the Discord member lookup fails the tab shows 'Member ...NNNN' and warns once."""
         self.post_hook('/_test/fail-members', n=1)

@@ -1126,6 +1126,26 @@ class AdminStore:
                     closed = table['id']
         return {'closed_table': closed}
 
+    def set_game_channels(self, guild_id, channel_ids, expected=None):
+        """Make `channel_ids` the guild's game channels in one transaction; each removed channel's open table is closed (rounds cancelled and refunded). Returns {'closed_tables': [table ids]}."""
+        wanted = set(channel_ids)
+        if any(isinstance(c, bool) or not isinstance(c, int) or not 0 < c < 2 ** 63 for c in wanted):
+            raise GameError('Game channels must be Discord channel IDs.')
+        closed = []
+        with self.write_admin():
+            current = self.game_channels(guild_id)
+            if expected is not None and set(expected) != current:
+                raise ConflictError('The game channels were changed elsewhere. Reload the page and try again.')
+            for channel_id in sorted(wanted - current):
+                self.db.execute('INSERT OR IGNORE INTO game_channels(guild_id,channel_id,created_at) VALUES(?,?,?)', (guild_id, channel_id, time.time()))
+            for channel_id in sorted(current - wanted):
+                self.db.execute('DELETE FROM game_channels WHERE guild_id=? AND channel_id=?', (guild_id, channel_id))
+                table = self.open_table_for(guild_id, channel_id)
+                if table:
+                    self._close_table_in_tx(guild_id, table['id'])
+                    closed.append(table['id'])
+        return {'closed_tables': closed}
+
     def game_settings(self, guild_id):
         row = self.one('SELECT game_min_bet,game_max_bet FROM guild_settings WHERE guild_id=?', (guild_id,))
         return {'min_bet': row['game_min_bet'], 'max_bet': row['game_max_bet']} if row else {'min_bet': 1, 'max_bet': 1000}
