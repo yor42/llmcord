@@ -1542,6 +1542,33 @@ class AdminStore:
         """Plain dict for the Discord layer. The seed appears only once the round is settled or cancelled."""
         return self._game_snapshot(guild_id, round_id)
 
+    def game_table_summary(self, guild_id, table_id, limit):
+        """The table's last ``limit`` settled rounds, oldest first: dealer total and each seat's net (payout - stake). Cancelled rounds are left out."""
+        if limit <= 0:
+            return []
+        rounds = self.all("SELECT * FROM game_rounds WHERE guild_id=? AND table_id=? AND status='settled' ORDER BY number DESC LIMIT ?", (guild_id, table_id, limit))[::-1]
+        if not rounds:
+            return []
+        ids = [r['id'] for r in rounds]
+        marks = ','.join('?' * len(ids))
+        seats, moves = {}, {}
+        for row in self.all(f'SELECT * FROM game_seats WHERE guild_id=? AND round_id IN ({marks}) ORDER BY round_id,seat_index', (guild_id, *ids)):
+            seats.setdefault(row['round_id'], []).append(row)
+        for row in self.all(f'SELECT round_id,seat_index,move FROM game_moves WHERE guild_id=? AND round_id IN ({marks}) ORDER BY id', (guild_id, *ids)):
+            moves.setdefault(row['round_id'], []).append((row['seat_index'], row['move']))
+        names = self.character_names(guild_id, [r['ref_id'] for rows in seats.values() for r in rows if r['kind'] == 'character'])
+        out = []
+        for rnd in rounds:
+            rows = seats.get(rnd['id'], [])
+            try:
+                dealer_total = blackjack.hand_total(self._game_state(rnd, rows, moves.get(rnd['id'], [])).dealer)[0]
+            except GameError:
+                dealer_total = None  # a damaged move log must not hide what was paid
+            out.append({'number': rnd['number'], 'dealer_total': dealer_total, 'seats': [
+                {'index': r['seat_index'], 'kind': r['kind'], 'ref_id': r['ref_id'], 'brought_by': None, 'net': (r['payout'] or 0) - r['stake'],
+                 'name': (names.get(r['ref_id']) or f"Deleted character (#{r['ref_id']})") if r['kind'] == 'character' else None} for r in rows]})
+        return out
+
     def latest_round(self, guild_id, table_id):
         self._game_table(guild_id, table_id)
         row = self.one('SELECT id FROM game_rounds WHERE guild_id=? AND table_id=? ORDER BY number DESC LIMIT 1', (guild_id, table_id))

@@ -327,7 +327,7 @@ class CharacterTurnTests(SeatCase):
         self.assertEqual(len(self.channel.edits), before + 1)
         content = self.channel.edits[-1][1]["content"]
         self.assertIn("Round cancelled. Bets are refunded.\nPlay again or leave. The table closes", content)
-        self.assertEqual(sorted(i.item.label for i in self.channel.edits[-1][1]["view"].children), ["Leave table", "Play again (same bet)"])
+        self.assertEqual(sorted(i.item.label for i in self.channel.edits[-1][1]["view"].children), ["How to play", "Leave table", "Play again (same bet)"])
         self.assertEqual([name.get_name() for name in self.games.timers.values()], [f"blackjack-idle-{key[1]}"])
 
     async def test_a_slow_webhook_post_is_given_up(self):
@@ -342,7 +342,7 @@ class CharacterTurnTests(SeatCase):
 
     async def test_no_move_buttons_while_a_character_is_on_turn(self):
         await self.start()
-        self.assertEqual(self.labels(), [])
+        self.assertEqual(self.labels(), ["How to play"])
 
     async def test_a_webhook_failure_is_ignored(self):
         self.webhook.fail = True

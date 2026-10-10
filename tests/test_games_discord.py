@@ -95,6 +95,7 @@ class GameCase(unittest.IsolatedAsyncioTestCase):
         GAMES = self.games
         HTTP.clear()
         self.games.JOIN_SECONDS = self.games.TURN_SECONDS = self.games.IDLE_SECONDS = 3600
+        self.games.DEALER_STEP_SECONDS = 0  # UI-54 pacing has its own tests
         self.channel = Channel()
         self.bot.get_channel = lambda channel_id: self.channel if channel_id == CH else None
         self.shoe = None
@@ -233,10 +234,10 @@ class JoinTests(GameCase):
         self.assertEqual(snap["message_id"], 7001)
         self.assertIn("**Blackjack**", content)
         self.assertIn(f"<@{ALICE}> bet 10 coins", content)
-        self.assertRegex(content, r"Join with /blackjack <bet> — dealing <t:\d+:R>\.")
+        self.assertRegex(content, r"Join with /blackjack bet:<amount> — dealing <t:\d+:R>\.")
         self.assertIn(f"\n-# Seed hash: {snap['seed_hash'][:12]}", content)
         self.assertNotIn(SEED, content)
-        self.assertEqual([child.item.label for child in kwargs["view"].children], ["Deal now", "Leave"])
+        self.assertEqual([child.item.label for child in kwargs["view"].children], ["Deal now", "Leave", "How to play"])
         self.assertEqual(self.balance(ALICE), 90)
         self.assertEqual(set(self.games.timers), {(G, snap["table_id"])})
 
@@ -313,7 +314,7 @@ class DealTests(GameCase):
         self.assertIn(f"Dealer: {bj.card_str(bj.RANKS.index('10'))} ??", content)
         self.assertIn(f"On turn: <@{ALICE}>", content)
         self.assertRegex(content, r"decide <t:\d+:R>")
-        self.assertEqual(self.labels(snap), ["Hit", "Stand", "Double"])
+        self.assertEqual(self.labels(snap), ["Hit", "Stand", "Double", "How to play"])
         self.assertEqual(list(self.games.timers), [(G, snap["table_id"])])
 
     async def test_deal_by_the_join_timer(self):
@@ -397,12 +398,12 @@ class PlayTests(GameCase):
         self.store.change_balance(G, ALICE, -90, "spend", 1)  # 10 left; bet 10 leaves 0
         await self.start("5", "10", "6", "7")
         self.assertEqual(self.balance(ALICE), 0)
-        self.assertEqual(self.labels(), ["Hit", "Stand"])
-        self.assertEqual((await self.press(ALICE, "Hit")).response.edited[0]["content"].count("Double"), 0)
+        self.assertEqual(self.labels(), ["Hit", "Stand", "How to play"])
+        self.assertEqual((await self.press(ALICE, "Hit")).response.edited[0]["content"].replace(bj.rules_text(), "").count("Double"), 0)
 
     async def test_double_available_and_charges_again(self):
         await self.start("5", "10", "6", "7")
-        self.assertEqual(self.labels(), ["Hit", "Stand", "Double"])
+        self.assertEqual(self.labels(), ["Hit", "Stand", "Double", "How to play"])
         click = await self.press(ALICE, "Double")
         self.assertEqual(self.latest()["status"], "settled")
         self.assertEqual(self.balance(ALICE), 80)  # 13 against the dealer's 17 loses 20
@@ -472,7 +473,7 @@ class SettleTests(GameCase):
         self.assertRegex(content, r"Dealer: 9. 7. 2. \(18\)")
         self.assertIn(f"\n-# Seed: {SEED} (hash {self.latest()['seed_hash'][:12]})", content)
         self.assertNotIn("Seed hash:", content)
-        self.assertEqual(self.labels(), ["Play again (same bet)", "Leave table"])
+        self.assertEqual(self.labels(), ["Play again (same bet)", "Leave table", "How to play"])
         self.assertEqual(self.balance(ALICE), 110)
 
     async def test_the_seed_is_absent_from_every_message_before_settlement(self):
@@ -518,7 +519,7 @@ class SettleTests(GameCase):
         self.assertEqual(snap["message_id"], first["message_id"])
         self.assertIn("Seed hash:", click.response.edited[0]["content"])
         self.assertNotIn(SEED, click.response.edited[0]["content"])
-        self.assertEqual(self.labels(), ["Deal now", "Leave"])
+        self.assertEqual(self.labels(), ["Deal now", "Leave", "How to play"])
         other = await self.press(BOB, "Deal now")
         self.assertEqual(other.replies, [NOT_SEATED])
 
@@ -565,7 +566,7 @@ class SettleTests(GameCase):
         self.assertEqual(click.replies, ["You left the table."])
         self.assertIsNotNone(self.store.open_table_for(G, CH))
         click = await self.press(BOB, "Leave table")
-        self.assertEqual(click.response.edited[0]["content"], "Table closed.")
+        self.assertEqual(click.response.edited[0]["content"].split("\n")[0], "Table closed.")  # then the round summary (UI-53)
         self.assertIsNone(self.store.open_table_for(G, CH))
         self.assertEqual(self.games.timers, {})
 
@@ -574,7 +575,7 @@ class SettleTests(GameCase):
         snap = self.latest()
         await self.games.on_idle_timer(G, snap["table_id"], snap["round_id"])
         self.assertIsNone(self.store.open_table_for(G, CH))
-        self.assertEqual(self.channel.edits[-1][1]["content"], "Table closed.")
+        self.assertEqual(self.channel.edits[-1][1]["content"].split("\n")[0], "Table closed.")
         self.assertIsNone(self.channel.edits[-1][1]["view"])
         self.assertEqual(self.balance(ALICE), 110)
 
@@ -638,7 +639,7 @@ class ReviewFixTests(GameCase):
         await GameButton("close", settled["table_id"], settled["round_id"], settled["moves"]).callback(click)
         self.assertEqual(self.balance(ALICE), 110)
         self.assertIsNone(self.store.open_table_for(G, CH))
-        self.assertEqual(click.response.edited[-1]["content"], "Table closed.")
+        self.assertEqual(click.response.edited[-1]["content"].split("\n")[0], "Table closed.")
 
     async def test_stale_leave_table_keeps_a_seat_in_a_round_in_play(self):
         await self.settle_alice_win()

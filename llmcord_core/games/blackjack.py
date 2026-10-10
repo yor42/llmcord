@@ -14,6 +14,29 @@ DEALER_STANDS_ON = 17
 RANKS = ("A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K")
 SUITS = ("♠", "♥", "♦", "♣")
 MOVES = ("hit", "stand", "double")
+DEFAULT_RULES = {"dealer_stands_on": DEALER_STANDS_ON, "dealer_hits_soft_17": False, "blackjack_pays": "3:2", "double": True, "split": False, "decks": DECKS}
+
+
+def rules_text(rules=None):
+    """The table's rules in plain words (display only; the engine itself still plays the defaults)."""
+    r = {**DEFAULT_RULES, **(rules or {})}
+    dealer = "Dealer hits soft 17" if r["dealer_hits_soft_17"] else "Dealer stands on all 17s" if r["dealer_stands_on"] == 17 else f"Dealer stands on {r['dealer_stands_on']}"
+    return " · ".join([dealer, f"Blackjack pays {r['blackjack_pays']}", "Ties push", "Double on the first two cards" if r["double"] else "No doubling",
+                       "Splitting allowed" if r["split"] else "No splitting", f"{r['decks']} deck{'' if r['decks'] == 1 else 's'}"])
+
+
+def how_to_play(rules=None):
+    r = {**DEFAULT_RULES, **(rules or {})}
+    draws = f"it draws until {r['dealer_stands_on']} or more" + (", and also hits a soft 17." if r["dealer_hits_soft_17"] else ".")
+    return "\n".join([
+        "**Blackjack in short**",
+        "Get closer to 21 than the dealer without going over.",
+        "• Cards: 2–10 are face value, J/Q/K are 10, an ace is 1 or 11.",
+        "• Hit takes a card. Stand keeps your hand." + (" Double doubles your bet, takes one card and ends your turn (first two cards only)." if r["double"] else ""),
+        f"• Over 21 is a bust: you lose. An ace with a ten-value card on your first two cards is blackjack and pays {r['blackjack_pays']}.",
+        f"• The dealer plays after everyone: {draws}",
+        "• Win: you get your bet back plus the same again. Tie: your bet comes back.",
+    ])
 
 
 def new_shoe(seed):

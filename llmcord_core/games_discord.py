@@ -37,6 +37,8 @@ SKIPPED = {"seated": "already at the table", "full": "table full", "archived": "
 CLOSED_OFF = "Table closed: games were turned off here."
 CLOSED = "Table closed."
 MAX_BET = 100_000
+SUMMARY_ROUNDS = 5
+HOW_TO_JOIN = "Join with /blackjack bet:<amount>; add favorites:True to bring your favorite characters."
 PREFIX = "llmcord:bj"
 NO_MENTIONS = discord.AllowedMentions.none()
 
@@ -58,6 +60,7 @@ class Paint:
     content: str
     view: discord.ui.View | None = None
     closing: bool = False
+    after: list = field(default_factory=list)  # later frames of a paced dealer play, sent in order after this one
 
 
 @dataclass
@@ -117,6 +120,7 @@ class GameTables:
     POST_SECONDS = 10
     RETRY_SECONDS = 5
     SWEEP_SECONDS = 30
+    DEALER_STEP_SECONDS = 1.5  # 0 turns the paced dealer play off
 
     def __init__(self, bot, clock=time.time):
         self.bot, self.clock = bot, clock
@@ -297,17 +301,87 @@ class GameTables:
     # --- painting ---------------------------------------------------------------------------
 
     def _paint(self, key, snap) -> Paint:
-        """Call under the table lock: the content is computed from the state the lock protects and numbered."""
+        """Call under the table lock: the content is computed from the state the lock protects and numbered.
+        A round that just settled gets the dealer's play as extra frames (``after``), numbered before the final paint, so any newer paint outranks them all."""
         sender = self.table(key).sender
+        paints = []
+        for content in self._frames(snap):
+            sender.issued += 1
+            paints.append(Paint(key, sender, sender.issued, content, self._help_view(snap)))
         sender.issued += 1
-        return Paint(key, sender, sender.issued, self.render(snap), self.buttons(snap))
+        paints.append(Paint(key, sender, sender.issued, self.render(snap), self.buttons(snap)))
+        paints[0].after = paints[1:]
+        return paints[0]
+
+    def _frames(self, snap) -> list[str]:
+        if not self.DEALER_STEP_SECONDS or snap["status"] != "settled" or not snap["view"]:
+            return []
+        view = snap["view"]
+        if len(view["dealer"]) == 2 and not blackjack.is_natural(view["dealer"]) and "stand" not in view["status"]:
+            return []  # everyone busted or has a blackjack: the dealer neither draws nor decides anything
+        return [self.render(snap, shown=n) for n in range(2, len(view["dealer"]) + 1)]
+
+    @staticmethod
+    def _help_view(snap) -> discord.ui.View:
+        """The only button that is safe on a frame of the dealer's play, so a failed final edit never leaves a bare message."""
+        view = discord.ui.View(timeout=None)
+        view.add_item(GameButton("help", snap["table_id"], snap["round_id"], snap["moves"], "How to play", discord.ButtonStyle.secondary))
+        return view
+
+    def summary_rounds(self) -> int:
+        return SUMMARY_ROUNDS
 
     def _closing(self, key, text: str) -> Paint:
         sender = self.sender(key)
         sender.issued += 1
+        try:
+            text = self._summary_text(text, self.store.game_table_summary(key[0], key[1], self.summary_rounds()))
+        except Exception:
+            logging.exception("Could not build the blackjack table summary (table %s)", key[1])
         return Paint(key, sender, sender.issued, text, None, True)
 
-    async def _deliver(self, paint: Paint, via=None) -> None:
+    def _summary_text(self, text: str, rounds: list) -> str:
+        """The closing text plus the last rounds; the oldest rounds go first when it would not fit a message."""
+        while rounds:
+            lines = [text, *(self._round_line(r) for r in rounds)]
+            if len(rounds) > 1:
+                lines.append(self._net_line(rounds))
+            if len("\n".join(lines)) <= 2000:
+                return "\n".join(lines)
+            rounds = rounds[1:]
+        return text
+
+    def _round_line(self, rnd) -> str:
+        dealer = rnd["dealer_total"]
+        head = f"Round {rnd['number']}:" + ("" if dealer is None else f" dealer {dealer}{' bust' if dealer > 21 else ''} —")
+        return head + " " + ", ".join(f"{self._who(s)} {_sign(s['net']) or 'push'}" for s in rnd["seats"])
+
+    def _net_line(self, rounds) -> str:
+        totals: dict = {}
+        for rnd in rounds:
+            for s in rnd["seats"]:
+                totals.setdefault((s["kind"], s["ref_id"]), [s, 0])[1] += s["net"]
+        return "Net: " + ", ".join(f"{self._who(s)} {_sign(net) or 'even'}" for s, net in totals.values())
+
+    async def _deliver(self, paint: Paint, via=None, pace=True) -> None:
+        """Sends a paint, then (``pace``) the frames that follow it."""
+        await self._send(paint, via)
+        if pace:
+            await self._pace(paint)
+
+    async def _pace(self, paint: Paint) -> None:
+        """Waits between the frames of the dealer's play. No lock is held while waiting; a frame older than a newer paint that was sent is dropped by ``_send``."""
+        for nxt in paint.after:
+            if nxt.seq <= paint.sender.sent:
+                return
+            await self._pause(self.DEALER_STEP_SECONDS)
+            await self._send(nxt)
+
+    @staticmethod
+    async def _pause(seconds: float) -> None:
+        await asyncio.sleep(seconds)
+
+    async def _send(self, paint: Paint, via=None) -> None:
         """Sends a paint (one at a time per table). A paint older than the last one sent is dropped; a table closed in the store takes only its closing paint."""
         sender = paint.sender
         async with sender.lock:
@@ -336,7 +410,10 @@ class GameTables:
         who = f"**{discord.utils.escape_markdown(discord.utils.escape_mentions(seat['name']))}**"
         return who + (f" (with <@{seat['brought_by']}>)" if seat["brought_by"] else "")
 
-    def render(self, snap) -> str:
+    def render(self, snap, shown=None) -> str:
+        """``shown``: a frame of the dealer's play with that many dealer cards, before the results."""
+        if shown is not None:
+            snap = {**snap, "status": "playing", "view": {**snap["view"], "dealer": snap["view"]["dealer"][:shown], "dealer_hidden": False, "turn": None}}
         key = (snap["guild_id"], snap["table_id"])
         table, store, guild_id = self.table(key), self.store, snap["guild_id"]
         name, limits = store.currency_name(guild_id), store.game_settings(guild_id)
@@ -365,7 +442,7 @@ class GameTables:
                 text = f"Dealer: {blackjack.hand_str(dealer)} ({blackjack.total_str(dealer)})"
                 lines.append(text + (" bust" if blackjack.hand_total(dealer)[0] > 21 else ""))
         if status == "joining":
-            lines.append(f"Join with /blackjack <bet> — dealing {stamp}." if stamp else "Join with /blackjack <bet>.")
+            lines.append(f"Join with /blackjack bet:<amount> — dealing {stamp}." if stamp else "Join with /blackjack bet:<amount>.")
             lines.append(f"Bets: {limits['min_bet']:,} to {limits['max_bet']:,} {name}.")
         elif status == "playing" and view and view["turn"] is not None:
             on_turn = snap["seats"][view["turn"]]
@@ -377,6 +454,9 @@ class GameTables:
             if status == "cancelled":
                 lines.append("Round cancelled. Bets are refunded.")
             lines.append(f"Play again or leave. The table closes {stamp} if nobody plays again." if stamp else "Play again or leave.")
+        if shown is not None:
+            lines.append("Dealer plays.")
+        lines.append("-# " + blackjack.rules_text())
         if status in ("settled", "cancelled") and snap["seed"]:
             lines.append(f"-# Seed: {snap['seed']} (hash {snap['seed_hash'][:12]})")
         else:
@@ -396,8 +476,9 @@ class GameTables:
             spec = [(m, m.capitalize(), discord.ButtonStyle.primary if m == "hit" else discord.ButtonStyle.secondary) for m in ("hit", "stand", "double") if m in legal]
         elif status in ("settled", "cancelled"):
             spec = [("again", "Play again (same bet)", discord.ButtonStyle.success), ("close", "Leave table", discord.ButtonStyle.secondary)]
-        if not spec:
+        if not spec and status not in ("joining", "playing", "settled", "cancelled"):
             return None
+        spec.append(("help", "How to play", discord.ButtonStyle.secondary))
         view = discord.ui.View(timeout=None)
         for action, label, style in spec:
             view.add_item(GameButton(action, table_id, round_id, moves, label, style))
@@ -593,7 +674,14 @@ class GameTables:
 
     # --- buttons ----------------------------------------------------------------------------
 
+    @staticmethod
+    def how_to_play() -> str:
+        return blackjack.how_to_play() + "\n" + HOW_TO_JOIN
+
     async def press(self, interaction: discord.Interaction, action: str, table_id: int, round_id: int, moves: int) -> None:
+        if action == "help":  # a guide, not a move: no state, no seat needed, works on old messages
+            await self._say(interaction, self.how_to_play())
+            return
         guild_id = interaction.guild_id
         if guild_id is None or interaction.user.bot:
             await self._say(interaction, STALE)
@@ -777,9 +865,11 @@ class GameTables:
                 self._after(key, snap)
                 paint = self._paint(key, snap)
         if paint is not None:
-            await self._deliver(paint)
+            await self._deliver(paint, pace=False)
         if line and not closed:
             await self._post_line(snap["channel_id"], guild_id, seated, line)
+        if paint is not None:
+            await self._pace(paint)
 
     @staticmethod
     def _house_move(snap, seat, legal) -> str:
