@@ -114,7 +114,6 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
         return PlainTextResponse("This name or entry already exists", status_code=409)
 
     cacheable, versioned = set(), {}
-    app.add_middleware(SecurityHeaders, base_url=base_url, cacheable=cacheable, versioned=versioned)
 
     # config.yaml is parsed once; the Backend tab, the prompt preview and AdminService share the result. A bad file leaves empty sets and a message.
     app.state.config_profiles, app.state.config_roles, app.state.config_error = {}, {}, None
@@ -224,6 +223,8 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
         from nicegui import core
         from nicegui.version import __version__
         versioned.update(prefix=f"/admin/_nicegui/{__version__}/", directives=core.app.config.cache_control_directives)
+    # After mount_dashboard so it wraps the upload guard (whose early refusals need the headers); still inside GZip.
+    app.add_middleware(SecurityHeaders, base_url=base_url, cacheable=cacheable, versioned=versioned)
     # Added last so it is outermost: the CSP rewrite sees plain HTML. text/html is excluded (BREACH: CSRF token, reflected params, socket.io polling text).
     app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=6,
                        exclude_content_types=(*DEFAULT_EXCLUDED_CONTENT_TYPES, "text/html", "text/plain", "application/octet-stream"))

@@ -347,6 +347,22 @@ class UploadBoundaryTests(unittest.TestCase):
         self.assertEqual(self.client.post(self.url, files=big, headers=self.good).status_code, 413)
         self.assertEqual(self.client.post(self.url, files=big, headers={"X-CSRF-Token": "nope"}).status_code, 403)
 
+    def assert_security_headers(self, response, status):
+        self.assertEqual(response.status_code, status)
+        self.assertEqual(response.headers.get("x-content-type-options"), "nosniff")
+        self.assertEqual(response.headers.get("cache-control"), "no-store")
+        self.assertEqual(response.headers.get("referrer-policy"), "same-origin")
+        self.assertIn("frame-ancestors 'none'", response.headers.get("content-security-policy", ""))
+
+    def test_guard_refusals_carry_security_headers(self):
+        """MNT-14: the upload guard's early 401/403 and 413 refusals carry the same security headers as any /admin response."""
+        self.assert_security_headers(self.client.post(self.url, files=self.files), 403)
+        self.assert_security_headers(self.client.post(self.url, files=self.files, headers={"X-CSRF-Token": "nope"}), 403)
+        big = {"file": ("big.json", b"x" * (8 * 1024 * 1024 + 70000), "application/json")}
+        self.assert_security_headers(self.client.post(self.url, files=big, headers=self.good), 413)
+        self.client.cookies.clear()
+        self.assert_security_headers(self.client.post(self.url, files=self.files, headers=self.good), 401)
+
 
 class OperatorBindingTests(unittest.TestCase):
     """FEAT-08: the /operator page binds its client to the OPERATOR sentinel; socket events and uploads re-check operator
