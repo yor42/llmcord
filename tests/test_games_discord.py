@@ -26,7 +26,7 @@ HTTP = []  # (kind, a table lock was held) for every fake Discord call
 
 
 def http(kind):
-    HTTP.append((kind, any(lock.locked() for lock in list(GAMES.locks.values()))))
+    HTTP.append((kind, any(lock.locked() for lock in list(GAMES.runtime.locks.values()))))
 
 
 class Response(FakeResponse):
@@ -174,7 +174,7 @@ class AdminTests(GameCase):
         self.assertEqual(admin.replies, ["Games are now off in <#100>. The open table was closed and bets were refunded."])
         self.assertEqual((self.balance(ALICE), self.balance(BOB)), (100, 100))
         self.assertIsNone(self.store.open_table_for(G, CH))
-        self.assertEqual(self.games.timers, {})
+        self.assertEqual(self.games.runtime.timers, {})
         self.assertEqual(self.channel.edits[-1][0], message_id)
         self.assertEqual(self.channel.edits[-1][1]["content"], "Table closed: games were turned off here.")
         self.assertIsNone(self.channel.edits[-1][1]["view"])
@@ -287,7 +287,7 @@ class JoinTests(GameCase):
         self.assertNotIn(SEED, content)
         self.assertEqual([child.item.label for child in kwargs["view"].children], ["Deal now", "Leave", "How to play"])
         self.assertEqual(self.balance(ALICE), 90)
-        self.assertEqual(set(self.games.timers), {(G, snap["table_id"])})
+        self.assertEqual(set(self.games.runtime.timers), {((G, snap["table_id"]), "table")})
 
     async def test_second_member_joins_the_open_table(self):
         await self.bet(ALICE, 10)
@@ -318,7 +318,7 @@ class JoinTests(GameCase):
             await invoke(self.bot, "blackjack", click, bet=10)
         self.assertIsNone(self.store.open_table_for(G, CH))
         self.assertEqual(self.balance(ALICE), 100)
-        self.assertEqual(self.games.timers, {})
+        self.assertEqual(self.games.runtime.timers, {})
 
     async def test_join_refused_while_a_round_is_in_play(self):
         self.rig("9", "10", "6", "7")
@@ -340,7 +340,7 @@ class JoinTests(GameCase):
         self.assertEqual(click.response.edited[0]["content"], "Table closed.")
         self.assertIsNone(click.response.edited[0]["view"])
         self.assertIsNone(self.store.open_table_for(G, CH))
-        self.assertEqual(self.games.timers, {})
+        self.assertEqual(self.games.runtime.timers, {})
 
     async def test_unseated_member_cannot_deal_or_leave(self):
         await self.bet(ALICE, 10)
@@ -363,7 +363,7 @@ class DealTests(GameCase):
         self.assertIn(f"On turn: <@{ALICE}>", content)
         self.assertRegex(content, r"decide <t:\d+:R>")
         self.assertEqual(self.labels(snap), ["Hit", "Stand", "Double", "How to play"])
-        self.assertEqual(list(self.games.timers), [(G, snap["table_id"])])
+        self.assertEqual(list(self.games.runtime.timers), [((G, snap["table_id"]), "table")])
 
     async def test_deal_by_the_join_timer(self):
         self.rig("9", "10", "6", "7")
@@ -499,7 +499,7 @@ class PlayTests(GameCase):
         await self.start("5", "10", "3", "7")
         snap = self.latest()
         click = Click(self.bot, ALICE)
-        async with self.games.lock((G, snap["table_id"])):
+        async with self.games.runtime.lock((G, snap["table_id"])):
             task = asyncio.create_task(GameButton("stand", snap["table_id"], snap["round_id"], 0).callback(click))
             await asyncio.sleep(0.01)
             self.assertFalse(task.done())
@@ -616,7 +616,7 @@ class SettleTests(GameCase):
         click = await self.press(BOB, "Leave table")
         self.assertEqual(click.response.edited[0]["content"].split("\n")[0], "Table closed.")  # then the round summary (UI-53)
         self.assertIsNone(self.store.open_table_for(G, CH))
-        self.assertEqual(self.games.timers, {})
+        self.assertEqual(self.games.runtime.timers, {})
 
     async def test_idle_timeout_closes_the_table(self):
         await self.settle_alice_win()
@@ -712,11 +712,11 @@ class ReviewFixTests(GameCase):
     async def test_nothing_is_armed_after_close(self):
         await self.games.close()
         self.games.arm((G, 1), "join", 1)
-        self.assertEqual(self.games.timers, {})
+        self.assertEqual(self.games.runtime.timers, {})
 
     async def test_a_failing_timer_is_retried_once(self):
         self.rig("9", "10", "6", "7")
-        self.games.JOIN_SECONDS = self.games.RETRY_SECONDS = 0.01
+        self.games.JOIN_SECONDS = self.games.runtime.retry_seconds = 0.01
         real = self.games.on_join_timer
         calls = []
 
@@ -751,7 +751,7 @@ class HardeningTests(GameCase):
         click = Click(self.bot, ALICE, events=events)
         snap = self.latest()
         with mock.patch.object(self.store, "round_snapshot", side_effect=spy):
-            async with self.games.lock((G, snap["table_id"])):
+            async with self.games.runtime.lock((G, snap["table_id"])):
                 task = asyncio.create_task(GameButton("deal", snap["table_id"], snap["round_id"], 0).callback(click))
                 await asyncio.sleep(0.01)
                 self.assertEqual(events, ["defer"])  # acknowledged while the lock is still taken by someone else
@@ -788,7 +788,7 @@ class HardeningTests(GameCase):
     async def test_an_older_paint_never_overwrites_a_newer_one(self):
         await self.bet(ALICE, 10)
         key = (G, self.latest()["table_id"])
-        async with self.games.lock(key):
+        async with self.games.runtime.lock(key):
             older = self.games._paint(key, self.latest())
             newer = self.games._paint(key, self.latest())
         newer.content = "newer"
@@ -855,7 +855,7 @@ class HardeningTests(GameCase):
     async def test_a_retry_replaced_by_a_new_timer_does_not_sleep_or_run(self):
         self.rig("9", "10", "6", "7")
         self.games.JOIN_SECONDS = 0.01
-        self.games.RETRY_SECONDS = 3600
+        self.games.runtime.retry_seconds = 3600
         calls = []
 
         async def replaced_then_failing(guild_id, table_id, round_id):
@@ -866,18 +866,18 @@ class HardeningTests(GameCase):
         self.games.on_join_timer = replaced_then_failing
         with self.assertLogs(level="ERROR"):
             await self.bet(ALICE, 10)
-            old = next(iter(self.games.timers.values()))
+            old = next(iter(self.games.runtime.timers.values()))
             await asyncio.wait_for(asyncio.shield(old), 1)
         self.assertTrue(old.done())
         self.assertEqual(calls, [1])
-        self.assertEqual(len(self.games.timers), 1)
+        self.assertEqual(len(self.games.runtime.timers), 1)
         await self.games.close()
-        self.assertEqual(self.games.timers, {})
+        self.assertEqual(self.games.runtime.timers, {})
         self.assertEqual([t for t in asyncio.all_tasks() if t.get_name().startswith("blackjack-") and not t.done()], [])
 
     async def test_close_during_a_pending_retry_stops_it_and_leaves_no_task(self):
         self.games.JOIN_SECONDS = 0.01
-        self.games.RETRY_SECONDS = 3600
+        self.games.runtime.retry_seconds = 3600
         calls = []
 
         async def failing(*args):
@@ -886,7 +886,7 @@ class HardeningTests(GameCase):
         self.games.on_join_timer = failing
         with self.assertLogs(level="ERROR"):
             await self.bet(ALICE, 10)
-            task = next(iter(self.games.timers.values()))
+            task = next(iter(self.games.runtime.timers.values()))
             for _ in range(100):
                 await asyncio.sleep(0.01)
                 if calls:
@@ -899,7 +899,7 @@ class HardeningTests(GameCase):
 
     async def test_disarm_and_forget_cancel_a_pending_retry(self):
         self.games.JOIN_SECONDS = 0.01
-        self.games.RETRY_SECONDS = 3600
+        self.games.runtime.retry_seconds = 3600
         calls = []
 
         async def failing(*args):
@@ -908,7 +908,7 @@ class HardeningTests(GameCase):
         self.games.on_join_timer = failing
         with self.assertLogs(level="ERROR"):
             await self.bet(ALICE, 10)
-            task = next(iter(self.games.timers.values()))
+            task = next(iter(self.games.runtime.timers.values()))
             for _ in range(100):
                 await asyncio.sleep(0.01)
                 if calls:
@@ -921,8 +921,8 @@ class HardeningTests(GameCase):
         await self.bet(ALICE, 10)
         old = self.latest()
         used = []
-        real = self.games.lock
-        self.games.lock = lambda key: used.append(key) or real(key)
+        real = self.games.runtime.lock
+        self.games.runtime.lock = lambda key: used.append(key) or real(key)
         async with real((G, old["table_id"])):
             task = asyncio.create_task(self.games.set_channel(G, CH, False))
             await asyncio.sleep(0.01)  # it found the old table and waits for its lock
@@ -965,7 +965,7 @@ class HardeningTests(GameCase):
         self.assertEqual((message_id, kwargs["content"], kwargs["view"]), (snap["message_id"], "Table closed: games were turned off here.", None))
         self.assertEqual(kwargs["allowed_mentions"].to_dict(), discord.AllowedMentions.none().to_dict())
         self.assertNotIn(key, self.games.tables)
-        self.assertEqual(self.games.timers, {})
+        self.assertEqual(self.games.runtime.timers, {})
 
     async def test_sweep_is_idle_without_tables(self):
         with mock.patch.object(self.store, "one", side_effect=AssertionError("no store read")):
@@ -1025,7 +1025,7 @@ class HardeningTests(GameCase):
         await self.games.on_join_timer(G, snap["table_id"], snap["round_id"])
         await self.games.on_idle_timer(G, snap["table_id"], snap["round_id"])
         self.assertEqual([kw["content"] for _, kw in self.channel.edits], ["Table closed: games were turned off here."])
-        self.assertEqual(self.games.timers, {})
+        self.assertEqual(self.games.runtime.timers, {})
 
     async def test_a_joiner_is_answered_before_a_slow_table_edit(self):
         await self.bet(ALICE, 10)
@@ -1114,7 +1114,7 @@ class HardeningTests(GameCase):
     async def test_a_paint_in_flight_cannot_land_after_the_table_closed(self):
         await self.bet(ALICE, 10)
         key = (G, self.latest()["table_id"])
-        async with self.games.lock(key):
+        async with self.games.runtime.lock(key):
             paint = self.games._paint(key, self.latest())
         self.store.set_game_channels(G, set())
         await self.games._deliver(paint)
@@ -1180,15 +1180,15 @@ class RecoveryTests(GameCase):
 class LifecycleTests(GameCase):
     async def test_close_cancels_every_timer(self):
         await self.bet(ALICE, 10)
-        tasks = list(self.games.timers.values())
+        tasks = list(self.games.runtime.timers.values())
         self.assertEqual(len(tasks), 1)
         await self.games.close()
         self.assertTrue(all(task.cancelled() for task in tasks))
-        self.assertEqual(self.games.timers, {})
+        self.assertEqual(self.games.runtime.timers, {})
 
     async def test_bot_close_cancels_the_game_timers(self):
         await self.bet(ALICE, 10)
-        task = next(iter(self.games.timers.values()))
+        task = next(iter(self.games.runtime.timers.values()))
         with mock.patch.object(SkitBot.__mro__[1], "close", new=mock.AsyncMock()):
             self.bot.models.close = mock.AsyncMock()
             self.store.close = lambda: None
@@ -1198,13 +1198,13 @@ class LifecycleTests(GameCase):
     async def test_one_timer_per_table_and_it_is_replaced_not_stacked(self):
         self.rig("9", "10", "6", "7")
         await self.bet(ALICE, 10)
-        first = next(iter(self.games.timers.values()))
+        first = next(iter(self.games.runtime.timers.values()))
         await self.press(ALICE, "Deal now")
-        second = next(iter(self.games.timers.values()))
+        second = next(iter(self.games.runtime.timers.values()))
         await asyncio.sleep(0)
         self.assertTrue(first.cancelled())
         self.assertIsNot(first, second)
-        self.assertEqual(len(self.games.timers), 1)
+        self.assertEqual(len(self.games.runtime.timers), 1)
 
     async def test_the_channel_skit_lock_is_never_taken(self):
         self.rig("9", "10", "6", "7")

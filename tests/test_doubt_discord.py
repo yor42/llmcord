@@ -63,7 +63,7 @@ HTTP = []  # (kind, a table lock was held) for every fake Discord call
 
 
 def http(kind):
-    locks = list(DOUBT.locks.values()) + list(DOUBT.bot.games.locks.values()) if DOUBT is not None else []
+    locks = list(DOUBT.locks.values()) + list(DOUBT.bot.games.runtime.locks.values()) if DOUBT is not None else []
     HTTP.append((kind, any(lock.locked() for lock in locks)))
 
 
@@ -1075,8 +1075,8 @@ class BlackjackUnchangedTests(DoubtCase):
         self.assertEqual(self.balance(ALICE), 90)
         lobby = self.channel.messages[table["message_id"]]
         self.assertTrue(all(item_of(child).custom_id.startswith("llmcord:bj:") for child in lobby.view.children))
-        self.assertIn((G, table["id"]), self.games.timers)
-        self.assertEqual([k for k in self.games.timers if len(k) == 2], [(G, table["id"])])
+        self.assertIn(((G, table["id"]), "table"), self.games.runtime.timers)
+        self.assertEqual(list(self.games.runtime.timers), [((G, table["id"]), "table")])
         self.assertIsNone(table["thread_id"])
         await self.push(ALICE, "Deal now", lobby)
         self.assertEqual(self.store.latest_round(G, table["id"])["status"], "playing")
@@ -1095,7 +1095,7 @@ class BlackjackUnchangedTests(DoubtCase):
         await self.playing()
         snap = self.snap()
         key = (G, snap["table_id"])
-        self.assertNotIn(key, self.games.timers)
+        self.assertNotIn((key, "table"), self.games.runtime.timers)
         self.assertNotIn(key, self.games.tables)
         await self.games.sweep()
         for hook in (self.games.on_join_timer, self.games.on_idle_timer):
@@ -1365,7 +1365,7 @@ class OutsideCloseTests(DoubtCase):
         await self.lobby3()
         tid = self.table()["id"]
         lobby = self.lobby()
-        async with self.games.lock((G, tid)):
+        async with self.games.runtime.lock((G, tid)):
             closed, paint = await asyncio.wait_for(self.games.switch_channel(G, CH, False), 2)
         self.assertEqual((closed, paint), (True, None))
         self.assertIn("turned off", lobby.content)

@@ -6,7 +6,7 @@ i.e. everything below that a refactor may have to touch, is confined to the two 
 
 - ``new_tasks()``: a snapshot of ``asyncio.all_tasks()`` taken in ``asyncSetUp``; "no live timer task" means no new
   pending task other than the test's own and ``tables.sweeper``. No task names are matched.
-- ``timer_present()``: reads ``tables.timers`` (key shape ``(guild, table)`` for Blackjack, ``(guild, table, kind)``
+- ``timer_present()``: reads ``tables.runtime.timers`` (key shape ``((guild, table), "table")`` for Blackjack, ``(guild, table, kind)``
   for I Doubt It). The only other direct reads are ``tables.closed``, ``tables.sweeper`` and, for one Blackjack test,
   ``tables.table(key).deadline``.
 - hooks (``on_*_timer``) and, for I Doubt It, ``_reap`` are replaced on the instance with scripted fakes.
@@ -31,8 +31,17 @@ class _Adapter:
         self.failures: dict[str, int] = {}  # kind -> how many more calls raise
         self.script = None  # optional async callable run inside every hook, before any scripted failure
         self.baseline: set = set()
-        tables.RETRY_SECONDS = DELAY
+        self.set_retry(DELAY)
         tables.SWEEP_SECONDS = 3600
+
+    def set_retry(self, seconds):
+        self.tables.RETRY_SECONDS = seconds
+
+    def mark_closed(self):
+        self.tables.closed = True
+
+    def lock(self, key):
+        return self.tables.lock(key)
 
     def hook(self, kind):
         async def hook(*_args):
@@ -62,6 +71,15 @@ class _Blackjack(_Adapter):
         for name, kind in (("on_join_timer", "join"), ("on_turn_timer", "turn"), ("on_character_timer", "character"), ("on_idle_timer", "idle")):
             setattr(tables, name, self.hook(kind))
 
+    def set_retry(self, seconds):
+        self.tables.runtime.retry_seconds = seconds
+
+    def mark_closed(self):
+        self.tables.runtime.closed = True
+
+    def lock(self, key):
+        return self.tables.runtime.lock(key)
+
     def arm(self, kind=None, delay=DELAY, key=None):
         kind = kind or self.kind
         setattr(self.tables, self.seconds[kind], delay)
@@ -71,7 +89,7 @@ class _Blackjack(_Adapter):
         self.tables.disarm(key or self.key)
 
     def timer_present(self, kind=None, key=None) -> bool:
-        return (key or self.key) in self.tables.timers
+        return ((key or self.key), self.tables.SLOT) in self.tables.runtime.timers
 
 
 class _Doubt(_Adapter):
@@ -166,24 +184,24 @@ class _TimerCases:
     async def test_disarm_during_retry_sleep_cancels_the_retry(self):
         """Characterization (MNT-50): cancellation alone stops a disarmed timer's retry (not the stale-timer guard)."""
         self.a.failures[self.a.kind] = 99
-        self.a.tables.RETRY_SECONDS = DELAY * 4
+        self.a.set_retry(5)  # long: only cancellation can keep the retry from running
         with self.assertLogs(level="ERROR"):
             self.a.arm()
             await until(lambda: self.a.calls == [self.a.kind])
             self.a.disarm()
-            await settle(DELAY * 8)
+            await settle(DELAY * 2)
         self.assertEqual(self.a.calls, [self.a.kind])
         self.assertEqual(self.a.new_tasks(), [])
 
     async def test_replacement_during_retry_sleep_cancels_the_stale_retry(self):
         """Characterization (MNT-50): cancellation alone stops a replaced timer's retry (not the stale-timer guard)."""
         self.a.failures[self.a.kind] = 1
-        self.a.tables.RETRY_SECONDS = DELAY * 4
+        self.a.set_retry(5)  # long: only cancellation can keep the retry from running
         with self.assertLogs(level="ERROR"):
             self.a.arm()
             await until(lambda: self.a.calls == [self.a.kind])
             self.a.arm(delay=3600)  # replaces the retrying timer with a long one
-            await settle(DELAY * 8)
+            await settle(DELAY * 2)
         self.assertEqual(self.a.calls, [self.a.kind])
         self.assertTrue(self.a.timer_present())
         self.assertEqual(len(self.a.new_tasks()), 1)
@@ -221,7 +239,7 @@ class _TimerCases:
         self.a.failures[self.a.kind] = 99
 
         async def close_then_fail():
-            self.a.tables.closed = True  # what close() sets first; calling close() from inside its own task would cancel the hook
+            self.a.mark_closed()  # what close() sets first; calling close() from inside its own task would cancel the hook
         self.a.script = close_then_fail
         with self.assertLogs(level="ERROR") as logs:
             self.a.arm()
@@ -271,12 +289,23 @@ class _TimerCases:
         self.assertFalse(self.a.timer_present())
         self.assertEqual(self.a.new_tasks(), [])
 
+    async def test_close_cancels_a_hook_that_is_mid_run(self):
+        """Characterization (MNT-50): close() cancels a timer whose hook is running (awaiting) and leaves no task behind."""
+        gate = asyncio.Event()  # never set
+        self.a.script = gate.wait
+        self.a.arm()
+        await until(lambda: self.a.calls == [self.a.kind])
+        await self.a.tables.close()
+        self.assertEqual(self.a.calls, [self.a.kind])
+        self.assertFalse(self.a.timer_present())
+        self.assertEqual(self.a.new_tasks(), [])
+
     async def test_lock_is_shared_per_key_while_referenced(self):
         """Characterization (MNT-50): the same key gives the same Lock while referenced; other keys get other locks."""
-        first = self.a.tables.lock((1, 7))
+        first = self.a.lock((1, 7))
         self.assertIsInstance(first, asyncio.Lock)
-        self.assertIs(self.a.tables.lock((1, 7)), first)
-        self.assertIsNot(self.a.tables.lock((1, 8)), first)
+        self.assertIs(self.a.lock((1, 7)), first)
+        self.assertIsNot(self.a.lock((1, 8)), first)
 
     # scripts that act on the timer's own key from inside its hook (kind of the running hook is self.a.kind)
     async def a_disarm_own(self):
@@ -364,3 +393,15 @@ class DoubtTimerTests(_TimerCases, unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.a.calls, ["turn", "turn"])
         self.assertEqual(self.a.reaped, [(1, 7), (1, 7)])
         self.assertEqual(len(logs.records), 1)
+
+    async def test_reap_failing_on_both_attempts_runs_the_hook_and_the_reap_twice(self):
+        """Characterization (MNT-50): a _reap that always raises makes both attempts fail after the hook succeeded: two hook runs, two reaps, two logs, no third try."""
+        self.a.reap_failures = 99
+        with self.assertLogs(level="ERROR") as logs:
+            self.a.arm("turn")
+            await until(lambda: len(self.a.reaped) == 2 and not self.a.timer_present("turn"))
+            await settle()
+        self.assertEqual(self.a.calls, ["turn", "turn"])
+        self.assertEqual(self.a.reaped, [(1, 7), (1, 7)])
+        self.assertEqual(len(logs.records), 2)
+        self.assertEqual(self.a.new_tasks(), [])

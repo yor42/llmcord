@@ -25,6 +25,7 @@ from discord import app_commands
 from .admin_store import ConflictError, GameError
 from . import game_chooser
 from .games import DefaultPolicy, blackjack
+from .table_runtime import TableRuntime
 
 STALE = "That table has moved on — use the latest buttons."
 OFF_HERE = "Games are off in this channel."
@@ -130,12 +131,10 @@ class GameTables:
 
     def __init__(self, bot, clock=time.time):
         self.bot, self.clock = bot, clock
-        self.locks: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
+        self.runtime = TableRuntime(label="Blackjack", retry_seconds=self.RETRY_SECONDS)
         self.senders: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
-        self.timers: dict[tuple[int, int], asyncio.Task] = {}
         self.tables: dict[tuple[int, int], _Table] = {}
         self.sweeper: asyncio.Task | None = None
-        self.closed = False
         self.talk_capped: set[tuple[int, object]] = set()
         self.talk_failed: dict[tuple[int, object], int] = {}  # attempts without a usage row, per (guild, server day)
 
@@ -143,11 +142,9 @@ class GameTables:
     def store(self):
         return self.bot.store
 
-    def lock(self, key) -> asyncio.Lock:
-        lock = self.locks.get(key)
-        if lock is None:
-            lock = self.locks[key] = asyncio.Lock()
-        return lock
+    @property
+    def closed(self) -> bool:
+        return self.runtime.closed
 
     def sender(self, key) -> _Sender:
         sender = self.senders.get(key)
@@ -164,57 +161,30 @@ class GameTables:
 
     # --- timers -----------------------------------------------------------------------------
 
+    SLOT = "table"  # blackjack keeps one timer per table: arming any kind replaces the previous one
+
     def arm(self, key, kind: str, round_id: int, moves: int = 0) -> None:
         if self.closed:
             return
         delay = {"join": self.JOIN_SECONDS, "turn": self.TURN_SECONDS, "idle": self.IDLE_SECONDS, "character": self.CHARACTER_SECONDS}[kind]
         self.disarm(key)
         self.table(key).deadline = self.clock() + delay
-        task = self.timers[key] = asyncio.create_task(self._timer(key, kind, round_id, moves, delay), name=f"blackjack-{kind}-{key[1]}")
-        task.add_done_callback(lambda done: self.timers.get(key) is done and self.timers.pop(key, None))
+        args = (*key, round_id) if kind in ("join", "idle") else (*key, round_id, moves)
+        self.runtime.arm(key, self.SLOT, delay, self._fire, kind, *args, name=f"blackjack-{kind}-{key[1]}")
+
+    async def _fire(self, kind, *args) -> None:
+        await getattr(self, f"on_{kind}_timer")(*args)  # looked up when the timer fires
 
     def disarm(self, key) -> None:
-        old = self.timers.pop(key, None)
-        if old is not None and old is not asyncio.current_task():
-            old.cancel()
-
-    def _current(self, key) -> bool:
-        return not self.closed and self.timers.get(key) is asyncio.current_task()
-
-    async def _timer(self, key, kind, round_id, moves, delay) -> None:
-        await asyncio.sleep(delay)
-        for attempt in (1, 2):  # one retry, so held bets do not wait for a restart after a transient failure
-            try:
-                if kind == "join":
-                    await self.on_join_timer(*key, round_id)
-                elif kind == "turn":
-                    await self.on_turn_timer(*key, round_id, moves)
-                elif kind == "character":
-                    await self.on_character_timer(*key, round_id, moves)
-                else:
-                    await self.on_idle_timer(*key, round_id)
-                return
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                logging.exception("Blackjack %s timer failed (table %s, attempt %d)", kind, key[1], attempt)
-                if attempt == 1:
-                    if not self._current(key):  # replaced, disarmed or closed: the retry would be untracked
-                        return
-                    await asyncio.sleep(self.RETRY_SECONDS)  # still the table's timer, so disarm, _forget and close() cancel it
-                    if not self._current(key):
-                        return
+        self.runtime.disarm(key, self.SLOT)
 
     async def close(self) -> None:
-        self.closed = True
-        tasks = list(self.timers.values())
-        self.timers.clear()
-        if self.sweeper is not None:
-            tasks.append(self.sweeper)
-            self.sweeper = None
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        sweeper, self.sweeper = self.sweeper, None
+        if sweeper is not None:
+            sweeper.cancel()
+        await self.runtime.close()
+        if sweeper is not None:
+            await asyncio.gather(sweeper, return_exceptions=True)
 
     def _after(self, key, snap) -> None:
         """Arms the timer the new state needs. Call under the table lock."""
@@ -266,7 +236,7 @@ class GameTables:
         for key in list(self.tables):
             if self._is_open(key):
                 continue
-            async with self.lock(key):
+            async with self.runtime.lock(key):
                 _, paint = self._closed(key)
             if paint is not None:
                 await self._deliver(paint)
@@ -588,7 +558,7 @@ class GameTables:
             if table["game"] == "doubt":  # its own lock namespace: never hold a blackjack table lock for it
                 closed = await self.bot.doubt.close_for_channel(guild_id, channel_id, table["id"])
                 break
-            async with self.lock((guild_id, table["id"])):
+            async with self.runtime.lock((guild_id, table["id"])):
                 current = self.store.open_table_for(guild_id, channel_id)
                 if current is not None and current["id"] != table["id"] and attempt < 2:
                     continue  # a newer table opened meanwhile: release this lock and close it under its own
@@ -638,7 +608,7 @@ class GameTables:
                 return
             table = {"id": opened["table_id"]}
         key = (guild_id, table["id"])
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             out = self._join(interaction.user.id, key, bet, opened, space_id=space_id, note=note)
         if out.opened:
             await self._open_message(interaction, key, out.paints[0])
@@ -697,12 +667,12 @@ class GameTables:
                 message = await interaction.original_response()
                 self.store.set_table_message(*key, message.id)
             except Exception:
-                async with self.lock(key):
+                async with self.runtime.lock(key):
                     self._close_in_store(key)  # refunds; no table without a message
                 raise
             paint.sender.sent = max(paint.sender.sent, paint.seq)
         fresh = None
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             if paint.sender.issued > paint.seq and key in self.tables and self._is_open(key):
                 try:
                     fresh = self._paint(key, self.store.latest_round(*key))  # someone joined before the message existed
@@ -742,7 +712,7 @@ class GameTables:
             return
         await self._ack(interaction)
         key = (guild_id, table_id)
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             out = self._press(interaction.user.id, key, action, round_id, moves)
         await self._finish(interaction, out, via=interaction)
 
@@ -847,7 +817,7 @@ class GameTables:
         key, paint = (guild_id, table_id), None
         if self._foreign(key):
             return
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             closed, paint = self._closed(key)
             if not closed:
                 snap = self.store.round_snapshot(guild_id, round_id)
@@ -863,7 +833,7 @@ class GameTables:
         key, paint = (guild_id, table_id), None
         if self._foreign(key):
             return
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             closed, paint = self._closed(key)
             if not closed:
                 snap = self.store.round_snapshot(guild_id, round_id)
@@ -885,7 +855,7 @@ class GameTables:
         key, paint = (guild_id, table_id), None
         if self._foreign(key):
             return
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             closed, paint = self._closed(key)
             if not closed:
                 snap = self.store.round_snapshot(guild_id, round_id)
@@ -900,7 +870,7 @@ class GameTables:
                 await self._deliver(paint)
             return
         move, line = await self._character_move(guild_id, snap, seat, legal, seated)
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             closed, paint = self._closed(key)
             if not closed:
                 now = self.store.round_snapshot(guild_id, round_id)
@@ -985,7 +955,7 @@ class GameTables:
         key, paint = (guild_id, table_id), None
         if self._foreign(key):
             return
-        async with self.lock(key):
+        async with self.runtime.lock(key):
             closed, paint = self._closed(key)
             if not closed:
                 snap = self.store.latest_round(guild_id, table_id)

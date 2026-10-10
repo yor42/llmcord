@@ -55,7 +55,7 @@ class SeatCase(GameCase):
     def fake_model(self, result):
         async def model(role, request, name, schema):
             self.context = (log_attribution()["feature"], log_attribution()["purpose"], self.bot.backend._pinned.get() is not None)
-            self.calls.append((role, request, name, schema, any(lock.locked() for lock in list(self.games.locks.values()))))
+            self.calls.append((role, request, name, schema, any(lock.locked() for lock in list(self.games.runtime.locks.values()))))
             if isinstance(result, BaseException):
                 raise result
             if callable(result):
@@ -155,7 +155,7 @@ class CharacterTurnTests(SeatCase):
         self.assertEqual(GameTables.CHARACTER_SECONDS, 2)
         await self.start()
         key = (G, self.latest()["table_id"])
-        self.assertIn("blackjack-character", self.games.timers[key].get_name())
+        self.assertIn("blackjack-character", self.games.runtime.timers[key, "table"].get_name())
 
     async def test_talk_off_plays_the_house_rule_without_a_model_call(self):
         self.store.set_game_character_talk(G, False)
@@ -231,7 +231,7 @@ class CharacterTurnTests(SeatCase):
         snap = self.latest()
         task = asyncio.create_task(self.games.on_character_timer(G, snap["table_id"], snap["round_id"], snap["moves"]))
         await started.wait()
-        self.assertFalse(any(lock.locked() for lock in self.games.locks.values()))
+        self.assertFalse(any(lock.locked() for lock in self.games.runtime.locks.values()))
         self.store.play(G, snap["round_id"], 1, "hit", "timeout", snap["moves"])
         gate.set()
         await task
@@ -328,7 +328,7 @@ class CharacterTurnTests(SeatCase):
         content = self.channel.edits[-1][1]["content"]
         self.assertIn("Round cancelled. Bets are refunded.\nPlay again or leave. The table closes", content)
         self.assertEqual(sorted(i.item.label for i in self.channel.edits[-1][1]["view"].children), ["How to play", "Leave table", "Play again (same bet)"])
-        self.assertEqual([name.get_name() for name in self.games.timers.values()], [f"blackjack-idle-{key[1]}"])
+        self.assertEqual([name.get_name() for name in self.games.runtime.timers.values()], [f"blackjack-idle-{key[1]}"])
 
     async def test_a_slow_webhook_post_is_given_up(self):
         class Slow(Webhook):

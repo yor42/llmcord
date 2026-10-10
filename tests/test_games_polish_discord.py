@@ -289,7 +289,7 @@ class PacingTests(GameCase):
 
         async def pause(seconds):
             sender = next(iter(self.games.senders.values()))
-            self.pauses.append((seconds, any(lock.locked() for lock in list(self.games.locks.values())), sender.lock.locked()))
+            self.pauses.append((seconds, any(lock.locked() for lock in list(self.games.runtime.locks.values())), sender.lock.locked()))
             if self.hook:
                 await self.hook(len(self.pauses))
         self.games._pause = pause
