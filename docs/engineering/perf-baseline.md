@@ -228,3 +228,19 @@ Reading:
 - After that comes the 300 ms Quasar expand animation. The Tailwind runtime runs during the animation, but blocking it saved only about 20 ms.
 - Not split further: native DOM, style and component setup inside the long task (about 340 ms of `(program)` samples, inflated by the profiler).
 - A lighter card body at expand time could save up to about 170 ms; see UI-51.
+
+## 2026-10-10: UI-51 (character card body built after the animation)
+
+A character card now starts with a muted "Loading…" placeholder (`role=status`). The first expand starts the animation at once, and a one-shot `ui.timer(0.35)` then builds the body (name, home world, 7 text areas, avatar editors) once per card per tab build. Collapsing and re-expanding keeps unsaved edits. Medians of 3 bench runs per profile, before and after, split row, milliseconds after the click:
+
+| Step | `latency` before → after | `ratelimited` before → after |
+| --- | --- | --- |
+| First DOM change | 163 → 29 | 165 → 28 |
+| Height starts changing | 282 → 158 | 293 → 157 |
+| Animation stable | 582 → 513 | 585 → 514 |
+| Main-thread long tasks | one, ~180 ms → none | one, ~180 ms → none |
+
+Reading:
+- The click no longer waits on the body build. The body arrives as one 24.6 KB socket frame about 388 ms after the click, near the end of the animation, and renders without a long task.
+- The **Expand one character** row dropped from about 0.45 s to 0.04 s, but it waits for network idle only, not for the body, so it now measures the click alone. Use the split row for comparisons.
+- Not investigated: the remaining ~130 ms between the first DOM change and the height change has no long task; it is probably the Quasar slide transition starting on the Pi's software-rendered frames.

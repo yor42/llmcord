@@ -1740,7 +1740,29 @@ def character_card(ctx, row, worlds):
                                    'Delete permanently', lambda: store.delete_character(gid, row['id'], revision),
                                    'character.delete', {'id': row['id']}, then=lambda _: ctx.refresh('characters'))
                 ui.menu_item('Delete character', on_click=confirm_delete).classes('text-negative').props('role=menuitem')
-        with ui.element('div').classes('ll-stack'):
+        # The body (about 35 controls) is built once, after the 300 ms expand animation, so the click does not stall on it.
+        stack = ui.element('div').classes('ll-stack')
+        with stack:
+            ui.label('Loading…').classes('ll-muted').style('min-height: 12rem').props('role=status')
+        built = False
+        def build():
+            stack.clear()
+            try:
+                with stack:
+                    fill()
+            except Exception:
+                logging.exception('Character card body failed to build')
+                stack.clear()
+                with stack:
+                    ui.label('Could not load this character. Reload the page.').classes('ll-muted')
+        def opened(event):
+            nonlocal built
+            if event.value and not built:
+                built = True
+                with card_panel:
+                    ui.timer(0.35, build, once=True)
+        card_panel.on_value_change(opened)
+        def fill():
             card = json.loads(row['card'])
             with ui.element('div').classes('ll-form-row'):
                 name = ui.input('Name', value=row['name'])
@@ -1758,7 +1780,7 @@ def character_card(ctx, row, worlds):
                 return True
             tracked = {name: row['name'], world: row['world_id'], **{control: card.get(key, '') for key, control in fields.items()}}
             ctx.savebar.track(row['name'], tracked, save, 'character.edit', {'id': row['id']}, then=lambda _: ctx.refresh('characters'), on_reset=lambda: confirm.set_value(False), reload=lambda: ctx.refresh('characters'))
-            static_avatar_editor(ctx, row)
+            static_avatar_editor(ctx, row, revision)
             ui.label('Emotion avatars').classes('ll-subtitle')
             ui.label('The selected emotion image is used first. If unavailable, the fallback static avatar is used.').classes('ll-muted')
             for slot in store.avatar_slots(gid, row['id']):
@@ -1774,7 +1796,7 @@ def character_card(ctx, row, worlds):
                 ctx.button('Add emotion', add_slot, 'avatar.slot.create', then=lambda _: ctx.refresh())
 
 
-def static_avatar_editor(ctx, character):
+def static_avatar_editor(ctx, character, revision):
     from nicegui import ui
     with ui.expansion('Fallback static avatar').classes('w-full fallback-avatar ll-subpanel'), ui.element('div').classes('ll-stack'):
         if character['avatar']:
@@ -1782,7 +1804,6 @@ def static_avatar_editor(ctx, character):
         else:
             ui.label('No static fallback set. Import a card portrait or upload one here.').classes('ll-muted')
         ui.label('Used when the selected emotion has no usable image. No asset channel or publication is needed.').classes('ll-muted')
-        revision = ctx.store.owner_revision(ctx.guild_id, 'character', character['id'])
         def reload(_):
             return ctx.refresh('characters')
         async def upload(event):

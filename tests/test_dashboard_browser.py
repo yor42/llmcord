@@ -3229,6 +3229,107 @@ class DashboardBrowserTests(unittest.TestCase):
         finally:
             context.close()
 
+    def test_ui51_character_body_builds_after_first_expand_and_keeps_edits(self):
+        """UI-51: a collapsed card has no form fields; they appear after the first expand; collapse/re-expand keeps an unsaved edit."""
+        context, page, errors = self.ux_page('/admin/guild/1?tab=characters')
+        try:
+            page.get_by_role('tab', name='Characters', exact=True).click()
+            card = page.locator('.character-card').filter(has=page.get_by_text('Alice', exact=True)).first
+            card.wait_for()
+            self.assertEqual(card.get_by_label('Description', exact=True).count(), 0)
+            self.assertEqual(card.get_by_label('Home world', exact=True).count(), 0)
+            card.get_by_text('Alice', exact=True).first.click()
+            description = card.get_by_label('Description', exact=True)
+            description.wait_for(timeout=5000)
+            original = description.input_value()
+            description.fill(original + ' deferred')
+            bar = page.get_by_role('region', name='Unsaved changes')
+            bar.wait_for(state='visible', timeout=5000)
+            card.locator('.q-item').first.click()
+            description.wait_for(state='hidden', timeout=5000)
+            card.locator('.q-item').first.click()
+            description.wait_for(state='visible', timeout=5000)
+            self.assertEqual(description.input_value(), original + ' deferred')
+            self.assertEqual(card.get_by_label('Description', exact=True).count(), 1)
+            self.assertTrue(bar.is_visible())
+            self.assertEqual(bar.get_by_text('Alice has unsaved changes.', exact=True).count(), 1)
+            bar.get_by_role('button', name='Reset', exact=True).click()
+            bar.wait_for(state='hidden', timeout=5000)
+            self.assertEqual(description.input_value(), original)
+            self.assertFalse(self.page_errors(page), errors)
+        finally:
+            context.close()
+
+    def test_ui51_deferred_body_saves_and_conflicts_on_fallback_avatar(self):
+        """UI-51: Save works on the deferred body; the fallback avatar editor keeps the tab-build revision, so a change made before the first expand is refused."""
+        from io import BytesIO
+        from PIL import Image
+        context, page, errors = self.ux_page('/admin/guild/1?tab=characters')
+        original = json.loads(self.alice_row()['card'])['description']
+        try:
+            page.get_by_role('tab', name='Characters', exact=True).click()
+            card = page.locator('.character-card').filter(has=page.get_by_text('Alice', exact=True)).first
+            card.wait_for()
+            self.post_hook('/_test/change-character', {'name': 'Alice', 'description': 'Changed before first expand'})
+            card.get_by_text('Alice', exact=True).first.click()
+            card.get_by_label('Description', exact=True).wait_for(timeout=5000)
+            card.get_by_text('Fallback static avatar', exact=True).click()
+            portrait = BytesIO()
+            Image.new('RGB', (50, 50), 'red').save(portrait, 'PNG')
+            before = self.alice_row()
+            card.locator('.fallback-avatar input[type=file]').set_input_files({'name': 'f.png', 'mimeType': 'image/png', 'buffer': portrait.getvalue()})
+            page.get_by_text('Character changed; reload before saving the fallback avatar', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.alice_row()['has_static_avatar'], before['has_static_avatar'])
+            self.assertFalse(self.page_errors(page), errors)
+        finally:
+            context.close()
+            self.restore_alice(original)
+        context, page, errors, card, description = self.open_alice()
+        try:
+            description.fill('Saved from deferred body')
+            bar = page.get_by_role('region', name='Unsaved changes')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            self.wait_for(lambda: json.loads(self.alice_row()['card'])['description'] == 'Saved from deferred body')
+            self.assertFalse(self.page_errors(page), errors)
+        finally:
+            context.close()
+            self.restore_alice(original)
+
+    def test_ui51_card_built_while_another_is_dirty_starts_disabled(self):
+        """UI-51: a card whose body is built while another editor is dirty has its fields disabled until Reset."""
+        context, page, errors, card, description = self.open_alice()
+        try:
+            page.get_by_role('tab', name='Characters', exact=True).click()
+            page.get_by_role('button', name='Create character', exact=True).click()
+            dialog = page.get_by_role('dialog')
+            dialog.get_by_label('Character name', exact=True).fill('UI51 other')
+            dialog.get_by_label('Home world', exact=True).click()
+            page.get_by_role('option', name='World', exact=True).click()
+            dialog.get_by_role('button', name='Create', exact=True).click()
+            self.wait_for(lambda: any(row['name'] == 'UI51 other' for row in self.state()['characters']))
+            card = page.locator('.character-card').filter(has=page.get_by_text('Alice', exact=True)).first
+            description = card.get_by_label('Description', exact=True)
+            if not description.is_visible():
+                card.get_by_text('Alice', exact=True).first.click()
+            description.wait_for(timeout=5000)
+            description.fill(description.input_value() + ' dirty')
+            bar = page.get_by_role('region', name='Unsaved changes')
+            bar.wait_for(state='visible', timeout=5000)
+            other = page.locator('.character-card').filter(has=page.get_by_text('UI51 other', exact=True)).first
+            other.get_by_text('UI51 other', exact=True).first.click()
+            other_description = other.get_by_label('Description', exact=True)
+            other_description.wait_for(timeout=5000)
+            self.assertTrue(other_description.is_disabled())
+            bar.get_by_role('button', name='Reset', exact=True).click()
+            bar.wait_for(state='hidden', timeout=5000)
+            self.wait_for(lambda: other_description.is_enabled())
+            self.open_more_item(page, other, 'UI51 other', 'Delete character')
+            page.get_by_role('button', name='Delete permanently', exact=True).click()
+            self.wait_for(lambda: not any(row['name'] == 'UI51 other' for row in self.state()['characters']))
+            self.assertFalse(self.page_errors(page), errors)
+        finally:
+            context.close()
+
     def test_savebar_reset_restores_fields_without_store_change(self):
         """MNT-21: Reset puts the field back, hides the bar, and makes no store call or audit row."""
         context, page, errors, card, description = self.open_alice()
