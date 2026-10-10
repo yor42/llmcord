@@ -32,6 +32,7 @@ The bot reads DB state fresh each turn, so dashboard edits apply on the next tur
 - **Verify before declaring a change done:** choose the level in the `verify` skill. Application/script/test changes require `scripts/verify.sh` — ruff, repo hygiene, compileall, offline unittest suite. Docs and Claude config changes require metadata/diff checks instead.
   - `scripts/verify.sh --browser` adds the Playwright dashboard suite (~2 min) — required when touching `web.py`, `auth.py`, `dashboard.py`, `scene_ui.py`, `lore_*`.
   - `scripts/verify.sh --bench` adds `scripts/bench_dashboard.py` — required when claiming a dashboard perf change.
+  - Every level also runs a Gitleaks secret scan when `$GITLEAKS` or `gitleaks` on PATH exists (CI always does); otherwise the summary shows SKIP.
 - Single test file: `.venv/bin/python -m unittest discover -s tests -p test_slash_commands.py -v`
 - Tests are stdlib `unittest` (not pytest). "expected failures" in output are documented known defects, not regressions.
 
