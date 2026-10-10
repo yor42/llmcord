@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
-from .games import blackjack
+from .games import blackjack, doubt
 from .models import TurnMessage
 from .usage import capture_usage, log_purpose, log_scope
 
@@ -77,3 +77,78 @@ async def ask(bot, guild_id, channel_id, character, snap, seat, legal) -> dict:
                                         TurnMessage("user", table_text(snap, seat, legal))])
     with bot.backend.pin(), capture_usage(guild_id, channel_id, "game"), log_scope(None), log_purpose("game"):
         return await bot.models.structured_compiled(ROLE, request, "blackjack_move", schema(legal))
+
+
+# --- I Doubt It (FEAT-21 B2): a seat's play or doubt decision; the prompt holds only that seat's own view ---
+
+DOUBT_SYSTEM = ("You are {name}, playing I Doubt It at a table in a roleplay server. Stay in character.\n"
+                "{persona}\n"
+                "Rules: on your turn you play 1 to 4 cards face down and claim they are all the rank to claim. You must "
+                "claim that rank but may bluff. Anyone may doubt the latest claim: if it was false the claimer takes the pile, "
+                "otherwise the doubter does. The first to empty their hand wins. Return only JSON.")
+RECENT = 5
+
+
+def _held(cards) -> dict:
+    counts = {}
+    for card in cards:
+        counts[card[0]] = counts.get(card[0], 0) + 1
+    return {rank: counts[rank] for rank in doubt.RANKS if rank in counts}
+
+
+def _cards(n: int) -> str:
+    return f"{n} card{'s' if n != 1 else ''}"
+
+
+def doubt_play_schema(view) -> dict:
+    held = _held(view.hand)
+    return {"type": "object", "properties": {rank: {"type": "integer", "enum": list(range(min(n, doubt.MAX_PLAY) + 1))} for rank, n in held.items()},
+            "required": list(held), "additionalProperties": False}
+
+
+def doubt_doubt_schema() -> dict:
+    return {"type": "object", "properties": {"doubt": {"type": "boolean"}}, "required": ["doubt"], "additionalProperties": False}
+
+
+def doubt_table_text(view, names, purpose) -> str:
+    lines = ["Your hand: " + ", ".join(f"{rank} x{n}" for rank, n in _held(view.hand).items()), f"Rank to claim: {view.rank}"]
+    for i, count in enumerate(view.counts):
+        if i != view.seat:
+            lines.append(f"{names[i]}: {_cards(count)}" + ("" if view.active[i] else " (out of the game)"))
+    lines.append(f"Pile: {_cards(view.pile)}")
+    for item in view.history[-RECENT:]:
+        if item.kind == "play":
+            lines.append(f"{names[item.seat]} claimed {item.count} {item.rank}")
+        else:
+            lines.append(f"{names[item.doubter]} doubted {names[item.claimer]}'s claim of {item.rank}: the cards were "
+                         + ", ".join(f"{rank}{suit}" for rank, suit in item.cards) + (" (a bluff)" if item.bluff else " (true)"))
+    w = view.window
+    if w is not None:
+        lines.append(f"The doubt window is open on {names[w.claimer]}'s claim.")
+    if purpose == "doubt" and w is not None:
+        lines.append(f"Claim to judge: {names[w.claimer]} claims {w.count} {w.rank}")
+        lines.append("From your hand this claim " + ("cannot be true." if doubt.impossible(view) else "could be true."))
+        lines.append("Decide whether to doubt it.")
+    else:
+        lines.append("Decide how many cards of each rank you hold to play.")
+    return "\n".join(lines)
+
+
+async def _ask_doubt(bot, guild_id, channel_id, character, view, names, purpose, name, schema):
+    request = SimpleNamespace(messages=[TurnMessage("system", DOUBT_SYSTEM.format(name=character["name"], persona=persona(character))),
+                                        TurnMessage("user", doubt_table_text(view, names, purpose))])
+    with bot.backend.pin(), capture_usage(guild_id, channel_id, "game"), log_scope(None), log_purpose("game"):
+        return await bot.models.structured_compiled(ROLE, request, name, schema)
+
+
+async def ask_doubt_play(bot, guild_id, channel_id, character, view, names) -> dict:
+    """One call on the seat's own view; returns the raw answer (the caller validates it). Raises on any failure."""
+    return await _ask_doubt(bot, guild_id, channel_id, character, view, names, "play", "doubt_play", doubt_play_schema(view))
+
+
+async def ask_doubt_doubt(bot, guild_id, channel_id, character, view, names) -> bool:
+    result = await _ask_doubt(bot, guild_id, channel_id, character, view, names, "doubt", "doubt_decision", doubt_doubt_schema())
+    answer = result.get("doubt") if isinstance(result, dict) else None
+    if not isinstance(answer, bool):
+        raise ValueError("doubt answer is not a boolean")
+    return answer

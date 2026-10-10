@@ -169,6 +169,8 @@ class DoubtCase(unittest.IsolatedAsyncioTestCase):
         for user in (ALICE, BOB, CARA, DAN):
             s.change_balance(G, user, 100, "start", 1)
         self.addCleanup(s.close)
+        s.set_game_character_talk(G, False)  # B1 tests pin the talk-off (policy only) behavior
+        self.bot.models.structured_compiled = mock.AsyncMock(side_effect=RuntimeError("no model in B1 tests"))  # and nothing reaches a real gateway
         if self.doubt is not None:
             for name in ("LOBBY_SECONDS", "WINDOW_SECONDS", "CHARACTER_SECONDS", "ARCHIVE_SECONDS", "BOARD_DEBOUNCE_SECONDS", "RETRY_SECONDS"):
                 setattr(self.doubt, name, 3600)

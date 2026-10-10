@@ -19,6 +19,7 @@ from types import SimpleNamespace
 import discord
 from discord import app_commands
 
+from . import game_chooser
 from .admin_store import ConflictError, GameError
 from .games import blackjack, doubt
 from .games_discord import MAX_BET, NO_CHARACTER_SEATS, NO_MENTIONS, NOT_SEATED, NOT_YOUR_TURN, OFF_HERE, STALE, GameTables, _sign
@@ -34,6 +35,7 @@ THREAD_FORBIDDEN = ("I couldn't open the table thread. I need the Create Public 
                     "permissions in this channel. The table was closed.")
 THREAD_FAILED = "Couldn't open the table thread; the table is closed."
 THREAD_NOT_READY = "The table thread isn't ready yet; try again in a moment."
+_STALE = object()  # the table moved on while a decision was made: drop it
 WORDS = {1: "one", 2: "two", 3: "three", 4: "four"}
 
 
@@ -136,6 +138,7 @@ class DoubtTables:
     BOARD_DEBOUNCE_SECONDS = 1
     RETRY_SECONDS = 5
     BUMP_AFTER = 8
+    MODEL_SECONDS = 20
 
     def __init__(self, bot, clock=time.time):
         self.bot, self.clock = bot, clock
@@ -146,6 +149,7 @@ class DoubtTables:
         self.dirty: set[tuple[int, int]] = set()
         self.board_tasks: dict[tuple[int, int], asyncio.Task] = {}
         self.closed = False
+        self.talk_failed: dict[tuple[int, object], int] = {}  # model attempts without a usage row, per (guild, server day)
 
     @property
     def store(self):
@@ -970,39 +974,197 @@ class DoubtTables:
                 return
         await self._publish(key, out)
 
+    def _talk_budget(self, guild_id) -> int:
+        """How many model calls the table-talk daily limit still allows (0 when character table talk is off). Failed attempts count like blackjack's."""
+        if not self.store.game_character_talk(guild_id):
+            return 0
+        marker = (guild_id, self.store._server_day(guild_id, time.time())[1])
+        if self.talk_failed.keys() - {marker}:
+            self.talk_failed = {m: n for m, n in self.talk_failed.items() if m == marker}
+        used = self.store.game_talk_calls_today(guild_id) + self.talk_failed.get(marker, 0)
+        return max(self.store.game_talk_daily_limit(guild_id) - used, 0)
+
+    def _note_failure(self, guild_id) -> None:
+        marker = (guild_id, self.store._server_day(guild_id, time.time())[1])
+        self.talk_failed[marker] = self.talk_failed.get(marker, 0) + 1
+
+    @staticmethod
+    def _names(snap) -> list:
+        """Display names by seat for a prompt: characters by name, members as Player 1, 2, ... in seat order (never member names or ids)."""
+        names, players = [], 0
+        for seat in snap["seats"]:
+            if seat["kind"] == "character":
+                names.append(seat["name"])
+            else:
+                players += 1
+                names.append(f"Player {players}")
+        return names
+
+    def _apply_chain(self, key, snap, tried):
+        """Under the table lock: the first move the store accepts (a refusal falls back to the next; the last resort frees the table).
+        None when the state moved on."""
+        for seat, move in tried:
+            try:
+                return self._apply(key, snap, seat, move, "character" if move != "forfeit" else "timeout")
+            except ConflictError:
+                return _STALE
+            except GameError as error:
+                logging.warning("I Doubt It character move refused (%s)", type(error).__name__)
+        return None
+
+    async def _apply_fresh(self, key, round_id, moves, tried):
+        """Applies only if the table is still at the move count the decision was made for; else _STALE (dropped silently)."""
+        async with self.lock(key):
+            snap = self._timer_snap(key, round_id, moves)
+            return _STALE if snap is None else self._apply_chain(key, snap, tried)
+
+    def _character(self, guild_id, seat):
+        character = self.store.character_by_id(seat["ref_id"])
+        return character if character is not None and character["guild_id"] == guild_id else None
+
     async def on_character_timer(self, guild_id, table_id, round_id, moves) -> None:
-        """Character seats first doubt an open claim (in seat order after the claimer), else the one on turn plays. Fallback policy only; no clock."""
+        """Character seats first doubt an open claim, else the one on turn plays. With character table talk on and the daily
+        limit not reached, those decisions are model calls on the seat's own view, made outside the table lock and applied
+        only if the table is still at the same move count; any failure falls back to the deterministic policy (no clock)."""
         key, out = (guild_id, table_id), None
         async with self.lock(key):
             snap = self._timer_snap(key, round_id, moves)
             if snap is None:
                 return
             view, seats = snap["view"], snap["seats"]
-            window, turn, n = view["window"], view["turn"], len(seats)
-            seed = lambda seat, kind: self.store.policy_seed(guild_id, round_id, f"{moves}/{seat}/{kind}")
-            tried = []
-            if window:
-                for k in range(1, n):
-                    i = (window["claimer"] + k) % n
-                    if seats[i]["kind"] == "character" and view["active"][i]:
-                        seen = self.store.seat_view(guild_id, round_id, i)
-                        if doubt.policy_doubt(seen, doubt.tendencies(seats[i]["ref_id"]), seed(i, "doubt")):
-                            tried = [(i, "doubt")]
-                            break
-            playable = turn is not None and seats[turn]["kind"] == "character" and not window
-            if not tried and playable:
-                seen = self.store.seat_view(guild_id, round_id, turn)
-                tried = [(turn, doubt.policy_play(seen, doubt.tendencies(seats[turn]["ref_id"]), seed(turn, "play"))),
-                         (turn, doubt.timeout_move_for_view(seen, seed(turn, "fallback"))), (turn, "forfeit")]
-            for seat, move in tried:  # the policy's move first; a refusal falls back, the last resort frees the table
-                try:
-                    out = self._apply(key, snap, seat, move, "character" if move != "forfeit" else "timeout")
-                    break
-                except ConflictError:
-                    return
-                except GameError as error:
-                    logging.warning("I Doubt It character move refused (%s)", type(error).__name__)
-        await self._publish(key, out)
+            window, turn = view["window"], view["turn"]
+            budget = self._talk_budget(guild_id)
+            if budget <= 0:
+                out = self._policy_step(key, snap)
+            elif window:
+                plan = self._doubt_plan(key, snap)
+            elif turn is not None and seats[turn]["kind"] == "character":
+                plan = self._play_plan(key, snap)
+            else:
+                return
+        if budget > 0:
+            out = await (self._decide_doubts(key, snap, plan, budget) if window else self._decide_play(key, snap, plan))
+        await self._publish(key, None if out is _STALE else out)
+
+    def _policy_step(self, key, snap):
+        """The fallback policy's step. Call under the table lock."""
+        guild_id, round_id, moves = key[0], snap["round_id"], snap["moves"]
+        view, seats = snap["view"], snap["seats"]
+        window, turn, n = view["window"], view["turn"], len(seats)
+        seed = lambda seat, kind: self.store.policy_seed(guild_id, round_id, f"{moves}/{seat}/{kind}")
+        tried = []
+        if window:
+            for k in range(1, n):
+                i = (window["claimer"] + k) % n
+                if seats[i]["kind"] == "character" and view["active"][i]:
+                    seen = self.store.seat_view(guild_id, round_id, i)
+                    if doubt.policy_doubt(seen, doubt.tendencies(seats[i]["ref_id"]), seed(i, "doubt")):
+                        tried = [(i, "doubt")]
+                        break
+        playable = turn is not None and seats[turn]["kind"] == "character" and not window
+        if not tried and playable:
+            seen = self.store.seat_view(guild_id, round_id, turn)
+            tried = [(turn, doubt.policy_play(seen, doubt.tendencies(seats[turn]["ref_id"]), seed(turn, "play"))),
+                     (turn, doubt.timeout_move_for_view(seen, seed(turn, "fallback"))), (turn, "forfeit")]
+        return self._apply_chain(key, snap, tried)
+
+    def _play_plan(self, key, snap):
+        """Under the lock: what the play decision needs, taken before the model call (the seat's own view only)."""
+        turn = snap["view"]["turn"]
+        return turn, self._character(key[0], snap["seats"][turn]), self.store.seat_view(key[0], snap["round_id"], turn), self._names(snap)
+
+    def _doubt_plan(self, key, snap):
+        """Under the lock: (seats that see an impossible claim, [(seat, character, own view, tendencies)] triage picked, names)."""
+        guild_id, view, seats = key[0], snap["view"], snap["seats"]
+        claimer, n, scored, seen_by = view["window"]["claimer"], len(seats), [], {}
+        for k in range(1, n):
+            i = (claimer + k) % n
+            if seats[i]["kind"] == "character" and view["active"][i]:
+                seen = seen_by[i] = self.store.seat_view(guild_id, snap["round_id"], i)
+                scored.append((i, doubt.suspicion(seen, doubt.tendencies(seats[i]["ref_id"])), doubt.impossible(seen)))
+        sure = [i for i, _, imp in scored if imp]
+        asked = [(i, self._character(guild_id, seats[i]), seen_by[i], doubt.tendencies(seats[i]["ref_id"])) for i in doubt.triage(scored, k=2) if i not in sure]
+        return sure, asked, self._names(snap)
+
+    @staticmethod
+    def _model_play(result, seen):
+        """The canonical play move for a valid model answer (every held rank, counts within what is held, 1 to 4 cards in all), else None."""
+        held = {}
+        for card in seen.hand:
+            held[card[0]] = held.get(card[0], 0) + 1
+        if not isinstance(result, dict) or set(result) != set(held):
+            return None
+        picks, total = [], 0
+        for rank in doubt.RANKS:
+            if rank in held:
+                n = result[rank]
+                if not isinstance(n, int) or isinstance(n, bool) or not 0 <= n <= held[rank]:
+                    return None
+                total += n
+                if n:
+                    picks.append(f"{rank}x{n}")
+        return "play:" + ",".join(picks) if 1 <= total <= doubt.MAX_PLAY else None
+
+    async def _decide_play(self, key, snap, plan):
+        guild_id, round_id, moves = key[0], snap["round_id"], snap["moves"]
+        turn, character, seen, names = plan
+        seed = lambda kind: self.store.policy_seed(guild_id, round_id, f"{moves}/{turn}/{kind}")
+        tried = []
+        if character is not None:
+            try:
+                result = await asyncio.wait_for(game_chooser.ask_doubt_play(self.bot, guild_id, snap["channel_id"], character, seen, names), self.MODEL_SECONDS)
+                move = self._model_play(result, seen)
+                if move is not None:
+                    tried.append((turn, move))
+            except asyncio.CancelledError:
+                self._note_failure(guild_id)  # an attempt that was cut short still counts toward the limit
+                raise
+            except Exception as error:
+                move = None
+                logging.warning("I Doubt It character play fell back to the policy (%s)", type(error).__name__)
+            if move is None:
+                self._note_failure(guild_id)
+        tried += [(turn, doubt.policy_play(seen, doubt.tendencies(snap["seats"][turn]["ref_id"]), seed("play"))),
+                  (turn, doubt.timeout_move_for_view(seen, seed("fallback"))), (turn, "forfeit")]
+        return await self._apply_fresh(key, round_id, moves, tried)
+
+    async def _doubt_one(self, key, snap, seat, character, seen, tend, names, bound) -> tuple:
+        """(seat, doubts?): the model's answer, else the policy's."""
+        guild_id = key[0]
+        try:
+            return seat, await asyncio.wait_for(game_chooser.ask_doubt_doubt(self.bot, guild_id, snap["channel_id"], character, seen, names), bound)
+        except asyncio.CancelledError:
+            self._note_failure(guild_id)  # a call dropped because another seat doubted first still counts toward the limit
+            raise
+        except Exception as error:
+            logging.warning("I Doubt It character doubt fell back to the policy (%s)", type(error).__name__)
+            self._note_failure(guild_id)
+        return seat, doubt.policy_doubt(seen, tend, self.store.policy_seed(guild_id, snap["round_id"], f"{snap['moves']}/{seat}/doubt"))
+
+    async def _decide_doubts(self, key, snap, plan, budget):
+        sure, asked, names = plan
+        round_id, moves = snap["round_id"], snap["moves"]
+        for seat in sure:  # a claim that cannot be true from the seat's own hand: doubt at once, no model call
+            out = await self._apply_fresh(key, round_id, moves, [(seat, "doubt")])
+            if out is _STALE:
+                return None
+            if out is not None:
+                return out
+        bound = min(self.MODEL_SECONDS, self.WINDOW_SECONDS - 3)
+        # Design: triaged seats without a character row, or beyond the remaining daily budget, simply pass (as do unselected seats).
+        asked = [item for item in asked if item[1] is not None] if bound > 0 else []
+        tasks = {asyncio.create_task(self._doubt_one(key, snap, seat, character, seen, tend, names, bound)) for seat, character, seen, tend in asked[:budget]}
+        try:
+            while tasks:
+                done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                for seat, yes in sorted(task.result() for task in done):
+                    if yes:  # the first yes wins; a later one finds the table moved on
+                        return await self._apply_fresh(key, round_id, moves, [(seat, "doubt")])
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+        return None
 
     async def closed_by_channel(self, guild_id, table_id) -> None:
         """Games were turned off in the table's channel (the store already closed and refunded it): stop the timers and say so in the lobby."""
