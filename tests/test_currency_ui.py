@@ -7,7 +7,7 @@ import httpx
 
 from llmcord_core.admin_store import ConflictError, CurrencyError
 from llmcord_core.avatars import AvatarPublisher
-from llmcord_core.currency_ui import CurrencyPanel, friendly, ledger_rows, member_label, parse_amount, parse_member_id, plain_mentions
+from llmcord_core.currency_ui import CurrencyPanel, friendly, save_daily, ledger_rows, member_label, parse_amount, parse_member_id, plain_mentions
 from llmcord_core.store import Store
 
 
@@ -139,6 +139,32 @@ class LookupTests(unittest.IsolatedAsyncioTestCase):
         await panel.lookup([8])
         await panel.lookup([8])
         self.assertEqual(asked, [[8]])
+
+
+class DailySaveTests(unittest.TestCase):
+    def setUp(self):
+        self.store = Store()
+        self.addCleanup(self.store.close)
+
+    def test_saves_whole_numbers_from_number_inputs(self):
+        before = self.store.daily_settings(1)
+        self.assertEqual(save_daily(self.store, 1, 25.0, 5, 3.0, before), {'amount': 25, 'streak_bonus': 5, 'streak_days': 3})
+        self.assertEqual(self.store.daily_settings(1), {'amount': 25, 'streak_bonus': 5, 'streak_days': 3})
+        self.assertEqual(self.store.daily_settings(2), before)
+
+    def test_a_stale_save_is_refused_and_does_not_write(self):
+        stale = self.store.daily_settings(1)
+        self.store.set_daily_settings(1, 9, 1, 2)
+        with self.assertRaises(ConflictError):
+            save_daily(self.store, 1, 25, 5, 3, stale)
+        self.assertEqual(self.store.daily_settings(1), {'amount': 9, 'streak_bonus': 1, 'streak_days': 2})
+
+    def test_blank_fractional_and_out_of_range_values_show_the_store_message(self):
+        before = self.store.daily_settings(1)
+        for bad in (None, 2.5, -1, 1_000_001):
+            with self.assertRaisesRegex(ValueError, 'whole number from 0 to'):
+                save_daily(self.store, 1, bad, 0, 7, before)
+        self.assertEqual(self.store.daily_settings(1), before)
 
 
 class CurrencyNameGuardTests(unittest.TestCase):

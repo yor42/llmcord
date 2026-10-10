@@ -204,6 +204,13 @@ def main():
         store.set_currency_name(1, (await request.json())['name'])
         return {}
 
+    @app.post('/_test/daily')
+    async def daily(request: Request):
+        # Simulates a change made elsewhere (/admin currency daily) while a dashboard page is open.
+        body = await request.json()
+        store.set_daily_settings(body.get('guild', 1), body['amount'], body['streak_bonus'], body['streak_days'])
+        return {}
+
     @app.get('/_test/state')
     async def snapshot():
         return {'spaces': [dict(r) for r in originals['list_spaces'](1)],
@@ -215,7 +222,7 @@ def main():
             'books': [dict(r) for r in store.all('SELECT * FROM lorebook_entries')],
             'presets': [dict(r) for r in store.list_presets(1)], 'active': store.active_preset(1)['id'],
             'active_bundle': store.active_preset(1)['bundle'], 'assets': [dict(r) for r in store.all('SELECT * FROM avatar_assets')],
-            'guild_timezone': store.guild_timezone(1), 'catchup_anywhere': store.catchup_anywhere(1), 'turn_log': store.turn_log_settings(1), 'audit': [dict(r) for r in store.all('SELECT * FROM admin_audit ORDER BY id')],
+            'daily': {g: store.daily_settings(g) for g in (1, 2)}, 'guild_timezone': store.guild_timezone(1), 'catchup_anywhere': store.catchup_anywhere(1), 'turn_log': store.turn_log_settings(1), 'audit': [dict(r) for r in store.all('SELECT * FROM admin_audit ORDER BY id')],
             'model_profiles': [dict(r) for r in store.model_profile_rows()], 'model_roles': dict(store.model_roles()),
             'slots': [{'character_id': r['character_id'], 'slot_key': r['slot_key'], 'label': r['label'], 'has_image': bool(r['image'])} for r in store.all('SELECT * FROM avatar_slots')]}
 

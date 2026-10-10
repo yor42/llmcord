@@ -3884,6 +3884,39 @@ class DashboardBrowserTests(unittest.TestCase):
             self.post_hook('/_test/currency-name', {'name': 'coins'})
             context.close()
 
+    def test_currency_daily_checkin_save_stale_conflict_and_guild_isolation(self):
+        """FEAT-18 B: the Daily check-in section saves through the save bar with its toast and audit row, shows the store's message for a bad value, refuses a save over settings changed elsewhere, and never touches guild 2."""
+        from playwright.sync_api import expect
+        other = self.state()['daily']['2']
+        context, page, errors = self.open_currency()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            amount, bonus, days = (page.get_by_label(label, exact=True) for label in ('Amount per check-in', 'Streak bonus per day', 'Streak bonus grows for up to (days)'))
+            page.get_by_text("Members claim with /daily once a day; the day ends at midnight in this server's timezone.", exact=False).wait_for(timeout=5000)
+            amount.fill('25')
+            bonus.fill('5')
+            days.fill('3')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Daily check-in saved', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['daily']['1'], {'amount': 25, 'streak_bonus': 5, 'streak_days': 3})
+            self.assertIn('currency.daily', self.audit_actions())
+            amount.fill('2000000')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The daily amount must be a whole number from 0 to 1,000,000.', exact=True).wait_for(timeout=5000)
+            amount.fill('40')
+            self.post_hook('/_test/daily', {'amount': 7, 'streak_bonus': 1, 'streak_days': 2})
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The daily check-in settings were changed elsewhere. Reload the page and try again.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['daily']['1'], {'amount': 7, 'streak_bonus': 1, 'streak_days': 2})
+            bar.get_by_role('button', name='Reload', exact=True).click()
+            bar.wait_for(state='hidden', timeout=5000)
+            expect(page.get_by_label('Amount per check-in', exact=True)).to_have_value('7')
+            self.assertEqual(self.state()['daily']['2'], other)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/daily', {'amount': 0, 'streak_bonus': 0, 'streak_days': 7})
+            context.close()
+
     def test_currency_member_lookup_failure_falls_back_to_ids_with_one_warning(self):
         """FEAT-17 B: when the Discord member lookup fails the tab shows 'Member ...NNNN' and warns once."""
         self.post_hook('/_test/fail-members', n=1)

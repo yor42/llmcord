@@ -35,6 +35,12 @@ def parse_amount(value):
     return int(value)
 
 
+def save_daily(store, gid, amount, streak_bonus, streak_days, expected):
+    """Save the daily check-in settings; blank or fractional input reaches the store as-is so its range message is shown."""
+    whole = lambda value: int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value == int(value) else value
+    return store.set_daily_settings(gid, whole(amount), whole(streak_bonus), whole(streak_days), expected)
+
+
 def member_label(names, user_id):
     return names.get(user_id) or f'Member …{str(user_id)[-4:]}'
 
@@ -104,6 +110,18 @@ class CurrencyPanel:
                 return saved['name']
             ctx.savebar.track('Currency name', {name: saved['name']}, save=save_name, action='currency.name',
                               detail=lambda result: {'name': result}, success='Currency name saved')
+        with section('Daily check-in'):
+            daily = store.daily_settings(gid)
+            with ui.element('div').classes('ll-form-row ll-field-row'):
+                fields = [ui.number(label, value=daily[key], min=0, precision=0, format='%d') for label, key in
+                          (('Amount per check-in', 'amount'), ('Streak bonus per day', 'streak_bonus'), ('Streak bonus grows for up to (days)', 'streak_days'))]
+            ui.label("Members claim with /daily once a day; the day ends at midnight in this server's timezone. Set the amount to 0 to turn check-ins off. A missed day starts the streak again.").classes('ll-muted')
+            def save_daily_settings():
+                nonlocal daily
+                daily = save_daily(store, gid, *(f.value for f in fields), daily)
+                return daily
+            ctx.savebar.track('Daily check-in', {f: daily[key] for f, key in zip(fields, daily)}, save=save_daily_settings, action='currency.daily',
+                              detail=lambda result: dict(result), success='Daily check-in saved')
         with section('Balances'):
             self.balances_body = ui.column().classes('w-full gap-2')
         with section('Give or take currency'):
