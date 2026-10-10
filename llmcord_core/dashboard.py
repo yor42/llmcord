@@ -37,6 +37,10 @@ from .savebar import SaveBar
 from .scene_ui import confirm_dialog, delete_book_dialog, delete_space_dialog, direct_import_dialog, guideline_editor
 
 
+_BUSY = 'The database is busy. Try again.'
+_UNEXPECTED = 'Something went wrong. Try again.'
+
+
 class OperatorContext:
     """Live context for the /operator page: every action re-checks the operator allowlist (AdminService.run_operator)."""
     def __init__(self, app, request):
@@ -50,6 +54,14 @@ class OperatorContext:
             return True, await self.service.run_operator(self.ident, operation, action, detail)
         except (ValueError, HTTPException) as error:
             ui.notify(error.detail if isinstance(error, HTTPException) else str(error), type='negative', timeout=8000)
+            return False, error
+        except sqlite3.OperationalError as error:
+            logging.warning('Operator action hit a database error', exc_info=True)
+            ui.notify(_BUSY, type='negative', timeout=8000)
+            return False, error
+        except Exception as error:
+            logging.exception('Operator action failed')
+            ui.notify(_UNEXPECTED, type='negative', timeout=8000)
             return False, error
 
     async def read(self, operation):
@@ -607,6 +619,14 @@ class LiveContext:
         except (ValueError, HTTPException, sqlite3.IntegrityError, TypeError, KeyError) as error:
             message = error.detail if isinstance(error, HTTPException) else 'This name already exists' if isinstance(error, sqlite3.IntegrityError) else 'Choose valid values for all required fields' if isinstance(error, (TypeError, KeyError)) else str(error)
             ui.notify(message, type='negative', timeout=8000)
+            return AttemptFailed((False, None), error)
+        except sqlite3.OperationalError as error:
+            logging.warning('Admin action hit a database error', exc_info=True)
+            ui.notify(_BUSY, type='negative', timeout=8000)
+            return AttemptFailed((False, None), error)
+        except Exception as error:
+            logging.exception('Admin action failed')
+            ui.notify(_UNEXPECTED, type='negative', timeout=8000)
             return AttemptFailed((False, None), error)
 
     def button(self, text, operation, action=None, detail=None, then=None, success=None, prepare=None, **kwargs):

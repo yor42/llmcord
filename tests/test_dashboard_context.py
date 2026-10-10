@@ -1,4 +1,5 @@
 """UX-01: LiveContext.button tells a successful operation that returns None apart from a failed one."""
+import sqlite3
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -6,12 +7,15 @@ from unittest import mock
 import httpx
 from fastapi import HTTPException
 
-from llmcord_core.dashboard import LiveContext
+from llmcord_core.dashboard import LiveContext, OperatorContext
 
 
 class FakeService:
     def __init__(self, outcome):
         self.store, self.outcome = object(), outcome
+
+    async def run_operator(self, ident, operation, action=None, detail=None):
+        return await self.run(ident, 0, operation, action, detail)
 
     async def run(self, ident, guild_id, operation, action=None, detail=None):
         if isinstance(self.outcome, Exception):
@@ -61,6 +65,37 @@ class ButtonOutcomeTests(unittest.IsolatedAsyncioTestCase):
             ctx = LiveContext(app, SimpleNamespace(cookies={}, query_params={}), 1, {'csrf': 'x'})
             with mock.patch('nicegui.ui.notify'):
                 self.assertEqual(await ctx.run(lambda: None), expected)
+
+
+class UnexpectedErrorTests(unittest.IsolatedAsyncioTestCase):
+    """MNT-30: _attempt never lets an unexpected error escape the event handler; it toasts, logs and reports failure."""
+    async def attempt(self, error, operator):
+        app = SimpleNamespace(state=SimpleNamespace(admin=FakeService(error)))
+        request = SimpleNamespace(cookies={}, query_params={})
+        ctx = OperatorContext(app, request) if operator else LiveContext(app, request, 1, {'csrf': 'x'})
+        notes = []
+        with mock.patch('nicegui.ui.notify', lambda message, **kwargs: notes.append((message, kwargs.get('type')))), \
+                self.assertLogs(level='WARNING') as logs:
+            outcome = await ctx._attempt(lambda: None, 'x.y')
+        return outcome, notes, logs.output
+
+    async def test_busy_database_is_toasted_and_logged(self):
+        for operator in (False, True):
+            error = sqlite3.OperationalError('database is locked')
+            outcome, notes, logs = await self.attempt(error, operator)
+            self.assertEqual(tuple(outcome), (False, None) if not operator else (False, error))
+            self.assertIs(getattr(outcome, 'error', error), error)
+            self.assertEqual(notes, [('The database is busy. Try again.', 'negative')])
+            self.assertIn('hit a database error', logs[0])
+
+    async def test_unexpected_error_is_toasted_and_logged(self):
+        for operator in (False, True):
+            error = RuntimeError('boom')
+            outcome, notes, logs = await self.attempt(error, operator)
+            self.assertFalse(outcome[0])
+            self.assertIs(getattr(outcome, 'error', error), error)
+            self.assertEqual(notes, [('Something went wrong. Try again.', 'negative')])
+            self.assertIn('action failed', logs[0])
 
 
 class ChannelNamesTests(unittest.IsolatedAsyncioTestCase):

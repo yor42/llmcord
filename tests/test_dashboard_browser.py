@@ -81,8 +81,8 @@ class DashboardBrowserTests(unittest.TestCase):
 
     def tearDown(self):
         if any(test is self for test, _ in self._outcome.result.failures + self._outcome.result.errors):
-            artifacts = Path(__file__).resolve().parents[1] / '.test-artifacts'
-            artifacts.mkdir(exist_ok=True)
+            artifacts = Path(__file__).resolve().parents[1] / '.test-artifacts' / self.id()  # MNT-30: one folder per failing test
+            artifacts.mkdir(parents=True, exist_ok=True)
             self.page.screenshot(path=str(artifacts / 'failure.png'))
             (artifacts / 'server.log').write_text((Path(self.temp.name) / 'server.log').read_text(encoding='utf-8', errors='replace'))
             (artifacts / 'browser-errors.json').write_text(json.dumps(self.errors, indent=2))
@@ -2545,6 +2545,38 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertFalse(errors, (errors, getattr(page, 'network', [])))
         finally:
             context.close()
+
+    def check_audit_failure(self, kind, toast):
+        """MNT-30: a save whose audit write fails afterwards ends consistently: toast, bar still dirty, Save enabled, nothing unhandled in server.log."""
+        active_before = self.state()['active']
+        context, page, errors = self.ux_page('/admin/guild/1?tab=prompts')
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            save = bar.get_by_role('button', name='Save draft', exact=True)
+            page.locator('.ll-subtitle').filter(has_text='Active preset:').first.wait_for(timeout=30000)  # the tab is built
+            page.get_by_label('Preset name', exact=True).fill(f'MNT30 audit failure {kind}')
+            bar.wait_for(timeout=30000)
+            self.post_hook('/_test/fail-next-audit', n=1, kind=kind)
+            save.click()
+            page.get_by_text(toast, exact=True).wait_for(timeout=10000)
+            self.assertTrue(bar.is_visible())
+            self.wait_for(lambda: save.is_enabled(), self.SLOW_SERVER_POLLS)
+            log = (Path(self.temp.name) / 'server.log').read_text(encoding='utf-8', errors='replace')
+            self.assertNotIn('ERROR:nicegui', log)
+            self.assertNotIn('Task exception was never retrieved', log)
+            self.assertIn('Admin action failed' if kind == 'bug' else 'Admin action hit a database error', log)
+        finally:
+            self.post_hook('/_test/fail-next-audit', n=0)
+            context.close()
+            self.context.request.post(self.url + '/_test/cleanup-presets', params={'prefix': 'MNT30 ', 'active': active_before})
+
+    def test_save_with_a_busy_audit_write_ends_with_a_toast_and_a_dirty_bar(self):
+        """MNT-30: sqlite3.OperationalError from the audit write is toasted as busy; the bar stays dirty with Save enabled."""
+        self.check_audit_failure('busy', 'The database is busy. Try again.')
+
+    def test_save_with_an_unexpected_error_ends_with_a_toast_and_a_dirty_bar(self):
+        """MNT-30: any other unexpected error is toasted generically, logged, and never escapes the handler; the bar stays dirty with Save enabled."""
+        self.check_audit_failure('bug', 'Something went wrong. Try again.')
 
     def test_preset_save_as_new_proposes_a_copy_name_and_save_draft_refreshes_subtitle(self):
         """UI-41: Save as new preset with an unchanged name saves '<name> copy' (then 'copy 2'); Save draft on the active preset refreshes the

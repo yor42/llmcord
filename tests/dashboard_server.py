@@ -2,6 +2,7 @@
 import asyncio
 import json
 import os
+import sqlite3
 import tempfile
 import time
 from collections import Counter
@@ -164,6 +165,18 @@ def main():
             raise ValueError('Fixture timezone failure')
         return original_set_guild_timezone(*args, **kwargs)
     store.set_guild_timezone = failing_set_guild_timezone
+
+    # MNT-30: lets a test make the next audit write fail after the operation committed (/_test/fail-next-audit): 'busy' or 'bug'.
+    audit_hooks = {'fail': 0, 'kind': 'busy'}
+    original_audit = store.audit
+    def failing_audit(*args, **kwargs):
+        if audit_hooks['fail']:
+            audit_hooks['fail'] -= 1
+            if audit_hooks['kind'] == 'busy':
+                raise sqlite3.OperationalError('database is locked')
+            raise RuntimeError('Fixture audit bug')
+        return original_audit(*args, **kwargs)
+    store.audit = failing_audit
 
     @app.get('/_test/state')
     async def snapshot():
@@ -381,6 +394,12 @@ def main():
     async def fail_timezone(n: int = 1):
         # MNT-29: the next `n` server timezone saves raise ValueError (shown as an error toast).
         timezone_hooks['fail'] = n
+        return {'ok': True}
+
+    @app.post('/_test/fail-next-audit')
+    async def fail_next_audit(n: int = 1, kind: str = 'busy'):
+        # MNT-30: the next `n` audit writes raise sqlite3.OperationalError ('busy') or RuntimeError ('bug').
+        audit_hooks.update(fail=n, kind=kind)
         return {'ok': True}
 
     @app.post('/_test/backend-profile')
