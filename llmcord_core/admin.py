@@ -3,7 +3,10 @@ from __future__ import annotations
 
 import inspect
 import json
+import logging
+import sqlite3
 import time
+import traceback
 
 from .avatars import AvatarPublisher
 from .backend import effective_backend
@@ -12,6 +15,7 @@ from .prompts import compile_prompt, time_values
 
 PURPOSE_ROLES = {'dialogue': 'dialogue', 'director': 'director', 'extraction': 'memory', 'summary': 'memory', 'images': 'dialogue'}
 OPERATOR_AUDIT_GUILD = 0  # no Discord snowflake is 0; operator actions have no server
+log = logging.getLogger(__name__)
 
 
 class AdminService:
@@ -57,9 +61,7 @@ class AdminService:
         if inspect.isawaitable(result):
             result = await result
         if action:
-            if callable(detail):  # detail may be derived from the operation result
-                detail = detail(result)
-            self.store.audit(guild_id, int(session['user']['id']), action, detail or {})
+            self._audit(guild_id, int(session['user']['id']), action, detail, result)
         return result
 
     async def run_operator(self, ident, operation, action=None, detail=None):
@@ -70,10 +72,24 @@ class AdminService:
         if inspect.isawaitable(result):
             result = await result
         if action:
-            if callable(detail):
-                detail = detail(result)
-            self.store.audit(OPERATOR_AUDIT_GUILD, int(session['user']['id']), action, detail or {})
+            self._audit(OPERATOR_AUDIT_GUILD, int(session['user']['id']), action, detail, result)
         return result
+
+    def _audit(self, guild_id, actor_id, action, detail, result):
+        # MNT-38: the operation has committed, so a failing audit must not report it as failed (a retry would conflict or duplicate).
+        # Logged without the detail or exception messages: they may hold user text. Detail-building errors and the write's sqlite3.Error are absorbed.
+        try:
+            if callable(detail):  # detail may be derived from the operation result
+                detail = detail(result)
+            json.dumps(detail or {})  # store.audit serializes; a failure here must not fail the committed action either
+        except Exception as error:
+            log.error('Audit detail failed after a committed admin action; auditing without it (action=%s guild=%s actor=%s error=%s)\n%s',
+                action, guild_id, actor_id, type(error).__name__, ''.join(traceback.format_tb(error.__traceback__)))
+            detail = {'detail_error': True}
+        try:
+            self.store.audit(guild_id, actor_id, action, detail or {})
+        except sqlite3.Error:
+            log.warning('Audit write failed after a committed admin action (action=%s guild=%s actor=%s)', action, guild_id, actor_id, exc_info=True)
 
     def owners(self, guild_id, channel_names=None, thread_names=None):
         store = self.store

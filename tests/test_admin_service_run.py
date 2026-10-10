@@ -6,6 +6,7 @@ authorized action runs and is audited. Assertions are on observable behavior onl
 status, audit rows), never on the arguments passed to ``guard``.
 """
 import json
+import sqlite3
 import unittest
 from collections import Counter
 
@@ -76,6 +77,56 @@ class AdminServiceRunTests(unittest.IsolatedAsyncioTestCase):
             await run_action(self.service, self.session, 1, boom, "x.y", lambda result: called.append(result) or {})
         self.assertEqual(called, [])
         self.assertEqual(self.audit_rows(), [])
+
+    async def test_audit_write_failure_after_commit_still_returns_the_result_and_logs_a_warning(self):
+        """MNT-38: a sqlite3 error from the audit write does not fail a committed action; it logs a warning with action/guild/actor and no detail."""
+        def locked(*args, **kwargs):
+            raise sqlite3.OperationalError("database is locked")
+        self.store.audit = locked
+        with self.assertLogs("llmcord_core.admin", "WARNING") as logs:
+            result = await run_action(self.service, self.session, 1, self.operation, "space.create", {"name": "SECRET-TEXT"})
+        self.assertEqual((result, self.ran), ("done", [True]))
+        text = "\n".join(logs.output)
+        self.assertIn("action=space.create guild=1 actor=4", text)
+        self.assertNotIn("SECRET-TEXT", text)
+        self.assertIsNotNone(logs.records[0].exc_info)
+
+    async def test_operator_audit_write_failure_after_commit_still_returns_the_result(self):
+        """MNT-38: the operator path absorbs an audit write failure the same way."""
+        self.app.state.auth.guard_operator = lambda ident: self.app.state.auth.guard(ident, 1)
+        def locked(*args, **kwargs):
+            raise sqlite3.OperationalError("database is locked")
+        self.store.audit = locked
+        with self.assertLogs("llmcord_core.admin", "WARNING"):
+            self.assertEqual(await self.service.run_operator(self.session, self.operation, "op.x", {"a": 1}), "done")
+
+    async def test_failing_detail_callable_after_commit_audits_with_an_error_marker(self):
+        """MNT-38: a detail callable that raises does not fail the committed action; ERROR names action/guild/actor but not the message; the row is marked."""
+        def bad(result):
+            raise KeyError("SECRET" + "-TEXT")  # built at runtime: the traceback echoes source lines
+        with self.assertLogs("llmcord_core.admin", "ERROR") as logs:
+            self.assertEqual(await run_action(self.service, self.session, 1, self.operation, "x.y", bad), "done")
+        text = "\n".join(logs.output)
+        self.assertIn("action=x.y guild=1 actor=4", text)
+        self.assertIn("KeyError", text)
+        self.assertNotIn("SECRET-TEXT", text)
+        self.assertEqual([(r["action"], json.loads(r["detail_json"])) for r in self.audit_rows()], [("x.y", {"detail_error": True})])
+
+    async def test_non_serializable_detail_after_commit_audits_with_an_error_marker(self):
+        """MNT-38: a detail that json cannot encode is treated like a failing callable, whether static or derived."""
+        for detail in ({"v": {1, 2}}, lambda result: {"v": object()}):
+            with self.assertLogs("llmcord_core.admin", "ERROR") as logs:
+                self.assertEqual(await run_action(self.service, self.session, 1, self.operation, "x.y", detail), "done")
+            self.assertIn("TypeError", "\n".join(logs.output))
+        self.assertEqual([json.loads(r["detail_json"]) for r in self.audit_rows()], [{"detail_error": True}] * 2)
+
+    async def test_non_sqlite_audit_error_still_propagates(self):
+        """MNT-38: only sqlite3 errors are absorbed; a bug in the audit path still surfaces."""
+        def bug(*args, **kwargs):
+            raise RuntimeError("bug")
+        self.store.audit = bug
+        with self.assertRaises(RuntimeError):
+            await run_action(self.service, self.session, 1, self.operation, "x.y", {})
 
     async def test_async_operation_is_awaited_and_unaudited_without_action(self):
         """SEC-03: an awaitable operation is awaited; no action name means no audit row."""
