@@ -206,3 +206,25 @@ Reading:
   - Resolving the `filter(has_text=…)` locator the first time costs 0.2–0.3 s.
   - A click right after another click waits for the previous animation.
   - Whether the 0.06 → 0.31 s change at the end of R5 comes from the dashboard or from Playwright is still open. See UI-48.
+
+## 2026-10-10: UI-48 (character expand attributed)
+
+`scripts/bench_dashboard.py` keeps the **Expand one character** row unchanged and adds **expand one character (split)**. That row collapses the card, waits 1 s, then clicks it from inside the page and times each step with `performance.now()`; its own ready time includes the 1 s wait, so do not compare it with the other row. An init script logs socket frames and long tasks. One run per profile, same host and seed (`10,500`). Times are milliseconds after the click.
+
+| Step | `latency` | `ratelimited` |
+| --- | --- | --- |
+| Locator resolve (before the click) | 35 | 26 |
+| Socket message sent | 0.3 | 0.3 |
+| 440-byte update received by the page | 2.5 | 2.4 |
+| Main-thread long task (start → end) | 2 → 179 | 2 → 186 |
+| First DOM change | 169 | 176 |
+| Height starts changing | 289 | 307 |
+| Animation stable | 589 | 591 |
+
+Reading:
+- The 155–175 ms "delivery gap" from UI-10 is not delivery. The page has the update after about 2 ms over a single websocket (no long-polling); NiceGUI's outbox sends on an event, not on a timer.
+- The browser then spends 160–235 ms (varies by run) in one main-thread task handling that update; nothing reaches the DOM until it ends. A CPU profile puts most of it under Vue's render/patch frames (about 210 ms inclusive, profiler-inflated), which fits the expanded card building its 7 text areas, select and checkbox only on expand; the split between Vue component setup and native DOM/style work was not measured. Stubbing out the Tailwind runtime did not shorten it (174 ms).
+- The bench clicks from inside the page, skipping Playwright's actionability waits; UI-10's 155–175 ms figure was measured at the first DOM change, so it was this task, not delivery.
+- After that comes the 300 ms Quasar expand animation. The Tailwind runtime runs during the animation, but blocking it saved only about 20 ms.
+- Not split further: native DOM, style and component setup inside the long task (about 340 ms of `(program)` samples, inflated by the profiler).
+- A lighter card body at expand time could save up to about 170 ms; see UI-51.

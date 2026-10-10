@@ -33,6 +33,64 @@ PROFILES = {
 }
 
 
+# Records every socket frame (direction, size, performance.now()) and which transport carries them.
+WS_PROBE = """
+window.__frames = [];
+window.__transports = [];
+const NativeWS = window.WebSocket;
+window.WebSocket = function(...args) {
+  const ws = new NativeWS(...args);
+  window.__transports.push('websocket ' + String(args[0]).split('?')[0]);
+  ws.addEventListener('message', e => window.__frames.push({d: 'in', t: performance.now(), n: String(e.data).length}));
+  const send = ws.send.bind(ws);
+  ws.send = data => { window.__frames.push({d: 'out', t: performance.now(), n: String(data).length}); return send(data); };
+  return ws;
+};
+window.WebSocket.prototype = NativeWS.prototype;
+Object.assign(window.WebSocket, {CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3});
+const NativeOpen = XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open = function(m, u, ...r) {
+  if (String(u).includes('socket.io')) window.__transports.push('xhr ' + m);
+  return NativeOpen.call(this, m, u, ...r);
+};
+"""
+
+# Clicks in the page so the timestamps share one clock with the frame log, then waits for the expand to finish.
+EXPAND_PROBE = """async (el) => {
+  const frames = window.__frames, mark = frames.length;
+  const t0 = performance.now();
+  const longTasks = [], mutations = [], ticks = [];
+  const po = new PerformanceObserver(list => list.getEntries().forEach(e => longTasks.push([Math.round(e.startTime - t0), Math.round(e.duration)])));
+  try { po.observe({entryTypes: ['longtask']}); } catch (e) {}
+  const mo = new MutationObserver(() => mutations.push(Math.round(performance.now() - t0)));
+  mo.observe(el, {childList: true, subtree: true, attributes: true});
+  (el.querySelector('.q-item') || el).click();
+  const t1 = performance.now();
+  const initial = el.getBoundingClientRect().height;
+  let last = initial, changedAt = null, stableSince = t1, end = t1;
+  await new Promise(resolve => {
+    const tick = () => {
+      const now = performance.now(), height = el.getBoundingClientRect().height;
+      ticks.push(Math.round(now - t0));
+      if (height !== last) { last = height; stableSince = now; if (changedAt === null) changedAt = now; }
+      if ((changedAt !== null && now - stableSince > 100) || now - t0 > 3000) { end = stableSince; resolve(); } else requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  po.takeRecords().forEach(e => longTasks.push([Math.round(e.startTime - t0), Math.round(e.duration)]));
+  mo.takeRecords().forEach(() => mutations.push(Math.round(performance.now() - t0)));
+  po.disconnect(); mo.disconnect();
+  const mine = frames.slice(mark);
+  const out = mine.find(f => f.d === 'out'), back = mine.find(f => f.d === 'in' && out && f.t >= out.t);
+  const rel = f => f ? Math.round((f.t - t0) * 10) / 10 : null;
+  return {click_call_ms: t1 - t0, send_ms: rel(out), reply_ms: rel(back), first_mutation_ms: mutations[0] ?? null,
+          mutation_count: mutations.length,
+          height_change_ms: changedAt === null ? null : changedAt - t0, animation_end_ms: end - t0,
+          frame_ticks_ms: ticks.slice(0, 8), long_tasks: longTasks.slice(0, 8), frames: mine.map(f => [f.d, rel(f), f.n]),
+          transports: window.__transports};
+}"""
+
+
 def start_server(folder: Path, env_extra: dict) -> tuple[subprocess.Popen, str]:
     import trustme
     cert = trustme.CA().issue_cert('localhost')
@@ -76,15 +134,21 @@ def run_profile(name: str, seed: str) -> list[dict]:
                     last, changed = current, time.monotonic()
             return last, changed - started
 
+        expand_detail = {}
+
         def measure(scenario, action):
             http.post('/_test/metrics/reset')
             started = time.monotonic()
             action()
             ready = time.monotonic() - started
             calls, settled = settle(started)
-            results.append({'profile': name, 'scenario': scenario, 'ready_s': round(ready, 2),
-                            'settled_s': round(max(settled, ready), 2), 'discord_calls': calls,
-                            'user_guild_checks': calls.get('GET /users/@me/guilds', 0)})
+            row = {'profile': name, 'scenario': scenario, 'ready_s': round(ready, 2),
+                   'settled_s': round(max(settled, ready), 2), 'discord_calls': calls,
+                   'user_guild_checks': calls.get('GET /users/@me/guilds', 0)}
+            if expand_detail:
+                row['parts'] = {k: (round(v, 1) if isinstance(v, float) else v) for k, v in expand_detail.items()}
+                expand_detail.clear()
+            results.append(row)
 
         try:
             with sync_playwright() as playwright:
@@ -92,6 +156,7 @@ def run_profile(name: str, seed: str) -> list[dict]:
                 context = browser.new_context(ignore_https_errors=True, viewport={'width': 1400, 'height': 1000})
                 context.add_cookies([{'name': 'llmcord_session', 'value': 'browser-test-session', 'url': url,
                                       'secure': True, 'httpOnly': True, 'sameSite': 'Lax'}])
+                context.add_init_script(WS_PROBE)
                 page = context.new_page()
 
                 def cold_load():
@@ -108,6 +173,21 @@ def run_profile(name: str, seed: str) -> list[dict]:
                     page.locator('.character-card').filter(has_text='Bench 000').first.click()
                     page.wait_for_load_state('networkidle')
                 measure('expand one character', expand_character)
+
+                def expand_parts():
+                    # Same click sequence as above, split into locator / click-to-reply / animation parts.
+                    page.get_by_text('Bench 000').first.click()  # collapse the previous card first
+                    page.wait_for_timeout(1000)
+                    started = time.perf_counter()
+                    card = page.locator('.character-card').filter(has_text='Bench 001').first
+                    handle = card.element_handle()
+                    resolved = time.perf_counter() - started
+                    probe = handle.evaluate(EXPAND_PROBE)
+                    waited = time.perf_counter()
+                    page.wait_for_load_state('networkidle')
+                    probe.update(locator_ms=resolved * 1000, networkidle_ms=(time.perf_counter() - waited) * 1000)
+                    expand_detail.update(probe)
+                measure('expand one character (split)', expand_parts)
 
                 def lore_panel_build():
                     page.get_by_role('tab', name='Lore').click()
