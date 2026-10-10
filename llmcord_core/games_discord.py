@@ -134,7 +134,6 @@ class GameTables:
         self.runtime = TableRuntime(label="Blackjack", retry_seconds=self.RETRY_SECONDS)
         self.senders: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
         self.tables: dict[tuple[int, int], _Table] = {}
-        self.sweeper: asyncio.Task | None = None
         self.talk_capped: set[tuple[int, object]] = set()
         self.talk_failed: dict[tuple[int, object], int] = {}  # attempts without a usage row, per (guild, server day)
 
@@ -145,6 +144,10 @@ class GameTables:
     @property
     def closed(self) -> bool:
         return self.runtime.closed
+
+    @property
+    def sweeper(self) -> asyncio.Task | None:
+        return self.runtime.sweeper
 
     def sender(self, key) -> _Sender:
         sender = self.senders.get(key)
@@ -179,12 +182,8 @@ class GameTables:
         self.runtime.disarm(key, self.SLOT)
 
     async def close(self) -> None:
-        sweeper, self.sweeper = self.sweeper, None
-        if sweeper is not None:
-            sweeper.cancel()
         await self.runtime.close()
-        if sweeper is not None:
-            await asyncio.gather(sweeper, return_exceptions=True)
+        self.runtime.sweeper = None
 
     def _after(self, key, snap) -> None:
         """Arms the timer the new state needs. Call under the table lock."""
@@ -210,26 +209,8 @@ class GameTables:
     # --- dashboard closes (no IPC: the dashboard closes tables in the shared database) -------
 
     def _ensure_sweeper(self) -> None:
-        if self.closed or not self.tables or (self.sweeper is not None and not self.sweeper.done()):
-            return
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return
-        self.sweeper = asyncio.create_task(self._sweep_loop(), name="blackjack-sweep")
-
-    async def _sweep_loop(self) -> None:
-        while True:
-            await asyncio.sleep(self.SWEEP_SECONDS)
-            if not self.tables:  # nothing in memory: stay idle until a table appears
-                self.sweeper = None
-                return
-            try:
-                await self.sweep()
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                logging.exception("Blackjack table sweep failed")
+        if self.tables:
+            self.runtime.ensure_sweeper(interval=lambda: self.SWEEP_SECONDS, held=lambda: bool(self.tables), sweep=self.sweep, name="blackjack-sweep")
 
     async def sweep(self) -> None:
         """Cleans up tables the dashboard closed in the store while the bot still holds them in memory."""

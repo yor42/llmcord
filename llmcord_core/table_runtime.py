@@ -14,6 +14,7 @@ class TableRuntime:
         self.label, self.sleep, self.retry_seconds = label, sleep, retry_seconds
         self.closed = False
         self.timers: dict[tuple, asyncio.Task] = {}
+        self.sweeper: asyncio.Task | None = None
         self.locks: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
 
     async def _sleep(self, seconds) -> None:
@@ -58,9 +59,34 @@ class TableRuntime:
                     if not self.current(key, kind):
                         return
 
+    def ensure_sweeper(self, *, interval, held, sweep, name: str) -> None:
+        """Starts the periodic sweep unless closed, already running or without a loop. It ends itself once ``held()`` is false."""
+        if self.closed or (self.sweeper is not None and not self.sweeper.done()):
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self.sweeper = asyncio.create_task(self._sweep_loop(interval, held, sweep), name=name)
+
+    async def _sweep_loop(self, interval, held, sweep) -> None:
+        while True:
+            await self._sleep(interval())
+            if not held():  # nothing in memory: stay idle until the adapter starts a sweeper again
+                self.sweeper = None
+                return
+            try:
+                await sweep()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logging.exception("%s table sweep failed", self.label)
+
     async def close(self) -> None:
         self.closed = True
         tasks = list(self.timers.values())
+        if self.sweeper is not None:
+            tasks.append(self.sweeper)
         self.timers.clear()
         for task in tasks:
             task.cancel()

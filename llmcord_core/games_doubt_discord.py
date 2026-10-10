@@ -157,7 +157,6 @@ class DoubtTables:
         self.event_tasks: set[asyncio.Task] = set()
         self.dirty: set[tuple[int, int]] = set()
         self.board_tasks: dict[tuple[int, int], asyncio.Task] = {}
-        self.sweeper: asyncio.Task | None = None
         self.ended: set[tuple[int, int]] = set()  # tables this object closed itself (settled, timed out, left): the sweeper leaves them alone
         self.talk_failed: dict[tuple[int, object], int] = {}  # model attempts without a usage row, per (guild, server day)
 
@@ -168,6 +167,10 @@ class DoubtTables:
     @property
     def closed(self) -> bool:
         return self.runtime.closed
+
+    @property
+    def sweeper(self) -> asyncio.Task | None:
+        return self.runtime.sweeper
 
     def table(self, key) -> _Table:
         table = self.tables.get(key)
@@ -190,7 +193,7 @@ class DoubtTables:
             await self._reap(key)  # the hook may have found the table closed from outside
 
     async def close(self) -> None:
-        tasks = [*self.board_tasks.values(), *self.event_tasks, *([self.sweeper] if self.sweeper else [])]
+        tasks = [*self.board_tasks.values(), *self.event_tasks]
         self.board_tasks.clear()
         for task in tasks:
             task.cancel()
@@ -213,26 +216,8 @@ class DoubtTables:
     # --- tables closed from outside (dashboard, /admin games channel) -------------------------
 
     def _ensure_sweeper(self) -> None:
-        if self.closed or not self.tables or (self.sweeper is not None and not self.sweeper.done()):
-            return
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return
-        self.sweeper = asyncio.create_task(self._sweep_loop(), name="doubt-sweep")
-
-    async def _sweep_loop(self) -> None:
-        while True:
-            await asyncio.sleep(self.SWEEP_SECONDS)
-            if not self._known():  # nothing in memory: stay idle until a table appears
-                self.sweeper = None
-                return
-            try:
-                await self.sweep()
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                logging.exception("I Doubt It table sweep failed")
+        if self.tables:
+            self.runtime.ensure_sweeper(interval=lambda: self.SWEEP_SECONDS, held=lambda: bool(self._known()), sweep=self.sweep, name="doubt-sweep")
 
     def _known(self) -> set:
         return {*self.tables, *self.threads.values(), *(k[0] for k in self.runtime.timers if k[1] != "archive")}

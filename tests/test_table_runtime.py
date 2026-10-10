@@ -283,3 +283,65 @@ class TableRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 await REAL_SLEEP(0)
         self.assertEqual(seen, [42.0, 0.25])
         self.assertEqual(self.calls, ["hook", "hook"])
+
+
+class EnsureSweeperTests(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.sleep = FakeSleep()
+        self.rt = TableRuntime(label="Test", sleep=self.sleep)
+        self.addAsyncCleanup(self.rt.close)
+        self.held = True
+        self.sweeps = 0
+        self.fail = False
+
+    async def sweep(self):
+        self.sweeps += 1
+        if self.fail:
+            raise RuntimeError("boom")
+
+    def start(self):
+        self.rt.ensure_sweeper(interval=lambda: 9.0, held=lambda: self.held, sweep=self.sweep, name="test-sweep")
+
+    async def test_sweeps_each_interval_and_keeps_one_task(self):
+        """MNT-54: the sweeper sleeps the interval, sweeps, and a second ensure keeps the live task."""
+        self.start()
+        task = self.rt.sweeper
+        self.start()
+        self.assertIs(self.rt.sweeper, task)
+        self.assertEqual(task.get_name(), "test-sweep")
+        await until(lambda: len(self.sleep.waiters) == 1)
+        self.sleep.release(0)
+        await until(lambda: self.sweeps == 1 and len(self.sleep.waiters) == 2)
+        self.assertEqual(self.sleep.delays, [9.0, 9.0])
+
+    async def test_exits_and_clears_when_nothing_is_held(self):
+        """MNT-54: an idle wake-up ends the loop without sweeping and clears the attribute."""
+        self.start()
+        await until(lambda: len(self.sleep.waiters) == 1)
+        self.held = False
+        self.sleep.release(0)
+        await until(lambda: self.rt.sweeper is None)
+        self.assertEqual(self.sweeps, 0)
+
+    async def test_a_failing_sweep_is_logged_and_the_loop_continues(self):
+        """MNT-54: a sweep exception is logged and the next interval still sweeps."""
+        self.fail = True
+        self.start()
+        await until(lambda: len(self.sleep.waiters) == 1)
+        with self.assertLogs(level="ERROR") as logs:
+            self.sleep.release(0)
+            await until(lambda: len(self.sleep.waiters) == 2)
+        self.assertIn("Test table sweep failed", logs.output[0])
+        self.sleep.release(1)
+        await until(lambda: self.sweeps == 2)
+
+    async def test_close_cancels_the_sweeper_and_blocks_a_restart(self):
+        """MNT-54: close() cancels the sweeper; afterwards ensure_sweeper is a no-op."""
+        self.start()
+        task = self.rt.sweeper
+        await until(lambda: len(self.sleep.waiters) == 1)
+        await self.rt.close()
+        self.assertTrue(task.cancelled())
+        self.rt.sweeper = None
+        self.start()
+        self.assertIsNone(self.rt.sweeper)
