@@ -699,8 +699,8 @@ class DashboardBrowserTests(unittest.TestCase):
             # /_test/state uses the unwrapped store methods, so reading it does not disturb the counters.
             guild_books = sum(1 for book in context.request.get(self.url + '/_test/state').json()['lorebooks']
                               if book['target_kind'] == 'guild')
-            self.assertEqual(context.request.post(self.url + '/_test/counters/reset').status, 200)
-            self.load(page, self.url + '/admin/guild/1')
+            self.load(page, self.url + '/admin/guild/1', before_each=lambda: self.assertEqual(
+                context.request.post(self.url + '/_test/counters/reset').status, 200))
             page.get_by_role('tab', name='Server setup', exact=True).click()
             _worlds_section(page).get_by_label('Name', exact=True).wait_for()
             page.wait_for_timeout(300)
@@ -754,12 +754,15 @@ class DashboardBrowserTests(unittest.TestCase):
         page.watched_errors, page.failed_assets = errors, []
         page.on('requestfailed', lambda r: page.failed_assets.append(r.url) if '/_nicegui/' in r.url and 'ERR_ABORTED' not in (r.failure or '') else None)
 
-    def load(self, page, url):
+    def load(self, page, url, before_each=None):
         """goto + live-socket wait. Chromium sometimes fails a NiceGUI static asset itself (net::ERR_TOO_MANY_RETRIES, the request
         never reaches the server) and nicegui.js then throws a cssRules SecurityError. Only that pair (every page error is that
         SecurityError and a /_nicegui/ request failed) is reloaded, up to twice; any other page error is kept for the assertion.
+        ``before_each`` runs before every goto attempt (MNT-35), so count-based tests can reset their counters per attempt.
         """
         for attempt in range(3):
+            if before_each:
+                before_each()
             page.goto(url)
             page.wait_for_function('window.did_handshake === true && window.socket?.connected === true')
             errors = page.watched_errors
@@ -1898,8 +1901,8 @@ class DashboardBrowserTests(unittest.TestCase):
         """
         context, page, errors = self.ux_page('/admin/')
         try:
-            self.assertEqual(context.request.post(self.url + '/_test/counters/reset').status, 200)
-            self.load(page, self.url + '/admin/guild/1?tab=characters')
+            self.load(page, self.url + '/admin/guild/1?tab=characters', before_each=lambda: self.assertEqual(
+                context.request.post(self.url + '/_test/counters/reset').status, 200))
             page.get_by_role('button', name='Create character', exact=True).wait_for()
             page.wait_for_timeout(300)
             self.assertEqual(self.panel_reads(context), {'usage_report': 0, 'list_presets': 0})
