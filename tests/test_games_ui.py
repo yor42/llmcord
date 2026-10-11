@@ -5,17 +5,13 @@ from test_game_tables import G, TableCase
 
 from llmcord_core import games_ui
 from llmcord_core.admin_store import ConflictError
-from llmcord_core.games import registry
-
-
-# Registered games with no dashboard section yet; remove 'holdem' when FEAT-33 part D adds its section.
-NO_SECTION_YET = ('holdem',)
+from llmcord_core.games import holdem, registry
 
 
 class GamesTabSections(unittest.TestCase):
     def test_every_registered_game_has_a_section_in_registry_order(self):
-        self.assertEqual(tuple(games_ui.GAME_SECTIONS), tuple(k for k in registry.keys() if k not in NO_SECTION_YET))
-        self.assertEqual(tuple(games_ui.GAME_SECTIONS), ('blackjack', 'doubt'))
+        self.assertEqual(tuple(games_ui.GAME_SECTIONS), tuple(registry.keys()))
+        self.assertEqual(tuple(games_ui.GAME_SECTIONS), ('blackjack', 'doubt', 'holdem'))
         self.assertTrue(all(callable(f) for f in games_ui.GAME_SECTIONS.values()))
 
 
@@ -50,6 +46,61 @@ class DoubtSettings(TableCase):
         for bad in ({'ante': -1}, {'ante': 10 ** 9 + 1}, {'ante': 1.5}, {'turn_timeout': 14}, {'turn_timeout': 301}):
             with self.assertRaises(ValueError):
                 self.store.set_game_rules(G, 'doubt', bad)
+
+
+class HoldemSettings(TableCase):
+    DEFAULT = {'small_blind': 5, 'min_buy_in_bb': 40, 'max_buy_in_bb': 200, 'action_timeout': 45, 'assist': False}
+
+    def test_defaults_and_enable_switch(self):
+        """FEAT-33 D: Hold'em is on by default with the default blinds, buy-in range, timeout and assist off."""
+        self.assertTrue(self.store.game_enabled(G, 'holdem'))
+        self.assertEqual(self.store.game_rules(G, 'holdem'), self.DEFAULT)
+
+    def test_rules_round_trip_through_normalize_and_stay_in_their_guild_and_game(self):
+        rules = {'small_blind': 25, 'min_buy_in_bb': 50, 'max_buy_in_bb': 400, 'action_timeout': 90, 'assist': True}
+        before = {g: self.store.game_rules(G, g) for g in ('blackjack', 'doubt')}
+        self.assertEqual(self.store.set_game_rules(G, 'holdem', rules, self.store.game_rules(G, 'holdem')), rules)
+        self.assertEqual(self.store.game_rules(G, 'holdem'), holdem.normalize_rules(rules))
+        self.assertEqual(self.store.game_rules(G, 'holdem'), rules)
+        self.assertEqual({g: self.store.game_rules(G, g) for g in ('blackjack', 'doubt')}, before)
+        self.assertEqual(self.store.game_rules(2, 'holdem'), self.DEFAULT)
+        self.store.set_game_enabled(G, 'holdem', False, True)
+        self.assertTrue(self.store.game_enabled(2, 'holdem'))
+        self.assertTrue(self.store.game_enabled(G, 'doubt'))
+        self.assertEqual(self.store.game_rules(G, 'holdem'), rules)
+
+    def test_stale_rules_and_switch_conflict(self):
+        stale = self.store.game_rules(G, 'holdem')
+        self.store.set_game_rules(G, 'holdem', {'small_blind': 10})
+        with self.assertRaisesRegex(ConflictError, "^The Texas Hold'em rules were changed elsewhere. Reload the page and try again.$"):
+            self.store.set_game_rules(G, 'holdem', {'small_blind': 20}, stale)
+        self.assertEqual(self.store.game_rules(G, 'holdem')['small_blind'], 10)
+        self.store.set_game_enabled(G, 'holdem', False)
+        with self.assertRaisesRegex(ConflictError, "^The Texas Hold'em setting was changed elsewhere. Reload the page and try again.$"):
+            self.store.set_game_enabled(G, 'holdem', True, True)
+
+    def test_bad_rules_are_refused_and_nothing_is_saved(self):
+        for bad in ({'small_blind': 0}, {'small_blind': 10 ** 6 + 1}, {'small_blind': 2.5}, {'small_blind': None},
+                    {'min_buy_in_bb': 19}, {'max_buy_in_bb': 1001}, {'min_buy_in_bb': 100, 'max_buy_in_bb': 50},
+                    {'action_timeout': 14}, {'action_timeout': 301}, {'action_timeout': None}, {'assist': 1}, {'assist': None}):
+            with self.assertRaises(ValueError, msg=bad):
+                self.store.set_game_rules(G, 'holdem', bad)
+        self.assertEqual(self.store.game_rules(G, 'holdem'), self.DEFAULT)
+
+    def test_rules_at_the_limits_are_accepted(self):
+        for ok in ({'small_blind': 1, 'min_buy_in_bb': 20, 'max_buy_in_bb': 20, 'action_timeout': 15},
+                   {'small_blind': 10 ** 6, 'min_buy_in_bb': 1000, 'max_buy_in_bb': 1000, 'action_timeout': 300}):
+            self.assertEqual(self.store.set_game_rules(G, 'holdem', ok), {**self.DEFAULT, **ok})
+
+    def test_character_moves_setting_is_shared_and_per_guild(self):
+        """Character moves is one server-wide setting for all games, not a Hold'em rule."""
+        self.assertEqual(self.store.game_character_moves(G), 'model')
+        self.assertEqual(self.store.set_game_character_moves(G, 'style', 'model'), 'style')
+        self.assertEqual(self.store.game_character_moves(G), 'style')
+        self.assertEqual(self.store.game_character_moves(2), 'model')
+        self.assertNotIn('character_moves', self.store.game_rules(G, 'holdem'))
+        with self.assertRaises(ConflictError):
+            self.store.set_game_character_moves(G, 'model', 'model')
 
 
 if __name__ == '__main__':

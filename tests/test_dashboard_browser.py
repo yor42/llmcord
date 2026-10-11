@@ -4496,6 +4496,53 @@ class DashboardBrowserTests(unittest.TestCase):
             self.post_hook('/_test/games', {'doubt_rules': default, 'doubt_enabled': True})
             context.close()
 
+    def test_games_tab_holdem_switch_and_rules_save_persist_validate_and_conflict(self):
+        """FEAT-33 D: the Texas Hold'em section saves its switch and its blinds, buy-in range, action timeout and assist rules with audit rows, persists after reload, refuses an invalid buy-in range and a stale save, and leaves guild 2 alone."""
+        import json
+        from playwright.sync_api import expect
+        default = {'small_blind': 5, 'min_buy_in_bb': 40, 'max_buy_in_bb': 200, 'action_timeout': 45, 'assist': False}
+        other = self.state()['games']['2']
+        context, page, errors = self.open_games()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            switch = page.get_by_role('switch', name="Texas Hold'em is on")
+            switch.wait_for(timeout=5000)
+            page.get_by_label('Small blind', exact=True).fill('25')
+            page.get_by_label('Smallest buy-in (big blinds)', exact=True).fill('50')
+            page.get_by_label('Largest buy-in (big blinds)', exact=True).fill('400')
+            page.get_by_label('Action timeout (seconds)', exact=True).fill('90')
+            page.get_by_role('switch', name='Allow assist').click()
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text("Texas Hold'em rules saved", exact=True).wait_for(timeout=5000)
+            expected = {'small_blind': 25, 'min_buy_in_bb': 50, 'max_buy_in_bb': 400, 'action_timeout': 90, 'assist': True}
+            self.assertEqual(self.state()['games']['1']['holdem_rules'], expected)
+            rows = [r for r in self.state()['audit'] if r['action'] == 'games.holdem_rules']
+            self.assertEqual([json.loads(r['detail_json']) for r in rows], [expected])
+            switch.click()
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text("Texas Hold'em setting saved", exact=True).wait_for(timeout=5000)
+            self.assertFalse(self.state()['games']['1']['holdem_enabled'])
+            self.assertTrue(self.state()['games']['1']['doubt_enabled'])
+            self.assertIn('games.holdem_enabled', self.audit_actions())
+            self.assertEqual(self.state()['games']['2'], other)
+            page.reload()
+            expect(page.get_by_role('switch', name="Texas Hold'em is on")).to_have_attribute('aria-checked', 'false', timeout=5000)
+            expect(page.get_by_label('Small blind', exact=True)).to_have_value('25', timeout=5000)
+            expect(page.get_by_role('switch', name='Allow assist')).to_have_attribute('aria-checked', 'true')
+            page.get_by_label('Smallest buy-in (big blinds)', exact=True).fill('500')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The buy-in must be 20 to 1000 big blinds, with the minimum not above the maximum.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['holdem_rules'], expected)
+            page.get_by_label('Smallest buy-in (big blinds)', exact=True).fill('60')
+            self.post_hook('/_test/games', {'holdem_rules': {'small_blind': 10}})
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text("The Texas Hold'em rules were changed elsewhere. Reload the page and try again.", exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['holdem_rules']['small_blind'], 10)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'holdem_rules': default, 'holdem_enabled': True})
+            context.close()
+
     def test_currency_character_wallets_cap_and_balances(self):
         """FEAT-25: the refill cap saves and persists, a stale save conflicts, a refilled character is listed (and in the ledger by name), guild 2 is untouched."""
         from playwright.sync_api import expect

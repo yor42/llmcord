@@ -190,12 +190,57 @@ def doubt_section(ctx):
                           reset=lambda: [c.set_value(rules['value'][k]) for c, k in zip(controls, keys)])
 
 
-GAME_SECTIONS = {'blackjack': blackjack_section, 'doubt': doubt_section}
+def holdem_section(ctx):
+    from nicegui import ui
+    from .dashboard import section
+    store, gid = ctx.store, ctx.guild_id
+    with section("Texas Hold'em"):
+        on = {'value': store.game_enabled(gid, 'holdem')}
+        switch = ui.switch("Texas Hold'em is on", value=on['value'])
+        ui.label("Off: /game start refuses Texas Hold'em, and open Hold'em tables close with every stack cashed out.").classes('ll-muted')
+        def save_on():
+            result = store.set_game_enabled(gid, 'holdem', bool(switch.value), on['value'])
+            on['value'] = result['enabled']
+            return result
+        def toast(result):
+            closed = len(result['closed_tables'])
+            if closed:
+                ui.notify(f"Texas Hold'em is off. Closed {closed} open {'table' if closed == 1 else 'tables'}.", type='positive')
+        ctx.savebar.track("Texas Hold'em", {switch: on['value']}, save=save_on, action='games.holdem_enabled',
+                          detail=lambda result: dict(result), success="Texas Hold'em setting saved",
+                          dirty=lambda: bool(switch.value) != on['value'],
+                          reset=lambda: switch.set_value(on['value']),
+                          then=toast)
+
+        rules = {'value': store.game_rules(gid, 'holdem')}
+        with ui.element('div').classes('ll-form-row ll-field-row'):
+            blind = ui.number('Small blind', value=rules['value']['small_blind'], min=1, max=1_000_000, precision=0, format='%d').classes('ll-wide')
+            low = ui.number('Smallest buy-in (big blinds)', value=rules['value']['min_buy_in_bb'], min=20, max=1000, precision=0, format='%d').classes('ll-wide')
+            high = ui.number('Largest buy-in (big blinds)', value=rules['value']['max_buy_in_bb'], min=20, max=1000, precision=0, format='%d').classes('ll-wide')
+            timeout = ui.number('Action timeout (seconds)', value=rules['value']['action_timeout'], min=15, max=300, precision=0, format='%d').classes('ll-wide')
+        assist = ui.switch('Allow assist', value=rules['value']['assist'])
+        ui.label('The big blind is twice the small blind. Buy-ins are counted in big blinds. A player who runs out of action time checks, or folds when there is a bet. Allow assist lets players ask for a suggested move. Changes apply to hands dealt afterwards.').classes('ll-muted')
+        controls = (blind, low, high, timeout, assist)
+        keys = ('small_blind', 'min_buy_in_bb', 'max_buy_in_bb', 'action_timeout', 'assist')
+        def current():
+            return {'small_blind': _whole(blind.value), 'min_buy_in_bb': _whole(low.value), 'max_buy_in_bb': _whole(high.value),
+                    'action_timeout': _whole(timeout.value), 'assist': bool(assist.value)}
+        def save_rules():
+            result = store.set_game_rules(gid, 'holdem', current(), expected=rules['value'])
+            rules['value'] = result
+            return result
+        ctx.savebar.track("Texas Hold'em rules", {c: rules['value'][k] for c, k in zip(controls, keys)},
+                          save=save_rules, action='games.holdem_rules', detail=lambda result: dict(result), success="Texas Hold'em rules saved",
+                          dirty=lambda: current() != rules['value'],
+                          reset=lambda: [c.set_value(rules['value'][k]) for c, k in zip(controls, keys)])
+
+
+GAME_SECTIONS = {'blackjack': blackjack_section, 'doubt': doubt_section, 'holdem': holdem_section}
 
 
 async def games_panel(ctx):
     from .games import registry
     all_games_section(ctx)
     for key in registry.keys():
-        if key in GAME_SECTIONS:  # Hold'em's section comes with FEAT-33 part D
+        if key in GAME_SECTIONS:
             GAME_SECTIONS[key](ctx)
