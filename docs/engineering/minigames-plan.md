@@ -145,3 +145,49 @@ Phase 3's first game, and the start of a library of multiplayer games built arou
 | B | Discord: `/game` (with `/blackjack` alias), lobby, Fill seats, table thread, board and turn messages with bump, rank-count hand picker, doubt window, timers, forfeits, model chooser with triage, restart recovery. | Opus (concurrency) |
 | C | Table talk: table threads as skit threads, the seated-only cast, the table prompt block (seat view only), event-triggered ambient turns, talk limits. | Opus (skit turn path, hidden information) |
 | D | Games tab section through the registry, user docs (how to play, permissions), glossary code names. | Sonnet |
+
+## Play style and Texas Hold'em (FEAT-32, FEAT-33, FEAT-34, D31, user 2026-10-11)
+
+Terms (**Texas Hold'em**, **Buy-in**, **Stack**, **Blinds**, **Dealer button**, **Assist**, **Play style**, and the widened **Pot**) are in the [glossary](../glossary.md). Order: FEAT-32 (Play style), then FEAT-33 (Hold'em), then FEAT-34 (Doubt on Play style).
+
+### Play style (FEAT-32, schema v19)
+
+A character's way of playing is a small set of numbers, so the fallback policy can be in character instead of seeded from the character id.
+
+- **Traits, each 0–100, 50 neutral:** Looseness (how weak a hand it plays), Aggression (raise over call, and size), Bluffing, Stubbornness (reluctance to fold after investing), Suspicion (how readily it doubts), Risk (how much of its stack it commits), **Judgment** (foolish ↔ sharp: systematic misreading of its own hand, draws and pot odds) and **Unpredictability** (steady ↔ erratic: chance of an out-of-pattern move). A game uses the traits it needs.
+- **Judgment is systematic, Unpredictability is random.** A foolish character makes the same kind of mistake every time; an erratic one is sometimes odd even when sharp. Erratic moves are always legal moves, and the policy never folds when checking is free.
+- **Not fully deterministic.** Fully deterministic play is exploitable. The traits set thresholds and probabilities; the action is the threshold rule plus noise drawn from the **secret round seed** (as in D29). The same seed and moves replay exactly; players cannot predict it.
+- **Storage:** `characters.play_style_json`, one style per character (not per server or game), not part of the card export. Edited in the character editor under "Play style" (sliders grouped Style / Reads / Mind, with "Reset to default"). Saves use `store.write_admin()` with a revision check.
+- **Unset style:** keeps today's behavior (traits derived from the character id), so no character is blank and existing Doubt tables are unchanged. A saved style replaces the derived one in every game.
+- **Generate from description:** a button sends the character's description and personality to a model with a structured-output schema (eight integers with ranges, plus a one-line reason each). The result fills the sliders as an **unsaved draft**; the admin reviews and saves. The model comes from the server's profile through `BackendResolver` (key pins apply), with an optional cheaper-profile setting, and counts toward the spending cap. The character text is untrusted: the output is validated and clamped as integers, so an injection can change only numbers the admin sees before saving. Reasons are shown, not stored. A failure shows a toast and leaves the sliders alone.
+- **Style versus the model.** D26 holds: with a model available the model picks one legal move, and the prompt carries the play style in words. The numbers drive the fallback. A Games tab setting, **Character moves: model / style only** (default model), selects style only: the policy always plays and the model is used for table talk alone, to save calls.
+
+### Texas Hold'em (FEAT-33, schema v20)
+
+**Rules (v1).**
+
+- No-limit, 2–9 seats, heads-up allowed, standard rules for the button, blinds and short all-ins. Best five of seven, ties split, the odd chip goes to the first seat left of the dealer button. Side pots are in v1.
+- **Cash table.** A seat pays a buy-in from its wallet (a member's or, for a character, its own) into a **stack**. Stacks carry across hands. Leaving or busting cashes the stack out to the wallet. Between hands members can sit, leave, rebuy or top up (up to the max buy-in); nobody joins mid-hand. A character seat never rebuys: it leaves on a bust. The table closes with fewer than 2 seats or after an idle timeout.
+- **Blinds and buy-in:** fixed per server, no escalation, set in the Games tab. Small blind S (default 5), big blind 2S, buy-in 40–200 big blinds. No ante, rake, straddle, run-it-twice, sit-out, pre-actions, tournaments, pot-limit or fixed-limit in v1.
+- **Actions:** Fold, Check or Call, Raise. Raise opens a private picker with min, ½ pot, pot and all-in, plus a modal for an exact amount.
+- **Showdown:** only seats that must show to win a pot reveal; the last aggressor shows first and a seat that cannot win may muck. If everyone else folds nothing is revealed, and the winner may press **Show** once.
+- **Timers:** a member's action timer defaults to 45 s (Games tab). A timeout checks if free, else folds. Two in a row remove the seat (cashed out after the hand).
+- **Seed hash:** as D26: a short hash of each hand's seed is shown at the deal and the seed is revealed after the hand settles.
+
+**Assist.** The host picks it in the lobby, only if the server allows it (Games tab, off by default); the table shows "Assist: on". In **My cards** (and `/game hand`) a member sees their current best hand and their chances of finishing with each of the three likeliest hand types by the river, against random opponent hands. It uses only the member's own cards and the board. The odds are exact or a capped Monte Carlo with a fixed per-hand seed, so numbers do not change between presses. Characters never get it, and it never goes into a prompt.
+
+**Seats and surface.** The same as I Doubt It (D29): humans-only in an unbound game channel; in a bound one members bring favorites and the host can Fill seats; `/game start game:holdem`; a table thread with a pinned board (community cards, pot, stacks, button, blinds), one edited turn message with the buttons, a hand-by-hand one-line result, and an end-of-table summary. Table talk is seated characters only. A character's prompt gets the public state plus its own hole cards, never another seat's, and never the assist odds.
+
+**Characters.** The engine owns the cards, the legal actions, the pot and the result. A model sees its seat's view only and picks one legal action id (`fold`, `call`, `raise:<amount>` from the menu min / ½ pot / pot / all-in); an optional in-character line goes through the webhook. Any error, timeout, daily limit or spending cap, or the **style only** setting, uses the Play style policy.
+
+**Store (schema v20, backup before upgrade).** No hands are stored: each hand replays from seed plus the append-only move log. `game_seats` gains `stack` (`stake` stays the total bought in); `game_rounds` holds each hand's seed, rules snapshot (blinds, assist), starting stacks and button. The wallet moves only at sit (buy-in), rebuy, leave or bust (cash-out) and cancel (refund), each in one transaction with its stack change; per-hand wins and losses change stacks inside the table, so the ledger gets no entry per bet. Reasons: "Texas Hold'em buy-in / rebuy / cash-out / refund (table T)". At recovery an unfinished hand is voided (stacks return to their pre-hand values), then the table closes and every stack is cashed out.
+
+| Part | Content | Review |
+| --- | --- | --- |
+| A | `games/holdem.py`: deal, betting rounds, side pots, hand evaluation, showdown, replay, rule normalizer; the assist odds; the fallback policy reading `PlayStyle`. Pure Python. | Sonnet; Opus pass on side pots |
+| B | Schema v20, store API, buy-in / rebuy / cash-out ledger, recovery. | Opus (migration, money) |
+| C | Discord: lobby, Fill seats, thread, board and turn messages, raise picker, My cards with Assist, timers, restart recovery, model chooser. | Opus (concurrency) |
+| D | Table talk with hidden-information handling, Games tab section (blinds, buy-in range, timer, assist allowed, character moves), user docs. | Opus for the prompt block; Sonnet for the rest |
+
+FEAT-32 parts: (A) `games/playstyle.py` (traits, validation, defaults, derived-from-id) and the policy noise helpers; (B) schema v19, store API, revision checks; (C) character editor section; (D) "Generate from description" and the Character moves setting. Review: Opus for B and D (schema, model call on untrusted text), Sonnet for A and C.
+
