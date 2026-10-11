@@ -1717,6 +1717,9 @@ class AdminStore:
             finally:
                 self.db.rollback()
 
+    def _table_closed(self, guild_id, table_id):
+        return self.one("SELECT 1 FROM game_tables WHERE id=? AND guild_id=? AND status='closed'", (table_id, guild_id)) is not None
+
     def _snapshot_reads(self, guild_id, round_id):
         rnd = self._game_round(guild_id, round_id)
         spec = self._round_game(rnd)
@@ -1730,7 +1733,7 @@ class AdminStore:
                          'brought_by': r['brought_by'], 'insurance': r['insurance'], 'name': (names.get(r['ref_id']) or f"Deleted character (#{r['ref_id']})") if r['kind'] == 'character' else None} for r in seats],
                'moves': len(moves), 'view': None, 'legal': {}, 'summary': None, 'phase': None,
                'rules': self._round_rules(rnd),
-               'seed': rnd['seed'] if rnd['status'] in ('settled', 'cancelled') else None}
+               'seed': rnd['seed'] if rnd['status'] in ('settled', 'cancelled') and (not spec.cash or self._table_closed(guild_id, rnd['table_id'])) else None}
         if spec.cash:
             for seat in out['seats']:
                 row = seats[seat['index']]
@@ -1752,7 +1755,7 @@ class AdminStore:
         return out
 
     def round_snapshot(self, guild_id, round_id):
-        """Plain dict for the Discord layer. The seed appears only once the round is settled or cancelled."""
+        """Plain dict for the Discord layer. The seed appears only once the round is settled or cancelled (Hold'em: once its table is closed)."""
         return self._game_snapshot(guild_id, round_id)
 
     def game_table_summary(self, guild_id, table_id, limit):

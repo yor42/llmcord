@@ -134,6 +134,17 @@ class HoldemStore:
             self.db.execute('UPDATE game_rounds SET rules_json=? WHERE id=? AND guild_id=?', (json.dumps({**rules, 'assist': on}, sort_keys=True), round_id, guild_id))
             return self._game_snapshot(guild_id, round_id)
 
+    def settled_seed(self, guild_id, round_id):
+        """Internal (replaying a finished hand): never to be rendered while the table is open."""
+        rnd = self._game_round(guild_id, round_id)
+        return rnd['seed'] if rnd['status'] in ('settled', 'cancelled') else None
+
+    def table_seeds(self, guild_id, table_id):
+        """[(hand number, seed)] of the dealt hands of a closed table, oldest first; nothing while the table is open."""
+        if not self._table_closed(guild_id, table_id):
+            return []
+        return [(r['number'], r['seed']) for r in self.all("SELECT number,seed FROM game_rounds WHERE guild_id=? AND table_id=? AND dealt_at IS NOT NULL AND status IN ('settled','cancelled') ORDER BY number", (guild_id, table_id))]
+
     def table_cash_summary(self, guild_id, table_id):
         """End-of-table money: {'cashouts': [{kind, ref_id, name, bought_in, cashed_out, net}] (a seat that left and sat again is one row),
         'seated': [{kind, ref_id, name, stack, stake}] for whoever still sits (nobody once the table is closed)}."""

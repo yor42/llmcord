@@ -21,7 +21,7 @@ Assumed API (pinned here; spec: "Hold'em Discord layer (FEAT-33 part C)" in docs
   ``timeout``), ``on_character_timer(guild, table, round, moves)`` plays a character seat on turn (actor ``character``),
   ``on_next_timer(guild, table, lobby_round)`` ends the pause between hands. ``runtime.timers`` kinds: ``turn``, ``character``, ``next``,
   ``lobby``, ``archive``. Class constants ``NEXT_HAND_SECONDS`` and ``CHARACTER_SECONDS``.
-  After a hand: a result post (board, shown hands with names, pots and winners, stack changes, the revealed seed) and the turn message becomes
+  After a hand: a result post (board, shown hands with names, pots and winners, stack changes, the seed hash; the seeds are revealed when the table closes, MNT-56) and the turn message becomes
   "Next hand in ..." with ``Sit``, ``Leave``, ``Rebuy``, ``Deal now`` (aimed at the next lobby round). When fewer than two seats remain after
   busts the table is closed at once and the end-of-table summary (``table_cash_summary``) is posted in the thread.
   When everyone else folded, the result message carries a ``Show`` button the winner can press once.
@@ -853,7 +853,7 @@ class CharacterSeatTests(HandCase):
 
 class ShowdownTests(HandCase):
     async def test_a_showdown_post_reveals_the_shown_hands_the_board_pot_winner_and_stack_changes(self):
-        """C1b: an all-in call-down heads-up: the result post has the five board cards, both hole cards with the hand names, the pot, the winner and the +/- stack change, and the seed is revealed."""
+        """C1b: an all-in call-down heads-up: the result post has the five board cards, both hole cards with the hand names, the pot, the winner and the +/- stack change; the seed stays hidden while the table is open (MNT-56)."""
         self.seed = find_seed("heads_up")
         await self.deal_table()
         holes = self.holes()
@@ -871,7 +871,23 @@ class ShowdownTests(HandCase):
         winner = expected.pots[0].winners[0]
         self.assertIn(f"<@{self.user_of(snap, winner)}>", text)
         self.assertIn("1,000", text)  # the stack change
-        self.assertIn(self.seed, text)  # revealed after the hand
+        result = next(m.content for m in self.th.messages.values() if m.content and m.content.startswith("**Hand 1**"))
+        self.assertNotIn(self.seed, result)  # MNT-56: the result post carries the hash only; the seed comes with the closing summary
+        self.assertIn(snap["seed_hash"][:12], result)
+
+    async def test_seeds_stay_hidden_while_the_table_is_open_and_closing_reveals_each_one(self):
+        """MNT-56: a hand settles at a table that goes on: no seed in the thread or the snapshot; the host closes: the closing post lists the seed, which matches the hash shown at the deal."""
+        self.seed = find_seed("bust")
+        await self.deal_table(sits=((ALICE, 400), (BOB, 700), (CARA, 1000)))
+        hash12 = self.now()["seed_hash"][:12]
+        await self.play_hand(shove)
+        self.assertIsNotNone(self.table())
+        self.assertNotIn(self.seed, self.text())
+        self.assertIsNone(self.now()["seed"])
+        self.assertIn(hash12, self.text())
+        await self.holdem.close_for_channel(G, lobby_tests.CH, self.tid)
+        self.assertIn(f"#1 {self.seed}", self.text())
+        self.assertEqual(seed_hash(self.seed)[:12], hash12)
 
     async def test_stacks_after_the_showdown_match_the_engine(self):
         """C1b: the settled stacks equal the oracle's end stacks; the loser is busted."""
@@ -1113,6 +1129,36 @@ class RecoveryTests(HandCase):
         self.assertEqual(self.store.round_snapshot(G, self.rid)["status"], "cancelled")
         self.assertEqual([k for k in self.holdem.runtime.timers if k[0] == (G, self.tid) and k[1] != "archive"], [])
         self.assertIn("restart", self.text().lower())
+
+    async def test_recovery_posts_the_voided_hands_seed(self):
+        """MNT-56: restart recovery voids the hand in progress and reveals its seed in its own post."""
+        await self.deal_table()
+        await self.do(self.actor()[1], "call")
+        self.assertNotIn(self.seed, self.text())
+        await self.holdem.recover()
+        self.assertIn(f"-# Seeds (revealed now): #1 {self.seed}", self.text())
+
+    async def test_a_bust_out_that_ends_the_table_posts_the_seed_after_the_summary(self):
+        """MNT-56: the table ends after a hand (fewer than two players with chips): the cash-out summary is followed by its own seeds post."""
+        self.seed = find_seed("heads_up")
+        await self.deal_table()
+        await self.play_hand(shove)
+        posts = [m.content for m in self.th.messages.values() if m.content]
+        i = next(k for k, c in enumerate(posts) if c.startswith("**Table closed.** Cash-outs"))
+        self.assertEqual(posts[i + 1], f"-# Seeds (revealed now): #1 {self.seed}")
+        self.assertNotIn(self.seed, posts[i])
+
+    async def test_many_hands_split_into_several_seed_posts_with_every_seed_once(self):
+        """MNT-56: a long table's seeds go out in as many posts as needed, each under 2,000 characters, none cut or repeated."""
+        seeds = [(n, f"{n:03d}" + "ab" * 14 + "c") for n in range(1, 120)]
+        with mock.patch.object(self.store, "table_seeds", return_value=seeds):
+            posts = self.holdem._seeds((G, 1))
+        self.assertGreaterEqual(len(posts), 2)
+        self.assertTrue(posts[0].startswith("-# Seeds (revealed now): #1 ") and all(p.startswith("-# Seeds (cont.): ") for p in posts[1:]))
+        self.assertTrue(all(len(p) < 2000 for p in posts))
+        joined = "\n".join(posts)
+        for n, seed in seeds:
+            self.assertEqual(joined.count(f"#{n} {seed}"), 1)
 
     async def test_turning_games_off_in_the_channel_during_a_hand_voids_it_and_cashes_out(self):
         """C1b: closing the table from outside mid-hand: the hand is voided, stacks are cashed out at their starting values, timers are gone."""

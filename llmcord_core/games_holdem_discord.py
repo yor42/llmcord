@@ -32,6 +32,7 @@ HOLDEM_OFF = f"{NAME} is off on this server."
 BET_NOTE = f"{NAME} uses the server's blinds; you choose your buy-in when you sit."
 NO_TABLE = "Use /game hand in your table's thread."
 NO_SEAT = "You do not have a seat in this round."
+SEEDS_CHARS = 1800
 CASHED = " Any chips were cashed out."
 THREAD_FORBIDDEN = ("I couldn't open the table thread. I need the Create Public Threads and Send Messages in Threads "
                     "permissions in this channel. The table was closed.")
@@ -127,6 +128,7 @@ class _Out:
     board_text: str | None = None  # the pinned board's last text (table over)
     result: tuple | None = None  # (text, view or None): the hand's result post
     summary: str | None = None  # the end-of-table post
+    seeds: list = field(default_factory=list)  # the closed table's seed posts
     talk: str | None = None  # a public event the seated characters react to (fire and forget, after the posts)
 
 
@@ -269,7 +271,7 @@ class HoldemTables:
         self._forget(key)
         self.arm(key, "archive", self.ARCHIVE_SECONDS)
         text = f"Table closed: {reason}{CASHED}"
-        return self._seal(key, _Out(lobby=(text, None), closing=text, closed=True))
+        return self._seal(key, _Out(lobby=(text, None), closing=text, seeds=self._seeds(key), closed=True))
 
     async def close_for_channel(self, guild_id, channel_id, table_id) -> int | None:
         """Turns games off in a channel whose open table is this game's: the store step under the table lock, then the closing messages.
@@ -418,6 +420,8 @@ class HoldemTables:
                 await self._post(thread_id, *out.result)
             if out.summary:
                 await self._post(thread_id, out.summary)
+            for post in out.seeds:
+                await self._post(thread_id, post)
             self._talk_event(thread_id, out)
             if out.turn and out.start is None and out.seq > table.sent.get("turn", 0):
                 table.sent["turn"] = out.seq
@@ -551,7 +555,7 @@ class HoldemTables:
                     + (" · on turn" if view["turn"] == i and not view["finished"] else "")
             stack = view["stacks"][i] if view else seat["stack"]
             lines.append(f"{i + 1}. {GameTables._who(seat)} — {stack:,} {name}{flags}")
-        lines.append(f"-# Seed: {snap['seed']} (hash {snap['seed_hash'][:12]})" if snap["seed"] else f"-# Seed hash: {snap['seed_hash'][:12]}")
+        lines.append(f"-# Seed hash: {snap['seed_hash'][:12]}")
         return "\n".join(lines)
 
     def render_turn(self, key, snap) -> tuple[str, discord.ui.View]:
@@ -610,15 +614,27 @@ class HoldemTables:
             lines.append(f"{label} {pot.amount:,}: " + (f"{winners} win" if len(pot.winners) > 1 else f"{winners} wins") + (f" with {holdem.hand_name(pot.hand)}" if pot.hand else ""))
         for seat in res.seats:
             lines.append(f"• {who(seat.seat)}: {seat.start:,} → {seat.end:,} ({seat.net:+,})")
-        if snap["seed"]:
-            lines.append(f"-# Seed: {snap['seed']} (hash {snap['seed_hash'][:12]})")
+        lines.append(f"-# Seed hash: {snap['seed_hash'][:12]} (the seed is revealed when the table closes)")
         return "\n".join(lines)
 
     def _final_state(self, key, snap):
-        """The finished hand's engine state, replayed from the revealed seed (settled rounds only)."""
+        """The finished hand's engine state, replayed from the seed (settled rounds only; the seed itself is never rendered while the table is open)."""
         seats = [Seat(s["index"], s["kind"], s["ref_id"], s["stack"]) for s in snap["seats"]]
         moves = [(r["seat_index"], r["move"]) for r in self.store.all("SELECT seat_index,move FROM game_moves WHERE guild_id=? AND round_id=? ORDER BY id", (key[0], snap["round_id"]))]
-        return holdem.replay(snap["seed"], seats, moves, snap["rules"], snap["rules"]["button"])
+        return holdem.replay(self.store.settled_seed(key[0], snap["round_id"]), seats, moves, snap["rules"], snap["rules"]["button"])
+
+    def _seeds(self, key) -> list[str]:
+        """The seeds of a closed table's hands as posts under SEEDS_CHARS each, oldest first; none for a table that never dealt."""
+        posts, head, line = [], "Seeds (revealed now)", ""
+        for n, seed in self.store.table_seeds(*key):
+            entry = f"#{n} {seed}"
+            if line and len(head) + len(line) + len(entry) + 6 > SEEDS_CHARS:
+                posts.append(f"-# {head}: {line}")
+                head, line = "Seeds (cont.)", ""
+            line += (", " if line else "") + entry
+        if line:
+            posts.append(f"-# {head}: {line}")
+        return posts
 
     def _summary(self, key) -> str:
         lines = ["**Table closed.** Cash-outs:"]
@@ -711,7 +727,7 @@ class HoldemTables:
             self.store.close_table(*key)
             self._forget(key)
             self.arm(key, "archive", self.ARCHIVE_SECONDS)
-            out.summary = self._summary(key)
+            out.summary, out.seeds = self._summary(key), self._seeds(key)
             out.turn = ("Table closed.", None)
             out.lobby = (f"Table closed: fewer than {holdem.MIN_SEATS} players still had chips." + CASHED, None)
             out.board_text = f"**{NAME}** · table {key[1]} — closed after hand {snap['number']}."
@@ -1086,7 +1102,7 @@ class HoldemTables:
     def _ended_after_hands(self, key, row, out: _Out) -> None:
         """A table that played hands ends with its cash-out summary in the thread and a turn message without buttons."""
         if row["turn_message_id"] is not None:
-            out.turn, out.summary = ("Table closed.", None), self._summary(key)
+            out.turn, out.summary, out.seeds = ("Table closed.", None), self._summary(key), self._seeds(key)
 
     # --- /game hand and /game rules ---------------------------------------------------------
 
@@ -1511,6 +1527,8 @@ class HoldemTables:
             await self._edit(t["channel_id"], t["message_id"], content=text, view=None)
             if t["thread_id"] is not None:
                 await self._post(t["thread_id"], text)
+                for post in self._seeds((guild_id, table_id)):
+                    await self._post(t["thread_id"], post)
                 await self._archive(t["thread_id"])
         if closed or failed:
             logging.info("Texas Hold'em recovery: %d tables closed, %d failures", closed, failed)

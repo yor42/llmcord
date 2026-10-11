@@ -565,7 +565,7 @@ class DealTests(HoldemCase):
         before = self.ledger_count()
         snap = self.store.deal(G, rid)
         self.assertEqual(snap["status"], "settled")
-        self.assertIsNotNone(snap["seed"])
+        self.assertIsNone(snap["seed"])  # MNT-56: the table is open
         self.assertEqual(sum(r["payout"] for r in self.seat_rows(rid)), 15)
         self.assertEqual(self.ledger_count(), before)
 
@@ -663,7 +663,13 @@ class PlayTests(HoldemCase):
         self.assertEqual(ends, [995, 1000, 1005])
         self.assertEqual(sum(ends), 3000)
         self.assertEqual(sorted(x["outcome"] for x in done["seats"]).count("fold"), 2)
-        self.assertEqual(done["seed"], self.store.db.execute("SELECT seed FROM game_rounds WHERE id=?", (rid,)).fetchone()[0])
+        seed = self.store.db.execute("SELECT seed FROM game_rounds WHERE id=?", (rid,)).fetchone()[0]
+        self.assertIsNone(done["seed"])  # MNT-56: withheld while the table is open
+        self.assertEqual(self.store.settled_seed(G, rid), seed)
+        self.assertEqual(self.store.table_seeds(G, 1), [])
+        self.store.close_table(G, 1)
+        self.assertEqual(self.snap(rid)["seed"], seed)
+        self.assertEqual(self.store.table_seeds(G, 1), [(1, seed)])
         self.assertIsNone(snap["seed"])
 
     def test_the_snapshot_never_holds_a_hole_card(self):
@@ -686,7 +692,7 @@ class PlayTests(HoldemCase):
                 for held in pair:
                     self.assertNotIn(repr(held), text)
         self.assertTrue(all(s["seed"] is None for s in seen[:-3] if s["status"] == "playing"))
-        self.assertIsNotNone(seen[-1]["seed"])
+        self.assertTrue(all(s["seed"] is None for s in seen))  # MNT-56: open table
 
     def test_the_public_menu_is_for_the_player_on_turn(self):
         rid, snap = self.dealt()
