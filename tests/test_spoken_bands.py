@@ -9,6 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "prototypes" / "spoken_moves"))
 
 import bands  # noqa: E402
+import wordrule  # noqa: E402
 
 TH = {"t_sure": 0.8, "margin": 0.1, "g_sure": 0.05, "t_floor": 0.6, "g_floor": 0.0}
 
@@ -144,6 +145,63 @@ class FoldTests(unittest.TestCase):
         m, ths = bands.cross_validate(rows, False, grid_n=5)
         self.assertEqual(m["move_n"] + m["talk_n"], len(rows))
         self.assertEqual(len(ths), 5)
+
+
+LEX = {"hit": {"en": ["hit", "hit me"], "ko": ["히트"]}, "stand": {"en": ["stand"], "ko": []}}
+
+
+def extra(text, kinds=("hit", "stand")):
+    return wordrule.extra_tokens(text, LEX, list(kinds))
+
+
+class WordRuleTests(unittest.TestCase):
+    def test_move_word_alone_or_with_fillers_has_no_extras(self):
+        for text in ("hit", "Hit me!", "ok hit me please", "히트", "히트요", "히트할게요", "그냥 히트 ㅋㅋㅋ", "stand lol 😀", "yeah i'll stand"):
+            self.assertEqual(extra(text), 0, text)
+
+    def test_other_words_are_counted(self):
+        self.assertEqual(extra("hit me up later"), 2)
+        self.assertEqual(extra("that song is a hit"), 4)
+        self.assertEqual(extra("히트곡 좋아"), 1)
+        self.assertEqual(extra("sure hit"), 1)
+
+    def test_attached_suffix_belongs_to_the_match(self):
+        self.assertEqual(extra("standing"), 0)
+        self.assertEqual(extra("히트요 더"), 1)
+
+    def test_laugh_runs_and_punctuation_are_ignored(self):
+        self.assertEqual(wordrule.other_tokens("ㅋㅋ ㅎㅎㅎ ... !!", []), [])
+        self.assertEqual(wordrule.other_tokens("ㅋㅎ x", []), ["ㅋㅎ", "x"])
+
+    def test_cascade_limit_gates_the_word_reading(self):
+        r = row("hit", {"hit": 0.2, "stand": 0.1}, talk=0.0, word=("sure", ["stand"]))
+        r["extra"] = 2
+        self.assertEqual(bands.decide(r, TH, 1)[1], [])
+        self.assertEqual(bands.decide(r, TH, 2), ("sure", ["stand"]))
+        self.assertEqual(bands.decide(r, TH, True)[1], [])
+        self.assertEqual(bands.decide(r, TH, False)[1], [])
+        r["extra"] = 0
+        self.assertEqual(bands.decide(r, TH, 0), ("sure", ["stand"]))
+
+
+class HeadMaskTests(unittest.TestCase):
+    def test_illegal_moves_dropped_and_renormalized(self):
+        scores, talk = bands.mask_renorm({"hit": 0.5, "stand": 0.2, "double": 0.2, "talk": 0.1}, ["hit", "stand"])
+        self.assertEqual(set(scores), {"hit", "stand"})
+        self.assertAlmostEqual(sum(scores.values()) + talk, 1.0)
+        self.assertAlmostEqual(scores["hit"], 0.5 / 0.8)
+        self.assertAlmostEqual(talk, 0.1 / 0.8)
+
+    def test_all_mass_on_illegal_moves_does_not_divide_by_zero(self):
+        scores, talk = bands.mask_renorm({"hit": 1.0, "stand": 0.0, "talk": 0.0}, ["stand"])
+        self.assertEqual((scores, talk), ({"stand": 0.0}, 0.0))
+
+    def test_probability_features_feed_the_bands(self):
+        scores, talk = bands.mask_renorm({"hit": 0.6, "stand": 0.1, "talk": 0.3}, ["hit", "stand"])
+        _, _, p1, margin, gap = bands.features(scores, talk)
+        self.assertAlmostEqual(margin, 0.5)
+        self.assertAlmostEqual(gap, 0.3)
+        self.assertAlmostEqual(p1, 0.6)
 
 
 if __name__ == "__main__":

@@ -63,3 +63,30 @@ A first run scored e5 cascade talk silence at 53.7%. That run used a word list t
 - n = 150. The fold thresholds vary, and a coarser or finer grid moves talk silence by several points.
 - "Silent" is counted strictly: a talk row whose accepted button is shown passes the per-label table but does not count as silent.
 - The local e5 int8 file is not byte-reproducible across ONNX Runtime versions. Its hash is recorded but not enforced. FEAT-37 bakes one verified file into the image anyway.
+
+## Second pass (2026-10-12)
+
+User direction: move wordings are a small, closed pool that the built-in move examples are meant to cover; the problem is table talk (38.9% silent is far too low, 85% a bit high). Changes tried, e5 only (MiniLM dropped):
+
+- **More table-talk examples**: `talk_examples.json`, 380 EN/KO/mixed chat lines written by a separate agent that never opened `phrases.csv` (its prompt did name some lookalike kinds, e.g. "standing in line", "사진 한 장"). Eight exact test duplicates were removed (372 left).
+- **Trained head**: multinomial logistic regression on the e5 vectors (4 moves + talk), trained on the examples only, masked to the legal moves + talk at use; `head2` adds lambda by CV accuracy and temperature scaling (no better than `head`, within noise).
+- **Word rule**: a word-list match counts only when at most N other non-filler words remain (`wordrule.py`).
+
+**Leakage found in review.** The blind talk lines still include near-paraphrases of test rows ("스탠드 조명 켰어요" ~ "스탠드 조명 샀어", cosine 0.97; "this song is such a hit"). The first second-pass headline (95.8% / 68.5%, kNN 93.8% / 75.9%) was inflated. Numbers below drop talk examples within cosine ≥ 0.95 or char-3-gram Jaccard ≥ 0.5 of any test row (24 dropped; the cutoffs are arbitrary). Move examples are kept, per the premise above, so move pass is "with move examples near the test wordings", not generalization to unseen wordings.
+
+Achieved 5-fold CV pairs (right move among buttons / silent on talk), with 370 talk examples:
+
+| Mode | Fit for 95% (train at 97%) | Fit for 90% |
+| --- | --- | --- |
+| kNN | 95.8% / 50.0% | 89.6% / 85.2% (below 90%) |
+| head | **95.8% / 70.4%** | 91.7% / 79.6% |
+| head + word rule N=1 | 95.8% / 66.7% | 90.6% / 77.8% |
+
+Conservative bound: dropping every example (talk and move) within cosine 0.91 of a test row removes 166 of 454 including most move examples, and the best cell falls to about 94% / 37–54%; with mild dedupe of both, about 94–96% / 48–57%.
+
+Reading:
+- The head is the clear gain over kNN at a ~95% move floor (+20 points of silence, beyond noise). Word rule and head2 do not help.
+- Best honest point: about **96% right move, 70% silent on talk**. No setting reaches 85% silence at ≥ 95% moves; trading to ~90% moves buys ~80%.
+- Still the same author's drafts on both sides; real numbers need reviewed phrases and a fresh held-out set from players.
+- Noise: one talk row = 1.85 points, one move row = 1.04 points.
+- Latency unchanged (head adds nothing measurable): p50 ≈ 6.5 ms, RSS ≈ 580 MB.
