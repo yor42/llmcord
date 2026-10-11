@@ -1436,6 +1436,36 @@ class AdminStore:
                 (guild_id, self._MOVES_KEY, int(mode == 'style'), time.time()))
         return mode
 
+    _SPOKEN_KEY, _SPOKEN_KEEP_KEY = 'spoken_moves', 'spoken_keep_phrases'  # FEAT-37 C: guild-wide switches kept as game_settings pseudo rows like _MOVES_KEY; never registry games
+
+    def _pseudo_flag(self, guild_id, key):
+        row = self.one('SELECT enabled FROM game_settings WHERE guild_id=? AND game=?', (guild_id, key))
+        return bool(row and row['enabled'])
+
+    def _set_pseudo_flag(self, guild_id, key, on, expected, label):
+        if not isinstance(on, bool):
+            raise ValueError('The setting must be on or off.')
+        with self.write_admin():
+            if expected is not None and self._pseudo_flag(guild_id, key) != expected:
+                raise ConflictError(f'The {label} setting was changed elsewhere. Reload the page and try again.')
+            self.db.execute('INSERT INTO game_settings(guild_id,game,enabled,updated_at) VALUES(?,?,?,?) ON CONFLICT(guild_id,game) DO UPDATE SET enabled=excluded.enabled,updated_at=excluded.updated_at',
+                (guild_id, key, int(on), time.time()))
+        return on
+
+    def spoken_moves_enabled(self, guild_id):
+        """Experimental "Read moves from chat" (D34): off by default."""
+        return self._pseudo_flag(guild_id, self._SPOKEN_KEY)
+
+    def set_spoken_moves_enabled(self, guild_id, on, expected=None):
+        return self._set_pseudo_flag(guild_id, self._SPOKEN_KEY, on, expected, 'read moves from chat')
+
+    def spoken_keep_phrases(self, guild_id):
+        """"Keep phrases for tuning": reads False whenever the main switch is off."""
+        return self.spoken_moves_enabled(guild_id) and self._pseudo_flag(guild_id, self._SPOKEN_KEEP_KEY)
+
+    def set_spoken_keep_phrases(self, guild_id, on, expected=None):
+        return self._set_pseudo_flag(guild_id, self._SPOKEN_KEEP_KEY, on, expected, 'keep phrases')
+
     GAME_SUMMARY_MAX = 20
 
     def game_summary_rounds(self, guild_id):
