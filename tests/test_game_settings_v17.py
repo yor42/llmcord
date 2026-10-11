@@ -43,14 +43,14 @@ class V16UpgradeTests(unittest.TestCase):
             path = self.v16_file(folder)
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 19)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 20)
                 self.assertEqual(len(list(Path(folder).glob("v16.sqlite3.pre-v17-*.sqlite3"))), 1)
                 self.assertFalse(store.blackjack_enabled(1))
                 self.assertTrue(store.blackjack_enabled(2))
                 self.assertEqual(store.blackjack_rules(1)["insurance"], True)
                 self.assertEqual(store.blackjack_rules(2)["insurance"], False)
                 seat = store.one("SELECT * FROM game_seats WHERE round_id=1")
-                self.assertEqual(tuple(seat), (1, 1, 0, "member", 7, 25, "win", 50, 9, 3))
+                self.assertEqual(tuple(seat), (1, 1, 0, "member", 7, 25, "win", 50, 9, 3, 0))
                 backup = next(Path(folder).glob("v16.sqlite3.pre-v17-*.sqlite3"))
                 with closing(sqlite3.connect(backup)) as old:
                     self.assertIn("CHECK(stake>0)", old.execute("SELECT sql FROM sqlite_master WHERE name='game_seats'").fetchone()[0])
@@ -110,7 +110,7 @@ class RegistryTests(unittest.TestCase):
         self.store.set_game_channel(G, CH, True)
 
     def test_registry_entries(self):
-        self.assertEqual(registry.keys(), ("blackjack", "doubt"))
+        self.assertEqual(registry.keys(), ("blackjack", "doubt", "holdem"))
         game = registry.get("blackjack")
         self.assertEqual((game.name, game.ledger_label, game.max_seats, game.default_enabled), ("Blackjack", "Blackjack", 7, True))
         with self.assertRaises(KeyError):

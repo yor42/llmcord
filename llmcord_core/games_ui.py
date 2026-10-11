@@ -197,4 +197,5 @@ async def games_panel(ctx):
     from .games import registry
     all_games_section(ctx)
     for key in registry.keys():
-        GAME_SECTIONS[key](ctx)
+        if key in GAME_SECTIONS:  # Hold'em's section comes with FEAT-33 part D
+            GAME_SECTIONS[key](ctx)

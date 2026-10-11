@@ -8,9 +8,13 @@ from llmcord_core.admin_store import ConflictError
 from llmcord_core.games import registry
 
 
+# Registered games with no dashboard section yet; remove 'holdem' when FEAT-33 part D adds its section.
+NO_SECTION_YET = ('holdem',)
+
+
 class GamesTabSections(unittest.TestCase):
     def test_every_registered_game_has_a_section_in_registry_order(self):
-        self.assertEqual(tuple(games_ui.GAME_SECTIONS), registry.keys())
+        self.assertEqual(tuple(games_ui.GAME_SECTIONS), tuple(k for k in registry.keys() if k not in NO_SECTION_YET))
         self.assertEqual(tuple(games_ui.GAME_SECTIONS), ('blackjack', 'doubt'))
         self.assertTrue(all(callable(f) for f in games_ui.GAME_SECTIONS.values()))
 

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from types import ModuleType
 from typing import Any, Callable, Optional
 
-from . import blackjack, doubt
+from . import blackjack, doubt, holdem
 
 
 @dataclass(frozen=True)
@@ -22,9 +22,10 @@ class Game:
     noun: str = ''  # the game's name inside a sentence
     min_seats: int = 1
     ante: bool = False  # seats stake the round's ante (rules snapshot), not a bet
+    cash: bool = False  # a cash table: buy-in into a stack that carries across hands; the wallet moves only at buy-in, rebuy and cash-out
     public_legal: Optional[Callable] = None  # (state, can_double(), can_insure()) -> {seat: moves}
     summary: Optional[Callable] = None  # (state) -> str | None
-    settlements: Optional[Callable] = None  # (state, ledger_label, label) -> [(seat, outcome, stake, returned, reason)]
+    settlements: Optional[Callable] = None  # (state, ledger_label, label) -> [(seat, outcome, stake, returned, reason)]; None for a cash game
     round_facts: Optional[Callable] = None  # (state) -> dict merged into the table summary row
     fact_keys: tuple = ()
     apply_move: Optional[Callable] = None  # (state, seat, move, can_double()) -> state
@@ -61,6 +62,18 @@ def _doubt_illegal(state, seat, move):
     return "It's not your turn." if state.turn != seat else "That move isn't allowed right now."
 
 
+def _holdem_facts(state):
+    res = holdem.result(state)
+    return {'pot': sum(pot.amount for pot in res.pots), 'winners': sorted({w for pot in res.pots for w in pot.winners}),
+            'hand': holdem.hand_name(res.pots[0].hand) if res.pots and res.pots[0].hand is not None else None}
+
+
+def _holdem_illegal(state, seat, move):
+    if state.finished:
+        return 'This hand is over.'
+    return "It's not your turn." if state.turn != seat else "That move isn't allowed right now."
+
+
 _GAMES = {
     "blackjack": Game("blackjack", "Blackjack", blackjack, blackjack.normalize_rules, blackjack.MAX_SEATS, True, "Blackjack", noun="blackjack",
                       public_legal=_bj_legal, summary=lambda state: blackjack.result(state).summary, settlements=_bj_settlements,
@@ -71,6 +84,11 @@ _GAMES = {
                   public_legal=lambda state, can_double, can_insure: {}, summary=lambda state: None, settlements=_doubt_settlements,
                   round_facts=lambda state: {'winner': state.winner, 'pot': sum(s.stake for s in state.seats)}, fact_keys=('winner', 'pot'),
                   apply_move=lambda state, seat, move, can_double: doubt.apply(state, seat, move), illegal_text=_doubt_illegal),
+    "holdem": Game("holdem", "Texas Hold'em", holdem, holdem.normalize_rules, holdem.MAX_SEATS, True, "Texas Hold'em", noun="Texas Hold'em",
+                   min_seats=holdem.MIN_SEATS, cash=True,
+                   public_legal=lambda state, can_double, can_insure: {state.turn: holdem.legal_moves(state, state.turn)} if state.turn is not None else {},
+                   summary=lambda state: None, round_facts=_holdem_facts, fact_keys=('pot', 'winners', 'hand'),
+                   apply_move=lambda state, seat, move, can_double: holdem.apply(state, seat, move), illegal_text=_holdem_illegal),
 }
 
 
