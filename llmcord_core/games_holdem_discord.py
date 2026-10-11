@@ -680,13 +680,19 @@ class HoldemTables:
         res = holdem.result(state)
         who = lambda seat: GameTables._who(seat)
         notes = [f"{who(seat)} is out of chips" + (" and can sit again to rejoin." if seat["kind"] == "member" else " and leaves the table.") for seat in snap["seats"] if seat["busted"]]
+        out_members = {seat["ref_id"] for seat in snap["seats"] if seat["busted"] and seat["kind"] == "member"}
         lobby = self.store.next_round(*key)
+        notes += [f"{who(seat)} leaves because <@{seat['brought_by']}> is out of chips, and is cashed out with {self.store.last_cash_out(guild_id, key[1], 'character', seat['ref_id']):,}."
+                  for seat in snap["seats"] if seat["kind"] == "character" and not seat["busted"] and seat["brought_by"] in out_members]
         over = len(lobby["seats"]) < holdem.MIN_SEATS
         if not over:
             for seat in list(lobby["seats"]):
                 if seat["kind"] == "member" and self._timeout_streak(guild_id, key[1], seat["ref_id"]) >= 2:
+                    brought = [c for c in lobby["seats"] if c["kind"] == "character" and c["brought_by"] == seat["ref_id"]]
                     lobby = self.store.leave_round(guild_id, lobby["round_id"], seat["ref_id"])
-                    notes.append(f"{who(seat)} ran out of time in two hands in a row and was cashed out with {seat['stack']:,}.")
+                    paid = lambda s: self.store.last_cash_out(guild_id, key[1], s["kind"], s["ref_id"])
+                    notes.append(f"{who(seat)} ran out of time in two hands in a row and was cashed out with {paid(seat):,}."
+                                 + "".join(f" {who(c)} leaves too, cashed out with {paid(c):,}." for c in brought))
         view = None
         if not res.shown:
             view = discord.ui.View(timeout=None)

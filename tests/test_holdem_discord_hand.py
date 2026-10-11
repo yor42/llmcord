@@ -48,6 +48,9 @@ except ImportError:  # pragma: no cover - the red state
 CUSTOM_ID = re.compile(r"llmcord:holdem:(?P<action>[a-z_]+):(?P<table>\d+):(?P<round>\d+):(?P<moves>\d+)")
 
 
+BUST_SEED, OVER_SEED = "mnt57-bust-46", "mnt57-over-0"
+
+
 def card(c):
     return f"{c[0]}{c[1]}"
 
@@ -725,6 +728,80 @@ class TimerTests(HandCase):
         self.assertEqual(lobby["status"], "joining")
         self.assertNotIn(CARA, [s["ref_id"] for s in lobby["seats"]])
         self.assertEqual(self.balance(CARA), WALLET - 1000 + end)
+
+    async def test_timeout_removal_also_cashes_out_the_characters_the_member_brought(self):
+        """MNT-57: the removal note names the characters that leave with the timed-out member, and their wallets are credited."""
+        self.seed = "mnt57-b"  # Ann survives both hands on this seed
+        await self.start(favorites=True)
+        await self.sit(BOB, 1000)
+        await self.sit(CARA, 1000)
+        await self.push(ALICE, "Deal")
+        self.tid, self.th, self.rid = self.table()["id"], self.thread(), self.snap()["round_id"]
+        def choose(menu, snap, seat):
+            row = snap["seats"][seat]
+            return "timeout" if row["ref_id"] == ALICE and row["kind"] == "member" else ("fold" if "fold" in menu else "check") if row["kind"] == "character" else call_down(menu)
+        await self.play_hand(choose)
+        await self.next_hand()
+        wallet = self.store.character_balance(G, self.ann)
+        last = await self.play_hand(choose)
+        lobby = self.store.latest_round(G, self.tid)
+        left = {s["ref_id"] for s in lobby["seats"]}
+        ann = next(s for s in last["seats"] if s["kind"] == "character")
+        self.assertGreater(ann["end"], 0)
+        self.assertNotIn(ALICE, left)
+        self.assertFalse(any(s["kind"] == "character" for s in lobby["seats"]))
+        self.assertIn(f"leaves too, cashed out with {ann['end']:,}", self.text())
+        self.assertEqual(self.store.character_balance(G, self.ann), wallet + ann["end"])
+        self.assertEqual(self.store.last_cash_out(G, self.tid, "character", self.ann), ann["end"])
+
+    def alice_shoves(self, menu, snap, seat):
+        row = snap["seats"][seat]
+        return shove(menu) if row["ref_id"] == ALICE else call_down(menu)
+
+    async def test_a_busted_member_takes_the_characters_they_brought_along(self):
+        """MNT-57: when a member busts, the characters they brought that still hold chips leave with a note naming the cash-out; their wallets are credited, the others play on."""
+        self.seed = BUST_SEED
+        await self.start(favorites=True)
+        await self.sit(BOB, 1000)
+        await self.sit(CARA, 1000)
+        await self.push(ALICE, "Deal")
+        self.tid, self.th, self.rid = self.table()["id"], self.thread(), self.snap()["round_id"]
+        wallet = self.store.character_balance(G, self.ann)
+        last = await self.play_hand(self.alice_shoves)
+        by = {(s["kind"], s["ref_id"]): s for s in last["seats"]}
+        self.assertTrue(by[("member", ALICE)]["busted"], "premise: the seed busts Alice")
+        ann = by[("character", self.ann)]
+        self.assertFalse(ann["busted"], "premise: the seed leaves Ann chips")
+        self.assertGreater(ann["end"], 0)
+        paid = ann["end"]
+        self.assertEqual(self.store.character_balance(G, self.ann), wallet + paid)
+        text = self.text()
+        self.assertIn(f"leaves because <@{ALICE}> is out of chips, and is cashed out with {paid:,}.", text)
+        self.assertIn(f"<@{ALICE}> is out of chips and can sit again to rejoin.", text)
+        lobby = self.store.latest_round(G, self.tid)
+        self.assertEqual({s["ref_id"] for s in lobby["seats"] if s["kind"] == "member"}, {BOB, CARA})
+        self.assertFalse(any(s["kind"] == "character" for s in lobby["seats"]))
+        self.assertIsNotNone(self.table())
+
+    async def test_a_busted_member_ending_the_table_does_not_pay_their_character_twice(self):
+        """MNT-57: when the bust leaves fewer than two seats the table closes; the brought character was cashed out once, at the bust, and the close pays only the member left."""
+        self.seed = OVER_SEED
+        await self.start(favorites=True)
+        await self.sit(BOB, 1000)
+        await self.push(ALICE, "Deal")
+        self.tid, self.th, self.rid = self.table()["id"], self.thread(), self.snap()["round_id"]
+        wallet = self.store.character_balance(G, self.ann)
+        last = await self.play_hand(self.alice_shoves)
+        by = {(s["kind"], s["ref_id"]): s for s in last["seats"]}
+        self.assertTrue(by[("member", ALICE)]["busted"], "premise: the seed busts Alice")
+        ann = by[("character", self.ann)]
+        self.assertGreater(ann["end"], 0, "premise: the seed leaves Ann chips")
+        self.assertIsNone(self.table())
+        self.assertEqual(self.store.character_balance(G, self.ann), wallet + ann["end"])
+        rows = [r for r in self.store.table_cash_summary(G, self.tid)["cashouts"] if r["kind"] == "character"]
+        self.assertEqual([(r["ref_id"], r["cashed_out"]) for r in rows], [(self.ann, ann["end"])])
+        self.assertEqual(sum(1 for r in self.store.db.execute("SELECT 1 FROM currency_ledger WHERE holder_kind='character' AND user_id=? AND reason LIKE '%cash-out%'", (self.ann,))), 1)
+        self.assertIn(f"leaves because <@{ALICE}> is out of chips, and is cashed out with {ann['end']:,}.", self.text())
 
     async def test_a_move_in_between_resets_the_timeout_count(self):
         """C1b: a timeout, then a hand where the member acts, then another timeout: still seated (the count is of consecutive hands)."""

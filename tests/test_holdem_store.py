@@ -769,6 +769,98 @@ class NextRoundTests(HoldemCase):
         with self.assertRaises(GameError):  # one player left: no hand
             self.store.deal(G, nxt["round_id"])
 
+    def brought_table(self, payouts, brought=(("Ann", ALICE), ("Bo", BOB))):
+        """Alice (+ Ann), Bob (+ Bo), Carl are seated and dealt; the hand is then forced settled with `payouts` ({(kind, ref_id): end stack}) so the busts are exact."""
+        s = self.store
+        ids = {"Ann": self.ann, "Bo": self.bo}
+        for name, owner in brought:
+            s.add_favorite(G, owner, ids[name])
+            self.cwallet(ids[name], 5000)
+        snap = self.open(seed="mnt57-forced")
+        rid = snap["round_id"]
+        for user in (ALICE, BOB):
+            self.wallet(user)
+            s.join_with_favorites(G, rid, user, 1000, self.w)
+        self.sit(rid, (CARL,), 1000)
+        s.deal(G, rid)
+        for (kind, ref), amount in payouts.items():
+            s.db.execute("UPDATE game_seats SET payout=? WHERE round_id=? AND kind=? AND ref_id=?", (amount, rid, kind, ref))
+        s.db.execute("UPDATE game_rounds SET status='settled' WHERE id=?", (rid,))
+        s.db.commit()
+        return rid
+
+    def test_characters_a_busted_member_brought_are_cashed_out_and_dropped(self):
+        """MNT-57: a member busts: their surviving character is paid to its own wallet (ledger + cashout row) and is not copied; other members' characters stay."""
+        s = self.store
+        self.brought_table({("member", ALICE): 0, ("character", self.ann): 777, ("member", BOB): 1500, ("character", self.bo): 1200, ("member", CARL): 1523})
+        wallets = {u: s.balance(G, u) for u in (ALICE, BOB, CARL)}
+        ann, bo, ledger = self.cbal(self.ann), self.cbal(self.bo), self.ledger_count()
+        nxt = s.next_round(G, 1)
+        rows = self.seat_rows(nxt["round_id"])
+        self.assertEqual([(r["kind"], r["ref_id"], r["stake"], r["stack"], r["brought_by"]) for r in rows],
+                         [("member", BOB, 1000, 1500, None), ("character", self.bo, 1000, 1200, BOB), ("member", CARL, 1000, 1523, None)])
+        self.assertEqual(self.cbal(self.ann), ann + 777)
+        self.assertEqual(self.cbal(self.bo), bo)
+        self.assertEqual({u: s.balance(G, u) for u in (ALICE, BOB, CARL)}, wallets)
+        self.assertEqual(self.ledger_count(), ledger + 1)  # only Ann's payout; Alice's zero moves no money
+        entry = s.ledger(G, character_id=self.ann)[0]
+        self.assertEqual((entry["amount"], entry["source"], entry["reason"]), (777, "game", CASH))
+        self.assertEqual([(r["kind"], r["ref_id"], r["bought_in"], r["cashed_out"]) for r in self.cashouts()],
+                         [("member", ALICE, 1000, 0), ("character", self.ann, 1000, 777)])
+        # no double pay: closing afterwards pays the remaining seats only
+        s.close_table(G, 1)
+        self.assertEqual(self.cbal(self.ann), ann + 777)
+        self.assertEqual([r["cashed_out"] for r in self.cashouts() if r["ref_id"] == self.ann and r["kind"] == "character"], [777])
+        self.assertEqual(self.cbal(self.bo), bo + 1200)
+        self.assertEqual([e["amount"] for e in s.ledger(G, character_id=self.ann) if e["reason"] == CASH], [777])  # a single cash-out entry
+
+    def test_a_character_busted_with_its_member_only_gets_the_zero_row(self):
+        """MNT-57: a brought character that is out of chips too is dropped with a zero cash-out row and no payment."""
+        s = self.store
+        self.brought_table({("member", ALICE): 0, ("character", self.ann): 0, ("member", BOB): 1500, ("character", self.bo): 1200, ("member", CARL): 2300})
+        ann, ledger = self.cbal(self.ann), self.ledger_count()
+        s.next_round(G, 1)
+        self.assertEqual(self.cbal(self.ann), ann)
+        self.assertEqual(self.ledger_count(), ledger)
+        self.assertEqual([(r["kind"], r["ref_id"], r["cashed_out"]) for r in self.cashouts()], [("member", ALICE, 0), ("character", self.ann, 0)])
+
+    def test_a_brought_character_cash_out_is_clamped_at_its_balance_cap(self):
+        """MNT-57: the character's payout follows the same balance-cap clamp as a normal cash-out; the row records what was paid."""
+        s = self.store
+        self.brought_table({("member", ALICE): 0, ("character", self.ann): 777, ("member", BOB): 1500, ("character", self.bo): 1200, ("member", CARL): 1523})
+        cap = s.MAX_CURRENCY_BALANCE
+        s.db.execute("UPDATE character_balances SET balance=? WHERE guild_id=? AND character_id=?", (cap - 300, G, self.ann))
+        s.db.commit()
+        s.next_round(G, 1)
+        self.assertEqual(self.cbal(self.ann), cap)
+        self.assertEqual(s.ledger(G, character_id=self.ann)[0]["amount"], 300)
+        row = [r for r in self.cashouts() if r["kind"] == "character"][0]
+        self.assertEqual((row["bought_in"], row["cashed_out"]), (1000, 300))
+
+    def test_a_deleted_brought_character_is_dropped_with_a_zero_cash_out(self):
+        """MNT-57: a brought character deleted meanwhile has no wallet left: it is dropped and its row records 0."""
+        s = self.store
+        self.brought_table({("member", ALICE): 0, ("character", self.ann): 777, ("member", BOB): 1500, ("character", self.bo): 1200, ("member", CARL): 1523})
+        s.db.execute("PRAGMA foreign_keys=OFF")
+        s.db.execute("DELETE FROM characters WHERE id=?", (self.ann,))
+        s.db.commit()
+        s.db.execute("PRAGMA foreign_keys=ON")
+        ledger = self.ledger_count()
+        nxt = s.next_round(G, 1)
+        self.assertEqual(self.ledger_count(), ledger)
+        self.assertNotIn(self.ann, [r["ref_id"] for r in self.seat_rows(nxt["round_id"])])
+        self.assertEqual([(r["kind"], r["cashed_out"]) for r in self.cashouts() if r["ref_id"] == self.ann], [("character", 0)])
+
+    def test_characters_of_surviving_members_are_copied_when_nobody_with_characters_busts(self):
+        """MNT-57: a bust of a member who brought nobody does not touch other members' characters."""
+        s = self.store
+        self.brought_table({("member", ALICE): 1000, ("character", self.ann): 777, ("member", BOB): 1500, ("character", self.bo): 1200, ("member", CARL): 0},
+                           brought=(("Ann", ALICE), ("Bo", BOB)))
+        nxt = s.next_round(G, 1)
+        self.assertEqual([(r["kind"], r["ref_id"], r["brought_by"], r["stack"]) for r in self.seat_rows(nxt["round_id"])],
+                         [("member", ALICE, None, 1000), ("character", self.ann, ALICE, 777), ("member", BOB, None, 1500), ("character", self.bo, BOB, 1200)])
+        self.assertEqual([(r["kind"], r["ref_id"], r["cashed_out"]) for r in self.cashouts()], [("member", CARL, 0)])
+
     def test_refused_while_unfinished_and_when_closed(self):
         rid = self.lobby((ALICE, BOB))
         with self.assertRaisesRegex(GameError, "unfinished"):

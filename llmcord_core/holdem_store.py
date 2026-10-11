@@ -28,6 +28,11 @@ class HoldemStore:
             (guild_id, table_id, seat['kind'], seat['ref_id'], seat['stake'], paid, time.time()))
         return paid
 
+    def last_cash_out(self, guild_id, table_id, kind, ref_id):
+        """What the seat's newest cash-out at this table actually paid (after any balance-cap clamp), or 0."""
+        row = self.one('SELECT cashed_out FROM game_cashouts WHERE guild_id=? AND table_id=? AND kind=? AND ref_id=? ORDER BY id DESC LIMIT 1', (guild_id, table_id, kind, ref_id))
+        return row['cashed_out'] if row else 0
+
     def open_cash_tables(self):
         """Every open table of a cash game in any guild, with the status of its newest round (startup recovery)."""
         keys = [k for k in registry.keys() if registry.get(k).cash]
@@ -50,13 +55,19 @@ class HoldemStore:
             self._cash_out_seat(guild_id, table_id, seat, self._end_stack(rnd, seat), reason)
 
     def _next_cash_round(self, guild_id, table_id):
-        """Inside write_admin: the next lobby, with the rules the table opened with (only Assist follows the server). Seats are copied with their end stacks (starting stacks after a voided hand); busted seats are cashed out for 0 and dropped."""
+        """Inside write_admin: the next lobby, with the rules the table opened with (only Assist follows the server). Seats are copied with their end stacks (starting stacks after a voided hand); busted seats are cashed out for 0 and dropped, and characters a busted member brought are cashed out to their own wallets."""
         prev = self._game_round(guild_id, self.one('SELECT id FROM game_rounds WHERE guild_id=? AND table_id=? ORDER BY number DESC LIMIT 1', (guild_id, table_id))['id'])
-        rules = self._round_rules(prev)
+        rules = self._round_rules(prev)  # unreadable pinned rules (None) fall back to the server's current rules
         assist = bool(rules and rules['assist'] and self.game_rules(guild_id, 'holdem')['assist'])
         round_id = self._new_round(guild_id, table_id, new_seed(), time.time(), assist=assist, pinned=rules)
-        for seat in self._game_seats(guild_id, prev['id']):
+        seats = self._game_seats(guild_id, prev['id'])
+        busted = {s['ref_id'] for s in seats if s['kind'] == 'member' and self._end_stack(prev, s) <= 0}
+        reason = f"{self._round_game(prev).ledger_label} cash-out ({self._game_label(prev)})"
+        for seat in seats:
             stack = self._end_stack(prev, seat)
+            if seat['kind'] == 'character' and seat['brought_by'] in busted and stack > 0:
+                self._cash_out_seat(guild_id, table_id, seat, stack, reason)  # a character leaves with the member who brought it
+                continue
             if stack <= 0:
                 self.db.execute('INSERT INTO game_cashouts(guild_id,table_id,kind,ref_id,bought_in,cashed_out,created_at) VALUES(?,?,?,?,?,?,?)',
                     (guild_id, table_id, seat['kind'], seat['ref_id'], seat['stake'], 0, time.time()))
