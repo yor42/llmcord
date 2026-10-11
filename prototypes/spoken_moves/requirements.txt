@@ -1,0 +1,6 @@
+# Prototype-only dependencies; install in prototypes/spoken_moves/.venv, never in the main .venv.
+onnxruntime==1.22.1
+tokenizers==0.21.2
+numpy==2.3.2
+# only for `run.py fetch` (int8 quantization of the e5 model)
+onnx==1.18.0

@@ -1,0 +1,21 @@
+{
+  "models": {
+    "intfloat/multilingual-e5-small": {
+      "revision": "614241f622f53c4eeff9890bdc4f31cfecc418b3",
+      "files": {
+        "onnx/model.onnx": "ca456c06b3a9505ddfd9131408916dd79290368331e7d76bb621f1cba6bc8665",
+        "tokenizer.json": "0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39"
+      },
+      "derived": {
+        "model_int8.onnx": "8da4c9ba0ad59f58e8566839425d7fd6339d31414d0ce5cba2d7d0afb75dd8b6"
+      }
+    },
+    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2": {
+      "revision": "e8f8c211226b894fcb81acc59f3b34ba3efd5f42",
+      "files": {
+        "onnx/model_qint8_arm64.onnx": "783fea82d71a58179b830a4dbd2d58447e640609e98eedf9ffa12622d375a672",
+        "tokenizer.json": "2c3387be76557bd40970cec13153b3bbf80407865484b209e655e5e4729076b8"
+      }
+    }
+  }
+}

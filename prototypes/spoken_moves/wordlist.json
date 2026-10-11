@@ -1,0 +1,64 @@
+{
+  "_note": "Blackjack word list (FEAT-36 draft, same shape as llmcord_core/spoken/lexicon/holdem.json). A match counts as sure; moves to the lexicon in FEAT-37.",
+  "hit": {
+    "en": [
+      "hit",
+      "hit me",
+      "one more",
+      "another card",
+      "card please"
+    ],
+    "ko": [
+      "히트",
+      "한 장 더",
+      "한장 더",
+      "하나 더",
+      "카드 줘",
+      "더 줘",
+      "더 받을"
+    ]
+  },
+  "stand": {
+    "en": [
+      "stand",
+      "stay",
+      "i'm good",
+      "im good",
+      "no more",
+      "stick",
+      "i'm done",
+      "im done"
+    ],
+    "ko": [
+      "스탠드",
+      "스테이",
+      "그만",
+      "여기까지",
+      "됐어"
+    ]
+  },
+  "double": {
+    "en": [
+      "double",
+      "double down"
+    ],
+    "ko": [
+      "더블",
+      "따블",
+      "두 배"
+    ]
+  },
+  "surrender": {
+    "en": [
+      "surrender",
+      "give up",
+      "forfeit"
+    ],
+    "ko": [
+      "서렌",
+      "항복",
+      "기권",
+      "포기"
+    ]
+  }
+}
