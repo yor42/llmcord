@@ -18,6 +18,7 @@ import time
 import weakref
 from dataclasses import dataclass, field
 from types import SimpleNamespace
+from typing import NamedTuple
 
 import discord
 from discord import app_commands
@@ -44,6 +45,14 @@ MAX_BET = 100_000
 HOW_TO_JOIN = "Join with /blackjack bet:<amount>; add favorites:True to bring your favorite characters."
 PREFIX = "llmcord:bj"
 NO_MENTIONS = discord.AllowedMentions.none()
+
+
+class Turn(NamedTuple):
+    """The member on turn at a playing table, kept in memory for spoken-move checks (FEAT-37 D)."""
+    round_id: int
+    moves: int
+    member_id: int
+    channel_id: int
 
 
 @dataclass(eq=False)
@@ -135,6 +144,8 @@ class GameTables:
         self.runtime = TableRuntime(label="Blackjack", retry_seconds=self.RETRY_SECONDS)
         self.senders: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
         self.tables: dict[tuple[int, int], _Table] = {}
+        self.turns: dict[tuple[int, int], Turn] = {}  # table key -> member on turn; the spoken-move check reads it without the store
+        self.turn_channels: dict[tuple[int, int], tuple[int, int]] = {}  # (guild, channel) -> table key
         self.talk_capped: set[tuple[int, object]] = set()
         self.talk = getattr(bot, 'talk_budget', None) or TalkBudget(lambda: bot.store)  # failed attempts, shared by every table game
 
@@ -206,10 +217,35 @@ class GameTables:
             self.arm(key, "idle", snap["round_id"])
         else:
             self.disarm(key)
+        self._note_turn(key, snap)
+
+    def _note_turn(self, key, snap) -> None:
+        """Records the member on turn (or clears it), then tells the spoken-move checker so a check for an earlier turn goes away."""
+        seat = None
+        if snap["status"] == "playing" and snap["view"] and snap["view"]["turn"] is not None:
+            seat = snap["seats"][snap["view"]["turn"]]
+        if seat is not None and seat["kind"] == "member":
+            turn = Turn(snap["round_id"], snap["moves"], seat["ref_id"], snap["channel_id"])
+            self.turns[key] = turn
+            self.turn_channels[(key[0], turn.channel_id)] = key
+        else:
+            self._clear_turn(key)
+        spoken = getattr(self.bot, "spoken", None)
+        if spoken is not None:
+            spoken.turn_changed(key)
+
+    def _clear_turn(self, key) -> None:
+        turn = self.turns.pop(key, None)
+        if turn is not None and self.turn_channels.get((key[0], turn.channel_id)) == key:
+            del self.turn_channels[(key[0], turn.channel_id)]
 
     def _forget(self, key) -> None:
         self.disarm(key)
         self.tables.pop(key, None)
+        self._clear_turn(key)
+        spoken = getattr(self.bot, "spoken", None)
+        if spoken is not None:
+            spoken.turn_changed(key)
 
     # --- dashboard closes (no IPC: the dashboard closes tables in the shared database) -------
 
@@ -706,6 +742,20 @@ class GameTables:
         async with self.runtime.lock(key):
             out = self._press(interaction.user.id, key, action, round_id, moves)
         await self._finish(interaction, out, via=interaction)
+
+    async def play_spoken(self, interaction: discord.Interaction, table_id: int, round_id: int, moves: int, move: str) -> str | None:
+        """A move chosen on a spoken-move check: the normal press path (same lock, same stale check), but the repaint goes to the
+        table message, not to the interaction's own message. None when the move was played, else the refusal text."""
+        guild_id = interaction.guild_id
+        if guild_id is None or interaction.user.bot or self._foreign((guild_id, table_id)):
+            await self._say(interaction, STALE)
+            return STALE
+        await self._ack(interaction)
+        key = (guild_id, table_id)
+        async with self.runtime.lock(key):
+            out = self._press(interaction.user.id, key, move, round_id, moves)
+        await self._finish(interaction, out)
+        return None if out.say is None and out.paints else out.say or STALE
 
     def _press(self, user_id, key, action, round_id, moves) -> _Out:
         """Store work for one button press, under the table lock. Returns what to send afterwards."""

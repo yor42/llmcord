@@ -38,6 +38,7 @@ from .identity import discord_identity, message_context
 from .favorites_discord import register_favorites_commands
 from .game_talk import TalkBudget
 from .games_discord import GameButton, GameTables, register_game_commands
+from .games_spoken_discord import SpokenButton, SpokenMoves
 from .games_doubt_discord import DoubtButton, DoubtTables, register_doubt_commands
 from .games_holdem_discord import HoldemButton, HoldemTables
 from .items_discord import register_items_commands
@@ -163,6 +164,7 @@ class SkitBot(commands.Bot):
         self.note_tasks: set[asyncio.Task] = set()
         self.talk_budget = TalkBudget(lambda: self.store, self._hard_cap_reached)
         self.games = GameTables(self)
+        self.spoken = SpokenMoves(self)
         self.doubt = DoubtTables(self)
         self.holdem = HoldemTables(self)
         self.engine.table_block = self._table_block
@@ -179,7 +181,7 @@ class SkitBot(commands.Bot):
         await self.games.recover()
         await self.doubt.recover()
         await self.holdem.recover()
-        self.add_dynamic_items(GameButton, DoubtButton, HoldemButton)
+        self.add_dynamic_items(GameButton, SpokenButton, DoubtButton, HoldemButton)
         self.cleanup_task = asyncio.create_task(self._cleanup_loop())
 
     async def on_ready(self):
@@ -201,6 +203,10 @@ class SkitBot(commands.Bot):
     async def close(self):
         if self.cleanup_task:
             self.cleanup_task.cancel()
+        try:
+            await self.spoken.close()
+        except Exception:
+            logging.exception('Closing the spoken-move checks failed')
         try:
             await self.games.close()
         except Exception:
@@ -242,6 +248,10 @@ class SkitBot(commands.Bot):
             await self.doubt.note_thread_message(message)
         except Exception:
             logging.exception("Counting a table thread message failed")
+        try:
+            self.spoken.note_message(message)  # only schedules a background check; the message carries on to the characters
+        except Exception:
+            logging.exception("Scheduling a spoken-move check failed")
         parent_id, binding = self.location(message.channel)
         if not binding:
             return
