@@ -27,6 +27,7 @@ The bot reads DB state fresh each turn, so dashboard edits apply on the next tur
 | Dashboard | `web.py`, `auth.py`, `admin.py`, `dashboard.py`, `scene_ui.py`, `presets_ui.py`, `lore_workspace.py`, `lore_drag.{py,js}` |
 | Imports/assets | `cards.py`, `lorebooks.py`, `avatars.py` |
 | Items and shop (FEAT-22) | `items/` (pure registry of item kinds, recipes, seeded rolls, built-in catalog in `items/recipes/*.json`), `items_store.py` (shop, inventory, use log, purchase/use transactions, ledger reversal hook), `items_discord.py` (`/shop`, `/inventory`, `/use`), `shop_ui.py` (dashboard Shop tab) |
+| Spoken moves (D32, seam only) | `spoken/` (pure: `SpokenMove`/`Reading` shapes, amount parser, EN/KO word matcher, `lexicon/*.json`, Hold'em adapter `spoken/holdem.py`); not wired to Discord yet (FEAT-37) |
 | Minigames (FEAT-19, FEAT-21) | `games/` (pure seeded rules engines: blackjack, I Doubt It `doubt.py`; `registry.py` lists the games), `games_discord.py` (`/blackjack`, buttons, per-table locks and timers); store API in `admin_store.py`; dashboard settings in `currency_ui.py` |
 
 ## Commands

@@ -1,0 +1,59 @@
+{
+  "fold": {
+    "en": ["fold", "i fold", "i'm out", "im out", "muck"],
+    "ko": ["폴드", "다이", "죽을게", "접을게", "포기"]
+  },
+  "check": {
+    "en": ["check", "check it", "knock"],
+    "ko": ["체크"]
+  },
+  "call": {
+    "en": ["call", "i call", "i'll call", "call it"],
+    "ko": ["콜", "받을게", "받아"]
+  },
+  "raise": {
+    "en": ["raise", "bet", "re-raise", "reraise", "bump it"],
+    "ko": ["레이즈", "베팅", "벳"]
+  },
+  "all_in": {
+    "en": ["all in", "allin", "shove", "jam"],
+    "ko": ["올인"]
+  },
+  "_presets": {
+    "min": {"en": ["min", "min raise", "minraise", "minimum"], "ko": ["민레이즈", "최소"]},
+    "half_pot": {"en": ["half pot", "half"], "ko": ["하프", "반팟"]},
+    "pot": {"en": ["pot", "pot it", "pot size"], "ko": ["팟", "풀팟"]}
+  },
+  "_preset_alone": {
+    "en": ["half pot", "pot it", "pot size", "min raise", "minraise"],
+    "ko": ["하프", "반팟", "풀팟", "민레이즈"]
+  },
+  "_exclude": ["콜라", "콜렉션", "체크카드", "다이어트", "다이아", "팟캐스트", "베팅업체"],
+  "_amount_kinds": ["raise"],
+  "examples": {
+    "fold": ["fold", "I fold", "nah, I'm out", "just muck it", "폴드", "그냥 다이", "이건 죽을게", "ㅇㅋ 접을게", "fine 다이", "fold 할게"],
+    "check": ["check", "check it", "knock knock, check", "체크", "체크 할게", "일단 체크", "check ㄱㄱ", "그냥 check", "I'll check"],
+    "call": ["call", "fine, I'll call", "I call", "call it", "콜", "콜 ㄱㄱ", "받을게", "콜할게요", "ok 콜", "just call"],
+    "raise": ["raise", "raise to 300 ㅋㅋ", "raise 50 more", "bet 100", "re-raise to 500", "레이즈", "300까지 레이즈", "베팅 2천", "half pot", "하프 베팅", "min raise"],
+    "all_in": ["all in", "all-in", "I shove", "jam it", "올인", "올인 간다", "그냥 올인", "shove ㄱㄱ", "다 걸게 올인", "allin"]
+  },
+  "table_talk": [
+    "nice hand",
+    "ㅋㅋㅋ 미쳤다",
+    "who's winning?",
+    "I'll call you later",
+    "콜라 마시고 올게",
+    "that was a great flop",
+    "wow 대박",
+    "너 블러프지?",
+    "I have 300 chips left",
+    "체크카드 어디갔지",
+    "lol",
+    "what do you think she has?",
+    "다이어트 해야되는데",
+    "good luck everyone",
+    "비밀인데 사실 나 카드 좋아",
+    "can someone explain the rules?",
+    "팟캐스트 들으면서 하는 중"
+  ]
+}
