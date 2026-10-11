@@ -88,6 +88,13 @@ def main():
     for n in range(1, 56):
         store.change_balance(1, 7_000_000_000_000_000_000 + n, 1, f'Seed grant {n}', 1, 'seed')
     store.change_balance(2, 8_000_000_000_000_000_001, 5, 'OTHER-GUILD-CANARY', 1)
+    # FEAT-22 D: 55 item uses for the Shop tab's log (append-only, so seeded once) and a guild-2 canary. The Shop browser test counts 50 + 5: no other browser test may write item_uses.
+    for n in range(1, 56):
+        text = '<b>Plain</b> roll' if n == 1 else f'You rolled a **{n % 6 + 1}** (1-6).'
+        store.db.execute('INSERT INTO item_uses(guild_id,user_id,channel_id,item_key,seed,result,used_at) VALUES(?,?,?,?,?,?,?)',
+                         (1, int(('1' if n % 3 == 0 else '2' if n % 3 == 1 else '3') * 18), 100, 'dice', f'seed{n}', json.dumps({'text': text, 'fields': [], 'footer_note': ''}), 1_700_000_000 + n * 60))
+    store.db.execute('INSERT INTO item_uses(guild_id,user_id,channel_id,item_key,seed,result,used_at) VALUES(2,5,100,\'dice\',\'s\',?,1700000000)', (json.dumps({'text': 'OTHER-GUILD-CANARY', 'fields': [], 'footer_note': ''}),))
+    store.db.commit()
     # FEAT-13: keep the spending period's start about two weeks from today so the period-bound assertions cannot flake around midnight UTC on the reset day.
     store.db.execute('UPDATE bot_settings SET reset_day=? WHERE id=1', ((time.gmtime().tm_mday + 13) % 28 + 1,))
     store.db.commit()
@@ -237,6 +244,18 @@ def main():
         store.set_daily_settings(body.get('guild', 1), body['amount'], body['streak_bonus'], body['streak_days'])
         return {}
 
+    @app.post('/_test/shop')
+    async def shop(request: Request):
+        # Simulates a change made elsewhere while a dashboard page is open: saves an item's settings (revision read now) or the hold cap.
+        body = await request.json()
+        guild = body.get('guild', 1)
+        if 'hold_cap' in body:
+            store.set_item_hold_cap(guild, body['hold_cap'])
+        if 'item' in body:
+            entry = store.shop_item(guild, body['item'])
+            store.save_shop_item(guild, body['item'], expected_revision=entry['revision'], for_sale=body.get('for_sale', entry['for_sale']), allow_use=body.get('allow_use', entry['allow_use']), price=body.get('price', entry['price_override']))
+        return {}
+
     @app.post('/_test/games')
     async def games(request: Request):
         # Simulates a change made elsewhere (bet limits, game channels) while a dashboard page is open.
@@ -334,7 +353,7 @@ def main():
             'books': [dict(r) for r in store.all('SELECT * FROM lorebook_entries')],
             'presets': [dict(r) for r in store.list_presets(1)], 'active': store.active_preset(1)['id'],
             'active_bundle': store.active_preset(1)['bundle'], 'assets': [dict(r) for r in store.all('SELECT * FROM avatar_assets')],
-            'guild2_spaces': [dict(r) for r in originals['list_spaces'](2)], 'cast_limits': {g: store.cast_limits(g) for g in (1, 2)}, 'archived_favorites': {g: store.archived_favorites(g) for g in (1, 2)}, 'daily': {g: store.daily_settings(g) for g in (1, 2)}, 'refill_cap': {g: store.refill_cap(g) for g in (1, 2)}, 'games': {g: {**store.game_settings(g), 'channels': sorted(store.game_channels(g)), 'character_talk': store.game_character_talk(g), 'talk_limit': store.game_talk_daily_limit(g), 'summary_rounds': store.game_summary_rounds(g), 'blackjack_enabled': store.blackjack_enabled(g), 'blackjack_rules': store.blackjack_rules(g), 'doubt_enabled': store.game_enabled(g, 'doubt'), 'doubt_rules': store.game_rules(g, 'doubt')} for g in (1, 2)}, 'guild_timezone': store.guild_timezone(1), 'catchup_anywhere': store.catchup_anywhere(1), 'turn_log': store.turn_log_settings(1), 'audit': [dict(r) for r in store.all('SELECT * FROM admin_audit ORDER BY id')],
+            'guild2_spaces': [dict(r) for r in originals['list_spaces'](2)], 'cast_limits': {g: store.cast_limits(g) for g in (1, 2)}, 'archived_favorites': {g: store.archived_favorites(g) for g in (1, 2)}, 'daily': {g: store.daily_settings(g) for g in (1, 2)}, 'refill_cap': {g: store.refill_cap(g) for g in (1, 2)}, 'games': {g: {**store.game_settings(g), 'channels': sorted(store.game_channels(g)), 'character_talk': store.game_character_talk(g), 'talk_limit': store.game_talk_daily_limit(g), 'summary_rounds': store.game_summary_rounds(g), 'blackjack_enabled': store.blackjack_enabled(g), 'blackjack_rules': store.blackjack_rules(g), 'doubt_enabled': store.game_enabled(g, 'doubt'), 'doubt_rules': store.game_rules(g, 'doubt')} for g in (1, 2)}, 'shop': {g: {'hold_cap': store.item_hold_cap(g), 'items': {e['key']: e for e in store.shop_catalog(g)}} for g in (1, 2)}, 'guild_timezone': store.guild_timezone(1), 'catchup_anywhere': store.catchup_anywhere(1), 'turn_log': store.turn_log_settings(1), 'audit': [dict(r) for r in store.all('SELECT * FROM admin_audit ORDER BY id')],
             'model_profiles': [dict(r) for r in store.model_profile_rows()], 'model_roles': dict(store.model_roles()),
             'slots': [{'character_id': r['character_id'], 'slot_key': r['slot_key'], 'label': r['label'], 'has_image': bool(r['image'])} for r in store.all('SELECT * FROM avatar_slots')]}
 

@@ -1,6 +1,6 @@
 # Items and the shop: plan (designed 2026-10-11, FEAT-22, D30)
 
-Status: **design agreed with the user in a grilling session on 2026-10-11; nothing built yet.** Words are in [the glossary](../glossary.md): Item, Inventory, Shop, Use, Recipe.
+Status: **built 2026-10-11 (parts A–E, schema v18).** Designed with the user in a grilling session the same day. Words are in [the glossary](../glossary.md): Item, Inventory, Shop, Use, Recipe.
 
 ## Principle
 

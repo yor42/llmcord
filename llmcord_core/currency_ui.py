@@ -17,6 +17,7 @@ PAGE = 50
 MAX_CHANGE = 1_000_000
 _MENTION = re.compile(r'<@!?(\d+)>')
 _MEMBER_INPUT = re.compile(r'<@!?(\d{1,20})>|(\d{1,20})')
+SHOP_REVERSE_NOTE = ' This also takes back the item that was bought, if the member still has it.'
 _WHOLE_AMOUNT = f'The amount must be a whole number from 1 to {MAX_CHANGE:,}.'
 
 
@@ -86,8 +87,23 @@ def ledger_rows(entries, names, zone_name, characters=None):
         rows.append({'id': e['id'], 'entry': f"#{e['id']}", 'time': datetime.fromtimestamp(e['created_at'], zone).strftime('%Y-%m-%d %H:%M'),
                      'member': holder(e), 'amount': f"{e['amount']:+,}", 'after': f"{e['balance_after']:,}",
                      'reason': e['reason'], 'admin': member_label(names, e['actor_id']) if e['actor_id'] else '', 'note': note,
-                     'can_reverse': e['reverses_id'] is None and e['id'] not in reversed_by and (e.get('holder_kind') != 'character' or e['user_id'] in characters)})
+                     'shop': e.get('source') == 'shop', 'can_reverse': e['reverses_id'] is None and e['id'] not in reversed_by and (e.get('holder_kind') != 'character' or e['user_id'] in characters)})
     return rows
+
+
+def reverse_detail(row, result):
+    """Audit detail for a reversal; a reversed shop purchase also records the item and whether it was taken back."""
+    detail = {'entry_id': row['id'], 'reversal_id': result['id'], 'user_id': result['user_id'], 'amount': result['amount']}
+    if result.get('shop_item'):
+        detail['shop_item'] = {'item_key': result['shop_item']['item_key'], 'removed': result['shop_item']['removed']}
+    return detail
+
+
+def reverse_note(result):
+    shop = result.get('shop_item')
+    if not shop:
+        return ''
+    return ' The shop item was taken back.' if shop['removed'] else ' The shop item was already used, so only the currency was returned.'
 
 
 def friendly(error, names):
@@ -307,7 +323,7 @@ class CurrencyPanel:
         from nicegui import ui
         with ui.dialog() as dialog, ui.card().classes('w-full max-w-lg'):
             ui.label(f"Reverse entry {row['entry']}").classes('text-xl font-bold')
-            ui.label(f"This adds a reversal entry that undoes {row['amount']} for {row['member']}. The original entry stays in the ledger.").classes('ll-muted')
+            ui.label(f"This adds a reversal entry that undoes {row['amount']} for {row['member']}. The original entry stays in the ledger.{SHOP_REVERSE_NOTE if row.get('shop') else ''}").classes('ll-muted')
             reason = ui.input('Reason').props('maxlength=200')
             def reverse():
                 try:
@@ -316,12 +332,11 @@ class CurrencyPanel:
                     raise friendly(error, self.names)
             async def done(result):
                 dialog.close()
-                ui.notify(f"Reversed entry {row['entry']}.", type='positive')
+                ui.notify(f"Reversed entry {row['entry']}.{reverse_note(result)}", type='positive')
                 await self.render_all()
             with ui.element('div').classes('ll-form-row justify-end'):
                 ui.button('Cancel', on_click=dialog.close).props('flat')
-                self.ctx.button('Reverse entry', reverse, 'currency.reverse', lambda result: {'entry_id': row['id'], 'reversal_id': result['id'], 'user_id': result['user_id'], 'amount': result['amount']},
-                                then=done, color='negative')
+                self.ctx.button('Reverse entry', reverse, 'currency.reverse', lambda result: reverse_detail(row, result), then=done, color='negative')
         dialog.on('hide', dialog.delete)
         dialog.open()
 

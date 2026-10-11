@@ -23,8 +23,13 @@ def _load():
 _ITEMS = _load()
 
 
+DISPLAY_ORDER = ('8ball', 'dice', 'd20', 'fortune_cookie', 'tarot')
+
+
 def all_items():
-    return list(_ITEMS.values())
+    """Built-ins in DISPLAY_ORDER, then any other key alphabetically."""
+    rank = {key: n for n, key in enumerate(DISPLAY_ORDER)}
+    return sorted(_ITEMS.values(), key=lambda r: (rank.get(r.key, len(rank)), r.key))
 
 
 def get_item(key):

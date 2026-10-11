@@ -14,7 +14,7 @@ Use Sonnet for routine coordination, implementation, tests, and review; Haiku fo
 ## Processes (no IPC — they share one SQLite file)
 - `llmcord.py` → `discord_bot.SkitBot`: events, slash commands (`register_commands`), webhooks, daily cleanup task.
 - `web_main.py` → `web.create_app`: OAuth, avatar images, mounts NiceGUI (`dashboard.mount_dashboard`).
-- `migrate.py` → `Store(path)`: creates/upgrades schema (`PRAGMA user_version`, currently 17; backs up before upgrading).
+- `migrate.py` → `Store(path)`: creates/upgrades schema (`PRAGMA user_version`, currently 18; backs up before upgrading).
 The bot reads DB state fresh each turn, so dashboard edits apply on the next turn.
 
 ## Module map (`llmcord_core/`)
@@ -26,6 +26,7 @@ The bot reads DB state fresh each turn, so dashboard edits apply on the next tur
 | Persistence | `store.py` (scene/lore/core), `admin_store.py` (presets, lore identities, avatars, revisions) |
 | Dashboard | `web.py`, `auth.py`, `admin.py`, `dashboard.py`, `scene_ui.py`, `presets_ui.py`, `lore_workspace.py`, `lore_drag.{py,js}` |
 | Imports/assets | `cards.py`, `lorebooks.py`, `avatars.py` |
+| Items and shop (FEAT-22) | `items/` (pure registry of item kinds, recipes, seeded rolls, built-in catalog in `items/recipes/*.json`), `items_store.py` (shop, inventory, use log, purchase/use transactions, ledger reversal hook), `items_discord.py` (`/shop`, `/inventory`, `/use`), `shop_ui.py` (dashboard Shop tab) |
 | Minigames (FEAT-19, FEAT-21) | `games/` (pure seeded rules engines: blackjack, I Doubt It `doubt.py`; `registry.py` lists the games), `games_discord.py` (`/blackjack`, buttons, per-table locks and timers); store API in `admin_store.py`; dashboard settings in `currency_ui.py` |
 
 ## Commands

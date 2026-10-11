@@ -4413,3 +4413,124 @@ class DashboardBrowserTests(unittest.TestCase):
                 context.close()
         finally:
             self.post_hook('/_test/fail-members', n=0)
+
+    def open_shop(self):
+        context, page, errors = self.ux_page('/admin/guild/1?tab=shop')
+        page.get_by_text('Every item use on this server, newest first.', exact=True).wait_for(timeout=5000)
+        page.locator('.ll-shop-table tbody tr').first.wait_for(timeout=5000)
+        return context, page, errors
+
+    def reset_shop(self):
+        for item in ('dice', 'fortune_cookie'):
+            self.post_hook('/_test/shop', {'item': item, 'for_sale': False, 'allow_use': True, 'price': None})
+        self.post_hook('/_test/shop', {'hold_cap': 10})
+
+    def shop_item(self, key, guild='1'):
+        return self.state()['shop'][guild]['items'][key]
+
+    def test_shop_tab_lists_items_settings_and_use_log_for_this_server_only(self):
+        """FEAT-22 D: the Shop tab lists the built-in items with their kind, shows the hold cap, and lists the use log newest first (50, then Load more) with plain-text results, member names and no other server's rows."""
+        from playwright.sync_api import expect
+        context, page, errors = self.open_shop()
+        try:
+            self.assertTrue(self.tab_selected(page, 'Shop'))
+            for name in ('Magic 8-ball', 'd20', 'Dice', 'Fortune cookie', 'Tarot'):
+                page.get_by_role('group', name=name, exact=True).wait_for(timeout=5000)
+            dice, tarot = page.get_by_role('group', name='Dice', exact=True), page.get_by_role('group', name='Tarot', exact=True)
+            self.assertEqual(dice.get_by_text('Random message · Reusable').count(), 1)
+            self.assertEqual(tarot.get_by_text('Random message · Consumable').count(), 1)
+            self.assertEqual((dice.get_by_label('Cooldown (seconds)').count(), tarot.get_by_label('Cooldown (seconds)').count()), (1, 0))
+            self.assertEqual((dice.get_by_label('Sides').count(), tarot.get_by_label('Sides').count()), (1, 0))
+            self.assertEqual((dice.get_by_text('Custom lines').count(), tarot.get_by_text('Custom lines').count(),
+                              page.get_by_role('group', name='Fortune cookie', exact=True).get_by_text('Custom lines').count()), (0, 0, 1))
+            expect(dice.get_by_label('Sides')).to_have_value('6')
+            expect(page.get_by_label('Most of a consumable one member can hold', exact=True)).to_have_value('10')
+            rows = page.locator('.ll-shop-table tbody tr')
+            self.assertEqual(rows.count(), 50)  # dashboard_server seeds 55 guild-1 uses: no other browser test may write item_uses
+            self.assertIn('Dice', rows.first.inner_text())
+            self.assertIn('Aria', page.locator('.ll-shop-table tbody').inner_text())
+            page.get_by_role('button', name='Load more', exact=True).click()
+            page.wait_for_function('document.querySelectorAll(".ll-shop-table tbody tr").length === 55')
+            text = page.locator('.ll-shop-table tbody').inner_text()
+            self.assertIn('<b>Plain</b> roll', text)
+            self.assertEqual(page.locator('.ll-shop-table tbody b').count(), 0)
+            self.assertNotIn('**', text)
+            self.assertNotIn('OTHER-GUILD-CANARY', page.content())
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            context.close()
+
+    def test_shop_item_save_audits_without_custom_text_conflicts_and_isolates_servers(self):
+        """FEAT-22 D: saving an item (for sale, price, custom lines) writes it with a toast and a shop.item audit row that never holds the custom text, shows the store's message for a bad price, refuses a save over a change made elsewhere, saves the hold cap, and never touches guild 2."""
+        other = self.state()['shop']['2']
+        context, page, errors = self.open_shop()
+        try:
+            before = self.shop_item('fortune_cookie')['revision']
+            audits = len([r for r in self.state()['audit'] if r['action'] == 'shop.item'])
+            cookie = page.get_by_role('group', name='Fortune cookie', exact=True)
+            cookie.get_by_role('switch', name='For sale').click()
+            cookie.get_by_label('Price', exact=True).fill('40')
+            cookie.get_by_text('Custom lines').click()
+            cookie.get_by_label('Extra lines', exact=True).fill('SECRET-LINE one\nSECRET-LINE two')
+            cookie.get_by_role('button', name='Save Fortune cookie', exact=True).click()
+            page.get_by_text('Fortune cookie saved', exact=True).wait_for(timeout=5000)
+            saved = self.shop_item('fortune_cookie')
+            self.assertEqual((saved['for_sale'], saved['price'], saved['extra_entries'], saved['revision']), (True, 40, {'en': ['SECRET-LINE one', 'SECRET-LINE two']}, before + 1))
+            rows = [r for r in self.state()['audit'] if r['action'] == 'shop.item']
+            self.assertEqual(len(rows), audits + 1)
+            detail = json.loads(rows[-1]['detail_json'])
+            self.assertEqual((detail['item_key'], detail['for_sale'], detail['price'], detail['extra_lines'], detail['replace_lines']), ('fortune_cookie', True, 40, 2, 0))
+            self.assertNotIn('SECRET-LINE', rows[-1]['detail_json'])
+            cookie.get_by_label('Price', exact=True).fill('0')
+            cookie.get_by_role('button', name='Save Fortune cookie', exact=True).click()
+            page.get_by_text('The price must be a whole number from 1 to', exact=False).wait_for(timeout=5000)
+            self.assertEqual(self.shop_item('fortune_cookie')['price'], 40)
+            cookie.get_by_label('Price', exact=True).fill('45')
+            self.post_hook('/_test/shop', {'item': 'fortune_cookie', 'price': 30})
+            cookie.get_by_role('button', name='Save Fortune cookie', exact=True).click()
+            page.get_by_text('Fortune cookie was changed elsewhere. Reload the page and try again.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.shop_item('fortune_cookie')['price'], 30)
+            cap = page.get_by_label('Most of a consumable one member can hold', exact=True)
+            cap.fill('12')
+            page.get_by_role('button', name='Save', exact=True).click()
+            page.get_by_text('Hold cap saved', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['shop']['1']['hold_cap'], 12)
+            self.assertIn('shop.hold_cap', self.audit_actions())
+            cap.fill('100')
+            page.get_by_role('button', name='Save', exact=True).click()
+            page.get_by_text('must be a whole number from 1 to 99', exact=False).wait_for(timeout=5000)
+            self.assertEqual(self.state()['shop']['1']['hold_cap'], 12)
+            self.assertEqual(self.state()['shop']['2'], other)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.reset_shop()
+            context.close()
+
+    def test_shop_item_switches_blank_price_and_cooldown_persist(self):
+        """FEAT-22 D: toggling For sale and Allow use and setting the price and cooldown save them; clearing the price goes back to the built-in price; the switches survive a reload."""
+        from playwright.sync_api import expect
+        context, page, errors = self.open_shop()
+        try:
+            dice = page.get_by_role('group', name='Dice', exact=True)
+            expect(dice.get_by_label('Price', exact=True)).to_have_value('')
+            dice.get_by_role('switch', name='For sale').click()
+            dice.get_by_role('switch', name='Allow use').click()
+            dice.get_by_label('Price', exact=True).fill('75')
+            dice.get_by_label('Cooldown (seconds)', exact=True).fill('9')
+            dice.get_by_role('button', name='Save Dice', exact=True).click()
+            page.get_by_text('Dice saved', exact=True).wait_for(timeout=5000)
+            saved = self.shop_item('dice')
+            self.assertEqual((saved['for_sale'], saved['allow_use'], saved['price'], saved['cooldown_seconds']), (True, False, 75, 9))
+            page.reload()
+            dice = page.get_by_role('group', name='Dice', exact=True)
+            expect(dice.get_by_role('switch', name='For sale')).to_have_attribute('aria-checked', 'true', timeout=5000)
+            expect(dice.get_by_role('switch', name='Allow use')).to_have_attribute('aria-checked', 'false')
+            dice.get_by_label('Price', exact=True).fill('')
+            dice.get_by_role('button', name='Save Dice', exact=True).click()
+            page.get_by_text('Dice saved', exact=True).wait_for(timeout=5000)  # the reload above dropped the first toast
+            saved = self.shop_item('dice')
+            self.assertEqual((saved['price_override'], saved['price']), (None, 50))
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.reset_shop()
+            context.close()
