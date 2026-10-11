@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS guild_settings (
  game_min_bet INTEGER NOT NULL DEFAULT 1, game_max_bet INTEGER NOT NULL DEFAULT 1000,
  max_cast INTEGER NOT NULL DEFAULT 5, max_favorites INTEGER NOT NULL DEFAULT 5, archived_favorites INTEGER NOT NULL DEFAULT 0,
  character_refill_cap INTEGER NOT NULL DEFAULT 1000, game_character_talk INTEGER NOT NULL DEFAULT 1, game_summary_rounds INTEGER NOT NULL DEFAULT 5, blackjack_enabled INTEGER NOT NULL DEFAULT 1,
- game_talk_daily_limit INTEGER NOT NULL DEFAULT 100, blackjack_rules TEXT NOT NULL DEFAULT ''
+ game_talk_daily_limit INTEGER NOT NULL DEFAULT 100, blackjack_rules TEXT NOT NULL DEFAULT '', item_hold_cap INTEGER NOT NULL DEFAULT 10
 );
 CREATE TABLE IF NOT EXISTS currency_daily (
  guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, last_day TEXT NOT NULL, streak INTEGER NOT NULL,
@@ -154,6 +154,33 @@ CREATE TRIGGER IF NOT EXISTS game_moves_no_update BEFORE UPDATE ON game_moves
 BEGIN SELECT RAISE(ABORT, 'The game move log is append-only.'); END;
 CREATE TRIGGER IF NOT EXISTS game_moves_no_delete BEFORE DELETE ON game_moves
 BEGIN SELECT RAISE(ABORT, 'The game move log is append-only.'); END;
+CREATE TABLE IF NOT EXISTS shop_items (
+ guild_id INTEGER NOT NULL, item_key TEXT NOT NULL, for_sale INTEGER NOT NULL DEFAULT 0, allow_use INTEGER NOT NULL DEFAULT 1,
+ price INTEGER, cooldown_seconds INTEGER, extra_entries TEXT NOT NULL DEFAULT '{}', replace_entries TEXT NOT NULL DEFAULT '{}',
+ params TEXT NOT NULL DEFAULT '{}', revision INTEGER NOT NULL DEFAULT 1,
+ PRIMARY KEY(guild_id,item_key)
+);
+CREATE TABLE IF NOT EXISTS inventory (
+ guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, item_key TEXT NOT NULL,
+ qty INTEGER NOT NULL CHECK(qty>=0), last_used_at REAL,
+ PRIMARY KEY(guild_id,user_id,item_key)
+);
+CREATE TABLE IF NOT EXISTS shop_purchases (
+ ledger_id INTEGER PRIMARY KEY REFERENCES currency_ledger(id), guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, item_key TEXT NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS shop_purchases_no_update BEFORE UPDATE ON shop_purchases
+BEGIN SELECT RAISE(ABORT, 'The shop purchase log is append-only.'); END;
+CREATE TRIGGER IF NOT EXISTS shop_purchases_no_delete BEFORE DELETE ON shop_purchases
+BEGIN SELECT RAISE(ABORT, 'The shop purchase log is append-only.'); END;
+CREATE TABLE IF NOT EXISTS item_uses (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, channel_id INTEGER NOT NULL,
+ item_key TEXT NOT NULL, seed TEXT NOT NULL, result TEXT NOT NULL, used_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS item_uses_guild ON item_uses(guild_id,id);
+CREATE TRIGGER IF NOT EXISTS item_uses_no_update BEFORE UPDATE ON item_uses
+BEGIN SELECT RAISE(ABORT, 'The item use log is append-only.'); END;
+CREATE TRIGGER IF NOT EXISTS item_uses_no_delete BEFORE DELETE ON item_uses
+BEGIN SELECT RAISE(ABORT, 'The item use log is append-only.'); END;
 CREATE TABLE IF NOT EXISTS user_timezones (
  guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, timezone TEXT NOT NULL, updated_at REAL NOT NULL,
  PRIMARY KEY(guild_id,user_id)
@@ -532,7 +559,7 @@ class AdminStore:
             'lore': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0'},
             'lorebook_entries': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0', 'pinned': 'INTEGER NOT NULL DEFAULT 0', 'source_message_id': 'INTEGER', 'promoted_from': 'INTEGER'},
             'characters': {'avatar_manual': 'INTEGER NOT NULL DEFAULT 0'},
-            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0', 'currency_name': "TEXT NOT NULL DEFAULT ''", 'daily_amount': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_bonus': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_days': 'INTEGER NOT NULL DEFAULT 7', 'game_min_bet': 'INTEGER NOT NULL DEFAULT 1', 'game_max_bet': 'INTEGER NOT NULL DEFAULT 1000', 'max_cast': 'INTEGER NOT NULL DEFAULT 5', 'max_favorites': 'INTEGER NOT NULL DEFAULT 5', 'archived_favorites': 'INTEGER NOT NULL DEFAULT 0', 'character_refill_cap': 'INTEGER NOT NULL DEFAULT 1000', 'game_character_talk': 'INTEGER NOT NULL DEFAULT 1', 'game_talk_daily_limit': 'INTEGER NOT NULL DEFAULT 100', 'game_summary_rounds': 'INTEGER NOT NULL DEFAULT 5', 'blackjack_enabled': 'INTEGER NOT NULL DEFAULT 1', 'blackjack_rules': "TEXT NOT NULL DEFAULT ''"},
+            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0', 'currency_name': "TEXT NOT NULL DEFAULT ''", 'daily_amount': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_bonus': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_days': 'INTEGER NOT NULL DEFAULT 7', 'game_min_bet': 'INTEGER NOT NULL DEFAULT 1', 'game_max_bet': 'INTEGER NOT NULL DEFAULT 1000', 'max_cast': 'INTEGER NOT NULL DEFAULT 5', 'max_favorites': 'INTEGER NOT NULL DEFAULT 5', 'archived_favorites': 'INTEGER NOT NULL DEFAULT 0', 'character_refill_cap': 'INTEGER NOT NULL DEFAULT 1000', 'game_character_talk': 'INTEGER NOT NULL DEFAULT 1', 'game_talk_daily_limit': 'INTEGER NOT NULL DEFAULT 100', 'game_summary_rounds': 'INTEGER NOT NULL DEFAULT 5', 'blackjack_enabled': 'INTEGER NOT NULL DEFAULT 1', 'blackjack_rules': "TEXT NOT NULL DEFAULT ''", 'item_hold_cap': 'INTEGER NOT NULL DEFAULT 10'},
             'game_rounds': {'rules_json': "TEXT NOT NULL DEFAULT ''"},
             'game_tables': {'thread_id': 'INTEGER', 'board_message_id': 'INTEGER', 'turn_message_id': 'INTEGER'},
             'game_seats': {'brought_by': 'INTEGER', 'insurance': 'INTEGER NOT NULL DEFAULT 0'},
@@ -1106,7 +1133,15 @@ class AdminStore:
                 if self._character_row(guild_id, entry['user_id']) is None:
                     raise CurrencyError("That character was deleted, so this entry cannot be reversed.")
                 return self._append_character_ledger(guild_id, entry['user_id'], -entry['amount'], reason, actor_id, 'reversal', entry_id)
-            return self._append_ledger(guild_id, entry['user_id'], -entry['amount'], reason, actor_id, 'reversal', entry_id)
+            shop = self._take_shop_item(guild_id, entry)
+            if shop is not None:
+                reason = (reason[:200 - len(shop['note'])].rstrip() + shop['note']) if shop['note'] else reason
+            reversal = self._append_ledger(guild_id, entry['user_id'], -entry['amount'], reason, actor_id, 'reversal', entry_id)
+            return {**reversal, 'shop_item': shop} if shop is not None else reversal
+
+    def _take_shop_item(self, guild_id, entry):
+        """Inside reverse_entry's transaction: None unless the entry bought a shop item (see ItemsStore)."""
+        return None
 
     def _append_ledger(self, guild_id, user_id, amount, reason, actor_id, source, reverses_id):
         """Inside write_admin: the read, the bounds check and both writes share one BEGIN IMMEDIATE transaction."""
