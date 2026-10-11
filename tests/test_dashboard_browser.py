@@ -3427,6 +3427,7 @@ class DashboardBrowserTests(unittest.TestCase):
         from playwright.sync_api import expect
         context, page, errors, card = self.open_play_style()
         original, before = self.alice_row()['card'], self.slider_value(card, 'looseness')
+        saves_before = self.audit_actions().count('character.play_style')  # earlier tests share the server and leave audit rows
         try:
             self.post_hook('/_test/change-character', {'name': 'Alice', 'description': 'Changed behind the page'})
             card.locator('.play-style-looseness .q-slider__track-container').focus()
@@ -3435,9 +3436,54 @@ class DashboardBrowserTests(unittest.TestCase):
             card.get_by_role('button', name='Save play style', exact=True).click()
             page.get_by_text('Character changed; reload before saving', exact=True).first.wait_for(timeout=5000)
             self.assertIsNone(self.alice_play_style())
-            self.assertNotIn('character.play_style', self.audit_actions())
+            self.assertEqual(self.audit_actions().count('character.play_style'), saves_before)
         finally:
             self.restore_alice(json.loads(original).get('description', ''))
+            context.close()
+
+    def test_play_style_generate_fills_sliders_clamped_and_saves_nothing_until_save(self):
+        """FEAT-32 D: Generate from description fills the sliders with the model's values (130 clamps to 100), shows the draft note and per-trait reasons, writes nothing; Save stores the style and the reasons are not persisted."""
+        from playwright.sync_api import expect
+        from llmcord_core.games import playstyle
+        context, page, errors, card = self.open_play_style()
+        try:
+            self.post_hook('/_test/play-style-model', {'mode': 'ok'})
+            audit_before = self.audit_actions()
+            card.get_by_role('button', name='Generate from description', exact=True).click()
+            expect(card.locator('.play-style-draft')).to_have_text('Draft from the description. Review it, then press Save play style; nothing is saved yet.', timeout=5000)
+            expected = {'looseness': 100, 'aggression': 80, 'bluffing': 10, 'stubbornness': 55, 'suspicion': 70, 'risk': 25, 'judgment': 90, 'unpredictability': 5}
+            for trait, value in expected.items():
+                expect(card.locator(f'.play-style-{trait} .q-slider')).to_have_attribute('aria-valuenow', str(value))
+                expect(card.locator(f'.play-style-reason-{trait}')).to_have_text(f'because {trait}')
+            expect(card.locator('.play-style-summary')).to_have_text('Plays: ' + playstyle.describe(playstyle.PlayStyle(**expected)))
+            self.assertIsNone(self.alice_play_style())
+            self.assertEqual(self.audit_actions()[len(audit_before):].count('character.play_style'), 0)
+            card.get_by_role('button', name='Save play style', exact=True).click()
+            page.get_by_text('Play style saved.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.alice_play_style(), expected)
+            self.assertIn('character.play_style', self.audit_actions())
+            details = ' '.join(row['detail_json'] or '' for row in self.state()['audit'])
+            self.assertNotIn('because', details)
+            self.assertFalse(self.page_errors(page), errors)
+        finally:
+            self.post_hook('/_test/clear-play-style', {'name': 'Alice'})
+            context.close()
+
+    def test_play_style_generate_failure_keeps_sliders_and_toasts(self):
+        """FEAT-32 D: when the model call fails the sliders and saved state are unchanged and a toast explains it."""
+        from playwright.sync_api import expect
+        context, page, errors, card = self.open_play_style()
+        try:
+            self.post_hook('/_test/play-style-model', {'mode': 'fail'})
+            before = {trait: self.slider_value(card, trait) for trait in ('looseness', 'aggression', 'judgment')}
+            card.get_by_role('button', name='Generate from description', exact=True).click()
+            page.get_by_text('The model call failed', exact=False).first.wait_for(timeout=5000)
+            self.assertEqual({trait: self.slider_value(card, trait) for trait in before}, before)
+            expect(card.locator('.play-style-draft')).to_have_text('')
+            self.assertIsNone(self.alice_play_style())
+            expect(card.get_by_role('button', name='Generate from description', exact=True)).to_be_enabled()
+        finally:
+            self.post_hook('/_test/play-style-model', {'mode': 'ok'})
             context.close()
 
     def test_savebar_hidden_until_character_field_differs(self):
@@ -4290,6 +4336,36 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             self.post_hook('/_test/games', {'summary_rounds': 5})
+            context.close()
+
+    def test_games_tab_character_moves_default_model_save_style_audit_and_conflict(self):
+        """FEAT-32 D: Character moves defaults to the model, choosing Play style only marks the save bar dirty, saves with a toast and audit row, persists across reload, and a stale save is refused."""
+        from playwright.sync_api import expect
+        context, page, errors = self.open_games()
+        try:
+            self.assertEqual(self.state()['games']['1']['character_moves'], 'model')
+            select = page.locator('.game-character-moves')
+            expect(select).to_contain_text('Model picks the move')
+            bar = page.get_by_role('region', name='Unsaved changes')
+            select.click()
+            page.get_by_role('option', name='Play style only', exact=True).click()
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Character moves saved', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['character_moves'], 'style')
+            rows = [r for r in self.state()['audit'] if r['action'] == 'games.character_moves']
+            self.assertEqual([json.loads(r['detail_json']) for r in rows], [{'mode': 'style'}])
+            page.reload()
+            expect(page.locator('.game-character-moves')).to_contain_text('Play style only', timeout=5000)
+            page.locator('.game-character-moves').click()
+            page.get_by_role('option', name='Model picks the move', exact=True).click()
+            self.post_hook('/_test/games', {'character_moves': 'model'})
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The character moves setting was changed elsewhere. Reload the page and try again.', exact=True).first.wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['character_moves'], 'model')
+            self.assertEqual(len([r for r in self.state()['audit'] if r['action'] == 'games.character_moves']), 1)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'character_moves': 'model'})
             context.close()
 
     def test_games_tab_blackjack_switch_closes_open_tables_with_refunds_and_guild_isolation(self):

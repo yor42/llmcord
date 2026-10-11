@@ -1410,6 +1410,24 @@ class AdminStore:
             self.db.execute('INSERT INTO guild_settings(guild_id,game_character_talk) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET game_character_talk=excluded.game_character_talk', (guild_id, int(bool(enabled))))
         return bool(enabled)
 
+    CHARACTER_MOVES = ('model', 'style')
+    _MOVES_KEY = 'character_moves'  # a guild-wide setting kept in game_settings under this pseudo game name (enabled = style only), so no schema change is needed
+
+    def game_character_moves(self, guild_id):
+        """FEAT-32 D: 'model' (default: a model picks a character's move when table talk allows) or 'style' (the Play style policy always plays)."""
+        row = self.one('SELECT enabled FROM game_settings WHERE guild_id=? AND game=?', (guild_id, self._MOVES_KEY))
+        return 'style' if row and row['enabled'] else 'model'
+
+    def set_game_character_moves(self, guild_id, mode, expected=None):
+        if mode not in self.CHARACTER_MOVES:
+            raise ValueError('Character moves must be model or style only.')
+        with self.write_admin():
+            if expected is not None and self.game_character_moves(guild_id) != expected:
+                raise ConflictError('The character moves setting was changed elsewhere. Reload the page and try again.')
+            self.db.execute('INSERT INTO game_settings(guild_id,game,enabled,updated_at) VALUES(?,?,?,?) ON CONFLICT(guild_id,game) DO UPDATE SET enabled=excluded.enabled,updated_at=excluded.updated_at',
+                (guild_id, self._MOVES_KEY, int(mode == 'style'), time.time()))
+        return mode
+
     GAME_SUMMARY_MAX = 20
 
     def game_summary_rounds(self, guild_id):

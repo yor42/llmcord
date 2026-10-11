@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
-from .games import blackjack, doubt
+from .games import blackjack, doubt, playstyle
 from .models import TurnMessage
 from .usage import capture_usage, log_purpose, log_scope
 
@@ -38,6 +38,11 @@ def persona(character) -> str:
             text = text.replace("{{char}}", character["name"]).replace("{{Char}}", character["name"]).replace("{{user}}", "the player").replace("{{User}}", "the player")
             parts.append(f"{key.capitalize()}: {text.strip()[:MAX_CARD_TEXT]}")
     return "\n".join(parts)
+
+
+def with_style(text, style) -> str:
+    """The persona plus a short in-words play style for a character that has a saved one (None: the text is unchanged)."""
+    return text if style is None else f"{text}\nPlay style: {playstyle.describe(style)}."
 
 
 MOVE_HELP = {"insure": "insure: put up half your bet that the dealer has blackjack (pays 2 to 1)",
@@ -70,10 +75,10 @@ def clean_line(value) -> str:
     return " ".join(value.split())[:MAX_LINE] if isinstance(value, str) else ""
 
 
-async def ask(bot, guild_id, channel_id, character, snap, seat, legal) -> dict:
+async def ask(bot, guild_id, channel_id, character, snap, seat, legal, style=None) -> dict:
     """One model call on a pinned backend snapshot, recorded as usage feature 'game'. Raises on any failure (the caller falls back)."""
     legal = tuple(legal)
-    request = SimpleNamespace(messages=[TurnMessage("system", SYSTEM.format(name=character["name"], persona=persona(character))),
+    request = SimpleNamespace(messages=[TurnMessage("system", SYSTEM.format(name=character["name"], persona=with_style(persona(character), style))),
                                         TurnMessage("user", table_text(snap, seat, legal))])
     with bot.backend.pin(), capture_usage(guild_id, channel_id, "game"), log_scope(None), log_purpose("game"):
         return await bot.models.structured_compiled(ROLE, request, "blackjack_move", schema(legal))
@@ -123,20 +128,20 @@ def doubt_table_text(view, names, purpose) -> str:
     return "\n".join(lines)
 
 
-async def _ask_doubt(bot, guild_id, channel_id, character, view, names, purpose, name, schema):
-    request = SimpleNamespace(messages=[TurnMessage("system", DOUBT_SYSTEM.format(name=character["name"], persona=persona(character))),
+async def _ask_doubt(bot, guild_id, channel_id, character, view, names, purpose, name, schema, style=None):
+    request = SimpleNamespace(messages=[TurnMessage("system", DOUBT_SYSTEM.format(name=character["name"], persona=with_style(persona(character), style))),
                                         TurnMessage("user", doubt_table_text(view, names, purpose))])
     with bot.backend.pin(), capture_usage(guild_id, channel_id, "game"), log_scope(None), log_purpose("game"):
         return await bot.models.structured_compiled(ROLE, request, name, schema)
 
 
-async def ask_doubt_play(bot, guild_id, channel_id, character, view, names) -> dict:
+async def ask_doubt_play(bot, guild_id, channel_id, character, view, names, style=None) -> dict:
     """One call on the seat's own view; returns the raw answer (the caller validates it). Raises on any failure."""
-    return await _ask_doubt(bot, guild_id, channel_id, character, view, names, "play", "doubt_play", doubt_play_schema(view))
+    return await _ask_doubt(bot, guild_id, channel_id, character, view, names, "play", "doubt_play", doubt_play_schema(view), style)
 
 
-async def ask_doubt_doubt(bot, guild_id, channel_id, character, view, names) -> bool:
-    result = await _ask_doubt(bot, guild_id, channel_id, character, view, names, "doubt", "doubt_decision", doubt_doubt_schema())
+async def ask_doubt_doubt(bot, guild_id, channel_id, character, view, names, style=None) -> bool:
+    result = await _ask_doubt(bot, guild_id, channel_id, character, view, names, "doubt", "doubt_decision", doubt_doubt_schema(), style)
     answer = result.get("doubt") if isinstance(result, dict) else None
     if not isinstance(answer, bool):
         raise ValueError("doubt answer is not a boolean")

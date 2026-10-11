@@ -37,6 +37,17 @@ def all_games_section(ctx):
                           detail=lambda result: {'enabled': result}, success='Character table talk saved',
                           dirty=lambda: bool(talk_switch.value) != talk['value'],
                           reset=lambda: talk_switch.set_value(talk['value']))
+        moves = {'value': store.game_character_moves(gid)}
+        moves_select = ui.select({'model': 'Model picks the move', 'style': 'Play style only'}, value=moves['value'], label='Character moves').classes('ll-wide game-character-moves')
+        ui.label('Model picks the move: with table talk on and the daily limit not reached, a model chooses each character\'s move; otherwise it plays by its play style (blackjack: the house rule). '
+                 'Play style only: I Doubt It characters never call the model for a move, which saves calls (a saved play style then sets their bluffing and suspicion); blackjack characters keep the house rule, and with table talk on the model only adds a line.').classes('ll-muted')
+        def save_moves():
+            moves['value'] = store.set_game_character_moves(gid, moves_select.value, moves['value'])
+            return moves['value']
+        ctx.savebar.track('Character moves', {moves_select: moves['value']}, save=save_moves, action='games.character_moves',
+                          detail=lambda result: {'mode': result}, success='Character moves saved',
+                          dirty=lambda: moves_select.value != moves['value'],
+                          reset=lambda: moves_select.set_value(moves['value']))
         limit = {'value': store.game_talk_daily_limit(gid)}
         limit_field = ui.number('Table talk calls per day', value=limit['value'], min=1, precision=0, format='%d')
         ui.label(f"After about this many table talk calls in a server day (approximate when several tables play at once), characters play by the house rule and stay quiet until the next day. Used today: {store.game_talk_calls_today(gid):,}.").classes('ll-muted')

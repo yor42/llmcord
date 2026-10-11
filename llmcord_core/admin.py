@@ -1,6 +1,7 @@
 """UI-independent operations, authorization and metadata-only auditing."""
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 import logging
@@ -9,12 +10,17 @@ import time
 import traceback
 
 from .avatars import AvatarPublisher
-from .backend import effective_backend
+from . import playstyle_generate
+from .backend import dashboard_gateway, effective_backend
+from .budget import BudgetExceeded
+from .errors import ModelConfigError, error_detail, is_timeout
 from .games import playstyle
 from .models import TurnMessage
+from .usage import capture_usage
 from .prompts import compile_prompt, time_values
 
 PURPOSE_ROLES = {'dialogue': 'dialogue', 'director': 'director', 'extraction': 'memory', 'summary': 'memory', 'images': 'dialogue'}
+GENERATE_SECONDS = 60
 OPERATOR_AUDIT_GUILD = 0  # no Discord snowflake is 0; operator actions have no server
 log = logging.getLogger(__name__)
 
@@ -80,6 +86,41 @@ class AdminService:
             return {'id': character_id, 'changes': text}
 
         return await self.run(ident, guild_id, operation, 'character.play_style', detail)
+
+    async def draft_play_style(self, guild_id, character_id):
+        """FEAT-32 D, call inside `run`: a model rates the character's description and personality; the result is a draft ({"values", "reasons"}) and nothing is written.
+        The call is counted in model_usage (feature 'playstyle'), refused at the spending hard cap, and key-pinned like the bot's calls. ValueError carries the message shown to the admin."""
+        character = self.store.character_by_id(character_id)
+        if character is None or character['guild_id'] != guild_id:
+            raise ValueError('That character was not found. Reload the page.')
+        request, schema = playstyle_generate.request(character), playstyle_generate.schema()
+        seam = getattr(self.app.state, 'play_style_model', None)  # test seam: tests/dashboard_server.py replaces the model call
+        gateway = None if seam else dashboard_gateway(self.effective_backend(), self.limits, self.store)
+        try:
+            if seam:
+                raw = await seam(request, schema)
+            else:
+                with capture_usage(guild_id, None, 'playstyle'):
+                    raw = await asyncio.wait_for(gateway.structured_compiled(playstyle_generate.ROLE, request, 'play_style', schema), GENERATE_SECONDS)
+        except BudgetExceeded:
+            raise ValueError('The spending hard cap is reached, so no model calls are made until it resets.') from None
+        except ModelConfigError as error:
+            raise ValueError(str(error)[:300]) from None
+        except ValueError as error:
+            log.warning('Play style generation got an unreadable answer (%s)', type(error).__name__)
+            raise ValueError('The model returned an answer that could not be read. Try again.') from None
+        except (asyncio.TimeoutError, TimeoutError):
+            raise ValueError('The model did not respond in time. Try again.') from None
+        except Exception as error:
+            log.warning('Play style generation failed (%s)', type(error).__name__)
+            raise ValueError('The model did not respond in time. Try again.' if is_timeout(error) else 'The model call failed: ' + error_detail(error, 300)) from None
+        finally:
+            if gateway is not None:
+                try:
+                    await gateway.close()
+                except Exception as error:
+                    log.warning('Dashboard model client did not close (%s)', type(error).__name__)
+        return playstyle_generate.parse(raw)
 
     async def run_operator(self, ident, operation, action=None, detail=None):
         # Live (socket.io) calls carry no per-request CSRF/origin: the boundary is the socket's cookie-to-client

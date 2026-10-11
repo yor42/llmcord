@@ -10,7 +10,7 @@ import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from .config import ModelProfile, Settings, check_key_pin, key_hosts_from_env, profile_from_mapping, validate_profile_name
+from .config import LIMIT_DEFAULTS, ModelProfile, Settings, check_key_pin, key_hosts_from_env, profile_from_mapping, validate_profile_name
 from .errors import error_detail, is_timeout, redact, register_secret_names
 
 ROLES = ('dialogue', 'director', 'memory')
@@ -172,3 +172,16 @@ async def test_profile_connection(name, mapping, key_hosts, environ=os.environ) 
                 await gateway.close()
             except Exception as error:
                 logging.warning('Connection test client did not close: %s', type(error).__name__)
+
+
+def dashboard_gateway(backend: Backend, limits, store, key_hosts=None, environ=os.environ):
+    """A gateway for a model call made by the dashboard (FEAT-32 D): the director profile (else dialogue), key pins checked on every call,
+    recorded in model_usage and refused at the spending hard cap, like the bot's own calls. ValueError when no model is set up."""
+    from . import budget
+    from .models import ModelGateway
+    name = backend.roles.get('director') or backend.roles.get('dialogue')
+    if name is None or name not in backend.profiles:
+        raise ValueError('No model is set up for this bot. Choose one on the Backend tab.')
+    settings = Settings('', None, Path(':memory:'), 0, backend.profiles, name, name, name, {**LIMIT_DEFAULTS, **limits})
+    source = _ProbeSource(settings, key_hosts_from_env() if key_hosts is None else key_hosts, environ)
+    return ModelGateway(source, usage_sink=store.record_model_usage, budget_gate=lambda: budget.state(store), environment='the dashboard')

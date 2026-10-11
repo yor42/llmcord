@@ -271,6 +271,8 @@ def main():
             store.set_game_talk_daily_limit(body.get('guild', 1), body['talk_limit'])
         if 'summary_rounds' in body:
             store.set_game_summary_rounds(body.get('guild', 1), body['summary_rounds'])
+        if 'character_moves' in body:
+            store.set_game_character_moves(body.get('guild', 1), body['character_moves'])
         if 'blackjack_enabled' in body:
             store.set_blackjack_enabled(body.get('guild', 1), body['blackjack_enabled'])
         if 'blackjack_rules' in body:
@@ -354,7 +356,7 @@ def main():
             'books': [dict(r) for r in store.all('SELECT * FROM lorebook_entries')],
             'presets': [dict(r) for r in store.list_presets(1)], 'active': store.active_preset(1)['id'],
             'active_bundle': store.active_preset(1)['bundle'], 'assets': [dict(r) for r in store.all('SELECT * FROM avatar_assets')],
-            'guild2_spaces': [dict(r) for r in originals['list_spaces'](2)], 'cast_limits': {g: store.cast_limits(g) for g in (1, 2)}, 'archived_favorites': {g: store.archived_favorites(g) for g in (1, 2)}, 'daily': {g: store.daily_settings(g) for g in (1, 2)}, 'refill_cap': {g: store.refill_cap(g) for g in (1, 2)}, 'games': {g: {**store.game_settings(g), 'channels': sorted(store.game_channels(g)), 'character_talk': store.game_character_talk(g), 'talk_limit': store.game_talk_daily_limit(g), 'summary_rounds': store.game_summary_rounds(g), 'blackjack_enabled': store.blackjack_enabled(g), 'blackjack_rules': store.blackjack_rules(g), 'doubt_enabled': store.game_enabled(g, 'doubt'), 'doubt_rules': store.game_rules(g, 'doubt')} for g in (1, 2)}, 'shop': {g: {'hold_cap': store.item_hold_cap(g), 'items': {e['key']: e for e in store.shop_catalog(g)}} for g in (1, 2)}, 'guild_timezone': store.guild_timezone(1), 'catchup_anywhere': store.catchup_anywhere(1), 'turn_log': store.turn_log_settings(1), 'audit': [dict(r) for r in store.all('SELECT * FROM admin_audit ORDER BY id')],
+            'guild2_spaces': [dict(r) for r in originals['list_spaces'](2)], 'cast_limits': {g: store.cast_limits(g) for g in (1, 2)}, 'archived_favorites': {g: store.archived_favorites(g) for g in (1, 2)}, 'daily': {g: store.daily_settings(g) for g in (1, 2)}, 'refill_cap': {g: store.refill_cap(g) for g in (1, 2)}, 'games': {g: {**store.game_settings(g), 'channels': sorted(store.game_channels(g)), 'character_talk': store.game_character_talk(g), 'character_moves': store.game_character_moves(g), 'talk_limit': store.game_talk_daily_limit(g), 'summary_rounds': store.game_summary_rounds(g), 'blackjack_enabled': store.blackjack_enabled(g), 'blackjack_rules': store.blackjack_rules(g), 'doubt_enabled': store.game_enabled(g, 'doubt'), 'doubt_rules': store.game_rules(g, 'doubt')} for g in (1, 2)}, 'shop': {g: {'hold_cap': store.item_hold_cap(g), 'items': {e['key']: e for e in store.shop_catalog(g)}} for g in (1, 2)}, 'guild_timezone': store.guild_timezone(1), 'catchup_anywhere': store.catchup_anywhere(1), 'turn_log': store.turn_log_settings(1), 'audit': [dict(r) for r in store.all('SELECT * FROM admin_audit ORDER BY id')],
             'play_styles': {r['id']: (dataclasses.asdict(style) if (style := store.character_play_style(r['guild_id'], r['id'])) else None) for r in store.all('SELECT id,guild_id FROM characters')},
             'model_profiles': [dict(r) for r in store.model_profile_rows()], 'model_roles': dict(store.model_roles()),
             'slots': [{'character_id': r['character_id'], 'slot_key': r['slot_key'], 'label': r['label'], 'has_image': bool(r['image'])} for r in store.all('SELECT * FROM avatar_slots')]}
@@ -438,6 +440,24 @@ def main():
         store.update_character(1, row['id'], row['world_id'], row['name'], card,
                                expected_revision=store.owner_revision(1, 'character', row['id']))
         return {'ok': True}
+
+    play_style_fake = {'mode': 'ok', 'calls': 0}
+
+    async def fake_play_style_model(request, schema):
+        # FEAT-32 D: stands in for the model call behind "Generate from description" (admin.draft_play_style test seam).
+        play_style_fake['calls'] += 1
+        if play_style_fake['mode'] == 'fail':
+            raise RuntimeError('fake model down')
+        values = {'looseness': 130, 'aggression': 80, 'bluffing': 10, 'stubbornness': 55, 'suspicion': 70, 'risk': 25, 'judgment': 90, 'unpredictability': 5}
+        return {trait: {'value': value, 'reason': f'because {trait}'} for trait, value in values.items()}
+
+    app.state.play_style_model = fake_play_style_model
+
+    @app.post('/_test/play-style-model')
+    async def play_style_model(request: Request):
+        # FEAT-32 D: choose whether the fake model answers ('ok', one value out of range) or fails ('fail').
+        play_style_fake['mode'] = (await request.json())['mode']
+        return {'calls': play_style_fake['calls']}
 
     @app.post('/_test/clear-play-style')
     async def clear_play_style(request: Request):

@@ -1159,7 +1159,7 @@ class DoubtTables:
                 return
             view, seats = snap["view"], snap["seats"]
             window, turn = view["window"], view["turn"]
-            budget = self._talk_budget(guild_id)
+            budget = 0 if self.store.game_character_moves(guild_id) == "style" else self._talk_budget(guild_id)  # style only: the policy plays; table talk keeps its own budget
             if budget <= 0:
                 out = self._policy_step(key, snap)
             elif window:
@@ -1172,10 +1172,15 @@ class DoubtTables:
             out = await (self._decide_doubts(key, snap, plan, budget) if window else self._decide_play(key, snap, plan))
         await self._publish(key, None if out is _STALE else out)
 
+    def _tendencies(self, guild_id, character_id) -> tuple:
+        """(bluff, suspicion) in 0..1: the saved play style only when Character moves is style only, else the id-derived pair (FEAT-34 moves Doubt onto traits)."""
+        style = self.store.character_play_style(guild_id, character_id) if self.store.game_character_moves(guild_id) == "style" else None
+        return doubt.tendencies(character_id) if style is None else (style.bluffing / 100, style.suspicion / 100)
+
     def _fallback_moves(self, guild_id, snap, seat, seen) -> list:
         """The seat's policy play, then the timeout play, then forfeit: the order the store is asked to accept them in."""
         seed = lambda kind: self.store.policy_seed(guild_id, snap["round_id"], f"{snap['moves']}/{seat}/{kind}")
-        return [(seat, doubt.policy_play(seen, doubt.tendencies(snap["seats"][seat]["ref_id"]), seed("play"))),
+        return [(seat, doubt.policy_play(seen, self._tendencies(guild_id, snap["seats"][seat]["ref_id"]), seed("play"))),
                 (seat, doubt.timeout_move_for_view(seen, seed("fallback"))), (seat, "forfeit")]
 
     def _policy_step(self, key, snap):
@@ -1190,7 +1195,7 @@ class DoubtTables:
                 i = (window["claimer"] + k) % n
                 if seats[i]["kind"] == "character" and view["active"][i]:
                     seen = self.store.seat_view(guild_id, round_id, i)
-                    if doubt.policy_doubt(seen, doubt.tendencies(seats[i]["ref_id"]), seed(i, "doubt")):
+                    if doubt.policy_doubt(seen, self._tendencies(guild_id, seats[i]["ref_id"]), seed(i, "doubt")):
                         tried = [(i, "doubt")]
                         break
         playable = turn is not None and seats[turn]["kind"] == "character" and not window
@@ -1212,9 +1217,9 @@ class DoubtTables:
             i = (claimer + k) % n
             if seats[i]["kind"] == "character" and view["active"][i]:
                 seen = seen_by[i] = self.store.seat_view(guild_id, snap["round_id"], i)
-                scored.append((i, doubt.suspicion(seen, doubt.tendencies(seats[i]["ref_id"])), doubt.impossible(seen)))
+                scored.append((i, doubt.suspicion(seen, self._tendencies(guild_id, seats[i]["ref_id"])), doubt.impossible(seen)))
         sure = [i for i, _, imp in scored if imp]
-        asked = [(i, self._character(guild_id, seats[i]), seen_by[i], doubt.tendencies(seats[i]["ref_id"])) for i in doubt.triage(scored, k=2) if i not in sure]
+        asked = [(i, self._character(guild_id, seats[i]), seen_by[i], self._tendencies(guild_id, seats[i]["ref_id"])) for i in doubt.triage(scored, k=2) if i not in sure]
         return sure, asked, self._names(snap)
 
     @staticmethod
@@ -1240,7 +1245,7 @@ class DoubtTables:
         tried = []
         if character is not None:
             try:
-                result = await asyncio.wait_for(game_chooser.ask_doubt_play(self.bot, guild_id, snap["channel_id"], character, seen, names), self.MODEL_SECONDS)
+                result = await asyncio.wait_for(game_chooser.ask_doubt_play(self.bot, guild_id, snap["channel_id"], character, seen, names, self.store.character_play_style(guild_id, character["id"])), self.MODEL_SECONDS)
                 move = self._model_play(result, seen)
                 if move is not None:
                     tried.append((turn, move))
@@ -1259,7 +1264,7 @@ class DoubtTables:
         """(seat, doubts?): the model's answer, else the policy's."""
         guild_id = key[0]
         try:
-            return seat, await asyncio.wait_for(game_chooser.ask_doubt_doubt(self.bot, guild_id, snap["channel_id"], character, seen, names), bound)
+            return seat, await asyncio.wait_for(game_chooser.ask_doubt_doubt(self.bot, guild_id, snap["channel_id"], character, seen, names, self.store.character_play_style(guild_id, character["id"])), bound)
         except asyncio.CancelledError:
             self._note_failure(guild_id)  # a call dropped because another seat doubted first still counts toward the limit
             raise

@@ -906,13 +906,15 @@ class GameTables:
             character = self.store.character_by_id(seated["character_id"])
             if character is None or character["guild_id"] != guild_id:
                 return house, ""
-            result = await asyncio.wait_for(game_chooser.ask(self.bot, guild_id, snap["channel_id"], character, snap, seat, legal), self.MODEL_SECONDS)
+            style_only = self.store.game_character_moves(guild_id) == "style"
+            offered = (house,) if style_only else legal  # style only: the model may only add a line, the move stays the house rule
+            result = await asyncio.wait_for(game_chooser.ask(self.bot, guild_id, snap["channel_id"], character, snap, seat, offered, self.store.character_play_style(guild_id, character["id"])), self.MODEL_SECONDS)
         except Exception as error:
             logging.warning("Blackjack character decision fell back to the house rule (%s)", type(error).__name__)
             self.talk_failed[marker] = self.talk_failed.get(marker, 0) + 1
             return house, ""
         move = result.get("move") if isinstance(result, dict) else None
-        if not isinstance(move, str) or move not in legal:
+        if not isinstance(move, str) or move not in offered:
             self.talk_failed[marker] = self.talk_failed.get(marker, 0) + 1
             return house, ""
         return move, game_chooser.clean_line(result.get("line"))

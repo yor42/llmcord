@@ -1217,7 +1217,7 @@ def format_usd(value):
 
 
 RETENTION_OPTIONS = {7: '7 days', 14: '14 days', 30: '30 days', 0: 'Full month'}
-USAGE_FEATURES = {'reply': 'Replies', 'ambient': 'Ambient turns', 'summon': 'Summons', 'memory': 'Memory updates', 'catchup': 'Catch-ups', 'game': 'Game table talk'}
+USAGE_FEATURES = {'reply': 'Replies', 'ambient': 'Ambient turns', 'summon': 'Summons', 'memory': 'Memory updates', 'catchup': 'Catch-ups', 'game': 'Game table talk', 'playstyle': 'Play style drafts'}
 USAGE_RANGES = {'day': ('Last 24 hours', 1), '7': ('Last 7 days', 7), '14': ('Last 14 days', 14), '30': ('Last 30 days', 30), 'month': ('This month', 31)}
 USAGE_UNKNOWN = 'Unknown (before this update)'
 
@@ -1889,7 +1889,7 @@ def play_style_editor(ctx, character, revision):
     with ui.expansion('Play style').classes('w-full play-style ll-subpanel'), ui.element('div').classes('ll-stack'):
         ui.label('How this character plays card games.' if saved else
                  'How this character plays card games. No style is saved, so it plays in a style derived from the character; the sliders show that style. Save to keep your own.').classes('ll-muted')
-        sliders = {}
+        sliders, reasons = {}, {}
         for group, traits in playstyle.GROUPS.items():
             ui.label(group).classes('ll-subtitle')
             for trait in traits:
@@ -1897,9 +1897,11 @@ def play_style_editor(ctx, character, revision):
                 with ui.element('div').classes(f'play-style-row play-style-{trait}'):
                     ui.label(label)
                     sliders[trait] = ui.slider(min=0, max=100, step=1, value=getattr(shown, trait)).props(f'label aria-label="{label}"').classes(f'play-style-slider-{trait}')
+                    reasons[trait] = ui.label().classes(f'play-style-reason play-style-reason-{trait} ll-muted')
                     with ui.element('div').classes('ll-form-row justify-between'):
                         ui.label(low).classes('ll-muted')
                         ui.label(high).classes('ll-muted')
+        draft_note = ui.label().classes('play-style-draft ll-muted').props('role=status')
         summary = ui.label().classes('play-style-summary').props('role=status')
         def current():
             return playstyle.PlayStyle(**{trait: int(slider.value) for trait, slider in sliders.items()})
@@ -1916,6 +1918,26 @@ def play_style_editor(ctx, character, revision):
                 ui.notify(success, type='positive')
             if outcome[0] or isinstance(getattr(outcome, 'error', None), ConflictError):
                 await ctx.refresh('characters')
+        def fill(result):
+            if result is None:
+                return
+            for trait, value in result['values'].items():
+                sliders[trait].set_value(value)
+                reasons[trait].set_text(result['reasons'].get(trait, ''))
+            draft_note.set_text('Draft from the description. Review it, then press Save play style; nothing is saved yet.')
+            ui.notify('Draft ready. Review the sliders, then save.', type='positive')
+        async def generate():
+            if generate_button.is_deleted:
+                return
+            generate_button.props('loading').disable()
+            try:
+                return await ctx.service.draft_play_style(gid, cid)
+            finally:
+                if not generate_button.is_deleted:
+                    generate_button.props(remove='loading').enable()
+        with ui.element('div').classes('ll-form-row'):
+            generate_button = ctx.button('Generate from description', generate, 'character.play_style_generate', {'id': cid}, then=fill).props('outline')
+            ui.label('Asks the model to read the description and personality. Counts toward the spending cap.').classes('ll-muted')
         with ui.element('div').classes('ll-form-row'):
             ui.button('Save play style', on_click=lambda: apply(current(), 'Play style saved.'))
             ui.button('Reset to default', on_click=lambda: apply(None, 'Play style reset.')).props('outline').set_enabled(saved is not None)
