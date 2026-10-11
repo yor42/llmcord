@@ -23,7 +23,7 @@ The game engine decides everything that has a result: the deck order, legal move
 | 1 | FEAT-19 | Game framework (engine interface, seeded deck, tables/seats/moves schema v14, stake and payout through the ledger, restart recovery, timeouts) plus **blackjack, humans only**: one table per channel, 1 to N players against the engine dealer. |
 | 2 | FEAT-20 | Character seats in blackjack: the "pick a legal move" model call, the fallback policy, an in-character line, a per-server switch and model profile. Blackjack is a good test bed because each seat plays only against the dealer, so a weak model choice harms only its own seat. |
 | 3 | FEAT-21 | A game that needs 3+ players, where characters fill empty seats (candidates: a simple poker variant, liar's dice, or a trick-taking game). Needs hidden information per seat, which `view()` already models. |
-| later | FEAT-22 | Items: catalogue, inventory, buying with currency. Waiting for the user's item ideas. |
+| later | FEAT-22 | Items and the shop: designed in [items-plan.md](items-plan.md) (D30). |
 
 ## Blackjack rules proposed for phase 1
 
