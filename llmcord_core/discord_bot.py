@@ -38,6 +38,7 @@ from .identity import discord_identity, message_context
 from .favorites_discord import register_favorites_commands
 from .games_discord import GameButton, GameTables, register_game_commands
 from .games_doubt_discord import DoubtButton, DoubtTables, register_doubt_commands
+from .games_holdem_discord import HoldemButton, HoldemTables
 from .items_discord import register_items_commands
 
 AVATAR_ASSET_CHECK_TTL = 600
@@ -161,6 +162,7 @@ class SkitBot(commands.Bot):
         self.note_tasks: set[asyncio.Task] = set()
         self.games = GameTables(self)
         self.doubt = DoubtTables(self)
+        self.holdem = HoldemTables(self)
         self.engine.table_block = self.doubt.table_block
         self.engine.talk_failed = self.doubt._note_failure
         register_commands(self)
@@ -174,7 +176,8 @@ class SkitBot(commands.Bot):
             await self.tree.sync()
         await self.games.recover()
         await self.doubt.recover()
-        self.add_dynamic_items(GameButton, DoubtButton)
+        await self.holdem.recover()
+        self.add_dynamic_items(GameButton, DoubtButton, HoldemButton)
         self.cleanup_task = asyncio.create_task(self._cleanup_loop())
 
     async def on_ready(self):
@@ -204,6 +207,10 @@ class SkitBot(commands.Bot):
             await self.doubt.close()
         except Exception:
             logging.exception('Closing the I Doubt It timers failed')
+        try:
+            await self.holdem.close()
+        except Exception:
+            logging.exception("Closing the Texas Hold'em timers failed")
         try:
             pending = [task for task in self.memory_tasks.values() if not task.done()]
             if pending:

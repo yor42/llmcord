@@ -785,7 +785,14 @@ class FakeTableThread(FakeMessageHost, FakeThread):
 class FakeGameResponse(FakeResponse):
     def __init__(self, click):
         super().__init__()
-        self.click, self.edited = click, []
+        self.click, self.edited, self.modals = click, [], []
+
+    async def send_modal(self, modal):
+        """Records the modal a component press opened (``modals``); it counts as the interaction's one response."""
+        self.click.call("send_modal")
+        await asyncio.sleep(0)
+        self.modals.append(modal)
+        self._done = True
 
     async def defer(self, **kwargs):
         self.click.call("defer")
