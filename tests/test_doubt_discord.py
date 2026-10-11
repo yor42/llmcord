@@ -43,6 +43,7 @@ from llmcord_core.discord_bot import SkitBot
 from llmcord_core.games import blackjack as bj
 from llmcord_core.games import doubt
 from llmcord_core.games.base import Seat
+from llmcord_core.games_doubt_discord import _Out as doubt_out
 from llmcord_core.games_discord import NOT_SEATED, OFF_HERE, STALE, GameButton
 
 try:  # imported softly so every test fails on its own until the module exists
@@ -1507,6 +1508,92 @@ class OutsideCloseTests(DoubtCase):
         self.doubt.table((G, snap["table_id"])).deadlines.pop("window")
         content, _ = self.doubt.render_turn((G, snap["table_id"]), snap)
         self.assertIn("Doubt window open.", content)
+
+
+class LifecycleEdgeTests(DoubtCase):
+    """MNT-45 (restart archives, timers after close, late sends after the archive, host who left with only characters)."""
+
+    async def test_restart_archives_the_thread_of_each_table_it_closes(self):
+        await self.playing()
+        thread = self.thread()
+        await self.doubt.recover()
+        self.assertTrue(thread.archived and thread.locked)
+        self.assertTrue(any("restarted" in text.lower() for text in self.thread_texts(thread)))
+
+    async def test_restart_archives_tables_that_closed_just_before_it_but_not_old_ones(self):
+        await self.playing()
+        recent = self.thread()
+        tid = self.table()["id"]
+        self.store.close_table(G, tid)
+        await self.start(DAN, channel=self.channel2)
+        await self.push(BOB, "Join", self.channel2.messages[self.table(CH2)["message_id"]])
+        old = self.channel2.threads[self.table(CH2)["thread_id"]]
+        self.store.close_table(G, self.table(CH2)["id"])
+        self.store.db.execute("UPDATE game_tables SET updated_at=updated_at-100000 WHERE id!=?", (tid,))
+        self.assertFalse(recent.archived)
+        await self.doubt.recover()
+        self.assertTrue(recent.archived and recent.locked)
+        self.assertFalse(old.archived)
+
+    async def test_restart_archive_is_best_effort(self):
+        await self.playing()
+        thread = self.thread()
+        with mock.patch.object(thread, "edit", side_effect=forbidden("Missing Permissions", 50013)):
+            await self.doubt.recover()
+        self.assertIsNone(self.table())
+
+    async def test_close_while_a_timer_hook_is_mid_await_leaves_no_task_running(self):
+        await self.playing()
+        key = (G, self.table()["id"])
+        entered, release, late = asyncio.Event(), asyncio.Event(), []
+
+        async def hook(*args):
+            entered.set()
+            try:
+                await release.wait()
+            except asyncio.CancelledError:
+                self.doubt.arm(key, "archive", 0)  # a hook that re-arms while it is being cancelled
+                self.doubt._mark_board(key)
+                self.doubt._talk_event(1, mock.Mock(talk=("x", False)))
+                late.append(True)
+                raise
+        with mock.patch.object(self.doubt, "on_archive_timer", hook):
+            self.doubt.arm(key, "archive", 0)
+            await asyncio.wait_for(entered.wait(), 2)
+            await self.doubt.close()
+        self.assertEqual(late, [True])
+        self.assertEqual((self.doubt.runtime.timers, self.doubt.board_tasks, self.doubt.event_tasks), ({}, {}, set()))
+        self.doubt.arm(key, "turn", 0)
+        self.assertEqual(self.doubt.runtime.timers, {})
+        self.assertTrue(self.doubt.sweeper is None or self.doubt.sweeper.done())
+
+    async def test_a_late_closing_publish_after_the_archive_says_nothing_and_registers_nothing(self):
+        await self.playing()
+        tid, lobby, thread, turn = await (OutsideCloseTests.grab)(self)
+        key = (G, tid)
+        late = self.doubt._seal(key, doubt_out(lobby=("Table closed: x", None), closing="Table closed: x", closed=True))
+        self.store.close_table(G, tid)
+        await self.doubt.sweep()  # says it once
+        self.doubt.runtime.disarm(key, "archive")
+        await self.doubt.on_archive_timer(G, tid)
+        self.assertNotIn(key, self.doubt.tables)
+        sent = [m.content for m in thread.sent]
+        await self.doubt._publish(key, late)
+        self.assertEqual([m.content for m in thread.sent], sent)
+        self.assertNotIn(key, self.doubt.tables)
+        await self.doubt.sweep()
+        self.assertEqual([m.content for m in thread.sent], sent)
+
+    async def test_the_lobby_names_no_host_when_only_character_seats_remain(self):
+        await self.start()
+        lobby = self.lobby()
+        await self.push(ALICE, "Fill seats", lobby)
+        self.assertIn(f"Host: <@{ALICE}>", lobby.content)
+        await self.push(ALICE, "Leave", lobby)
+        self.assertIsNotNone(self.table())
+        self.assertEqual([kind for kind, _, _ in self.seats()].count("member"), 0)
+        self.assertNotIn("Host:", lobby.content)
+        self.assertNotIn(f"<@{ALICE}>", lobby.content)
 
 
 class FallbackMovesTests(DoubtCase):

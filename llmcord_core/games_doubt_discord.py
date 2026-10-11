@@ -415,7 +415,7 @@ class DoubtTables:
         rules = snap["rules"] or doubt.normalize_rules(None)
         name, pot, ante = self.store.currency_name(key[0]), sum(s["stake"] for s in snap["seats"]), rules["ante"]
         lines = [f"**I Doubt It** · table {key[1]}", f"Ante: {ante:,} {name} · Pot: {pot:,} {name}" if ante else f"No ante · Pot: {pot:,} {name}",
-                 f"Host: <@{self._host(row, snap)}>", ""]
+                 *([f"Host: <@{self._host(row, snap)}>"] if any(s["kind"] == "member" for s in snap["seats"]) else []), ""]
         for seat in snap["seats"]:
             tag = " (house)" if seat["kind"] == "character" and not seat["brought_by"] else ""
             lines.append(f"{seat['index'] + 1}. {GameTables._who(seat)}{tag}")
@@ -584,7 +584,9 @@ class DoubtTables:
         await self._send(key, out)
 
     async def _send(self, key, out: _Out) -> None:
-        table = self.table(key)
+        table = self.tables.get(key)
+        if table is None:
+            return  # sealed outs register the table; a missing record means its archive already ran, so nothing may be said or re-registered
         async with table.send_lock:
             row = self._row(key)
             if row is None:
@@ -1304,10 +1306,15 @@ class DoubtTables:
         self.tables.pop((guild_id, table_id), None)
         self.banter = {thread: k for thread, k in self.banter.items() if k != (guild_id, table_id)}
         row = self._row((guild_id, table_id))
-        if row is None or row["status"] == "open" or row["thread_id"] is None:
+        if row is None or row["status"] == "open":
+            return
+        await self._archive_thread(row["thread_id"])
+
+    async def _archive_thread(self, thread_id) -> None:
+        if thread_id is None:
             return
         try:
-            thread = await self._channel(row["thread_id"])
+            thread = await self._channel(thread_id)
             await thread.edit(archived=True, locked=True)
         except Exception as error:
             logging.warning("Could not archive the I Doubt It thread (%s)", type(error).__name__)
@@ -1414,6 +1421,8 @@ class DoubtTables:
         tables = {(r["guild_id"], r["table_id"]): (r["channel_id"], r["message_id"], r["thread_id"]) for r in rounds}
         for row in store.all("SELECT id,guild_id,channel_id,message_id,thread_id FROM game_tables WHERE status='open' AND game='doubt'"):
             tables.setdefault((row["guild_id"], row["id"]), (row["channel_id"], row["message_id"], row["thread_id"]))
+        # tables that closed just before the restart: their archive timer never fired (closed_at is updated_at; no schema change)
+        earlier = [r["thread_id"] for r in store.all("SELECT thread_id FROM game_tables WHERE game='doubt' AND status='closed' AND thread_id IS NOT NULL AND updated_at>=?", (time.time() - self.ARCHIVE_SECONDS,))]
         notes = {(r["guild_id"], r["table_id"]): self._refunded((r["guild_id"], r["table_id"]), past=True) for r in rounds}
         for r in rounds:
             try:
@@ -1436,6 +1445,9 @@ class DoubtTables:
             text = "This table closed when the bot restarted." + notes.get((guild_id, table_id), "")
             await self._edit(channel_id, message_id, content=text, view=None)
             await self._post(thread_id, text)
+            await self._archive_thread(thread_id)  # the old process's archive timer died with it
+        for thread_id in earlier:
+            await self._archive_thread(thread_id)
         if refunded or closed or failed:
             logging.info("I Doubt It recovery: %d rounds refunded, %d tables closed, %d failures", refunded, closed, failed)
 
