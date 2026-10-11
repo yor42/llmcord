@@ -231,14 +231,32 @@ class DoubtStyleOnly(dc.ModelCase):
         await self.fire()
         self.assertTrue(self.calls)
 
-    async def test_a_saved_style_drives_the_policy_and_unset_keeps_the_id_derived_pair(self):
+    def save_style(self, cid, **traits):
+        self.store.set_character_play_style(G, cid, playstyle.PlayStyle(**traits), self.store.owner_revision(G, "character", cid))
+
+    async def test_style_only_mode_uses_a_saved_style_and_unset_keeps_the_id_derived_pair(self):
         tables = self.doubt
         cid = self.ann
-        self.assertEqual(tables._tendencies(G, cid), dc.doubt.tendencies(cid))
-        self.store.set_character_play_style(G, cid, playstyle.PlayStyle(bluffing=80, suspicion=10), self.store.owner_revision(G, "character", cid))
-        self.assertEqual(tables._tendencies(G, cid), dc.doubt.tendencies(cid))  # model mode ignores the saved style (FEAT-34)
         self.store.set_game_character_moves(G, "style")
+        self.assertEqual(tables._tendencies(G, cid), dc.doubt.tendencies(cid))
+        self.save_style(cid, bluffing=80, suspicion=10)
         self.assertEqual(tables._tendencies(G, cid), (0.8, 0.1))
+
+    async def test_model_mode_uses_a_saved_style_too(self):
+        """FEAT-34: a saved style drives the fallback policy and triage in model mode as well."""
+        self.assertEqual(self.store.game_character_moves(G), "model")
+        self.save_style(self.ann, bluffing=80, suspicion=10)
+        self.assertEqual(self.doubt._tendencies(G, self.ann), (0.8, 0.1))
+
+    async def test_model_mode_without_a_style_keeps_the_id_derived_pair(self):
+        """FEAT-34: unset style falls back to doubt.tendencies(id) in both modes."""
+        self.assertIsNone(self.store.character_play_style(G, self.ann))
+        self.assertEqual(self.doubt._tendencies(G, self.ann), dc.doubt.tendencies(self.ann))
+
+    async def test_clearing_a_style_returns_to_the_id_derived_pair(self):
+        self.save_style(self.ann, bluffing=80, suspicion=10)
+        self.store.set_character_play_style(G, self.ann, None, self.store.owner_revision(G, "character", self.ann))
+        self.assertEqual(self.doubt._tendencies(G, self.ann), dc.doubt.tendencies(self.ann))
 
 
 if __name__ == "__main__":

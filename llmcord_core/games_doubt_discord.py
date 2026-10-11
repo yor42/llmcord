@@ -1173,8 +1173,8 @@ class DoubtTables:
         await self._publish(key, None if out is _STALE else out)
 
     def _tendencies(self, guild_id, character_id) -> tuple:
-        """(bluff, suspicion) in 0..1: the saved play style only when Character moves is style only, else the id-derived pair (FEAT-34 moves Doubt onto traits)."""
-        style = self.store.character_play_style(guild_id, character_id) if self.store.game_character_moves(guild_id) == "style" else None
+        """(bluff, suspicion) in 0..1: the saved play style's bluffing and suspicion in either Character moves mode, else the id-derived pair when none is saved."""
+        style = self.store.character_play_style(guild_id, character_id)
         return doubt.tendencies(character_id) if style is None else (style.bluffing / 100, style.suspicion / 100)
 
     def _fallback_moves(self, guild_id, snap, seat, seen) -> list:

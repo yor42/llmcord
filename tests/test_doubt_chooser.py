@@ -46,6 +46,7 @@ from llmcord_core import game_chooser
 from llmcord_core.budget import BudgetExceeded
 from llmcord_core.games import doubt
 from llmcord_core.games.base import Seat
+from llmcord_core.games.playstyle import PlayStyle
 from llmcord_core.usage import log_attribution
 
 CARD = json.dumps({"description": "A cheerful gambler named {{char}}.", "personality": "Superstitious and chatty."})
@@ -629,6 +630,22 @@ class TriageTests(ModelCase):
         self.assertEqual(sorted(c["name"] for c in self.calls), sorted(self.names[i] for i in self.selected))
         self.assertEqual(len({c["name"] for c in self.calls}), 2)
         self.assertEqual(len(self.moves()), before)  # all said no: unselected seats pass, nobody doubts
+
+    async def test_a_saved_suspicion_changes_which_seats_are_asked_in_model_mode(self):
+        """FEAT-34: triage scores use the saved style's suspicion in model mode, so a very suspicious style gets asked."""
+        await self.claim()
+        snap = self.snap()
+        seats = (1, 3, 4)
+        keep = next(i for i in seats if i not in self.selected)
+        seen = {i: self.store.seat_view(G, snap["round_id"], i) for i in seats}
+        for i in seats:
+            cid = snap["seats"][i]["ref_id"]
+            self.store.set_character_play_style(G, cid, PlayStyle(suspicion=100 if i == keep else 0), self.store.owner_revision(G, "character", cid))
+        scored = [(i, doubt.suspicion(seen[i], (doubt.tendencies(snap["seats"][i]["ref_id"])[0], 1.0 if i == keep else 0.0)), False) for i in seats]
+        expected = set(doubt.triage(scored, k=2))
+        self.assertIn(keep, expected)
+        await self.fire()
+        self.assertEqual({c["name"] for c in self.calls}, {self.names[i] for i in expected})
 
     async def test_the_asked_seats_are_decided_in_parallel(self):
         await self.claim()
