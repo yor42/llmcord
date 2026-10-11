@@ -90,3 +90,11 @@ Reading:
 - Still the same author's drafts on both sides; real numbers need reviewed phrases and a fresh held-out set from players.
 - Noise: one talk row = 1.85 points, one move row = 1.04 points.
 - Latency unchanged (head adds nothing measurable): p50 ≈ 6.5 ms, RSS ≈ 580 MB.
+
+## Third pass: reviewed phrases and insurance (2026-10-12, D34)
+
+The user approved all English phrases and the Korean ones, and asked for more Korean surrender (서렌/서렌더), double down (더블/더블다운) and insurance (인슈/인슈어런스) examples, and pure-Korean versions of scenarios that only had mixed EN/KO phrases. `phrases.csv` now has 195 rows (133 moves incl. insure / no_insurance / even_money, 62 talk); `examples.json` gained the three insurance moves.
+
+Chosen config (head, no word list, table-talk examples with talk-only near-duplicate drop, thresholds fitted for 95% moves), 5-fold CV: **95.5% right move, 77.4% silent on table talk**. Insurance moves 19/19 (small n). Remaining misses: "hold", "패스", "dd", "fold", "ㅈㅈ"; talk that lands as a sure stand ("잠깐만", "gg", "배고프다") and the lookalikes ("hit me up later").
+
+`run.py export-head --floor 0.95` writes the shipped head (`head-e5.json`, 8 classes, sha256 `52b1a1b9…cb9c`; in-sample 95.5% / 80.6%). FEAT-37 ships it with the e5 model.

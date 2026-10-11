@@ -151,6 +151,11 @@ def load_data():
     wordlist = json.loads((HERE / "wordlist.json").read_text(encoding="utf-8"))
     with open(HERE / "phrases.csv", encoding="utf-8", newline="") as f:
         phrases = list(csv.DictReader(f))
+    known = set(examples["examples"]) | {"talk"}
+    for p in phrases:
+        for label in [p["label"], *p["legal"].split(), *p["accept"].split()]:
+            if label not in known:
+                sys.exit(f"phrases.csv id {p['id']}: move label {label!r} has no examples in examples.json (have {sorted(known - {'talk'})})")
     return examples, talk_extra, wordlist, phrases
 
 
@@ -360,6 +365,27 @@ def drop_examples(examples, talk_extra, dropped):
     return ex, [x for x in talk_extra if ("talk+", x) not in dropped]
 
 
+def talk_dedupe(emb, examples, talk_extra, phrases):
+    """(examples, talk_extra, n_dropped) without the talk examples close to a phrases.csv row (cosine >= 0.95 or jaccard >= 0.5)."""
+    pairs = near_pairs(emb, examples, talk_extra, phrases)
+    drop = {(p["kind"], p["text"]) for p in pairs if p["kind"] in ("talk", "talk+") and (p["cos"] >= 0.95 or p["jac"] >= 0.5)}
+    return (*drop_examples(examples, talk_extra, drop), len(drop))
+
+
+def detail(emb, examples, talk_extra, wordlist, phrases):
+    """Overall, per-label, per-language results and failing rows for the chosen config (no word list, with talk examples,
+    fit at 97% train floor for the 95% target) in kNN and head mode."""
+    prep = Prepared(emb, examples, merged_talk(examples, talk_extra, True), phrases, wordlist)
+    out = []
+    for mode in ("head", "knn"):
+        cv, ths = bands.cross_validate(prep.rows(mode), False, min_move=0.97)
+        out += [f"### Detail: {mode}, no word list, with talk examples ({len(prep.talk_vecs)}), train floor 97% (target 95%)", "",
+                f"- 5-fold cross-validation: {summary_line(cv)}; folds feasible {cv['folds_feasible']}/5"]
+        out += [f"- fold {i + 1} thresholds: {fmt_th(t)}" for i, t in enumerate(ths)]
+        out += ["", "Cross-validated breakdown:", ""] + breakdown(cv) + ["", "Cross-validated failing rows:", ""] + failures(cv) + [""]
+    return out
+
+
 def matrix(emb, examples, talk_extra, wordlist, phrases, title):
     variants = [False] + ([True] if talk_extra else [])
     out = [f"### {title}", "",
@@ -408,6 +434,8 @@ def eval_model(name, examples, talk_extra, wordlist, phrases, dedupe):
         for title, drop in runs:
             ex2, extra2 = drop_examples(examples, talk_extra, drop)
             out += matrix(emb, ex2, extra2, wordlist, phrases, title)
+            if dedupe == "talk":
+                out += detail(emb, ex2, extra2, wordlist, phrases)
     return out
 
 
@@ -430,6 +458,28 @@ def cmd_eval(args):
     if args.out:
         Path(args.out).write_text(text, encoding="utf-8")
     print(text)
+
+
+# export
+
+def cmd_export_head(args):
+    examples, talk_extra, wordlist, phrases = load_data()
+    emb = Embedder("e5")
+    ex2, extra2, dropped = talk_dedupe(emb, examples, talk_extra, phrases)
+    prep = Prepared(emb, ex2, merged_talk(ex2, extra2, True), phrases, wordlist)
+    th, fit_m = bands.fit(prep.rows("head"), False, min_move=args.floor)
+    head = prep.heads["head"]
+    lock = json.loads(LOCK.read_text())["models"][MODELS["e5"]["id"]]
+    payload = {"model": MODELS["e5"]["id"], "model_revision": lock["revision"], "prefix": MODELS["e5"]["prefix"],
+               "classes": prep.classes, "lambda": prep.lams["head"], "T": head.get("T", 1.0),
+               "mu": head["mu"].tolist(), "sd": head["sd"].tolist(), "W": head["W"].tolist(), "b": head["b"].tolist(),
+               "thresholds": th, "fit": {"train_floor": args.floor, "move_pass": fit_m["move_rate"], "talk_silent": fit_m["talk_rate"],
+                                         "phrases": len(phrases), "move_examples": {m: len(v) for m, v in ex2["examples"].items()},
+                                         "talk_examples": len(prep.talk_vecs), "talk_dropped_near_duplicates": dropped}}
+    out = CACHE / "head-e5.json"
+    out.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+    print(f"{out}\nsha256 {sha256(out)}\nthresholds {fmt_th(th)}\nin-sample (all phrases, train floor {args.floor}): {summary_line(fit_m)}\n"
+          f"{len(prep.talk_vecs)} talk examples ({dropped} near-duplicates dropped), classes {prep.classes}, lambda {prep.lams['head']}")
 
 
 # bench
@@ -501,6 +551,9 @@ def main():
             p.add_argument("--dedupe-near", nargs="?", const="all", choices=["all", "talk"],
                            help="also report examples close to phrases.csv rows and rerun with them dropped (all: strict and mild; talk: mild, talk examples only)")
         p.set_defaults(fn=fn)
+    exp = sub.add_parser("export-head")
+    exp.add_argument("--floor", type=float, default=0.95, help="move-pass floor for fitting the band thresholds on all phrases")
+    exp.set_defaults(fn=cmd_export_head)
     one = sub.add_parser("bench-one")
     one.add_argument("model", choices=list(MODELS))
     one.set_defaults(fn=lambda a: print(json.dumps(bench_one(a.model))))

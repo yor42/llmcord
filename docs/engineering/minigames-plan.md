@@ -218,7 +218,20 @@ A member can play a turn move by chatting ("fine, hit me", "한 장 더") instea
 - **Switches.** Server: **Read moves from chat** in the Games tab, off by default. Member: `/games spoken_moves off|on`.
 - **Kept phrases.** Server setting **Keep phrases for tuning**, off by default, retention follows the server's retention period (like the turn log). Keeps the phrase, scores, band and button pressed; never from opted-out members; from silent messages only near misses just under the floor. An admin can promote a kept phrase into a per-server example phrase (guild-scoped, added to the built-in set). Not tied to `/memory opt_in`, which covers personal facts only. Schema change in FEAT-37.
 - **Runtime.** ONNX Runtime + tokenizer in the bot process (no PyTorch), inference in a worker thread, loaded lazily only when some server has the setting on. The model is baked into the Docker image at a pinned revision with a checksum; no runtime download. Pi 5 CPU; no Jetson.
-- **Prototype gate (FEAT-36).** About 150 labelled blackjack phrases (EN, KO, mixed, slang, negations, table talk), Korean reviewed by members. Compare `multilingual-e5-small` and `paraphrase-multilingual-MiniLM-L12-v2` as int8 arm64 ONNX. Pass bar: right move among the buttons for ≥ 95% of real moves, silent on ≥ 85% of table talk, < 100 ms per message on the Pi.
+- **Prototype gate (FEAT-36).** About 150 labelled blackjack phrases (EN, KO, mixed, slang, negations, table talk), Korean reviewed by members. Compare `multilingual-e5-small` and `paraphrase-multilingual-MiniLM-L12-v2` as int8 arm64 ONNX. Pass bar: right move among the buttons for ≥ 95% of real moves, silent on ≥ 85% of table talk, < 100 ms per message on the Pi. **Result (D34, 2026-10-12):** `multilingual-e5-small` int8 with a small trained head (logistic regression on the embeddings, trained on the example phrases and ~370 table-talk lines) reaches about 95% right move / 70% silent on table talk at about 6 ms; the user accepted that bar and the feature ships **Experimental**, opt-in. The word-list step did not help blackjack and is not used for it ([research/spoken-moves-prototype.md](research/spoken-moves-prototype.md)).
+
+### FEAT-37 parts (blackjack spoken moves, D32/D34)
+
+Each part is committed on its own; the server switch stays off by default (Experimental), so partial merges are safe.
+
+- **A. Pure interpreter** (`llmcord_core/spoken/`: `head.py` loads and validates the exported head JSON, `interpret.py` masks to legal moves + talk, renormalizes and picks the band, `embedder.py` Protocol + `FakeEmbedder`, `blackjack.py` move list and button labels, `data/head-e5-blackjack.json` + sha256). No numpy, no model; a golden test against prototype outputs.
+- **B. Real embedder and image** (`onnx_embedder.py`: lazy ONNX Runtime + tokenizers + numpy imports, one worker thread, `query: ` prefix, mean pooling, 128 tokens). Pins onnxruntime 1.22.1, tokenizers 0.21.2, numpy 2.3.2. The Docker build fetches the pinned e5 revision, verifies sha256, makes the int8 model and verifies it; no runtime download. About +200 MB image, about 580 MB RSS when loaded (lazy: only when a server has it on).
+- **C. Settings accessors** (no schema): `spoken_moves_enabled` / `spoken_keep_phrases` per guild as `game_settings` pseudo-rows like `character_moves`, both off by default.
+- **D. Move check in Discord** (`games_spoken_discord.py`): `on_message` hook after `note_thread_message`, before the bound-channel check; in-memory "table waiting on this author" lookup before any inference; re-check round and move count after inference; buttons `llmcord:blackjack:spoken:...` through the existing play path (`expected_moves`); delete on turn end; never swallows the message (table talk still reaches characters).
+- **E. Games tab**: "Read moves from chat (Experimental)" and "Keep phrases for tuning" switches.
+- **F. Kept phrases and per-server examples** (schema v21, needs go-ahead): `spoken_phrases`, `spoken_examples`, member opt-out column; retention purge in the daily cleanup; promote a kept phrase into a guild-scoped example.
+- **G. `/games spoken_moves off|on`**: member opt-out (purges that member's kept phrases).
+- **H. Docs**: glossary, CLAUDE.md module map, this plan.
 
 ### Hold'em store API (FEAT-33 part B, schema v20)
 
