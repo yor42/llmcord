@@ -163,8 +163,8 @@ class SkitBot(commands.Bot):
         self.games = GameTables(self)
         self.doubt = DoubtTables(self)
         self.holdem = HoldemTables(self)
-        self.engine.table_block = self.doubt.table_block
-        self.engine.talk_failed = self.doubt._note_failure
+        self.engine.table_block = self._table_block
+        self.engine.talk_failed = self._note_talk_failure
         register_commands(self)
 
     async def setup_hook(self):
@@ -243,8 +243,8 @@ class SkitBot(commands.Bot):
         parent_id, binding = self.location(message.channel)
         if not binding:
             return
-        table = self.doubt.table_talk_context(message.guild.id, message.channel.id)
-        if table is not None and not self._table_talk_open(message.guild.id, table):
+        game, table = self._table_game(message.guild.id, message.channel.id)
+        if table is not None and not self._table_talk_open(message.guild.id, table, game):
             return  # the table's characters are silent (talk off, daily limit, spending cap); members still chat
         reference_id = message.reference.message_id if message.reference else None
         referenced = self.store.node(reference_id)
@@ -306,11 +306,28 @@ class SkitBot(commands.Bot):
         async with self.channel_locks.lock(message.channel.id):
             await self.run_scene(scene, message.channel)
 
-    def _table_talk_open(self, guild_id, table) -> bool:
+    def _table_game(self, guild_id, thread_id):
+        """(the game's tables object, its table talk context) for the table that owns this thread, else (None, None)."""
+        for game in (self.doubt, self.holdem):
+            table = game.table_talk_context(guild_id, thread_id)
+            if table is not None:
+                return game, table
+        return None, None
+
+    def _table_block(self, guild_id, thread_id, character_id):
+        block = self.doubt.table_block(guild_id, thread_id, character_id)
+        return block if block is not None else self.holdem.table_block(guild_id, thread_id, character_id)
+
+    def _note_talk_failure(self, guild_id) -> None:
+        """A failed table talk attempt counts toward the guild's daily table-talk limit, which every table game shares."""
+        self.doubt._note_failure(guild_id)
+        self.holdem._note_failure(guild_id)
+
+    def _table_talk_open(self, guild_id, table, game) -> bool:
         """May the characters of this table thread speak: someone is seated, table talk is on, the daily limit and the spending cap allow it."""
         # The limit is checked once per turn: a turn that passes with one call left may use up to 1 + max_speakers calls
         # (the director plus one dialogue per speaker). The overshoot is bounded and accepted.
-        if not table['seated_character_ids'] or not self.doubt.talk_allowed(guild_id):
+        if not table['seated_character_ids'] or not game.talk_allowed(guild_id):
             return False
         state = self._budget_check()
         return not (state and state.hard_reached)
@@ -326,9 +343,9 @@ class SkitBot(commands.Bot):
         guild = getattr(thread, 'guild', None)
         if guild is None or not isinstance(thread, discord.Thread):
             return
-        table = self.doubt.table_talk_context(guild.id, thread.id)
+        game, table = self._table_game(guild.id, thread.id)
         parent_id, binding = self.location(thread)
-        if table is None or not binding or not self._table_talk_open(guild.id, table):
+        if table is None or not binding or not self._table_talk_open(guild.id, table, game):
             return
         lock = self.channel_locks.lock(thread.id)
         if lock.locked():
@@ -697,7 +714,7 @@ class SkitBot(commands.Bot):
         self._log_failure(error, ref, stage)
         pointer = self._failure_pointer(log_attribution()['guild_id'])
         if log_attribution()['feature'] == 'game':
-            self.doubt._note_failure(log_attribution()['guild_id'])
+            self._note_talk_failure(log_attribution()['guild_id'])
         failure = f"The character couldn't reply (ref {ref}). {pointer}"
         try:
             if progress.message:
@@ -1069,12 +1086,12 @@ def _register_summon_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
     async def summon(interaction: discord.Interaction, character: str, prompt: str):
         parent_id, binding = await binding_for(interaction)
         row = eligible_character(interaction, binding, character)
-        table = bot.doubt.table_talk_context(interaction.guild_id, interaction.channel.id)
+        game, table = bot._table_game(interaction.guild_id, interaction.channel.id)
         if table is not None:
             if row["id"] not in table["seated_character_ids"]:
                 await interaction.response.send_message("Only the characters seated at this table can speak in its thread.", ephemeral=True)
                 return
-            if not bot.doubt.talk_allowed(interaction.guild_id):
+            if not game.talk_allowed(interaction.guild_id):
                 await interaction.response.send_message("The table's characters aren't talking right now (table talk is off or today's limit is reached).", ephemeral=True)
                 return
         state = bot._budget_check()
