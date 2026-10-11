@@ -229,7 +229,7 @@ Each part is committed on its own; the server switch stays off by default (Exper
 - **C. Settings accessors** (no schema): `spoken_moves_enabled` / `spoken_keep_phrases` per guild as `game_settings` pseudo-rows like `character_moves`, both off by default.
 - **D. Move check in Discord** (`games_spoken_discord.py`): `on_message` hook after `note_thread_message`, before the bound-channel check; in-memory "table waiting on this author" lookup before any inference; re-check round and move count after inference; buttons `llmcord:blackjack:spoken:...` through the existing play path (`expected_moves`); delete on turn end; never swallows the message (table talk still reaches characters).
 - **E. Games tab**: "Read moves from chat (Experimental)" and "Keep phrases for tuning" switches.
-- **F. Kept phrases and per-server examples** (schema v21, needs go-ahead): `spoken_phrases`, `spoken_examples`, member opt-out column; retention purge in the daily cleanup; promote a kept phrase into a guild-scoped example.
+- **F. Kept phrases and per-server examples** (schema v21, approved D35): `spoken_phrases`, `spoken_examples`, member opt-out column; retention purge in the daily cleanup; promote a kept phrase into a guild-scoped example. Kept phrases record false positives (Just table talk pressed, or the other move of an unsure check) and false negatives (silent or wrong, then the member pressed a table button in the same turn; label = that move), shown in the Games tab for an admin to promote; never automatic.
 - **G. `/games spoken_moves off|on`**: member opt-out (purges that member's kept phrases).
 - **H. Docs**: glossary, CLAUDE.md module map, this plan.
 
