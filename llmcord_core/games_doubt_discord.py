@@ -24,6 +24,7 @@ from .admin_store import ConflictError, GameError
 from .games import blackjack, doubt
 from .games_discord import MAX_BET, NO_CHARACTER_SEATS, NO_MENTIONS, NOT_SEATED, NOT_YOUR_TURN, OFF_HERE, STALE, GameTables, _sign
 from .games_holdem_discord import BET_NOTE
+from .game_talk import TalkBudget
 from .table_runtime import TableRuntime
 
 PREFIX = "llmcord:doubt"
@@ -155,7 +156,11 @@ class DoubtTables:
         self.dirty: set[tuple[int, int]] = set()
         self.board_tasks: dict[tuple[int, int], asyncio.Task] = {}
         self.ended: set[tuple[int, int]] = set()  # tables this object closed itself (settled, timed out, left): the sweeper leaves them alone
-        self.talk_failed: dict[tuple[int, object], int] = {}  # model attempts without a usage row, per (guild, server day)
+        self.talk = getattr(bot, 'talk_budget', None) or TalkBudget(lambda: bot.store)  # failed attempts, shared by every table game
+
+    @property
+    def talk_failed(self):
+        return self.talk.failed
 
     @property
     def store(self):
@@ -1102,23 +1107,13 @@ class DoubtTables:
         await self._publish(key, out)
 
     def _talk_budget(self, guild_id) -> int:
-        """How many model calls the table-talk daily limit still allows (0 when character table talk is off). Failed attempts count like blackjack's."""
+        """How many model calls the table-talk daily limit still allows (0 when character table talk is off). Failed attempts count."""
         if not self.store.game_character_talk(guild_id):
             return 0
-        marker = (guild_id, self.store._server_day(guild_id, time.time())[1])
-        if self.talk_failed.keys() - {marker}:
-            self.talk_failed = {m: n for m, n in self.talk_failed.items() if m == marker}
-        used = self.store.game_talk_calls_today(guild_id) + self.talk_failed.get(marker, 0)
-        return max(self.store.game_talk_daily_limit(guild_id) - used, 0)
-
-    def _count_failure(self, guild_id) -> None:
-        marker = (guild_id, self.store._server_day(guild_id, time.time())[1])
-        self.talk_failed[marker] = self.talk_failed.get(marker, 0) + 1
+        return self.talk.remaining(guild_id)
 
     def _note_failure(self, guild_id) -> None:
-        """Route through the bot so a failure counts once toward the limit every table game shares."""
-        note = getattr(self.bot, '_note_talk_failure', None)
-        note(guild_id) if note else self._count_failure(guild_id)
+        self.talk.note_failure(guild_id)  # one counter for every table game
 
     @staticmethod
     def _names(snap) -> list:

@@ -25,6 +25,7 @@ from discord import app_commands
 from .admin_store import ConflictError, GameError
 from . import game_chooser
 from .games import DefaultPolicy, blackjack
+from .game_talk import TalkBudget
 from .table_runtime import TableRuntime
 
 STALE = "That table has moved on — use the latest buttons."
@@ -135,7 +136,11 @@ class GameTables:
         self.senders: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
         self.tables: dict[tuple[int, int], _Table] = {}
         self.talk_capped: set[tuple[int, object]] = set()
-        self.talk_failed: dict[tuple[int, object], int] = {}  # attempts without a usage row, per (guild, server day)
+        self.talk = getattr(bot, 'talk_budget', None) or TalkBudget(lambda: bot.store)  # failed attempts, shared by every table game
+
+    @property
+    def talk_failed(self):
+        return self.talk.failed
 
     @property
     def store(self):
@@ -899,10 +904,8 @@ class GameTables:
         if not self.store.game_character_talk(guild_id):
             return house, ""
         marker = (guild_id, self.store._server_day(guild_id, time.time())[1])
-        if self.talk_failed.keys() - {marker}:
-            self.talk_failed = {m: n for m, n in self.talk_failed.items() if m == marker}
-        used, limit = self.store.game_talk_calls_today(guild_id) + self.talk_failed.get(marker, 0), self.store.game_talk_daily_limit(guild_id)
-        if used >= limit:
+        if self.talk.remaining(guild_id) <= 0:
+            limit = self.store.game_talk_daily_limit(guild_id)
             if marker not in self.talk_capped:
                 self.talk_capped = {m for m in self.talk_capped if m[1] == marker[1]} | {marker}
                 logging.info("Blackjack table talk reached its daily limit (%d) in guild %s; characters play by the house rule", limit, guild_id)
@@ -916,11 +919,11 @@ class GameTables:
             result = await asyncio.wait_for(game_chooser.ask(self.bot, guild_id, snap["channel_id"], character, snap, seat, offered, self.store.character_play_style(guild_id, character["id"])), self.MODEL_SECONDS)
         except Exception as error:
             logging.warning("Blackjack character decision fell back to the house rule (%s)", type(error).__name__)
-            self.talk_failed[marker] = self.talk_failed.get(marker, 0) + 1
+            self.talk.note_failure(guild_id)
             return house, ""
         move = result.get("move") if isinstance(result, dict) else None
         if not isinstance(move, str) or move not in offered:
-            self.talk_failed[marker] = self.talk_failed.get(marker, 0) + 1
+            self.talk.note_failure(guild_id)
             return house, ""
         return move, game_chooser.clean_line(result.get("line"))
 

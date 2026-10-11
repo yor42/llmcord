@@ -36,6 +36,7 @@ from .errors import ModelConfigError, error_detail, error_stack, reference_id, u
 from .usage import capture_usage, log_attribution, log_purpose, log_scope, mask_for_log, reply_footer
 from .identity import discord_identity, message_context
 from .favorites_discord import register_favorites_commands
+from .game_talk import TalkBudget
 from .games_discord import GameButton, GameTables, register_game_commands
 from .games_doubt_discord import DoubtButton, DoubtTables, register_doubt_commands
 from .games_holdem_discord import HoldemButton, HoldemTables
@@ -160,6 +161,7 @@ class SkitBot(commands.Bot):
         self.tree.allowed_contexts = app_commands.AppCommandContext(guild=True)
         self.memory_tasks: dict[int, asyncio.Task] = {}
         self.note_tasks: set[asyncio.Task] = set()
+        self.talk_budget = TalkBudget(lambda: self.store)
         self.games = GameTables(self)
         self.doubt = DoubtTables(self)
         self.holdem = HoldemTables(self)
@@ -320,8 +322,7 @@ class SkitBot(commands.Bot):
 
     def _note_talk_failure(self, guild_id) -> None:
         """A failed table talk attempt counts toward the guild's daily table-talk limit, which every table game shares."""
-        self.doubt._count_failure(guild_id)
-        self.holdem._count_failure(guild_id)
+        self.talk_budget.note_failure(guild_id)
 
     def _table_talk_open(self, guild_id, table, game) -> bool:
         """May the characters of this table thread speak: someone is seated, table talk is on, the daily limit and the spending cap allow it."""
