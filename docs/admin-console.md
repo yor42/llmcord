@@ -145,6 +145,11 @@ The **Smallest bet** and **Largest bet** (whole numbers from 1 to 100,000; the s
 - **I Doubt It is on** (saved as "I Doubt It setting saved", audited as `games.doubt_enabled`): off, `/game start game:doubt` is refused and the server's open I Doubt It tables close with every ante refunded; the toast says "I Doubt It is off. Closed 1 open table." or "Closed N open tables."
 - **I Doubt It rules** (saved as "I Doubt It rules saved", audited as `games.doubt_rules` with the full rules): **Ante** (whole number from 0 to 1,000,000,000; 0 = no ante, the default), **Turn timeout (seconds)** (15 to 300, default 60) and the **Claim rule**, shown read-only as "Sequence" (claims follow A, 2 … K, then A again). The doubt window (15 seconds), the deck count (one deck for 3–5 players, two for 6–8) and when the turn message is posted again (after 8 messages) are fixed. Changes apply to tables opened afterwards; an open table keeps the rules it was opened with. If the rules were changed elsewhere meanwhile, the save is refused ("The I Doubt It rules were changed elsewhere. Reload the page and try again.")
 
+**Texas Hold'em**
+
+- **Texas Hold'em is on** (saved as "Texas Hold'em setting saved", audited as `games.holdem_enabled`): off, `/game start game:holdem` is refused and the server's open Hold'em tables close with every stack cashed out into wallets; the toast says how many tables were closed.
+- **Texas Hold'em rules** (saved as "Texas Hold'em rules saved", audited as `games.holdem_rules` with the full rules): **Small blind** (whole number from 1 to 1,000,000, default 5; the big blind is double), **Smallest buy-in (big blinds)** (20 or more, default 40) and **Largest buy-in (big blinds)** (1,000 or less, default 200; the smallest cannot be above the largest), **Action timeout (seconds)** (15 to 300, default 45) and **Allow assist** (off by default: when on, a table's host may turn on Assist, which shows win odds to the player privately). Changes apply from the next hand of an open table, and to new tables.
+
 **Characters talk at the table** and **Table talk calls per day** above also apply to I Doubt It: they decide whether characters choose their plays and doubts by model and talk in the table thread. See [I Doubt It](server-guide.md#i-doubt-it).
 
 ## Reply footer and cost estimates
