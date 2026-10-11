@@ -10,10 +10,10 @@ from llmcord_core.games_holdem_discord import HoldemTables
 
 class FakeStore:
     def __init__(self, limit=3, calls=0):
-        self.limit, self.calls, self.day = limit, calls, "d1"
+        self.limit, self.calls, self.days = limit, calls, {}
 
     def _server_day(self, guild_id, now):
-        return (None, self.day)
+        return (None, self.days.get(guild_id, "d1"))
 
     def game_talk_calls_today(self, guild_id):
         return self.calls
@@ -32,13 +32,21 @@ class TalkBudgetTests(unittest.TestCase):
         budget.note_failure(1)
         self.assertEqual(budget.remaining(1), 0)
 
-    def test_new_server_day_drops_old_counts(self):
+    def test_reading_one_guild_keeps_the_others_counts(self):
+        budget = TalkBudget(FakeStore(limit=3))
+        budget.note_failure(1)
+        self.assertEqual(budget.remaining(2), 3)
+        self.assertEqual(budget.remaining(1), 2)
+
+    def test_new_server_day_drops_only_that_guilds_old_counts(self):
         store = FakeStore(limit=2)
         budget = TalkBudget(store)
         budget.note_failure(1)
-        store.day = "d2"
-        self.assertEqual(budget.remaining(1), 2)
-        self.assertEqual(len(budget.failed), 0)
+        budget.note_failure(2)
+        store.days[2] = "d2"
+        self.assertEqual(budget.remaining(2), 2)
+        self.assertEqual(budget.remaining(1), 1)
+        self.assertEqual(budget.failed, {(1, "d1"): 1})
 
     def test_games_on_one_bot_share_the_counter(self):
         store = FakeStore(limit=3)

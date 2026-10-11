@@ -161,7 +161,7 @@ class SkitBot(commands.Bot):
         self.tree.allowed_contexts = app_commands.AppCommandContext(guild=True)
         self.memory_tasks: dict[int, asyncio.Task] = {}
         self.note_tasks: set[asyncio.Task] = set()
-        self.talk_budget = TalkBudget(lambda: self.store)
+        self.talk_budget = TalkBudget(lambda: self.store, self._hard_cap_reached)
         self.games = GameTables(self)
         self.doubt = DoubtTables(self)
         self.holdem = HoldemTables(self)
@@ -454,6 +454,14 @@ class SkitBot(commands.Bot):
         except Exception as error:
             logging.error('Budget check failed: %s\n%s', error_detail(error), error_stack(error))
             return None
+
+    def _hard_cap_reached(self) -> bool:
+        """Read-only spending check for the game talk budget: no operator notices, fails open."""
+        try:
+            return bool(budget.state(self.store, time.time()).hard_reached)
+        except Exception as error:
+            logging.warning('Game talk budget check failed open: %s', error_detail(error))
+            return False
 
     def _send_operator_dm(self, operator_id, text):
         async def send():
@@ -1092,12 +1100,12 @@ def _register_summon_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
             if row["id"] not in table["seated_character_ids"]:
                 await interaction.response.send_message("Only the characters seated at this table can speak in its thread.", ephemeral=True)
                 return
-            if not game.talk_allowed(interaction.guild_id):
-                await interaction.response.send_message("The table's characters aren't talking right now (table talk is off or today's limit is reached).", ephemeral=True)
-                return
         state = bot._budget_check()
         if state and state.hard_reached:
             await interaction.response.send_message(_hard_cap_notice(state), ephemeral=True)
+            return
+        if table is not None and not game.talk_allowed(interaction.guild_id):
+            await interaction.response.send_message("The table's characters aren't talking right now (table talk is off or today's limit is reached).", ephemeral=True)
             return
         cutoff = interaction.created_at - timedelta(seconds=bot.base_settings.limits["recent_window_seconds"])
         reset_at = bot.store.scene_reset_at(interaction.channel.id)

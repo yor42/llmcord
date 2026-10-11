@@ -903,6 +903,8 @@ class GameTables:
         house = self._house_move(snap, seat, legal)
         if not self.store.game_character_talk(guild_id):
             return house, ""
+        if self.talk.capped():
+            return house, ""  # spending hard cap: the house rule plays, nothing to log or count
         marker = (guild_id, self.store._server_day(guild_id, time.time())[1])
         if self.talk.remaining(guild_id) <= 0:
             limit = self.store.game_talk_daily_limit(guild_id)

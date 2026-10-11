@@ -52,6 +52,16 @@ class SeatCase(GameCase):
         self.model = self.fake_model({"move": "stand", "line": "Feeling lucky."})
         self.bot.models.structured_compiled = self.model
 
+    def patch_spending(self, result):
+        """Stands in for the spending state read the game talk budget makes (an exception is raised)."""
+        def state(store, now):
+            if isinstance(result, BaseException):
+                raise result
+            return result
+        patcher = mock.patch("llmcord_core.discord_bot.budget.state", state)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def fake_model(self, result):
         async def model(role, request, name, schema):
             self.context = (log_attribution()["feature"], log_attribution()["purpose"], self.bot.backend._pinned.get() is not None)
@@ -166,6 +176,26 @@ class CharacterTurnTests(SeatCase):
         self.assertEqual(self.actors()[-2:], [(0, "stand", "member"), (1, "hit", "character")])
         await self.fire()
         self.assertEqual((self.actors()[-1], self.calls, self.latest()["status"]), ((1, "stand", "character"), [], "settled"))
+
+    async def test_hard_spending_cap_plays_the_house_rule_without_a_model_call_or_failure(self):
+        """MNT-47: with the hard cap reached the house rule plays: no model call, no failure counted, no line."""
+        self.patch_spending(SimpleNamespace(hard_reached=True, soft_reached=True))
+        await self.start()
+        await self.fire()
+        self.assertEqual((self.calls, self.webhook.sent, self.games.talk_failed), ([], [], {}))
+        self.assertEqual(self.actors()[-1], (1, "hit", "character"))
+
+    async def test_an_unreadable_spending_state_fails_open(self):
+        self.patch_spending(RuntimeError("db"))
+        await self.start()
+        await self.fire()
+        self.assertEqual(len(self.calls), 1)
+
+    async def test_a_spending_state_below_the_cap_asks_the_model(self):
+        self.patch_spending(SimpleNamespace(hard_reached=False, soft_reached=False))
+        await self.start()
+        await self.fire()
+        self.assertEqual(len(self.calls), 1)
 
     async def test_talk_on_uses_the_models_move_and_posts_the_line(self):
         await self.start()

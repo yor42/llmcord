@@ -585,6 +585,18 @@ class GatingTests(TalkCase):
         self.assertEqual(self.models.calls, [])
         self.assertEqual(self.spoke(), [])
 
+    async def test_summoning_under_the_hard_cap_gets_the_spending_notice(self):
+        await self.table3()
+        thread = self.thread()
+        self.silent_history(thread)
+        self.hard_cap()
+        click = FakeGameClick(self.bot, ALICE, channel=thread)
+        await invoke(self.bot, "summon", click, character="Ann", prompt="Join us")
+        (text, kwargs), = click.response.sent + click.followup.sent
+        self.assertIn("spending limit", text)
+        self.assertNotIn("table talk is off", text)
+        self.assertEqual((self.models.calls, self.spoke()), ([], []))
+
     async def test_a_silent_table_still_plays(self):
         await self.table3()
         self.store.set_game_character_talk(G, False)

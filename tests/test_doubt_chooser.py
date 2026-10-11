@@ -38,6 +38,7 @@ import functools
 import json
 import time
 from types import SimpleNamespace
+from unittest import mock
 
 import test_doubt_discord as base
 from test_doubt_discord import ALICE, BOB, G, counts_of, parse_move
@@ -297,6 +298,16 @@ class ModelCase(base.DoubtCase):
         snap = self.snap()
         await self.doubt.on_window_timer(G, snap["table_id"], snap["round_id"], snap["moves"])
 
+    def patch_spending(self, result):
+        """Stands in for the spending state read the game talk budget makes (an exception is raised)."""
+        def state(store, now):
+            if isinstance(result, BaseException):
+                raise result
+            return result
+        patcher = mock.patch("llmcord_core.discord_bot.budget.state", state)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     async def fire(self):
         snap = self.snap()
         await self.doubt.on_character_timer(G, snap["table_id"], snap["round_id"], snap["moves"])
@@ -472,6 +483,28 @@ class GatingTests(ModelCase):
         await self.fire()
         self.assertEqual(self.calls, [])
         self.assertEqual(parse_move(self.moves()[-1][1]), parse_move(expected))
+
+    async def test_hard_spending_cap_plays_the_policy_without_a_model_call_or_failure(self):
+        """MNT-47: with the hard cap reached the policy plays: no model call, no failure counted."""
+        self.patch_spending(SimpleNamespace(hard_reached=True, soft_reached=True))
+        await self.ann_on_turn()
+        expected = self.policy_play_move(1)
+        await self.fire()
+        self.assertEqual(self.calls, [])
+        self.assertEqual(parse_move(self.moves()[-1][1]), parse_move(expected))
+        self.assertEqual(sum(self.doubt.talk_failed.values()), 0)
+
+    async def test_an_unreadable_spending_state_fails_open(self):
+        self.patch_spending(RuntimeError("db"))
+        await self.ann_on_turn()
+        await self.fire()
+        self.assertEqual(len(self.calls), 1)
+
+    async def test_a_spending_state_below_the_cap_asks_the_model(self):
+        self.patch_spending(SimpleNamespace(hard_reached=False, soft_reached=False))
+        await self.ann_on_turn()
+        await self.fire()
+        self.assertEqual(len(self.calls), 1)
 
     async def test_below_the_daily_limit_the_model_is_asked(self):
         self.store.set_game_talk_daily_limit(G, 2)
