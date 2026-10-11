@@ -1,6 +1,7 @@
 """The trained spoken-move head (FEAT-36 export): standardize, linear layer, softmax. Pure python."""
 import hashlib
 import json
+import math
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -42,7 +43,7 @@ class Head:
                 logits[j] += z * w
         logits = [v / self.T for v in logits]
         top = max(logits)
-        exps = [pow(2.718281828459045, v - top) for v in logits]
+        exps = [math.exp(v - top) for v in logits]
         total = sum(exps)
         return {c: e / total for c, e in zip(self.classes, exps)}
 
