@@ -696,6 +696,30 @@ class PlayTests(HoldemCase):
 
 
 class NextRoundTests(HoldemCase):
+    def test_next_lobby_keeps_the_opening_rules_and_new_tables_get_the_new_ones(self):
+        rid = self.lobby((ALICE, BOB), buy_in=100, rules={"small_blind": 2, "min_buy_in_bb": 20, "max_buy_in_bb": 100, "action_timeout": 60})
+        self.store.deal(G, rid)
+        self.hand(rid, self.fold_out)
+        self.store.set_game_rules(G, "holdem", {"small_blind": 9, "min_buy_in_bb": 30, "max_buy_in_bb": 90, "action_timeout": 20})
+        nxt = self.store.next_round(G, 1)
+        keep = {k: nxt["rules"][k] for k in ("small_blind", "min_buy_in_bb", "max_buy_in_bb", "action_timeout")}
+        self.assertEqual(keep, {"small_blind": 2, "min_buy_in_bb": 20, "max_buy_in_bb": 100, "action_timeout": 60})
+        self.store.close_table(G, 1)
+        fresh = self.open()
+        self.assertEqual((fresh["rules"]["small_blind"], fresh["rules"]["action_timeout"]), (9, 20))
+
+    def test_rebuy_bounds_use_the_pinned_rules_after_a_server_change(self):
+        rid = self.lobby((ALICE, BOB), buy_in=50, rules={"small_blind": 1, "min_buy_in_bb": 20, "max_buy_in_bb": 50})  # bb 2: 40..100
+        self.store.deal(G, rid)
+        self.hand(rid, self.fold_out)
+        self.store.set_game_rules(G, "holdem", {"small_blind": 50})  # a server max of 5000 would allow the rebuy below
+        nxt = self.store.next_round(G, 1)["round_id"]
+        stack = next(r["stack"] for r in self.seat_rows(nxt) if r["ref_id"] == ALICE)
+        with self.assertRaises(GameError):
+            self.store.rebuy(G, nxt, ALICE, 100 - stack + 1)
+        self.store.rebuy(G, nxt, ALICE, 100 - stack)
+        self.assertEqual(next(r["stack"] for r in self.seat_rows(nxt) if r["ref_id"] == ALICE), 100)
+
     def test_next_round_copies_seats_with_end_stacks(self):
         self.cwallet(self.ann, 5000)
         self.store.add_favorite(G, ALICE, self.ann)

@@ -1790,10 +1790,12 @@ class AdminStore:
             raise GameError('That table has no rounds.')
         return self._game_snapshot(guild_id, row['id'])
 
-    def _new_round(self, guild_id, table_id, seed, now, assist=False):
+    def _new_round(self, guild_id, table_id, seed, now, assist=False, pinned=None):
         number = self.one('SELECT COALESCE(MAX(number),0)+1 FROM game_rounds WHERE table_id=? AND guild_id=?', (table_id, guild_id))[0]
         game = self._game_table(guild_id, table_id)['game']
         spec, rules = registry.get(game), self.game_rules(guild_id, game)
+        if spec.cash and pinned is not None:
+            rules = pinned  # a table keeps the rules it opened with
         if spec.cash:
             rules = {**rules, 'assist': assist}  # the server's assist is "the host may turn it on"; a round pins the table's choice
         return self.db.execute('INSERT INTO game_rounds(guild_id,table_id,number,seed,seed_hash,status,created_at,rules_json) VALUES(?,?,?,?,?,?,?,?)',

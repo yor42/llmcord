@@ -50,11 +50,11 @@ class HoldemStore:
             self._cash_out_seat(guild_id, table_id, seat, self._end_stack(rnd, seat), reason)
 
     def _next_cash_round(self, guild_id, table_id):
-        """Inside write_admin: the next lobby. Seats are copied with their end stacks (starting stacks after a voided hand); busted seats are cashed out for 0 and dropped."""
+        """Inside write_admin: the next lobby, with the rules the table opened with (only Assist follows the server). Seats are copied with their end stacks (starting stacks after a voided hand); busted seats are cashed out for 0 and dropped."""
         prev = self._game_round(guild_id, self.one('SELECT id FROM game_rounds WHERE guild_id=? AND table_id=? ORDER BY number DESC LIMIT 1', (guild_id, table_id))['id'])
         rules = self._round_rules(prev)
         assist = bool(rules and rules['assist'] and self.game_rules(guild_id, 'holdem')['assist'])
-        round_id = self._new_round(guild_id, table_id, new_seed(), time.time(), assist=assist)
+        round_id = self._new_round(guild_id, table_id, new_seed(), time.time(), assist=assist, pinned=rules)
         for seat in self._game_seats(guild_id, prev['id']):
             stack = self._end_stack(prev, seat)
             if stack <= 0:
