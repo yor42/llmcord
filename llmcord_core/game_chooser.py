@@ -6,6 +6,7 @@ the legal moves: no lore, scene history, memory or member identities, so nothing
 from __future__ import annotations
 
 import json
+import re
 from types import SimpleNamespace
 
 from .games import blackjack, doubt, playstyle
@@ -146,3 +147,62 @@ async def ask_doubt_doubt(bot, guild_id, channel_id, character, view, names, sty
     if not isinstance(answer, bool):
         raise ValueError("doubt answer is not a boolean")
     return answer
+
+
+# --- Texas Hold'em (FEAT-33 C2): a seat's move from its own view; no seed, other hole cards, member identities or odds ---
+
+HOLDEM_SYSTEM = ("You are {name}, playing Texas Hold'em (no-limit cash game) at a table in a roleplay server. Stay in character.\n"
+                 "{persona}\n"
+                 "Choose your move from the legal moves: fold, check, call, or raise:<n> (n is your total bet this round). "
+                 f"You may also say one short line in character, at most {MAX_LINE} characters, or leave it empty. Do not mention anyone with @. Return only JSON.")
+HOLDEM_RECENT = 6
+
+
+def holdem_schema(legal) -> dict:
+    return schema(legal)
+
+
+def holdem_names(snap) -> list:
+    """Prompt-safe names by seat: characters by name (one line, no markup or colons), members as Player 1, 2, ... (never member names or ids)."""
+    names, players = [], 0
+    for seat in snap["seats"]:
+        if seat["kind"] == "character":
+            name = " ".join(re.sub(r"[*_~`|>@<\\:]", " ", str(seat["name"])).split())[:40]
+        else:
+            players += 1
+            name = f"Player {players}"
+        names.append(name or f"Seat {len(names) + 1}")
+    return names
+
+
+def _cards(cards) -> str:
+    return " ".join(f"{c[0]}{c[1]}" for c in cards)
+
+
+def holdem_table_text(view, names, legal) -> str:
+    me = view.seat
+    lines = [f"Your cards: {_cards(view.hole)}", f"Street: {view.street}. Board: {_cards(view.board) or 'none yet'}", f"Pot: {view.pot}"]
+    for i, name in enumerate(names):
+        flags = (" (you)" if i == me else "") + (" (dealer)" if view.button == i else "") + (" folded" if view.folded[i] else " all-in" if view.all_in[i] else "")
+        lines.append(f"Seat {i + 1}, {name}{flags}: stack {view.stacks[i]}, bet this round {view.bets[i]}")
+    if view.to_call:
+        lines.append(f"To call: {view.to_call}")
+    for seat, move in view.history[-HOLDEM_RECENT:]:
+        lines.append(f"Earlier: {names[seat]} " + (f"raised to {move[6:]}" if move.startswith("raise:") else {"fold": "folded", "check": "checked", "call": "called"}.get(move, move)))
+    lines.append("Legal moves: " + ", ".join(legal))
+    return "\n".join(lines)
+
+
+def holdem_move(result, legal):
+    """The answer's move when it is a dict whose ``move`` is a string equal to a menu id, else None (``line`` is never read as a move)."""
+    move = result.get("move") if isinstance(result, dict) else None
+    return move if isinstance(move, str) and move in tuple(legal) else None
+
+
+async def ask_holdem(bot, guild_id, channel_id, character, view, names, legal, style=None) -> dict:
+    """One call on the seat's own view; returns the raw answer (the caller validates it). Raises on any failure."""
+    legal = tuple(legal)
+    request = SimpleNamespace(messages=[TurnMessage("system", HOLDEM_SYSTEM.format(name=character["name"], persona=with_style(persona(character), style))),
+                                        TurnMessage("user", holdem_table_text(view, names, legal))])
+    with bot.backend.pin(), capture_usage(guild_id, channel_id, "game"), log_scope(None), log_purpose("game"):
+        return await bot.models.structured_compiled(ROLE, request, "holdem_move", holdem_schema(legal))

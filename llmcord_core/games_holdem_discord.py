@@ -1,6 +1,6 @@
 """Texas Hold'em on Discord (FEAT-33 parts C1a, C1b): `/game start game:holdem`, lobby (Sit, Leave, Rebuy, Fill seats, Assist, Deal, Close table),
 table thread, idle timer, restart recovery, and the hand: pinned board, one turn message (Fold, Check / Call, Raise, My cards), action
-timer, character seats by the fallback policy, showdown post, the pause between hands. Character decisions by a model are C2.
+timer, character seats (a model's choice from the engine menu, else the fallback policy), showdown post, the pause between hands.
 
 Same shape as ``games_doubt_discord``: one lock per table that covers store work only; a handler decides under the lock and builds an
 ``_Out`` (a private reply, the lobby text and buttons, a sequence number); the messages go out afterwards, one table at a time, and an
@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 
 import discord
 
+from . import game_chooser
 from .admin_store import ConflictError, GameError
 from .games import holdem
 from .games.base import IllegalMove, Seat
@@ -135,6 +136,7 @@ class HoldemTables:
     BOARD_DEBOUNCE_SECONDS = 1
     RETRY_SECONDS = 5  # read once at construction (TableRuntime.retry_seconds); tests set runtime.retry_seconds
     SWEEP_SECONDS = 30
+    MODEL_SECONDS = 20  # bounds one character decision by the model
 
     def __init__(self, bot, clock=time.time):
         self.bot, self.clock = bot, clock
@@ -146,6 +148,7 @@ class HoldemTables:
         self.board_tasks: dict[tuple[int, int], asyncio.Task] = {}
         self.assists: dict[tuple, str] = {}  # (guild, round, seat, street) -> the odds text, so a street's numbers never change
         self.shown: set[tuple[int, int]] = set()  # (guild, round) whose winner already showed their cards
+        self.talk_failed: dict = {}  # (guild, server day) -> failed model attempts, which count toward the daily limit
 
     @property
     def store(self):
@@ -1232,9 +1235,25 @@ class HoldemTables:
                 return
         await self._publish(key, out)
 
+    def _talk_budget(self, guild_id) -> int:
+        """How many model calls the table-talk daily limit still allows (0 when character table talk is off). Failed attempts count."""
+        if not self.store.game_character_talk(guild_id):
+            return 0
+        marker = (guild_id, self.store._server_day(guild_id, time.time())[1])
+        if self.talk_failed.keys() - {marker}:
+            self.talk_failed = {m: n for m, n in self.talk_failed.items() if m == marker}
+        used = self.store.game_talk_calls_today(guild_id) + self.talk_failed.get(marker, 0)
+        return max(self.store.game_talk_daily_limit(guild_id) - used, 0)
+
+    def _note_failure(self, guild_id) -> None:
+        marker = (guild_id, self.store._server_day(guild_id, time.time())[1])
+        self.talk_failed[marker] = self.talk_failed.get(marker, 0) + 1
+
     async def on_character_timer(self, guild_id, table_id, round_id, moves) -> None:
-        """A character seat on turn plays by the engine policy with its saved Play style (a model chooser comes in C2)."""
-        key, out = (guild_id, table_id), None
+        """A character seat on turn plays. With character table talk on, the daily limit not reached and Character moves not
+        "style only", the model chooses from the engine menu (asked outside the table lock, applied only if the table is still at
+        the same move count); any other answer or failure falls back to the engine policy with the saved Play style."""
+        key, out, plan = (guild_id, table_id), None, None
         async with self.runtime.lock(key):
             snap = self._timer_snap(key, round_id, moves)
             if snap is None:
@@ -1242,14 +1261,36 @@ class HoldemTables:
             seat = snap["view"]["turn"]
             if seat is None or snap["seats"][seat]["kind"] != "character":
                 return
-            out = self._character_move(key, snap, seat)
+            character = self.store.character_by_id(snap["seats"][seat]["ref_id"])
+            if character is not None and character["guild_id"] == guild_id and self.store.game_character_moves(guild_id) != "style" and self._talk_budget(guild_id) > 0:
+                seen = self.store.seat_view(guild_id, round_id, seat)
+                plan = (character, seen, game_chooser.holdem_names(snap), holdem.legal_moves_for_view(seen), self.store.character_play_style(guild_id, character["id"]))
+            else:
+                out = self._character_move(key, snap, seat)
+        if plan is not None:
+            character, seen, names, legal, style = plan
+            move = None
+            try:
+                result = await asyncio.wait_for(game_chooser.ask_holdem(self.bot, guild_id, snap["channel_id"], character, seen, names, legal, style), self.MODEL_SECONDS)
+                move = game_chooser.holdem_move(result, legal)
+            except asyncio.CancelledError:
+                self._note_failure(guild_id)  # an attempt that was cut short still counts toward the limit
+                raise
+            except Exception as error:
+                logging.warning("Texas Hold'em character move fell back to the policy (%s)", type(error).__name__)
+            if move is None:
+                self._note_failure(guild_id)
+            async with self.runtime.lock(key):
+                fresh = self._timer_snap(key, round_id, moves)  # None: the table moved on or closed while the model thought
+                out = None if fresh is None else self._character_move(key, fresh, seat, move)
         await self._publish(key, out)
 
-    def _character_move(self, key, snap, seat) -> _Out | None:
+    def _character_move(self, key, snap, seat, chosen=None) -> _Out | None:
+        """Under the table lock: the model's ``chosen`` move if given, else (or if refused) the policy's, then the free timeout move."""
         guild_id, round_id = key[0], snap["round_id"]
         seen = self.store.seat_view(guild_id, round_id, seat)
         seed = self.store.policy_seed(guild_id, round_id, f"{snap['moves']}/{seat}/character")
-        tries = []
+        tries = [(chosen, "character")] if chosen is not None else []
         try:
             tries.append((holdem.policy_action(seen, self.store.character_play_style(guild_id, snap["seats"][seat]["ref_id"]), seed), "character"))
         except (IllegalMove, ValueError) as error:
