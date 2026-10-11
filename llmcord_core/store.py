@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 import sqlite3
@@ -9,6 +10,7 @@ from contextlib import closing
 from pathlib import Path
 from typing import Any
 from .admin_store import AdminStore, ConflictError, entry_match, run_script
+from .games import playstyle
 from .items_store import ItemsStore
 
 
@@ -196,16 +198,16 @@ class Store(ItemsStore, AdminStore):
 
     def _upgrade(self, path: str | Path, existing: bool) -> None:
         """The whole schema upgrade, backup included, in one write-locked transaction: a failure leaves the old file as it was,
-        and a second process opening the same file waits, then finds version 18 and does nothing. executescript commits, so scripts run per statement."""
+        and a second process opening the same file waits, then finds version 19 and does nothing. executescript commits, so scripts run per statement."""
         self.db.execute("BEGIN IMMEDIATE")
         try:
             old_version = self.db.execute("PRAGMA user_version").fetchone()[0]
-            if old_version > 18:
+            if old_version > 19:
                 raise ValueError('The database is newer than this application. Update the application.')
             node_columns = {row[1] for row in self.db.execute('PRAGMA table_info(nodes)')}
             needs_identities = bool(node_columns) and not {'author_label', 'mentions_json'} <= node_columns
-            if existing and (old_version < 18 or needs_identities):
-                upgrade = 'v3' if old_version < 3 else 'identities' if needs_identities else 'v4' if old_version == 3 else 'v5' if old_version == 4 else 'v6' if old_version == 5 else 'v7' if old_version == 6 else 'v8' if old_version == 7 else 'v9' if old_version == 8 else 'v10' if old_version == 9 else 'v11' if old_version == 10 else 'v12' if old_version == 11 else 'v13' if old_version == 12 else 'v14' if old_version == 13 else 'v15' if old_version == 14 else 'v16' if old_version == 15 else 'v17' if old_version == 16 else 'v18'
+            if existing and (old_version < 19 or needs_identities):
+                upgrade = 'v3' if old_version < 3 else 'identities' if needs_identities else 'v4' if old_version == 3 else 'v5' if old_version == 4 else 'v6' if old_version == 5 else 'v7' if old_version == 6 else 'v8' if old_version == 7 else 'v9' if old_version == 8 else 'v10' if old_version == 9 else 'v11' if old_version == 10 else 'v12' if old_version == 11 else 'v13' if old_version == 12 else 'v14' if old_version == 13 else 'v15' if old_version == 14 else 'v16' if old_version == 15 else 'v17' if old_version == 16 else 'v18' if old_version == 17 else 'v19'
                 backup = Path(str(path) + f".pre-{upgrade}-{time.time_ns()}.sqlite3")
                 # Connection.backup from the connection holding the write lock never finishes; a second reader sees the committed file (the lock excludes other writers).
                 with closing(sqlite3.connect(path, timeout=30)) as reader, closing(sqlite3.connect(backup)) as target:
@@ -218,6 +220,8 @@ class Store(ItemsStore, AdminStore):
             columns = {row[1] for row in self.db.execute("PRAGMA table_info(characters)")}
             if "archived" not in columns:
                 self.db.execute("ALTER TABLE characters ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+            if "play_style" not in columns:
+                self.db.execute("ALTER TABLE characters ADD COLUMN play_style TEXT NOT NULL DEFAULT ''")
             columns = {row[1] for row in self.db.execute("PRAGMA table_info(lore)")}
             if "rule_json" not in columns:
                 self.db.execute("ALTER TABLE lore ADD COLUMN rule_json TEXT NOT NULL DEFAULT '{}'")
@@ -238,7 +242,7 @@ class Store(ItemsStore, AdminStore):
                 self.db.execute('ALTER TABLE avatar_slots ADD COLUMN image_hash TEXT')
             if added or old_version < 11:
                 self._backfill_avatar_hashes()
-            self.db.execute("PRAGMA user_version=18")
+            self.db.execute("PRAGMA user_version=19")
             self.db.commit()
         except BaseException:
             self.db.rollback()
@@ -805,6 +809,29 @@ class Store(ItemsStore, AdminStore):
             if moved:
                 self._remove_from_thread_casts(guild_id, character_id)
             self.bump_owner(guild_id, 'character', character_id)
+
+    def character_play_style(self, guild_id: int, character_id: int) -> playstyle.PlayStyle | None:
+        row = self.one("SELECT play_style FROM characters WHERE guild_id=? AND id=?", (guild_id, character_id))
+        return playstyle.loads(row["play_style"]) if row else None
+
+    def resolved_play_style(self, guild_id: int, character_id: int) -> playstyle.PlayStyle:
+        """Returns the derived style even for a missing or other-guild character; callers must check the character exists."""
+        return self.character_play_style(guild_id, character_id) or playstyle.derived_from_id(character_id)
+
+    def set_character_play_style(self, guild_id: int, character_id: int, style: playstyle.PlayStyle | None, expected_revision: int) -> int:
+        if style is not None and not isinstance(style, playstyle.PlayStyle):
+            raise TypeError("style must be a PlayStyle or None")
+        if style is not None:
+            style = playstyle.parse(dataclasses.asdict(style))
+        with self.write_admin():
+            if not self.one("SELECT 1 FROM characters WHERE guild_id=? AND id=?", (guild_id, character_id)):
+                raise ValueError("Character not found in this server.")
+            if expected_revision != self.owner_revision(guild_id, 'character', character_id):
+                raise ConflictError('Character changed; reload before saving')
+            self.db.execute("UPDATE characters SET play_style=? WHERE guild_id=? AND id=?",
+                ("" if style is None else playstyle.dumps(style), guild_id, character_id))
+            self.bump_owner(guild_id, 'character', character_id)
+            return self.owner_revision(guild_id, 'character', character_id)
 
     def list_characters(self, guild_id: int) -> list:
         return self.all("SELECT * FROM characters WHERE guild_id=? ORDER BY name", (guild_id,))

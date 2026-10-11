@@ -10,6 +10,7 @@ import traceback
 
 from .avatars import AvatarPublisher
 from .backend import effective_backend
+from .games import playstyle
 from .models import TurnMessage
 from .prompts import compile_prompt, time_values
 
@@ -63,6 +64,22 @@ class AdminService:
         if action:
             self._audit(guild_id, int(session['user']['id']), action, detail, result)
         return result
+
+    async def set_play_style(self, ident, guild_id, character_id, style, expected_revision):
+        old = {}
+
+        def operation():
+            old['style'] = self.store.character_play_style(guild_id, character_id) or playstyle.PlayStyle()
+            return self.store.set_character_play_style(guild_id, character_id, style, expected_revision)
+
+        def detail(_):
+            if style is None:
+                text = 'reset'
+            else:
+                text = ', '.join(f'{t} {getattr(old["style"], t)}→{getattr(style, t)}' for t in playstyle.TRAITS if getattr(old['style'], t) != getattr(style, t)) or 'no change'
+            return {'id': character_id, 'changes': text}
+
+        return await self.run(ident, guild_id, operation, 'character.play_style', detail)
 
     async def run_operator(self, ident, operation, action=None, detail=None):
         # Live (socket.io) calls carry no per-request CSRF/origin: the boundary is the socket's cookie-to-client
