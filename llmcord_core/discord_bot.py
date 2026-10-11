@@ -38,6 +38,7 @@ from .identity import discord_identity, message_context
 from .favorites_discord import register_favorites_commands
 from .games_discord import GameButton, GameTables, register_game_commands
 from .games_doubt_discord import DoubtButton, DoubtTables, register_doubt_commands
+from .items_discord import register_items_commands
 
 AVATAR_ASSET_CHECK_TTL = 600
 CACHE_LIMIT = 512
@@ -1613,6 +1614,7 @@ def register_commands(bot: SkitBot) -> None:
     _register_currency_commands(bot, ctx, admin_currency)
     register_game_commands(bot, ctx, admin_games)
     register_doubt_commands(bot, ctx)
+    register_items_commands(bot, ctx)
     _register_lore_commands(bot, ctx, admin_lore)
     _register_scene_commands(bot, ctx, admin_scene)
     bot.tree.add_command(admin)

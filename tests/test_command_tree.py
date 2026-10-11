@@ -377,6 +377,7 @@ EXPECTED_COMMANDS = {
         "None",
         False,
     ),
+    "inventory": ("See the items you hold and use them", (), 0, "None", False),
     "lore list": ("Show the lore available in this location", (), 0, "None", False),
     "memory forget": (
         "Remove one of your personal memories",
@@ -407,6 +408,7 @@ EXPECTED_COMMANDS = {
         "None",
         False,
     ),
+    "shop": ("See what is for sale and buy items", (), 0, "None", False),
     "space list": ("List the server's worlds and hubs", (), 0, "None", False),
     "summon": (
         "Invite an eligible character for one turn",
@@ -427,6 +429,13 @@ EXPECTED_COMMANDS = {
         False,
     ),
     "time show": ("Show the timezone characters use for you", (), 0, "None", False),
+    "use": (
+        "Use an item you hold",
+        (("item", "string", True, "The item to use", True, ()),),
+        0,
+        "None",
+        False,
+    ),
 }
 
 # group -> (description, default_permissions, guild_only)

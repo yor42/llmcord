@@ -41,6 +41,14 @@ class InsufficientFunds(ItemError):
         self.balance, self.price = balance, price
 
 
+class PriceChanged(ItemError):
+    code = 'price_changed'
+
+    def __init__(self, message, price):
+        super().__init__(message)
+        self.price = price
+
+
 class NotHeld(ItemError):
     code = 'not_held'
 
@@ -162,13 +170,16 @@ class ItemsStore:
                             'qty': held[recipe.key]['qty'], 'last_used_at': held[recipe.key]['last_used_at']})
         return out
 
-    def buy_item(self, guild_id, user_id, item_key):
-        """One transaction: for sale, hold cap, then the ledger debit, the purchase link and the inventory row. Returns {'item','qty','balance','price','ledger_id'}."""
+    def buy_item(self, guild_id, user_id, item_key, expected_price=None):
+        """One transaction: for sale, hold cap, then the ledger debit, the purchase link and the inventory row. Returns {'item','qty','balance','price','ledger_id'}.
+        With `expected_price` (the price the buyer was shown), a different current price raises PriceChanged before anything is written."""
         recipe = _recipe(item_key)
         with self.write_admin():
             entry = self._shop_entry(recipe, self._shop_row(guild_id, item_key)) if recipe else None
             if entry is None or not entry['for_sale'] or entry['price'] < 1:
                 raise NotForSale('That item is not for sale.')
+            if expected_price is not None and expected_price != entry['price']:
+                raise PriceChanged(f'The price changed to {entry["price"]:,}. Open /shop again.', entry['price'])
             qty = self.item_qty(guild_id, user_id, item_key)
             if recipe.reusable and qty >= 1:
                 raise AlreadyOwned(f'You already own {recipe.name}.')

@@ -172,6 +172,17 @@ class BuyTests(unittest.TestCase):
         return (s.balance(guild, U), s.one("SELECT COUNT(*) FROM currency_ledger")[0], s.one("SELECT COUNT(*) FROM inventory")[0],
                 s.one("SELECT COUNT(*) FROM shop_purchases")[0])
 
+    def test_expected_price_mismatch_refuses_without_writing(self):
+        from llmcord_core.items_store import PriceChanged
+        price = self.store.shop_item(G, BALL)["price"]
+        before = self.snapshot()
+        with self.assertRaises(PriceChanged) as caught:
+            self.store.buy_item(G, U, BALL, expected_price=price - 1)
+        self.assertEqual((caught.exception.code, caught.exception.price), ("price_changed", price))
+        self.assertEqual(str(caught.exception), f"The price changed to {price:,}. Open /shop again.")
+        self.assertEqual(self.snapshot(), before)
+        self.assertEqual(self.store.buy_item(G, U, BALL, expected_price=price)["price"], price)
+
     def test_happy_path(self):
         price = self.store.shop_item(G, BALL)["price"]
         bought = self.store.buy_item(G, U, BALL)
