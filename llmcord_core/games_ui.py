@@ -219,7 +219,7 @@ def holdem_section(ctx):
             high = ui.number('Largest buy-in (big blinds)', value=rules['value']['max_buy_in_bb'], min=20, max=1000, precision=0, format='%d').classes('ll-wide')
             timeout = ui.number('Action timeout (seconds)', value=rules['value']['action_timeout'], min=15, max=300, precision=0, format='%d').classes('ll-wide')
         assist = ui.switch('Allow assist', value=rules['value']['assist'])
-        ui.label('The big blind is twice the small blind. Buy-ins are counted in big blinds. A player who runs out of action time checks, or folds when there is a bet. Allow assist lets players ask for a suggested move. Changes apply to hands dealt afterwards.').classes('ll-muted')
+        ui.label('The big blind is twice the small blind. Buy-ins are counted in big blinds. A player who runs out of action time checks, or folds when there is a bet. Allow assist lets the host turn on private hand and odds hints for the table. Changes apply to hands dealt afterwards.').classes('ll-muted')
         controls = (blind, low, high, timeout, assist)
         keys = ('small_blind', 'min_buy_in_bb', 'max_buy_in_bb', 'action_timeout', 'assist')
         def current():

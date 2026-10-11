@@ -1111,9 +1111,14 @@ class DoubtTables:
         used = self.store.game_talk_calls_today(guild_id) + self.talk_failed.get(marker, 0)
         return max(self.store.game_talk_daily_limit(guild_id) - used, 0)
 
-    def _note_failure(self, guild_id) -> None:
+    def _count_failure(self, guild_id) -> None:
         marker = (guild_id, self.store._server_day(guild_id, time.time())[1])
         self.talk_failed[marker] = self.talk_failed.get(marker, 0) + 1
+
+    def _note_failure(self, guild_id) -> None:
+        """Route through the bot so a failure counts once toward the limit every table game shares."""
+        note = getattr(self.bot, '_note_talk_failure', None)
+        note(guild_id) if note else self._count_failure(guild_id)
 
     @staticmethod
     def _names(snap) -> list:

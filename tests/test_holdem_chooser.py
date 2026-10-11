@@ -280,6 +280,19 @@ class FallbackTests(ModelCase):
         self.assertEqual(self.now()["status"], "playing")
 
 
+class SharedFailureCountTests(ModelCase):
+    async def test_a_failed_move_counts_once_for_both_games(self):
+        """A failed Hold'em move is one failure toward the shared daily limit, visible to the Doubt budget too."""
+        self.store.set_game_talk_daily_limit(G, 10)
+        before_doubt, before_holdem = self.bot.doubt._talk_budget(G), self.holdem._talk_budget(G)
+        self.answer = {"move": "all-in", "line": ""}
+        await self.expect_fallback()
+        self.assertEqual(before_doubt - self.bot.doubt._talk_budget(G), 1)
+        self.assertEqual(before_holdem - self.holdem._talk_budget(G), 1)
+        self.assertEqual(sum(self.holdem.talk_failed.values()), 1)
+        self.assertEqual(sum(self.bot.doubt.talk_failed.values()), 1)
+
+
 class StyleOnlyTests(ModelCase):
     async def test_style_only_plays_the_policy_without_a_model_call(self):
         """C2: Character moves = style only never calls the model, even with character talk on and budget left."""

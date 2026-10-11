@@ -320,8 +320,8 @@ class SkitBot(commands.Bot):
 
     def _note_talk_failure(self, guild_id) -> None:
         """A failed table talk attempt counts toward the guild's daily table-talk limit, which every table game shares."""
-        self.doubt._note_failure(guild_id)
-        self.holdem._note_failure(guild_id)
+        self.doubt._count_failure(guild_id)
+        self.holdem._count_failure(guild_id)
 
     def _table_talk_open(self, guild_id, table, game) -> bool:
         """May the characters of this table thread speak: someone is seated, table talk is on, the daily limit and the spending cap allow it."""
