@@ -1,4 +1,5 @@
 """Opt-in browser integration tests against a disposable mocked Discord server."""
+import dataclasses
 import json
 import os
 import re
@@ -3347,6 +3348,97 @@ class DashboardBrowserTests(unittest.TestCase):
 
     def restore_alice(self, original):
         self.context.request.post(self.url + '/_test/change-character', data={'name': 'Alice', 'description': original})
+
+    # FEAT-32 C: the Play style section of the character card.
+    def open_play_style(self):
+        context, page, errors, card, _ = self.open_alice()
+        card.get_by_text('Play style', exact=True).click()
+        card.locator('.play-style-summary').wait_for(timeout=5000)
+        return context, page, errors, card
+
+    def slider_value(self, card, trait):
+        return int(card.locator(f'.play-style-{trait} .q-slider').get_attribute('aria-valuenow'))
+
+    def alice_play_style(self):
+        return self.state()['play_styles'][str(self.alice_row()['id'])]
+
+    def test_play_style_unsaved_character_shows_derived_style_and_disabled_reset(self):
+        """FEAT-32 C: with nothing saved the sliders show the derived style, the explainer says so, Reset is disabled, groups and end captions show."""
+        from playwright.sync_api import expect
+        from llmcord_core.games import playstyle
+        context, page, errors, card = self.open_play_style()
+        try:
+            derived = playstyle.derived_from_id(self.alice_row()['id'])
+            self.assertIsNone(self.alice_play_style())
+            for trait in playstyle.TRAITS:
+                self.assertEqual(self.slider_value(card, trait), getattr(derived, trait), trait)
+            card.get_by_text('How this character plays card games. No style is saved, so it plays in a style derived from the character; the sliders show that style. Save to keep your own.', exact=True).wait_for(timeout=5000)
+            for group in playstyle.GROUPS:
+                self.assertEqual(card.locator('.play-style').get_by_text(group, exact=True).count(), 1, group)
+            row = card.locator('.play-style-stubbornness')
+            self.assertIn('Folds easily', row.inner_text())
+            self.assertIn('Stubborn', row.inner_text())
+            expect(card.locator('.play-style-summary')).to_have_text('Plays: ' + playstyle.describe(derived))
+            expect(card.get_by_role('button', name='Reset to default', exact=True)).to_be_disabled()
+            self.assertFalse(self.page_errors(page), errors)
+        finally:
+            context.close()
+
+    def test_play_style_save_persists_audits_and_reset_clears(self):
+        """FEAT-32 C: moving a slider updates the summary; Save stores the style and audits it; reopening shows it with Reset enabled; Reset clears it."""
+        from playwright.sync_api import expect
+        from llmcord_core.games import playstyle
+        context, page, errors, card = self.open_play_style()
+        try:
+            derived = playstyle.derived_from_id(self.alice_row()['id'])
+            slider = card.locator('.play-style-looseness .q-slider')
+            slider.click(position={'x': 2, 'y': 10})  # Quasar sliders take keys on the track container, and Home/End do nothing, so click the left end first
+            expect(slider).not_to_have_attribute('aria-valuenow', str(derived.looseness))
+            start = self.slider_value(card, 'looseness')
+            self.assertLess(start, 5)
+            expect(card.locator('.play-style-summary')).to_have_text('Plays: ' + playstyle.describe(playstyle.PlayStyle(**{**dataclasses.asdict(derived), 'looseness': start})))
+            page.keyboard.press('ArrowRight')
+            page.keyboard.press('ArrowRight')
+            expected = {**dataclasses.asdict(derived), 'looseness': start + 2}
+            expect(slider).to_have_attribute('aria-valuenow', str(start + 2))
+            expect(card.locator('.play-style-summary')).to_have_text('Plays: ' + playstyle.describe(playstyle.PlayStyle(**expected)))
+            card.get_by_role('button', name='Save play style', exact=True).click()
+            page.get_by_text('Play style saved.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.alice_play_style(), expected)
+            self.assertIn('character.play_style', self.audit_actions())
+            card = page.locator('.character-card').filter(has=page.get_by_text('Alice', exact=True)).first
+            card.get_by_text('Alice', exact=True).first.click()
+            card.get_by_text('Play style', exact=True).click()
+            card.locator('.play-style-summary').wait_for(timeout=5000)
+            card.get_by_text('How this character plays card games.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.slider_value(card, 'looseness'), start + 2)
+            reset = card.get_by_role('button', name='Reset to default', exact=True)
+            expect(reset).to_be_enabled()
+            reset.click()
+            page.get_by_text('Play style reset.', exact=True).wait_for(timeout=5000)
+            self.assertIsNone(self.alice_play_style())
+            self.assertFalse(self.page_errors(page), errors)
+        finally:
+            self.post_hook('/_test/clear-play-style', {'name': 'Alice'})
+            context.close()
+
+    def test_play_style_save_conflicts_when_character_changed_elsewhere(self):
+        """FEAT-32 C: a save made after the character changed elsewhere is refused with the conflict toast and stores nothing."""
+        from playwright.sync_api import expect
+        context, page, errors, card = self.open_play_style()
+        original, before = self.alice_row()['card'], self.slider_value(card, 'looseness')
+        try:
+            self.post_hook('/_test/change-character', {'name': 'Alice', 'description': 'Changed behind the page'})
+            card.locator('.play-style-looseness .q-slider__track-container').focus()
+            page.keyboard.press('ArrowRight')
+            expect(card.locator('.play-style-looseness .q-slider')).not_to_have_attribute('aria-valuenow', str(before))
+            card.get_by_role('button', name='Save play style', exact=True).click()
+            page.get_by_text('Character changed; reload before saving', exact=True).first.wait_for(timeout=5000)
+            self.assertIsNone(self.alice_play_style())
+            self.assertNotIn('character.play_style', self.audit_actions())
+        finally:
+            self.restore_alice(json.loads(original).get('description', ''))
+            context.close()
 
     def test_savebar_hidden_until_character_field_differs(self):
         """MNT-21: no bar on load; editing Description shows 'Alice has unsaved changes.'; typing the old value back hides it."""

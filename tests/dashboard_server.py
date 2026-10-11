@@ -1,5 +1,6 @@
 """Isolated HTTPS browser-test fixture. Never used by production entry points."""
 import asyncio
+import dataclasses
 import json
 import os
 import re
@@ -354,6 +355,7 @@ def main():
             'presets': [dict(r) for r in store.list_presets(1)], 'active': store.active_preset(1)['id'],
             'active_bundle': store.active_preset(1)['bundle'], 'assets': [dict(r) for r in store.all('SELECT * FROM avatar_assets')],
             'guild2_spaces': [dict(r) for r in originals['list_spaces'](2)], 'cast_limits': {g: store.cast_limits(g) for g in (1, 2)}, 'archived_favorites': {g: store.archived_favorites(g) for g in (1, 2)}, 'daily': {g: store.daily_settings(g) for g in (1, 2)}, 'refill_cap': {g: store.refill_cap(g) for g in (1, 2)}, 'games': {g: {**store.game_settings(g), 'channels': sorted(store.game_channels(g)), 'character_talk': store.game_character_talk(g), 'talk_limit': store.game_talk_daily_limit(g), 'summary_rounds': store.game_summary_rounds(g), 'blackjack_enabled': store.blackjack_enabled(g), 'blackjack_rules': store.blackjack_rules(g), 'doubt_enabled': store.game_enabled(g, 'doubt'), 'doubt_rules': store.game_rules(g, 'doubt')} for g in (1, 2)}, 'shop': {g: {'hold_cap': store.item_hold_cap(g), 'items': {e['key']: e for e in store.shop_catalog(g)}} for g in (1, 2)}, 'guild_timezone': store.guild_timezone(1), 'catchup_anywhere': store.catchup_anywhere(1), 'turn_log': store.turn_log_settings(1), 'audit': [dict(r) for r in store.all('SELECT * FROM admin_audit ORDER BY id')],
+            'play_styles': {r['id']: (dataclasses.asdict(style) if (style := store.character_play_style(r['guild_id'], r['id'])) else None) for r in store.all('SELECT id,guild_id FROM characters')},
             'model_profiles': [dict(r) for r in store.model_profile_rows()], 'model_roles': dict(store.model_roles()),
             'slots': [{'character_id': r['character_id'], 'slot_key': r['slot_key'], 'label': r['label'], 'has_image': bool(r['image'])} for r in store.all('SELECT * FROM avatar_slots')]}
 
@@ -435,6 +437,14 @@ def main():
         card = {**json.loads(row['card']), 'description': value['description']}
         store.update_character(1, row['id'], row['world_id'], row['name'], card,
                                expected_revision=store.owner_revision(1, 'character', row['id']))
+        return {'ok': True}
+
+    @app.post('/_test/clear-play-style')
+    async def clear_play_style(request: Request):
+        # FEAT-32 C: undo a saved play style (back to the derived default) so later tests start from the fixture.
+        value = await request.json()
+        row = next(r for r in store.list_characters(1) if r['name'] == value['name'])
+        store.set_character_play_style(1, row['id'], None, store.owner_revision(1, 'character', row['id']))
         return {'ok': True}
 
     @app.post('/_test/cleanup-presets')

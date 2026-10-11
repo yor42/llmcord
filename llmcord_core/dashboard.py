@@ -29,6 +29,7 @@ from .backend import ROLES, effective_backend
 from .avatars import MAX_AVATAR_BYTES, avatar_version, normalize_avatar
 from .cards import parse_card
 from .currency_ui import currency_panel
+from .games import playstyle
 from .games_ui import games_panel
 from .shop_ui import shop_panel
 from .presets_ui import presets_panel
@@ -1850,6 +1851,7 @@ def character_card(ctx, row, worlds):
                 return True
             tracked = {name: row['name'], world: row['world_id'], **{control: card.get(key, '') for key, control in fields.items()}}
             ctx.savebar.track(row['name'], tracked, save, 'character.edit', {'id': row['id']}, then=lambda _: ctx.refresh('characters'), on_reset=lambda: confirm.set_value(False), reload=lambda: ctx.refresh('characters'))
+            play_style_editor(ctx, row, revision)
             static_avatar_editor(ctx, row, revision)
             ui.label('Emotion avatars').classes('ll-subtitle')
             ui.label('The selected emotion image is used first. If unavailable, the fallback static avatar is used.').classes('ll-muted')
@@ -1864,6 +1866,59 @@ def character_card(ctx, row, worlds):
                     store.save_avatar(gid, row['id'], key.value or '', label.value or '', '')
                     return True
                 ctx.button('Add emotion', add_slot, 'avatar.slot.create', then=lambda _: ctx.refresh())
+
+
+PLAY_STYLE_LABELS = {
+    'looseness': ('Looseness', 'Tight', 'Loose'),
+    'aggression': ('Aggression', 'Passive', 'Aggressive'),
+    'bluffing': ('Bluffing', 'Honest', 'Bluffer'),
+    'risk': ('Risk', 'Cautious', 'Reckless'),
+    'suspicion': ('Suspicion', 'Trusting', 'Suspicious'),
+    'stubbornness': ('Stubbornness', 'Folds easily', 'Stubborn'),
+    'judgment': ('Judgment', 'Foolish', 'Sharp'),
+    'unpredictability': ('Unpredictability', 'Steady', 'Erratic'),
+}
+
+
+def play_style_editor(ctx, character, revision):
+    """Collapsed Play style section (FEAT-32): eight sliders with their own Save/Reset, written through AdminService.set_play_style."""
+    from nicegui import ui
+    store, gid, cid = ctx.store, ctx.guild_id, character['id']
+    saved = store.character_play_style(gid, cid)
+    shown = saved or store.resolved_play_style(gid, cid)
+    with ui.expansion('Play style').classes('w-full play-style ll-subpanel'), ui.element('div').classes('ll-stack'):
+        ui.label('How this character plays card games.' if saved else
+                 'How this character plays card games. No style is saved, so it plays in a style derived from the character; the sliders show that style. Save to keep your own.').classes('ll-muted')
+        sliders = {}
+        for group, traits in playstyle.GROUPS.items():
+            ui.label(group).classes('ll-subtitle')
+            for trait in traits:
+                label, low, high = PLAY_STYLE_LABELS[trait]
+                with ui.element('div').classes(f'play-style-row play-style-{trait}'):
+                    ui.label(label)
+                    sliders[trait] = ui.slider(min=0, max=100, step=1, value=getattr(shown, trait)).props(f'label aria-label="{label}"').classes(f'play-style-slider-{trait}')
+                    with ui.element('div').classes('ll-form-row justify-between'):
+                        ui.label(low).classes('ll-muted')
+                        ui.label(high).classes('ll-muted')
+        summary = ui.label().classes('play-style-summary').props('role=status')
+        def current():
+            return playstyle.PlayStyle(**{trait: int(slider.value) for trait, slider in sliders.items()})
+        def update():
+            summary.set_text('Plays: ' + playstyle.describe(current()))
+        for slider in sliders.values():
+            slider.on_value_change(lambda _: update())
+        update()
+        async def apply(style, success):
+            if ctx.savebar and ctx.savebar.refuse():
+                return
+            outcome = await ctx._attempt(lambda: ctx.service.set_play_style(ctx.ident, gid, cid, style, revision))
+            if outcome[0]:
+                ui.notify(success, type='positive')
+            if outcome[0] or isinstance(getattr(outcome, 'error', None), ConflictError):
+                await ctx.refresh('characters')
+        with ui.element('div').classes('ll-form-row'):
+            ui.button('Save play style', on_click=lambda: apply(current(), 'Play style saved.'))
+            ui.button('Reset to default', on_click=lambda: apply(None, 'Play style reset.')).props('outline').set_enabled(saved is not None)
 
 
 def static_avatar_editor(ctx, character, revision):
