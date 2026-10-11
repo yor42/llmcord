@@ -1,0 +1,26 @@
+{
+  "key": "d20",
+  "kind": "random_message",
+  "name": "d20",
+  "emoji": "🎲",
+  "consumable": false,
+  "default_price": 50,
+  "default_cooldown_seconds": 5,
+  "audience": "none",
+  "params": {
+    "sides": 20
+  },
+  "tables": {
+    "roll": {
+      "range": [
+        1,
+        "sides"
+      ]
+    }
+  },
+  "template": {
+    "en": {
+      "text": "You rolled a **{roll}** (1-{sides})."
+    }
+  }
+}

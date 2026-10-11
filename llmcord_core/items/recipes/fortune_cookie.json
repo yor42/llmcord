@@ -1,0 +1,57 @@
+{
+  "key": "fortune_cookie",
+  "kind": "random_message",
+  "name": "Fortune cookie",
+  "emoji": "🥠",
+  "consumable": true,
+  "default_price": 25,
+  "audience": "none",
+  "tables": {
+    "fortune": {
+      "en": [
+        "A smooth sea never made a skilled sailor.",
+        "You will find a small joy where you least expect it.",
+        "Someone is thinking of you kindly today.",
+        "A pleasant surprise is waiting for you.",
+        "Patience will open the door that force cannot.",
+        "Your curiosity will lead you somewhere good.",
+        "Today is a fine day to begin something.",
+        "A kind word costs nothing and is worth a great deal.",
+        "The best view comes after the hardest climb.",
+        "An old friend will bring good news.",
+        "Luck favors the one who tries again.",
+        "Your next idea is the one that works.",
+        "Rest is part of the journey.",
+        "Good company makes a short road.",
+        "Something you lost will turn up soon.",
+        "A small step today saves a long walk tomorrow.",
+        "You will soon be asked for your opinion; give it gladly.",
+        "The quiet path holds the best stories.",
+        "Share your plans with someone you trust.",
+        "Courage grows when you use it.",
+        "A good meal and a good laugh are close at hand.",
+        "What you seek is also seeking you.",
+        "Be the lantern, not the fog.",
+        "Your effort is noticed, even when it feels quiet.",
+        "Change is a doorway, not a wall.",
+        "A friendly stranger will brighten your afternoon.",
+        "The moon is full of stories; tell one tonight.",
+        "Do not hurry the tea.",
+        "Fortune smiles on the one who smiles first.",
+        "Listen well and you will hear the answer."
+      ]
+    },
+    "lucky": {
+      "range": [
+        1,
+        99
+      ]
+    }
+  },
+  "template": {
+    "en": {
+      "text": "{fortune}",
+      "footer_note": "Lucky number: {lucky}"
+    }
+  }
+}

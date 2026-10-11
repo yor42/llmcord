@@ -1,0 +1,133 @@
+{
+  "key": "tarot",
+  "kind": "random_message",
+  "name": "Tarot",
+  "emoji": "🔮",
+  "consumable": true,
+  "default_price": 60,
+  "audience": "none",
+  "params": {
+    "reversed_chance": 0.5
+  },
+  "tables": {
+    "card": {
+      "en": [
+        {
+          "name": "The Fool",
+          "upright": "new beginnings, a leap of faith, innocence",
+          "reversed": "recklessness, naivety, a poor choice"
+        },
+        {
+          "name": "The Magician",
+          "upright": "skill, willpower, making things happen",
+          "reversed": "trickery, wasted talent, poor planning"
+        },
+        {
+          "name": "The High Priestess",
+          "upright": "intuition, hidden knowledge, quiet insight",
+          "reversed": "secrets, ignored instincts, confusion"
+        },
+        {
+          "name": "The Empress",
+          "upright": "abundance, nurture, creativity",
+          "reversed": "smothering, creative block, neglect"
+        },
+        {
+          "name": "The Emperor",
+          "upright": "authority, structure, steady leadership",
+          "reversed": "rigidity, domination, lack of discipline"
+        },
+        {
+          "name": "The Hierophant",
+          "upright": "tradition, guidance, shared belief",
+          "reversed": "rebellion, unconventional paths, dogma"
+        },
+        {
+          "name": "The Lovers",
+          "upright": "harmony, deep connection, a meaningful choice",
+          "reversed": "discord, imbalance, a hard choice avoided"
+        },
+        {
+          "name": "The Chariot",
+          "upright": "determination, victory, control",
+          "reversed": "lack of direction, aggression, setbacks"
+        },
+        {
+          "name": "Strength",
+          "upright": "courage, patience, quiet confidence",
+          "reversed": "self-doubt, raw impulse, weakness"
+        },
+        {
+          "name": "The Hermit",
+          "upright": "reflection, solitude, inner guidance",
+          "reversed": "isolation, withdrawal, loneliness"
+        },
+        {
+          "name": "Wheel of Fortune",
+          "upright": "luck, cycles, a turning point",
+          "reversed": "bad timing, resistance to change, a setback"
+        },
+        {
+          "name": "Justice",
+          "upright": "fairness, truth, cause and effect",
+          "reversed": "unfairness, dishonesty, evasion"
+        },
+        {
+          "name": "The Hanged Man",
+          "upright": "pause, surrender, a new perspective",
+          "reversed": "stalling, needless sacrifice, indecision"
+        },
+        {
+          "name": "Death",
+          "upright": "endings, transformation, letting go",
+          "reversed": "resisting change, stagnation, fear of endings"
+        },
+        {
+          "name": "Temperance",
+          "upright": "balance, moderation, patience",
+          "reversed": "excess, imbalance, impatience"
+        },
+        {
+          "name": "The Devil",
+          "upright": "attachment, temptation, shadow habits",
+          "reversed": "release, breaking free, reclaiming power"
+        },
+        {
+          "name": "The Tower",
+          "upright": "sudden change, upheaval, revelation",
+          "reversed": "averted disaster, fear of change, slow collapse"
+        },
+        {
+          "name": "The Star",
+          "upright": "hope, renewal, calm inspiration",
+          "reversed": "doubt, discouragement, lost faith"
+        },
+        {
+          "name": "The Moon",
+          "upright": "illusion, dreams, uncertain ground",
+          "reversed": "clarity returning, confusion lifting, fear released"
+        },
+        {
+          "name": "The Sun",
+          "upright": "joy, success, warmth",
+          "reversed": "fading joy, delayed success, overconfidence"
+        },
+        {
+          "name": "Judgement",
+          "upright": "reckoning, awakening, a clear call",
+          "reversed": "self-doubt, ignoring the call, harsh judgement"
+        },
+        {
+          "name": "The World",
+          "upright": "completion, wholeness, a goal reached",
+          "reversed": "unfinished business, delay, a loose end"
+        }
+      ]
+    }
+  },
+  "template": {
+    "en": {
+      "text": "**{name}** ({orientation})\n{meaning}"
+    }
+  }
+}
