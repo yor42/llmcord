@@ -162,7 +162,7 @@ class WordRuleTests(unittest.TestCase):
     def test_other_words_are_counted(self):
         self.assertEqual(extra("hit me up later"), 2)
         self.assertEqual(extra("that song is a hit"), 4)
-        self.assertEqual(extra("히트곡 좋아"), 1)
+        self.assertEqual(extra("히트곡 좋아"), 2)  # 히트곡 is not a match since MNT-55: both tokens are extra
         self.assertEqual(extra("sure hit"), 1)
 
     def test_attached_suffix_belongs_to_the_match(self):

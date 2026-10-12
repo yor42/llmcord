@@ -1,6 +1,7 @@
 """Chips amount parser for chat text: '200', '1,500', '2k', '1.5k', Korean units (2만, 1만5천, 1만 5천, 3백).
 
 Digits take thousands commas only in proper groups ('1,500'); a malformed run like '1,2345' is rejected, not split.
+After a Korean unit the next number joins the amount only when it has a unit too ('1만 5천'; '5천 2 more' is 5000).
 A fraction counts only with k or a Korean unit ('1.5k', '1.5만'); plain '2.5' is skipped.
 """
 import re
@@ -31,7 +32,7 @@ def _read(text, m):
         total += val * _UNITS[text[end]]
         units, end = True, end + 1
         nxt = _NEXT.match(text, end)
-        if not nxt:
+        if not nxt or nxt.end() >= len(text) or text[nxt.end()] not in _UNITS:
             return total, end
         val, end = _value(nxt.group(1)), nxt.end()
     if not units and val != val.to_integral_value():

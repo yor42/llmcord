@@ -147,6 +147,17 @@ class ReadHoldemTests(SpotMixin, unittest.TestCase):
         self.assertEqual(r.candidates, (SpokenMove("raise", 300, "to", "pot"),))
         self.assertFalse(r.sure)
 
+    def test_korean_lookalike_words_and_endings(self):
+        v = vw(self.facing)
+        for text in ("체크아웃", "최소한 이건", "다이소", "받아들여", "체크인"):
+            with self.subTest(text=text):
+                self.assertIsNone(sh.read_holdem(text, vw(self.unbet)) if text.startswith("체크") else sh.read_holdem(text, v))
+        for text, kind in (("콜인데", "call"), ("콜입니다", "call"), ("콜한다", "call"), ("콜갈게", "call"),
+                           ("콜간다", "call"), ("다이간다", "fold"), ("올인갑니다", "all_in"), ("폴드야", "fold"),
+                           ("받아줘", "call"), ("받아볼게", "call"), ("다이각", "fold"), ("올인각", "all_in")):
+            with self.subTest(text=text):
+                self.assertEqual([c.kind for c in sh.read_holdem(text, v).candidates], [kind])
+
     def test_more_negations_are_unsure(self):
         for text in ("I can't fold", "cannot call", "shouldn't fold", "wouldnt call", "nope, fold"):
             with self.subTest(text=text):

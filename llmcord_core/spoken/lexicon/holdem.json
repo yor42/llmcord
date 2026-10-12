@@ -28,7 +28,7 @@
     "en": ["half pot", "pot it", "pot size", "min raise", "minraise"],
     "ko": ["하프", "반팟", "풀팟", "민레이즈"]
   },
-  "_exclude": ["콜라", "콜렉션", "체크카드", "다이어트", "다이아", "팟캐스트", "베팅업체"],
+  "_exclude": ["콜라", "콜렉션", "체크카드", "다이어트", "다이아", "체크아웃", "체크인", "최소한", "팟캐스트", "베팅업체"],
   "_amount_kinds": ["raise"],
   "examples": {
     "fold": ["fold", "I fold", "nah, I'm out", "just muck it", "폴드", "그냥 다이", "이건 죽을게", "ㅇㅋ 접을게", "fine 다이", "fold 할게"],

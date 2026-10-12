@@ -21,7 +21,7 @@ LEX = {
     },
     "_preset_alone": {"en": ["half pot", "pot it", "pot size", "min raise", "minraise"],
                       "ko": ["하프", "반팟", "풀팟", "민레이즈"]},
-    "_exclude": ["콜라", "콜렉션", "체크카드", "다이어트", "다이아"],
+    "_exclude": ["콜라", "콜렉션", "체크카드", "다이어트", "다이아", "체크인", "최소한"],
     "_amount_kinds": ["raise"],
 }
 NEG = {
@@ -114,6 +114,19 @@ class KoreanMatchTests(unittest.TestCase):
         self.assertIsNone(rd("다이어트 중"))
         self.assertEqual(kinds_of(rd("콜라 말고 콜")), ["call"])
 
+    def test_tokens_that_only_start_with_a_lexicon_word_do_not_match(self):
+        for text in ("최소한 베팅", "다이소", "받아들여", "체크인"):
+            with self.subTest(text=text):
+                self.assertIsNone(rd(text, kinds=("fold", "call", "check")))
+        self.assertEqual(kinds_of(rd("최소한 베팅")), ["raise"])
+
+    def test_common_endings_and_particles_still_match(self):
+        for text, kind in (("콜이요", "call"), ("다이요", "fold"), ("다이해", "fold"), ("콜을", "call"),
+                           ("체크함", "check"), ("콜ㅋㅋ", "call"), ("콜!", "call"), ("올인으로", "all_in"),
+                           ("콜하자", "call"), ("폴드죠", "fold"), ("받을게요", "call")):
+            with self.subTest(text=text):
+                self.assertEqual(kinds_of(rd(text)), [kind])
+
     def test_nfd_input_is_normalized(self):
         import unicodedata
         self.assertEqual(kinds_of(rd(unicodedata.normalize("NFD", "콜할게"))), ["call"])
@@ -145,6 +158,15 @@ class SureTests(unittest.TestCase):
         self.assertTrue(rd("안녕 콜").sure)
         self.assertFalse(rd("콜 안 해").sure)
         self.assertFalse(rd("콜 안해").sure)
+
+    def test_korean_single_syllable_negations_need_their_endings(self):
+        for text in ("콜 하지 말고", "콜 말아", "콜 말자", "콜 말라", "콜 말래", "콜 말", "콜 못 받아", "콜 못해", "콜 못할래", "콜 못했어",
+                     "콜 말게", "콜 말지", "콜 말까", "콜 말았어", "콜 못한다"):
+            with self.subTest(text=text):
+                self.assertFalse(rd(text).sure)
+        for text in ("콜 말해줘", "콜 못생겼다", "콜 말했어", "콜 말씀"):
+            with self.subTest(text=text):
+                self.assertTrue(rd(text).sure)
 
     def test_question_mark_is_unsure(self):
         r = rd("should I call?")
@@ -221,6 +243,17 @@ class AmountAndPresetTests(unittest.TestCase):
     def test_presets_match_whole_words_only(self):
         self.assertIsNone(rd("potted plant half pots"))
         self.assertEqual(rd("raise mining").candidates, (SpokenMove("raise"),))
+
+    def test_preset_far_from_the_raise_word_is_ignored(self):
+        for text in ("I'll raise, the pot is big", "raise! pot", "raise because the pot", "the pot is big so raise"):
+            with self.subTest(text=text):
+                self.assertEqual(rd(text), Reading((SpokenMove("raise"),), True))
+
+    def test_preset_close_to_the_raise_word_counts(self):
+        for text, preset in (("raise to pot", "pot"), ("pot raise", "pot"), ("하프 레이즈", "half_pot"),
+                             ("레이즈 하프", "half_pot"), ("raise the pot", "pot"), ("raise min", "min")):
+            with self.subTest(text=text):
+                self.assertEqual(rd(text).candidates, (SpokenMove("raise", preset=preset),))
 
     def test_bare_amount_is_not_a_move(self):
         self.assertIsNone(rd("300"))

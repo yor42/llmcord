@@ -66,6 +66,17 @@ class ParseAmountTests(unittest.TestCase):
         self.assertEqual(parse_amount("300 더 해"), (300, "by"))
         self.assertEqual(parse_amount("300더"), (300, "by"))
 
+    def test_korean_unit_then_unitless_number_ends_the_amount(self):
+        self.assertEqual(parse_amount("5천 2 more"), (5000, None))
+        self.assertEqual(parse_amount("5천 2"), (5000, None))
+        self.assertEqual(parse_amount("1만 5천 2"), (15000, None))
+        self.assertEqual(parse_amount("1만5천"), (15000, None))
+        self.assertEqual(parse_amount("2만"), (20000, None))
+
+    def test_comma_without_space_is_one_grouped_number(self):
+        self.assertEqual(parse_amount("200,300"), (200300, None))
+        self.assertEqual(parse_amount("200, 300"), (200, None))
+
     def test_first_amount_wins(self):
         self.assertEqual(parse_amount("raise 200 or 300"), (200, None))
 
