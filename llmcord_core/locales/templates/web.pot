@@ -1,0 +1,3757 @@
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Thread {name}"
+msgstr ""
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Thread …{tail}"
+msgstr ""
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Archived thread …{tail}"
+msgstr ""
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Hub: {name}"
+msgstr ""
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "World: {name}"
+msgstr ""
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Character: {name}"
+msgstr ""
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Channel: {name}"
+msgstr ""
+
+#: llmcord_core/admin.py
+msgid "Server: Server-wide lore"
+msgstr ""
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Lorebook: {name}"
+msgstr ""
+
+#: llmcord_core/admin.py
+msgctxt "preview sample"
+msgid "Character"
+msgstr ""
+
+#: llmcord_core/admin.py
+msgctxt "preview sample"
+msgid "Sample user"
+msgstr ""
+
+#: llmcord_core/admin.py
+msgctxt "preview sample"
+msgid "Sample world"
+msgstr ""
+
+#: llmcord_core/auth.py
+msgid "Discord permission checks are temporarily rate limited. Please try again shortly."
+msgstr ""
+
+#: llmcord_core/auth.py
+msgid "Cannot reach Discord to check permissions. Please try again shortly."
+msgstr ""
+
+#: llmcord_core/auth.py
+msgid "Discord session expired. Please sign in again."
+msgstr ""
+
+#: llmcord_core/auth.py
+msgid "Discord denied the permission check. Please sign in again."
+msgstr ""
+
+#: llmcord_core/auth.py
+msgid "Discord permission checks are unavailable. Please try again shortly."
+msgstr ""
+
+#: llmcord_core/auth.py llmcord_core/dashboard.py
+msgid "Sign in with Discord"
+msgstr ""
+
+#: llmcord_core/auth.py
+msgid "Discord session expired"
+msgstr ""
+
+#: llmcord_core/auth.py
+msgid "Invalid request origin"
+msgstr ""
+
+#: llmcord_core/auth.py llmcord_core/web.py
+msgid "Invalid form token"
+msgstr ""
+
+#: llmcord_core/auth.py
+msgid "Server administrator permission required"
+msgstr ""
+
+#: llmcord_core/auth.py
+msgid "Operator permission required"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "Game channels saved. Closed {closed} open table(s) and refunded their bets."
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Game channels saved"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "Member …{last4}"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "Deleted character (#{id})"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "Reverses #{id}"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "Reversed by #{id}"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "The shop item was taken back."
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "The shop item was already used, so only the currency was returned."
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Currency name"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "What this server calls its currency, for example coins or gold (1 to 32 characters). Members see it in /balance."
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Currency name saved"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Daily check-in"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Amount per check-in"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Streak bonus per day"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Streak bonus grows for up to (days)"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Members claim with /daily once a day; the day ends at midnight in this server's timezone. Set the amount to 0 to turn check-ins off. A missed day starts the streak again."
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Daily check-in saved"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Character wallets"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Character refill cap"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Each character gets the daily amount once per server day, without the streak bonus, until it reaches this cap. Winnings can take a character above it."
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Daily check-in is off, so characters don't refill."
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Character refill cap saved"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Game channels, bets and table talk are in the Games tab."
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Balances"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Character balances"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Give or take currency"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgctxt "section"
+msgid "Ledger"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Every change is kept here. A mistake is undone by a reversal entry, never by editing."
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Member ID or mention"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgctxt "field"
+msgid "Amount"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgctxt "field"
+msgid "Reason"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgctxt "button"
+msgid "Give"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgctxt "button"
+msgid "Take"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "Gave {amount:,} {name} to {member}. New balance: {balance:,} {name}."
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "Took {amount:,} {name} from {member}. New balance: {balance:,} {name}."
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "No balances yet. Give a member some currency to start."
+msgstr ""
+
+#: llmcord_core/currency_ui.py llmcord_core/shop_ui.py
+msgctxt "column"
+msgid "Member"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgctxt "column"
+msgid "Balance"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgctxt "column"
+msgid "Member ID"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgctxt "button"
+msgid "Previous"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "Page {page}"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgctxt "button"
+msgid "Next"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "No character balances yet. Characters refill when they first need money each day."
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgctxt "column"
+msgid "Character"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "{name} (archived)"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "No ledger entries yet."
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgctxt "column"
+msgid "Entry"
+msgstr ""
+
+#: llmcord_core/currency_ui.py llmcord_core/shop_ui.py
+msgctxt "column"
+msgid "Time"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgctxt "column"
+msgid "Amount"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgctxt "column"
+msgid "Balance after"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgctxt "column"
+msgid "Reason"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgctxt "column"
+msgid "Admin"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgctxt "column"
+msgid "Status"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgctxt "column"
+msgid "Actions"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgctxt "button"
+msgid "Reverse"
+msgstr ""
+
+#. i18n: also used in a JavaScript template literal (the button's aria-label):
+#. the translation must not contain a backtick (`) or ${.
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "Reverse entry {entry}"
+msgstr ""
+
+#: llmcord_core/currency_ui.py llmcord_core/dashboard.py
+#: llmcord_core/shop_ui.py
+msgctxt "button"
+msgid "Load more"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "This adds a reversal entry that undoes {amount} for {member}. The original entry stays in the ledger. This also takes back the item that was bought, if the member still has it."
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "This adds a reversal entry that undoes {amount} for {member}. The original entry stays in the ledger."
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "Reversed entry {entry}."
+msgstr ""
+
+#: llmcord_core/currency_ui.py llmcord_core/dashboard.py
+#: llmcord_core/lore_workspace.py llmcord_core/savebar.py
+#: llmcord_core/scene_ui.py
+msgctxt "button"
+msgid "Cancel"
+msgstr ""
+
+#: llmcord_core/currency_ui.py
+msgid "Reverse entry"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "The database is busy. Try again."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Something went wrong. Try again."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Spending caps"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Applies to the whole bot. Operators get a DM when spending passes each cap. At the hard cap, new character replies, ambient turns, catch-ups and memory updates pause until the reset day or until you raise the cap."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{spent} spent since {period}. The period resets on {date} (UTC)."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Hard cap reached: character replies are paused."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Soft cap reached: operators were warned."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{n} model call without a cost estimate this period was counted as $0. Set prices for those models to include them."
+msgid_plural "{n} model calls without a cost estimate this period were counted as $0. Set prices for those models to include them."
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/dashboard.py
+msgid "Soft cap (USD)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Blank means off"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Hard cap (USD)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Reset day"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Day of the month, UTC"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Post a notice in the channel when the hard cap pauses a reply (at most once an hour per channel)"
+msgstr ""
+
+#: llmcord_core/dashboard.py llmcord_core/shop_ui.py
+msgctxt "button"
+msgid "Save"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Spending caps saved."
+msgstr ""
+
+#: llmcord_core/dashboard.py llmcord_core/presets_ui.py
+msgctxt "model role"
+msgid "Dialogue"
+msgstr ""
+
+#: llmcord_core/dashboard.py llmcord_core/presets_ui.py
+msgctxt "model role"
+msgid "Director"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "model role"
+msgid "Memory"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Dashboard"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Dashboard (overrides config.yaml)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Dashboard (skipped, see warning)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Changes apply from the next message. \"Set\" means this dashboard's environment has the variable; the bot checks its own environment when it calls the model."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "A ${{NAME}} reference to a variable ending in _API_KEY. Never paste the key itself."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "No key"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{ref} (set)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{ref} (missing)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Use config.yaml ({role})"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Use config.yaml (none)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{name} (not available)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Context tokens"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Input cost"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Output cost"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Cached input cost"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Timeout"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Max retries"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Roles"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Profiles"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Roles choose from your profiles. Add a profile below to use another model. A role set here replaces the config.yaml role of the same name."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Save roles"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Roles saved."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "config.yaml could not be read, so only dashboard profiles are listed. {error}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "No profiles yet."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{role} role"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Key: {key}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "From: {source}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "button"
+msgid "Edit"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Edit {name}"
+msgstr ""
+
+#: llmcord_core/dashboard.py llmcord_core/games_ui.py
+#: llmcord_core/lore_workspace.py
+msgctxt "button"
+msgid "Delete"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Delete {name}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Reset to config.yaml"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Reset to config.yaml for {name}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Add profile"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "The config.yaml version of this profile applies again. Edits made on the dashboard are lost."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "This removes the saved profile. Roles assigned to it must be changed first."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Reset {name} to config.yaml?"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Delete {name}?"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Reset profile"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Delete profile"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Name"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Lowercase letters, digits and . _ / -"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Provider"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Model"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Fetched models"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "API key"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Base URL"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Required for compatible providers."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Supports images"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Advanced"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Reasoning effort"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Compatible providers only"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Structured outputs"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Stream usage"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "billing tier"
+msgid "paid"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "billing tier"
+msgid "free"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Billing tier"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Blank means none"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Input cost per million (USD)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Output cost per million (USD)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Cached input cost per million (USD)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Timeout (seconds)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Suggested prices from {source} ({fetched}) filled all three cost fields. Check them before saving."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Fetch models"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Look up prices"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Test connection"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Save profile"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Profile saved."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Test connection sends one short request from the dashboard with these settings. It is not counted in usage."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Fetch models asks the provider for its model list with these settings. Nothing is saved; you can still type any model ID."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Look up prices fills the cost fields (under Advanced) with suggested prices from a public price list. Nothing is saved until you save the profile."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "This spending period"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Last 7 days"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Last 30 days"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "No server"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Server (ID …{tail})"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Usage by server"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Period"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "No model calls in this period."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Server"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Requests"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Input tokens"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Output tokens"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Estimated USD"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Without cost estimate"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "row"
+msgid "Total"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Each server keeps usage for its own period (Server settings), so this table can show less than the Spending tab."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Cost uses list rates or your configured rates; it is not a billing statement."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Discord channels could not be loaded. Showing channel IDs."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Thread names could not be loaded. Showing thread IDs."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "This name already exists"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Choose valid values for all required fields"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Could not check the form before saving. Try again"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Your Discord sign-in expired. Sign in again."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "This action was rejected"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Page not found"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "This page does not exist, or you cannot open it."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Back to your servers"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Uploads are not available here"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Upload exceeds 8 MiB"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Manage your characters, worlds, lore, and prompt presets."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "You will see the servers where you are an administrator."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Your servers"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Servers where you are an administrator."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Bot settings"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Bot-wide settings. Only operators can see this page."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Spending"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Usage by server"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Backend"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Server administration"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Changes apply on the next bot turn. Prompt drafts require activation."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Server setup"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Characters"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Lore"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Imports"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Prompt presets"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Monitoring"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Currency"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Games"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Shop"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Drop entries here"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Follow each member's Discord language"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "llmcord / Servers"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Account menu"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "button"
+msgid "Sign out"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Language"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "$0.00"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "${value:,.2f}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "<$0.0001"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "${value}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "7 days"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "14 days"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "30 days"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Full month"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Replies"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Ambient turns"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Summons"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Memory updates"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Catch-ups"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Game table talk"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Play style drafts"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Last 24 hours"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Last 14 days"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "This month"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Unknown (before this update)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "chart series"
+msgid "Input"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "chart series"
+msgid "Output"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "tokens"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Unknown feature"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{inputs} in / {outputs} out"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "status"
+msgid "Error"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "status"
+msgid "OK"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Log"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Personal facts are hidden and API keys removed. Entries are kept for the current month (Server settings)."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Personal facts are hidden and API keys removed. Entries are kept for {days} days (Server settings)."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "All channels"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Channel"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Errors only"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Reference ID"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Logging is off; showing earlier entries."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "This entry is no longer available."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "turn log"
+msgid "Request"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "turn log"
+msgid "Response"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "turn log"
+msgid "Error"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "(empty)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Error · Ref {reference}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "OK · Ref {reference}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "No entries match these filters."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "No log entries yet."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "The turn log is off. Turn it on in Server settings to record model calls."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "usage role"
+msgid "dialogue"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "usage role"
+msgid "director"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "usage role"
+msgid "memory"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Deleted channel (ID …{digits})"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Bot-wide spending: {spent} of {cap} hard cap this period"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Bot-wide spending: {spent} this period; no hard cap set"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Open Bot settings"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Usage"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Usage is kept for the current month (Server settings)."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Usage is kept for {days} days (Server settings)."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Input tokens"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Output tokens"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Estimated USD"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Without cost estimate"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "By model"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Model"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Used for"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "By channel"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Channel"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "By feature"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Feature"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{count:,} calls did not report token counts, so their tokens are not included."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Tracked for this server, including internal model calls. Cost uses list rates or your configured rates; it is not a billing statement."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "space kind"
+msgid "world"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "space kind"
+msgid "hub"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Worlds and hubs"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{name} · {kind}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "World guidelines"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Hub guidelines"
+msgstr ""
+
+#: llmcord_core/dashboard.py llmcord_core/scene_ui.py
+msgid "Delete world"
+msgstr ""
+
+#: llmcord_core/dashboard.py llmcord_core/scene_ui.py
+msgid "Delete hub"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Kind"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "button"
+msgid "Create"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "In character"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Off duty"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Tone"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Off duty: characters keep their personality but chat casually and don't push their world's plot. World channels are always in character."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Save hub tone"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Hub links"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Hub"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "World"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Removed {pruned} cast entries no longer available in the hub."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "button"
+msgid "Link"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "button"
+msgid "Unlink"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Channels and casts"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Discord text channel"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "World or hub"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Removed from the cast (not available there): {names} ...and {count} more."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Removed from the cast (not available there): {names}."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Cast kept."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Bind channel"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Rebinding a channel keeps its ambient mode and removes cast members not available in the new world or hub."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Server settings"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Show model and cost footer on replies"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Allow /catchup in channels without characters"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Members can then get a private summary of any channel they can read. Its messages are sent to the summary model."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Keep a turn log"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Keep usage and log for"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "The turn log stores the prompt and reply of every model call on this server, including /catchup, so admins can check errors. Personal facts are hidden. Usage history is kept for the same period."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Server timezone"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Characters use this for members who have not chosen their own with /time set. Without it they use UTC."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Bot language"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Language of the bot's public messages: tables, game updates and notices. Replies only one member sees use that member's Discord language. Character lines are never translated."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Private text channel"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Avatar asset channel: deny View Channel to @everyone and allow the bot to upload images. Images become Discord CDN assets."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Largest cast"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Favorites per member"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "A larger cast gives the director more characters to choose from, so more characters may answer a message. Each answer is a separate model call, and every prompt lists the cast. At most 3 characters answer one message."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "With step in, a member's favorites outside the cast can also answer them, so more favorites can mean more model calls and longer prompts. Lowering a limit keeps existing casts and favorites; they can shrink but not grow."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Archived favorites can answer their members"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "When on, members can keep archived characters as favorites. An archived favorite answers only the members who chose it, in channels where its world is available. It never joins a cast, a game or /summon."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Server settings saved"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Channel guidelines"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Default cast (up to {limit})"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Ambient participation"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "World or hub missing"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{count} in cast"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "pill"
+msgid "Ambient"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Channel settings saved"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Create character"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Start with an empty card, then add a description, personality, and dialogue examples."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Character name"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Home world"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Characters"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Create a home world in Server setup first."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Create an empty character here or import a character card in Imports to get started."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{name} · Archived"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "menu"
+msgid "Restore"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "menu"
+msgid "Archive"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Permanently delete this character, its lore, memories, and saved avatars, and remove it from all casts. Past Discord messages remain."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "This cannot be undone. Use Archive if you may want to restore the character later."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Delete permanently"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Delete character"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Loading…"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Could not load this character. Reload the page."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Description"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Personality"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Scenario"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Opening line"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Example dialogue"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Card instructions"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Card post-history instructions"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Confirm moving worlds; ineligible casts will be cleared"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Emotion avatars"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "The selected emotion image is used first. If unavailable, the fallback static avatar is used."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "New emotion key"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "lowercase letters, digits, underscores, hyphens"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Emotion label"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Add emotion"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Looseness"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Tight"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Loose"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Aggression"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Passive"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Aggressive"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Bluffing"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Honest"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Bluffer"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Risk"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Cautious"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Reckless"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Suspicion"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Trusting"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Suspicious"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Stubbornness"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Folds easily"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Stubborn"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Judgment"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Foolish"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Sharp"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Unpredictability"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Steady"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Erratic"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Play style"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "How this character plays card games."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "How this character plays card games. No style is saved, so it plays in a style derived from the character; the sliders show that style. Save to keep your own."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Plays: {style}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Draft from the description. Review it, then press Save play style; nothing is saved yet."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Draft ready. Review the sliders, then save."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Generate from description"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Asks the model to read the description and personality. Counts toward the spending cap."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Save play style"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Play style saved."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Reset to default"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Play style reset."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Fallback static avatar"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "No static fallback set. Import a card portrait or upload one here."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Used when the selected emotion has no usable image. No asset channel or publication is needed."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Upload fallback avatar"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Fallback avatar saved"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Remove fallback avatar"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Remove fallback avatar?"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "The character falls back to emotion images only. Emotion images stay."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Stable key: {key}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Label"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "When to use this emotion"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Upload avatar image"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Emotion image saved"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Save emotion"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Publish / repair image"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Image published"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Remove emotion image"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Remove the image from {label}?"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "The emotion and its label stay; only the image is removed."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Remove emotion"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Remove emotion {label}?"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "This removes the emotion and its image. The neutral emotion and the fallback avatar stay."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Selective"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Secondary key logic"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Case sensitive"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Whole words only"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Depth"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Scan depth (JSON, null for default)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Probability (%)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Use probability"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Groups (JSON list)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Group weight"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Group override"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Use group scoring"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Exclude from recursion"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Prevent recursion"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Delay until recursion"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Recursion level"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Sticky turns"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Cooldown turns"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Delay turns"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Character filter names (JSON list)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Character filter tags (JSON list)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Exclude filtered characters"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Match character description"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Match character personality"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Match scenario"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Edit lore"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Create lore"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Content"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Keys"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Secondary keys"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Press Enter after each key"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Order"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Higher values appear later"
+msgstr ""
+
+#: llmcord_core/dashboard.py llmcord_core/presets_ui.py
+msgctxt "field"
+msgid "Enabled"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Always active"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Pinned"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Advanced activation and placement rules"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Preserved import fields / unsupported feature remapping"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Original fields (JSON)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Detect /pattern/flags automatically"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Regex patterns"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Literal keywords"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Keyword matching"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Message role"
+msgstr ""
+
+#: llmcord_core/dashboard.py llmcord_core/presets_ui.py
+msgctxt "field"
+msgid "Placement"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Destination"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Save lore"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "button"
+msgid "Move"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "button"
+msgid "Copy"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Delete this lore entry?"
+msgstr ""
+
+#: llmcord_core/dashboard.py llmcord_core/lore_workspace.py
+msgid "This also keeps your deletion choice for future reimports."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Delete entry"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Current: {text}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "(none)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Incoming: {text}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Keep current entry"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Use imported entry"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Resolve conflict"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Character cards"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Preview: {name}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Keep current {field}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Use imported {field}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Resolve {field} conflict"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Confirm updating the existing character and home world"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Apply card import"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Upload V2/V3 JSON or PNG card"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Direct lore entry import"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Destination owner"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Import entries into selected owner"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Named lorebooks"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Lorebook name"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Server lorebook"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Channel lorebook"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Create lorebook"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{name} · Server lorebook"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{name} · Channel lorebook"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Edit entries in Lore"
+msgstr ""
+
+#: llmcord_core/dashboard.py llmcord_core/scene_ui.py
+msgid "Delete lorebook"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Disable in {space}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Enable in {space}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{format} lorebook detected · {count} entries"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Apply lorebook sync"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Upload JSON lorebook for preview"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt role"
+msgid "System"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt role"
+msgid "User"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt role"
+msgid "Assistant"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Relative to the prompt"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "In chat at depth"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Before character"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "After character"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Before examples"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "After examples"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt placement"
+msgid "Relative"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt placement"
+msgid "In chat"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Custom text"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Chat history"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Request payload"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt source"
+msgid "Location"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Character description"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Character personality"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt source"
+msgid "Scenario"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Opening message"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Lore before character"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Lore after character"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Lore before examples"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Lore after examples"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Lore in chat"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Personal facts"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt source"
+msgid "Encounters"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Scene summary"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Preceding messages"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Recent messages"
+msgstr ""
+
+#: llmcord_core/emotion_ui.py
+msgctxt "emotion"
+msgid "Neutral"
+msgstr ""
+
+#: llmcord_core/emotion_ui.py
+msgctxt "emotion"
+msgid "Happy"
+msgstr ""
+
+#: llmcord_core/emotion_ui.py
+msgctxt "emotion"
+msgid "Sad"
+msgstr ""
+
+#: llmcord_core/emotion_ui.py
+msgctxt "emotion"
+msgid "Angry"
+msgstr ""
+
+#: llmcord_core/emotion_ui.py
+msgctxt "emotion"
+msgid "Surprised"
+msgstr ""
+
+#: llmcord_core/emotion_ui.py
+msgctxt "emotion"
+msgid "Embarrassed"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgctxt "blackjack move"
+msgid "Hit"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgctxt "blackjack move"
+msgid "Stand"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgctxt "blackjack move"
+msgid "Double"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgctxt "blackjack move"
+msgid "Surrender"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgctxt "blackjack move"
+msgid "Insure"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgctxt "blackjack move"
+msgid "Even money"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgctxt "blackjack move"
+msgid "No insurance"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Table talk"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "Offered {move}"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "Offered {moves} or {last}"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "No check"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Meant: table talk"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "Meant: {move}"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "All games"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Smallest bet"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Largest bet"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Bet limits"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Bet limits saved"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Characters talk at the table"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "On: a character at a blackjack table asks the model for its move and may say a short line, one model call per decision. Off: characters play by the house rule (hit below 17) and stay quiet."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Character table talk"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Character table talk saved"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Model picks the move"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Play style only"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Character moves"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Model picks the move: with table talk on and the daily limit not reached, a model chooses each character's move; otherwise it plays by its play style (blackjack: the house rule). Play style only: I Doubt It characters never call the model for a move, which saves calls (a saved play style then sets their bluffing and suspicion); blackjack characters keep the house rule, and with table talk on the model only adds a line."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Character moves saved"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Table talk calls per day"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "After about this many table talk calls in a server day (approximate when several tables play at once), characters play by the house rule and stay quiet until the next day. Used today: {count:,}."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Table talk limit"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Table talk limit saved"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Game channels"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Members play with /blackjack in game channels. Bets are taken when a member joins and paid when the round ends. Turning a channel off closes its open table and refunds the bets."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Rounds in the end-of-table summary"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "When a table closes, its message lists this many of the last rounds."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Summary rounds"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Summary rounds saved"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "{game} is on"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Off: /blackjack is refused and open blackjack tables close with every bet refunded."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "{game} is off. Closed {n} open table."
+msgid_plural "{game} is off. Closed {n} open tables."
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "{game} setting saved"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Push: bet comes back"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Dealer wins"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Dealer stands on"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Blackjack pays"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgctxt "field"
+msgid "Ties"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Dealer hits soft 17"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Insurance and even money"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Late surrender"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "{game} rules"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "Table rules line: {rules}"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Rule changes apply from the next round. Open rounds keep the rules they were dealt with."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "{game} rules saved"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Read moves from chat (Experimental)"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "On: when it's a member's turn at a blackjack table, the bot reads their chat message and, if it looks like a move, replies with buttons to confirm it (for example Hit / Just table talk). Nothing is played until they press a button. English and Korean. Experimental: it can miss or misread moves, and it loads a small language model (about 0.5 GB of memory) the first time it reads a message."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Read moves from chat"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Read moves from chat saved"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Tuning"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Keep phrases for tuning"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "On: when a move check was wrong (the member pressed Just table talk or picked the other move) or missed a move they then played with a table button, the bot keeps that chat message here so you can turn it into an example phrase for this server. Only while Read moves from chat is on. Members can turn it off for themselves with /game spoken_moves off. Turning this off deletes every kept phrase. Kept phrases are deleted after the history retention period."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Keep phrases for tuning saved"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Already removed."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Kept phrases"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "No kept phrases yet."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgctxt "field"
+msgid "Move"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Make example"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Example phrase added"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Delete kept phrase"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "This message is deleted from the kept list."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Kept phrase deleted"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Example phrases for this server"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "When a chat message is very close to one of these, the bot uses this example's move instead of its own guess. Up to 200."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "No example phrases yet."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgctxt "button"
+msgid "Remove"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Remove example phrase"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "The bot stops using this example for this server's move checks."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Example phrase removed"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Turn off keeping?"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Every kept phrase is deleted. Example phrases stay."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Turn off and delete"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "{count} kept phrase is deleted. Example phrases stay."
+msgid_plural "{count} kept phrases are deleted. Example phrases stay."
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/games_ui.py
+msgid "Off: /game start refuses I Doubt It, and open I Doubt It tables close with every ante refunded."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgctxt "field"
+msgid "Ante"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Turn timeout (seconds)"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Claim rule"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgctxt "claim rule"
+msgid "Sequence"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Ante: each player pays this into the pot when joining; the winner takes the pot. 0 = no ante. Turn timeout: a player who runs out of time plays one card automatically; two automatic plays in a row forfeit the seat. Claims follow the sequence A, 2 … K, then A again. Changes apply to tables opened afterwards."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Read doubts from chat (Experimental)"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "On: during the few seconds after a claim, when a member at the table writes something like \"liar!\" or \"구라\", the bot replies with buttons to confirm it (Doubt it! / Just table talk). Nothing is played until they press a button, and the doubt window does not wait. English and Korean, by word list only (no language model). Members can turn move checks off for themselves with /game spoken_moves."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Read doubts from chat"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Read doubts from chat saved"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Off: /game start refuses Texas Hold'em, and open Hold'em tables close with every stack cashed out."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Small blind"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Smallest buy-in (big blinds)"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Largest buy-in (big blinds)"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Action timeout (seconds)"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Allow assist"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "The big blind is twice the small blind. Buy-ins are counted in big blinds. A player who runs out of action time checks, or folds when there is a bet. Allow assist lets the host turn on private hand and odds hints for the table. Changes apply to hands dealt afterwards."
+msgstr ""
+
+#: llmcord_core/icons.py llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "More actions for {name}"
+msgstr ""
+
+#: llmcord_core/icons.py
+msgid "More actions"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Lore workspace"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Import lorebook"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Import JSON directly into either owner below, or manage reusable named lorebooks in Imports."
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Drag entries onto either drop area, or select entries to move or delete together. Higher insertion orders appear later in each prompt position."
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Create a world or import a character first."
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Left owner"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Right owner"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Search content and keywords"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Saving lore changes…"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Change could not be confirmed. Refresh to check your lore."
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+#, python-brace-format
+msgid "{count} selected"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Move selected left"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Move selected right"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Delete selected"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Clear selection"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+#, python-brace-format
+msgid "Deleted {count} lore entry"
+msgid_plural "Deleted {count} lore entries"
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/lore_workspace.py
+#, python-brace-format
+msgid "Moved {count} lore entry"
+msgid_plural "Moved {count} lore entries"
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Selected entries are already in that list."
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+#, python-brace-format
+msgid "Delete {count} lore entry?"
+msgid_plural "Delete {count} lore entries?"
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/lore_workspace.py
+msgid "(empty entry)"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+#, python-brace-format
+msgid "And {extra} more selected entries."
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+#, python-brace-format
+msgid "Delete {count} entry"
+msgid_plural "Delete {count} entries"
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Move could not be confirmed. Refresh and try again."
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+#, python-brace-format
+msgid "{count} entry"
+msgid_plural "{count} entries"
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/lore_workspace.py
+#, python-brace-format
+msgid "{label} · page {page} of {last_page}"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgctxt "field"
+msgid "Page"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Select page"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Clear page"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "No keywords"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Select entry"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+#, python-brace-format
+msgid "Priority {order}"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py llmcord_core/presets_ui.py
+msgctxt "status"
+msgid "Disabled"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Edit entry"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Edit or transfer"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Move right"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Move left"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "New entry"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Export owner"
+msgstr ""
+
+#: llmcord_core/lore_workspace.py
+msgid "Import JSON entries"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Extraction"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Summary"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Images"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Main"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Location"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Time"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Name"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Lore Before Char"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Description"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Personality"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Scenario"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Opening"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Card Instructions"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Lore After Char"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Lore Before Examples"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Examples"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Lore After Examples"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Lore In Chat"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Personal"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Encounters"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Summary"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Preceding"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Recent"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "History"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Character Voice"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Card Post History"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Payload"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "moved to top-level system instructions"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "converted to user instructions"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Untitled block"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "Custom-{code}"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Built-in default"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "{name} · draft {revision}"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Imported (not saved)"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "Active preset: {label} · revision {revision}"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Save as new preset"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Activate saved revision"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Delete preset"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Preset library"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Preset name"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Draft saved. Activate it when ready."
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Prompt blocks"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "field"
+msgid "Purpose"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "button"
+msgid "Save draft"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "The built-in default cannot be deleted"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "Delete preset {name}?"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "This permanently deletes the preset. The active preset cannot be deleted; activate another one first."
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Imported preset"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Import preview loaded. Resolve compatibility items, save a draft, then activate."
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Move up"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Move down"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Remove block"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Block name"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Context source"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Prompt text / template"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "field"
+msgid "Role"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "field"
+msgid "Depth"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Injection order"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Trimming priority"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Exact placement"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Move to top-level system instructions"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Convert late system block to user instructions"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "System instruction placement"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Preserved import fields and compatibility remapping"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Original prompt fields (JSON)"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "Block ID: {id}"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "To remap triggers/extensions: clear injection_trigger and set extension to false."
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Add prompt block"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Disable imported assistant prefill"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Import preset"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "SillyTavern order {label}"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Choose an order profile"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Preview selected profile"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Upload native or SillyTavern Chat Completion JSON"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Export preset"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Export full native bundle"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "{label} — not portable"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Leave out blocks"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "SillyTavern cannot represent some blocks; choose them here to export without them."
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Export SillyTavern dialogue preset"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Assembled request preview"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Sample character"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Sample channel (optional)"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Sample input"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "sample input"
+msgid "Hello!"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Sample history (one message per line)"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "Estimated input tokens: {count}"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "{name} (history message {number})"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "Omitted: {items}"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "value"
+msgid "none"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "Adaptations: {items}"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Preview without a model call"
+msgstr ""
+
+#: llmcord_core/savebar.py
+msgctxt "button"
+msgid "Save changes"
+msgstr ""
+
+#: llmcord_core/savebar.py
+msgctxt "button"
+msgid "Reset"
+msgstr ""
+
+#: llmcord_core/savebar.py
+msgctxt "button"
+msgid "Reload"
+msgstr ""
+
+#: llmcord_core/savebar.py
+msgid "Unsaved changes"
+msgstr ""
+
+#: llmcord_core/savebar.py
+#, python-brace-format
+msgid "{name} has unsaved changes."
+msgstr ""
+
+#: llmcord_core/savebar.py
+#, python-brace-format
+msgid "Save or reset your changes to {name} first."
+msgstr ""
+
+#: llmcord_core/savebar.py
+#, python-brace-format
+msgid "{name} was changed somewhere else."
+msgstr ""
+
+#: llmcord_core/savebar.py
+msgid "Your other changes were not saved. They are still pending."
+msgstr ""
+
+#: llmcord_core/savebar.py
+msgid "Saved, but the view could not refresh. Reload the page."
+msgstr ""
+
+#: llmcord_core/scene_ui.py
+msgid "Setting, participants' fictional roles, tone, and interaction conventions"
+msgstr ""
+
+#. i18n: {label} is the guidelines field label in lower case, such as "world
+#. guidelines"
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "Save {label}"
+msgstr ""
+
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "This removes its guidelines, {entries} owned lore entries, encounters, and hub/lorebook links. Lorebooks and past messages remain."
+msgstr ""
+
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "Move or delete these home characters first: {names}"
+msgstr ""
+
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "Rebind its {count} Discord channel(s) to another world or hub first."
+msgstr ""
+
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "Delete world {name}?"
+msgstr ""
+
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "Delete hub {name}?"
+msgstr ""
+
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "Delete lorebook {name}?"
+msgstr ""
+
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "This deletes the lorebook, its {count} remaining entries, and its world/hub links. Entries moved to another owner remain."
+msgstr ""
+
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "Import entries into {owner}"
+msgstr ""
+
+#: llmcord_core/scene_ui.py
+msgid "Adds entries directly to this owner. Existing lore stays in place; identical entries are skipped. No new lorebook is created."
+msgstr ""
+
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "{format}: {additions} new entries, {present} already present"
+msgstr ""
+
+#: llmcord_core/scene_ui.py
+msgctxt "status"
+msgid "add"
+msgstr ""
+
+#: llmcord_core/scene_ui.py
+msgctxt "status"
+msgid "duplicate"
+msgstr ""
+
+#: llmcord_core/scene_ui.py
+msgctxt "column"
+msgid "Source ID"
+msgstr ""
+
+#: llmcord_core/scene_ui.py
+msgctxt "column"
+msgid "Action"
+msgstr ""
+
+#: llmcord_core/scene_ui.py
+msgctxt "column"
+msgid "Content"
+msgstr ""
+
+#: llmcord_core/scene_ui.py
+msgid "Compatibility notes"
+msgstr ""
+
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "Imported {count} entries"
+msgstr ""
+
+#: llmcord_core/scene_ui.py
+msgid "Apply entry import"
+msgstr ""
+
+#: llmcord_core/scene_ui.py
+msgid "Upload JSON entries"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgctxt "item kind"
+msgid "Random message"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+#, python-brace-format
+msgid "{kind} · Consumable"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+#, python-brace-format
+msgid "{kind} · Reusable"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgid "Items"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgid "The built-in items. Members buy them with /shop and use them with /use. A price left blank uses the built-in price. Changes apply at once."
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgid "Settings"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgid "Use log"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgid "Every item use on this server, newest first."
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgid "For sale"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgid "Allow use"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgctxt "field"
+msgid "Price"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+#, python-brace-format
+msgid "Blank = built-in price ({price:,} {currency})"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgid "Cooldown (seconds)"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+#, python-brace-format
+msgid "Blank = built-in ({seconds:,} s)"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgctxt "field"
+msgid "Sides"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgid "Custom lines"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgid "Extra lines"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgid "One per line. Added to the built-in lines."
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgid "Replace built-in lines"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgid "One per line. If any are given, only these are used. Leave empty to keep the built-in lines."
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+#, python-brace-format
+msgid "{name} saved"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+#, python-brace-format
+msgid "Save {name}"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgid "Most of a consumable one member can hold"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgid "A member cannot buy another of a consumable item at this number. A reusable item can be owned once."
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgid "Hold cap saved"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgid "No items have been used yet."
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgctxt "column"
+msgid "Item"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgctxt "column"
+msgid "Result"
+msgstr ""
+
+#: llmcord_core/web.py
+msgid "the file could not be read"
+msgstr ""
+
+#: llmcord_core/web.py
+msgid "Invalid OAuth state"
+msgstr ""
+
+#: llmcord_core/web.py
+msgid "Discord sign-in failed"
+msgstr ""
+
+#: llmcord_core/web.py
+msgid "Unknown language"
+msgstr ""
+
+#: llmcord_core/web.py
+msgid "Avatar not found"
+msgstr ""
+
+#: llmcord_core/web.py
+#, python-brace-format
+msgid "Invalid input: {error}"
+msgstr ""
+
+#: llmcord_core/web.py
+msgid "This name or entry already exists"
+msgstr ""
+

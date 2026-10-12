@@ -1,0 +1,3757 @@
+msgid ""
+msgstr ""
+"Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Thread {name}"
+msgstr "스레드 {name}"
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Thread …{tail}"
+msgstr "스레드 …{tail}"
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Archived thread …{tail}"
+msgstr "보관된 스레드 …{tail}"
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Hub: {name}"
+msgstr "허브: {name}"
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "World: {name}"
+msgstr "월드: {name}"
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Character: {name}"
+msgstr "캐릭터: {name}"
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Channel: {name}"
+msgstr "채널: {name}"
+
+#: llmcord_core/admin.py
+msgid "Server: Server-wide lore"
+msgstr "서버: 서버 전체 로어"
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Lorebook: {name}"
+msgstr "로어북: {name}"
+
+#: llmcord_core/admin.py
+msgctxt "preview sample"
+msgid "Character"
+msgstr "캐릭터"
+
+#: llmcord_core/admin.py
+msgctxt "preview sample"
+msgid "Sample user"
+msgstr "예시 사용자"
+
+#: llmcord_core/admin.py
+msgctxt "preview sample"
+msgid "Sample world"
+msgstr "예시 월드"
+
+#: llmcord_core/auth.py
+msgid "Discord permission checks are temporarily rate limited. Please try again shortly."
+msgstr "Discord 권한 확인 요청이 일시적으로 제한되었어요. 잠시 후 다시 시도해 주세요."
+
+#: llmcord_core/auth.py
+msgid "Cannot reach Discord to check permissions. Please try again shortly."
+msgstr "Discord에 연결할 수 없어서 권한을 확인하지 못했어요. 잠시 후 다시 시도해 주세요."
+
+#: llmcord_core/auth.py
+msgid "Discord session expired. Please sign in again."
+msgstr "Discord 세션이 만료되었어요. 다시 로그인해 주세요."
+
+#: llmcord_core/auth.py
+msgid "Discord denied the permission check. Please sign in again."
+msgstr "Discord가 권한 확인을 거부했어요. 다시 로그인해 주세요."
+
+#: llmcord_core/auth.py
+msgid "Discord permission checks are unavailable. Please try again shortly."
+msgstr "지금은 Discord 권한을 확인할 수 없어요. 잠시 후 다시 시도해 주세요."
+
+#: llmcord_core/auth.py llmcord_core/dashboard.py
+msgid "Sign in with Discord"
+msgstr "Discord로 로그인"
+
+#: llmcord_core/auth.py
+msgid "Discord session expired"
+msgstr "Discord 세션 만료"
+
+#: llmcord_core/auth.py
+msgid "Invalid request origin"
+msgstr "요청 출처가 올바르지 않아요"
+
+#: llmcord_core/auth.py llmcord_core/web.py
+msgid "Invalid form token"
+msgstr "양식 토큰이 올바르지 않아요"
+
+#: llmcord_core/auth.py
+msgid "Server administrator permission required"
+msgstr "서버 관리자 권한이 필요해요"
+
+#: llmcord_core/auth.py
+msgid "Operator permission required"
+msgstr "운영자 권한이 필요해요"
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "Game channels saved. Closed {closed} open table(s) and refunded their bets."
+msgstr "게임 채널을 저장했어요. 진행 중인 테이블 {closed}개를 닫고 베팅액을 돌려줬어요."
+
+#: llmcord_core/currency_ui.py
+msgid "Game channels saved"
+msgstr "게임 채널을 저장했어요"
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "Member …{last4}"
+msgstr "멤버 …{last4}"
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "Deleted character (#{id})"
+msgstr "삭제된 캐릭터 (#{id})"
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "Reverses #{id}"
+msgstr "#{id} 취소"
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "Reversed by #{id}"
+msgstr "#{id} 항목으로 취소됨"
+
+#: llmcord_core/currency_ui.py
+msgid "The shop item was taken back."
+msgstr "상점 아이템을 회수했어요."
+
+#: llmcord_core/currency_ui.py
+msgid "The shop item was already used, so only the currency was returned."
+msgstr "상점 아이템이 이미 사용되어서 화폐만 돌려줬어요."
+
+#: llmcord_core/currency_ui.py
+msgid "Currency name"
+msgstr "화폐 이름"
+
+#: llmcord_core/currency_ui.py
+msgid "What this server calls its currency, for example coins or gold (1 to 32 characters). Members see it in /balance."
+msgstr "이 서버에서 쓰는 화폐 이름이에요. 예: 코인, 골드 (1~32자). 멤버는 /balance에서 볼 수 있어요."
+
+#: llmcord_core/currency_ui.py
+msgid "Currency name saved"
+msgstr "화폐 이름을 저장했어요"
+
+#: llmcord_core/currency_ui.py
+msgid "Daily check-in"
+msgstr "출석 체크"
+
+#: llmcord_core/currency_ui.py
+msgid "Amount per check-in"
+msgstr "출석 체크당 지급액"
+
+#: llmcord_core/currency_ui.py
+msgid "Streak bonus per day"
+msgstr "연속 출석 보너스 (하루당)"
+
+#: llmcord_core/currency_ui.py
+msgid "Streak bonus grows for up to (days)"
+msgstr "연속 출석 보너스 최대 증가 일수"
+
+#: llmcord_core/currency_ui.py
+msgid "Members claim with /daily once a day; the day ends at midnight in this server's timezone. Set the amount to 0 to turn check-ins off. A missed day starts the streak again."
+msgstr "멤버는 하루에 한 번 /daily로 받을 수 있어요. 하루는 이 서버 시간대의 자정에 끝나요. 지급액을 0으로 설정하면 출석 체크가 꺼져요. 하루라도 빠지면 연속 출석이 처음부터 다시 시작돼요."
+
+#: llmcord_core/currency_ui.py
+msgid "Daily check-in saved"
+msgstr "출석 체크 설정을 저장했어요"
+
+#: llmcord_core/currency_ui.py
+msgid "Character wallets"
+msgstr "캐릭터 지갑"
+
+#: llmcord_core/currency_ui.py
+msgid "Character refill cap"
+msgstr "캐릭터 충전 한도"
+
+#: llmcord_core/currency_ui.py
+msgid "Each character gets the daily amount once per server day, without the streak bonus, until it reaches this cap. Winnings can take a character above it."
+msgstr "각 캐릭터는 이 한도에 이를 때까지 서버 기준 하루에 한 번 출석 지급액을 받아요 (연속 출석 보너스 없음). 게임에서 이기면 한도를 넘을 수 있어요."
+
+#: llmcord_core/currency_ui.py
+msgid "Daily check-in is off, so characters don't refill."
+msgstr "출석 체크가 꺼져 있어서 캐릭터 지갑이 충전되지 않아요."
+
+#: llmcord_core/currency_ui.py
+msgid "Character refill cap saved"
+msgstr "캐릭터 충전 한도를 저장했어요"
+
+#: llmcord_core/currency_ui.py
+msgid "Game channels, bets and table talk are in the Games tab."
+msgstr "게임 채널, 베팅, 잡담 설정은 게임 탭에 있어요."
+
+#: llmcord_core/currency_ui.py
+msgid "Balances"
+msgstr "잔액"
+
+#: llmcord_core/currency_ui.py
+msgid "Character balances"
+msgstr "캐릭터 잔액"
+
+#: llmcord_core/currency_ui.py
+msgid "Give or take currency"
+msgstr "화폐 지급 또는 차감"
+
+#: llmcord_core/currency_ui.py
+msgctxt "section"
+msgid "Ledger"
+msgstr "거래 내역"
+
+#: llmcord_core/currency_ui.py
+msgid "Every change is kept here. A mistake is undone by a reversal entry, never by editing."
+msgstr "모든 변경 사항이 여기에 남아요. 잘못된 항목은 수정하지 않고 취소 기록을 추가해서 되돌려요."
+
+#: llmcord_core/currency_ui.py
+msgid "Member ID or mention"
+msgstr "멤버 ID 또는 멘션"
+
+#: llmcord_core/currency_ui.py
+msgctxt "field"
+msgid "Amount"
+msgstr "금액"
+
+#: llmcord_core/currency_ui.py
+msgctxt "field"
+msgid "Reason"
+msgstr "사유"
+
+#: llmcord_core/currency_ui.py
+msgctxt "button"
+msgid "Give"
+msgstr "지급"
+
+#: llmcord_core/currency_ui.py
+msgctxt "button"
+msgid "Take"
+msgstr "차감"
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "Gave {amount:,} {name} to {member}. New balance: {balance:,} {name}."
+msgstr "{member}에게 {amount:,} {name:을/를} 지급했어요. 새 잔액: {balance:,} {name}."
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "Took {amount:,} {name} from {member}. New balance: {balance:,} {name}."
+msgstr "{member}에게서 {amount:,} {name:을/를} 차감했어요. 새 잔액: {balance:,} {name}."
+
+#: llmcord_core/currency_ui.py
+msgid "No balances yet. Give a member some currency to start."
+msgstr "아직 잔액이 없어요. 멤버에게 화폐를 지급해서 시작해 보세요."
+
+#: llmcord_core/currency_ui.py llmcord_core/shop_ui.py
+msgctxt "column"
+msgid "Member"
+msgstr "멤버"
+
+#: llmcord_core/currency_ui.py
+msgctxt "column"
+msgid "Balance"
+msgstr "잔액"
+
+#: llmcord_core/currency_ui.py
+msgctxt "column"
+msgid "Member ID"
+msgstr "멤버 ID"
+
+#: llmcord_core/currency_ui.py
+msgctxt "button"
+msgid "Previous"
+msgstr "이전"
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "Page {page}"
+msgstr "{page}페이지"
+
+#: llmcord_core/currency_ui.py
+msgctxt "button"
+msgid "Next"
+msgstr "다음"
+
+#: llmcord_core/currency_ui.py
+msgid "No character balances yet. Characters refill when they first need money each day."
+msgstr "아직 캐릭터 잔액이 없어요. 캐릭터 지갑은 그날 처음 돈이 필요할 때 충전돼요."
+
+#: llmcord_core/currency_ui.py
+msgctxt "column"
+msgid "Character"
+msgstr "캐릭터"
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "{name} (archived)"
+msgstr "{name} (보관됨)"
+
+#: llmcord_core/currency_ui.py
+msgid "No ledger entries yet."
+msgstr "아직 거래 내역이 없어요."
+
+#: llmcord_core/currency_ui.py
+msgctxt "column"
+msgid "Entry"
+msgstr "항목"
+
+#: llmcord_core/currency_ui.py llmcord_core/shop_ui.py
+msgctxt "column"
+msgid "Time"
+msgstr "시간"
+
+#: llmcord_core/currency_ui.py
+msgctxt "column"
+msgid "Amount"
+msgstr "금액"
+
+#: llmcord_core/currency_ui.py
+msgctxt "column"
+msgid "Balance after"
+msgstr "변경 후 잔액"
+
+#: llmcord_core/currency_ui.py
+msgctxt "column"
+msgid "Reason"
+msgstr "사유"
+
+#: llmcord_core/currency_ui.py
+msgctxt "column"
+msgid "Admin"
+msgstr "관리자"
+
+#: llmcord_core/currency_ui.py
+msgctxt "column"
+msgid "Status"
+msgstr "상태"
+
+#: llmcord_core/currency_ui.py
+msgctxt "column"
+msgid "Actions"
+msgstr "작업"
+
+#: llmcord_core/currency_ui.py
+msgctxt "button"
+msgid "Reverse"
+msgstr "되돌리기"
+
+#. i18n: also used in a JavaScript template literal (the button's aria-label):
+#. the translation must not contain a backtick (`) or ${.
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "Reverse entry {entry}"
+msgstr "{entry} 항목 되돌리기"
+
+#: llmcord_core/currency_ui.py llmcord_core/dashboard.py
+#: llmcord_core/shop_ui.py
+msgctxt "button"
+msgid "Load more"
+msgstr "더 보기"
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "This adds a reversal entry that undoes {amount} for {member}. The original entry stays in the ledger. This also takes back the item that was bought, if the member still has it."
+msgstr "{member}의 {amount:을/를} 되돌리는 취소 기록을 추가해요. 원래 항목은 거래 내역에 그대로 남아요. 멤버가 구매한 아이템을 아직 가지고 있다면 그 아이템도 회수해요."
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "This adds a reversal entry that undoes {amount} for {member}. The original entry stays in the ledger."
+msgstr "{member}의 {amount:을/를} 되돌리는 취소 기록을 추가해요. 원래 항목은 거래 내역에 그대로 남아요."
+
+#: llmcord_core/currency_ui.py
+#, python-brace-format
+msgid "Reversed entry {entry}."
+msgstr "{entry} 항목을 되돌렸어요."
+
+#: llmcord_core/currency_ui.py llmcord_core/dashboard.py
+#: llmcord_core/lore_workspace.py llmcord_core/savebar.py
+#: llmcord_core/scene_ui.py
+msgctxt "button"
+msgid "Cancel"
+msgstr "취소"
+
+#: llmcord_core/currency_ui.py
+msgid "Reverse entry"
+msgstr "항목 되돌리기"
+
+#: llmcord_core/dashboard.py
+msgid "The database is busy. Try again."
+msgstr "데이터베이스가 사용 중이에요. 다시 시도해 주세요."
+
+#: llmcord_core/dashboard.py
+msgid "Something went wrong. Try again."
+msgstr "문제가 발생했어요. 다시 시도해 주세요."
+
+#: llmcord_core/dashboard.py
+msgid "Spending caps"
+msgstr "지출 한도"
+
+#: llmcord_core/dashboard.py
+msgid "Applies to the whole bot. Operators get a DM when spending passes each cap. At the hard cap, new character replies, ambient turns, catch-ups and memory updates pause until the reset day or until you raise the cap."
+msgstr "봇 전체에 적용돼요. 지출이 각 한도를 넘으면 운영자에게 DM이 가요. 하드 한도에 이르면 초기화 날짜가 되거나 한도를 올릴 때까지 새 캐릭터 응답, 자율 참여, 놓친 대화 요약, 기억 업데이트가 멈춰요."
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{spent} spent since {period}. The period resets on {date} (UTC)."
+msgstr "{period} 이후 {spent} 지출했어요. 기간은 {date} (UTC)에 초기화돼요."
+
+#: llmcord_core/dashboard.py
+msgid "Hard cap reached: character replies are paused."
+msgstr "하드 한도에 도달했어요. 캐릭터 응답이 일시 중지되었어요."
+
+#: llmcord_core/dashboard.py
+msgid "Soft cap reached: operators were warned."
+msgstr "소프트 한도에 도달했어요. 운영자에게 경고를 보냈어요."
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{n} model call without a cost estimate this period was counted as $0. Set prices for those models to include them."
+msgid_plural "{n} model calls without a cost estimate this period were counted as $0. Set prices for those models to include them."
+msgstr[0] "이번 기간에 비용 추정이 없는 모델 호출 {n}건을 $0으로 계산했어요. 포함하려면 해당 모델의 가격을 설정해 주세요."
+
+#: llmcord_core/dashboard.py
+msgid "Soft cap (USD)"
+msgstr "소프트 한도 (USD)"
+
+#: llmcord_core/dashboard.py
+msgid "Blank means off"
+msgstr "비워 두면 꺼짐"
+
+#: llmcord_core/dashboard.py
+msgid "Hard cap (USD)"
+msgstr "하드 한도 (USD)"
+
+#: llmcord_core/dashboard.py
+msgid "Reset day"
+msgstr "초기화 날짜"
+
+#: llmcord_core/dashboard.py
+msgid "Day of the month, UTC"
+msgstr "매월 며칠 (UTC)"
+
+#: llmcord_core/dashboard.py
+msgid "Post a notice in the channel when the hard cap pauses a reply (at most once an hour per channel)"
+msgstr "하드 한도로 응답이 멈추면 채널에 안내 메시지 올리기 (채널당 1시간에 최대 1번)"
+
+#: llmcord_core/dashboard.py llmcord_core/shop_ui.py
+msgctxt "button"
+msgid "Save"
+msgstr "저장"
+
+#: llmcord_core/dashboard.py
+msgid "Spending caps saved."
+msgstr "지출 한도를 저장했어요."
+
+#: llmcord_core/dashboard.py llmcord_core/presets_ui.py
+msgctxt "model role"
+msgid "Dialogue"
+msgstr "대화"
+
+#: llmcord_core/dashboard.py llmcord_core/presets_ui.py
+msgctxt "model role"
+msgid "Director"
+msgstr "디렉터"
+
+#: llmcord_core/dashboard.py
+msgctxt "model role"
+msgid "Memory"
+msgstr "기억"
+
+#: llmcord_core/dashboard.py
+msgid "Dashboard"
+msgstr "대시보드"
+
+#: llmcord_core/dashboard.py
+msgid "Dashboard (overrides config.yaml)"
+msgstr "대시보드 (config.yaml 대체)"
+
+#: llmcord_core/dashboard.py
+msgid "Dashboard (skipped, see warning)"
+msgstr "대시보드 (건너뜀, 경고 참고)"
+
+#: llmcord_core/dashboard.py
+msgid "Changes apply from the next message. \"Set\" means this dashboard's environment has the variable; the bot checks its own environment when it calls the model."
+msgstr "변경 사항은 다음 메시지부터 적용돼요. \"설정됨\"은 이 대시보드 환경에 해당 변수가 있다는 뜻이에요. 봇은 모델을 호출할 때 자체 환경을 확인해요."
+
+#: llmcord_core/dashboard.py
+msgid "A ${{NAME}} reference to a variable ending in _API_KEY. Never paste the key itself."
+msgstr "_API_KEY로 끝나는 변수를 가리키는 ${{NAME}} 참조예요. 키 값 자체는 절대 붙여 넣지 마세요."
+
+#: llmcord_core/dashboard.py
+msgid "No key"
+msgstr "키 없음"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{ref} (set)"
+msgstr "{ref} (설정됨)"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{ref} (missing)"
+msgstr "{ref} (없음)"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Use config.yaml ({role})"
+msgstr "config.yaml 사용 ({role})"
+
+#: llmcord_core/dashboard.py
+msgid "Use config.yaml (none)"
+msgstr "config.yaml 사용 (없음)"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{name} (not available)"
+msgstr "{name} (사용할 수 없음)"
+
+#: llmcord_core/dashboard.py
+msgid "Context tokens"
+msgstr "컨텍스트 토큰"
+
+#: llmcord_core/dashboard.py
+msgid "Input cost"
+msgstr "입력 비용"
+
+#: llmcord_core/dashboard.py
+msgid "Output cost"
+msgstr "출력 비용"
+
+#: llmcord_core/dashboard.py
+msgid "Cached input cost"
+msgstr "캐시된 입력 비용"
+
+#: llmcord_core/dashboard.py
+msgid "Timeout"
+msgstr "제한 시간"
+
+#: llmcord_core/dashboard.py
+msgid "Max retries"
+msgstr "최대 재시도 횟수"
+
+#: llmcord_core/dashboard.py
+msgid "Roles"
+msgstr "역할"
+
+#: llmcord_core/dashboard.py
+msgid "Profiles"
+msgstr "프로필"
+
+#: llmcord_core/dashboard.py
+msgid "Roles choose from your profiles. Add a profile below to use another model. A role set here replaces the config.yaml role of the same name."
+msgstr "역할은 프로필 중에서 골라요. 다른 모델을 쓰려면 아래에서 프로필을 추가해 주세요. 여기서 지정한 역할은 config.yaml의 같은 이름 역할을 대체해요."
+
+#: llmcord_core/dashboard.py
+msgid "Save roles"
+msgstr "역할 저장"
+
+#: llmcord_core/dashboard.py
+msgid "Roles saved."
+msgstr "역할을 저장했어요."
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "config.yaml could not be read, so only dashboard profiles are listed. {error}"
+msgstr "config.yaml을 읽을 수 없어서 대시보드 프로필만 표시해요. {error}"
+
+#: llmcord_core/dashboard.py
+msgid "No profiles yet."
+msgstr "아직 프로필이 없어요."
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{role} role"
+msgstr "{role} 역할"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Key: {key}"
+msgstr "키: {key}"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "From: {source}"
+msgstr "출처: {source}"
+
+#: llmcord_core/dashboard.py
+msgctxt "button"
+msgid "Edit"
+msgstr "편집"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Edit {name}"
+msgstr "{name} 편집"
+
+#: llmcord_core/dashboard.py llmcord_core/games_ui.py
+#: llmcord_core/lore_workspace.py
+msgctxt "button"
+msgid "Delete"
+msgstr "삭제"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Delete {name}"
+msgstr "{name} 삭제"
+
+#: llmcord_core/dashboard.py
+msgid "Reset to config.yaml"
+msgstr "config.yaml로 되돌리기"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Reset to config.yaml for {name}"
+msgstr "{name}: config.yaml로 되돌리기"
+
+#: llmcord_core/dashboard.py
+msgid "Add profile"
+msgstr "프로필 추가"
+
+#: llmcord_core/dashboard.py
+msgid "The config.yaml version of this profile applies again. Edits made on the dashboard are lost."
+msgstr "이 프로필의 config.yaml 버전이 다시 적용돼요. 대시보드에서 수정한 내용은 사라져요."
+
+#: llmcord_core/dashboard.py
+msgid "This removes the saved profile. Roles assigned to it must be changed first."
+msgstr "저장된 프로필을 삭제해요. 이 프로필에 지정된 역할을 먼저 바꿔야 해요."
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Reset {name} to config.yaml?"
+msgstr "{name:을/를} config.yaml로 되돌릴까요?"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Delete {name}?"
+msgstr "{name:을/를} 삭제할까요?"
+
+#: llmcord_core/dashboard.py
+msgid "Reset profile"
+msgstr "프로필 되돌리기"
+
+#: llmcord_core/dashboard.py
+msgid "Delete profile"
+msgstr "프로필 삭제"
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Name"
+msgstr "이름"
+
+#: llmcord_core/dashboard.py
+msgid "Lowercase letters, digits and . _ / -"
+msgstr "소문자, 숫자와 . _ / -"
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Provider"
+msgstr "제공업체"
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Model"
+msgstr "모델"
+
+#: llmcord_core/dashboard.py
+msgid "Fetched models"
+msgstr "가져온 모델"
+
+#: llmcord_core/dashboard.py
+msgid "API key"
+msgstr "API 키"
+
+#: llmcord_core/dashboard.py
+msgid "Base URL"
+msgstr "기본 URL"
+
+#: llmcord_core/dashboard.py
+msgid "Required for compatible providers."
+msgstr "호환 제공업체에는 필수예요."
+
+#: llmcord_core/dashboard.py
+msgid "Supports images"
+msgstr "이미지 지원"
+
+#: llmcord_core/dashboard.py
+msgid "Advanced"
+msgstr "고급"
+
+#: llmcord_core/dashboard.py
+msgid "Reasoning effort"
+msgstr "추론 강도"
+
+#: llmcord_core/dashboard.py
+msgid "Compatible providers only"
+msgstr "호환 제공업체 전용"
+
+#: llmcord_core/dashboard.py
+msgid "Structured outputs"
+msgstr "구조화된 출력"
+
+#: llmcord_core/dashboard.py
+msgid "Stream usage"
+msgstr "스트리밍 사용량"
+
+#: llmcord_core/dashboard.py
+msgctxt "billing tier"
+msgid "paid"
+msgstr "유료"
+
+#: llmcord_core/dashboard.py
+msgctxt "billing tier"
+msgid "free"
+msgstr "무료"
+
+#: llmcord_core/dashboard.py
+msgid "Billing tier"
+msgstr "요금 등급"
+
+#: llmcord_core/dashboard.py
+msgid "Blank means none"
+msgstr "비워 두면 없음"
+
+#: llmcord_core/dashboard.py
+msgid "Input cost per million (USD)"
+msgstr "입력 100만 토큰당 비용 (USD)"
+
+#: llmcord_core/dashboard.py
+msgid "Output cost per million (USD)"
+msgstr "출력 100만 토큰당 비용 (USD)"
+
+#: llmcord_core/dashboard.py
+msgid "Cached input cost per million (USD)"
+msgstr "캐시된 입력 100만 토큰당 비용 (USD)"
+
+#: llmcord_core/dashboard.py
+msgid "Timeout (seconds)"
+msgstr "제한 시간 (초)"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Suggested prices from {source} ({fetched}) filled all three cost fields. Check them before saving."
+msgstr "{source}의 추천 가격({fetched})으로 비용 필드 3개를 모두 채웠어요. 저장하기 전에 확인해 주세요."
+
+#: llmcord_core/dashboard.py
+msgid "Fetch models"
+msgstr "모델 가져오기"
+
+#: llmcord_core/dashboard.py
+msgid "Look up prices"
+msgstr "가격 조회"
+
+#: llmcord_core/dashboard.py
+msgid "Test connection"
+msgstr "연결 테스트"
+
+#: llmcord_core/dashboard.py
+msgid "Save profile"
+msgstr "프로필 저장"
+
+#: llmcord_core/dashboard.py
+msgid "Profile saved."
+msgstr "프로필을 저장했어요."
+
+#: llmcord_core/dashboard.py
+msgid "Test connection sends one short request from the dashboard with these settings. It is not counted in usage."
+msgstr "연결 테스트는 이 설정으로 대시보드에서 짧은 요청을 한 번 보내요. 사용량에는 포함되지 않아요."
+
+#: llmcord_core/dashboard.py
+msgid "Fetch models asks the provider for its model list with these settings. Nothing is saved; you can still type any model ID."
+msgstr "모델 가져오기는 이 설정으로 제공업체에 모델 목록을 요청해요. 아무것도 저장되지 않으며, 모델 ID는 여전히 직접 입력할 수 있어요."
+
+#: llmcord_core/dashboard.py
+msgid "Look up prices fills the cost fields (under Advanced) with suggested prices from a public price list. Nothing is saved until you save the profile."
+msgstr "가격 조회는 공개 가격 목록의 추천 가격으로 비용 필드(고급 아래)를 채워요. 프로필을 저장하기 전에는 아무것도 저장되지 않아요."
+
+#: llmcord_core/dashboard.py
+msgid "This spending period"
+msgstr "이번 지출 기간"
+
+#: llmcord_core/dashboard.py
+msgid "Last 7 days"
+msgstr "최근 7일"
+
+#: llmcord_core/dashboard.py
+msgid "Last 30 days"
+msgstr "최근 30일"
+
+#: llmcord_core/dashboard.py
+msgid "No server"
+msgstr "서버 없음"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Server (ID …{tail})"
+msgstr "서버 (ID …{tail})"
+
+#: llmcord_core/dashboard.py
+msgid "Usage by server"
+msgstr "서버별 사용량"
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Period"
+msgstr "기간"
+
+#: llmcord_core/dashboard.py
+msgid "No model calls in this period."
+msgstr "이 기간에는 모델 호출이 없어요."
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Server"
+msgstr "서버"
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Requests"
+msgstr "요청"
+
+#: llmcord_core/dashboard.py
+msgid "Input tokens"
+msgstr "입력 토큰"
+
+#: llmcord_core/dashboard.py
+msgid "Output tokens"
+msgstr "출력 토큰"
+
+#: llmcord_core/dashboard.py
+msgid "Estimated USD"
+msgstr "예상 비용 (USD)"
+
+#: llmcord_core/dashboard.py
+msgid "Without cost estimate"
+msgstr "비용 추정 없음"
+
+#: llmcord_core/dashboard.py
+msgctxt "row"
+msgid "Total"
+msgstr "합계"
+
+#: llmcord_core/dashboard.py
+msgid "Each server keeps usage for its own period (Server settings), so this table can show less than the Spending tab."
+msgstr "서버마다 자체 보관 기간(서버 설정)만큼 사용량을 보관하므로, 이 표는 지출 탭보다 적게 표시될 수 있어요."
+
+#: llmcord_core/dashboard.py
+msgid "Cost uses list rates or your configured rates; it is not a billing statement."
+msgstr "비용은 공시 요금이나 설정한 요금으로 계산하며, 청구서가 아니에요."
+
+#: llmcord_core/dashboard.py
+msgid "Discord channels could not be loaded. Showing channel IDs."
+msgstr "Discord 채널을 불러올 수 없어서 채널 ID를 표시해요."
+
+#: llmcord_core/dashboard.py
+msgid "Thread names could not be loaded. Showing thread IDs."
+msgstr "스레드 이름을 불러올 수 없어서 스레드 ID를 표시해요."
+
+#: llmcord_core/dashboard.py
+msgid "This name already exists"
+msgstr "이미 있는 이름이에요"
+
+#: llmcord_core/dashboard.py
+msgid "Choose valid values for all required fields"
+msgstr "필수 항목을 모두 올바른 값으로 선택해 주세요"
+
+#: llmcord_core/dashboard.py
+msgid "Could not check the form before saving. Try again"
+msgstr "저장하기 전에 양식을 확인할 수 없었어요. 다시 시도해 주세요"
+
+#: llmcord_core/dashboard.py
+msgid "Your Discord sign-in expired. Sign in again."
+msgstr "Discord 로그인이 만료되었어요. 다시 로그인해 주세요."
+
+#: llmcord_core/dashboard.py
+msgid "This action was rejected"
+msgstr "이 작업은 거부되었어요"
+
+#: llmcord_core/dashboard.py
+msgid "Page not found"
+msgstr "페이지를 찾을 수 없어요"
+
+#: llmcord_core/dashboard.py
+msgid "This page does not exist, or you cannot open it."
+msgstr "이 페이지가 없거나 열 수 있는 권한이 없어요."
+
+#: llmcord_core/dashboard.py
+msgid "Back to your servers"
+msgstr "내 서버로 돌아가기"
+
+#: llmcord_core/dashboard.py
+msgid "Uploads are not available here"
+msgstr "여기에서는 업로드를 사용할 수 없어요"
+
+#: llmcord_core/dashboard.py
+msgid "Upload exceeds 8 MiB"
+msgstr "업로드 파일이 8 MiB를 넘어요"
+
+#: llmcord_core/dashboard.py
+msgid "Manage your characters, worlds, lore, and prompt presets."
+msgstr "캐릭터, 월드, 로어, 프롬프트 프리셋을 관리할 수 있어요."
+
+#: llmcord_core/dashboard.py
+msgid "You will see the servers where you are an administrator."
+msgstr "관리자로 있는 서버가 표시돼요."
+
+#: llmcord_core/dashboard.py
+msgid "Your servers"
+msgstr "내 서버"
+
+#: llmcord_core/dashboard.py
+msgid "Servers where you are an administrator."
+msgstr "관리자로 있는 서버예요."
+
+#: llmcord_core/dashboard.py
+msgid "Bot settings"
+msgstr "봇 설정"
+
+#: llmcord_core/dashboard.py
+msgid "Bot-wide settings. Only operators can see this page."
+msgstr "봇 전체 설정이에요. 운영자만 이 페이지를 볼 수 있어요."
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Spending"
+msgstr "지출"
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Usage by server"
+msgstr "서버별 사용량"
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Backend"
+msgstr "백엔드"
+
+#: llmcord_core/dashboard.py
+msgid "Server administration"
+msgstr "서버 관리"
+
+#: llmcord_core/dashboard.py
+msgid "Changes apply on the next bot turn. Prompt drafts require activation."
+msgstr "변경 사항은 봇의 다음 턴부터 적용돼요. 프롬프트 초안은 활성화해야 적용돼요."
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Server setup"
+msgstr "서버 설정"
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Characters"
+msgstr "캐릭터"
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Lore"
+msgstr "로어"
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Imports"
+msgstr "가져오기"
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Prompt presets"
+msgstr "프롬프트 프리셋"
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Monitoring"
+msgstr "모니터링"
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Currency"
+msgstr "화폐"
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Games"
+msgstr "게임"
+
+#: llmcord_core/dashboard.py
+msgctxt "tab"
+msgid "Shop"
+msgstr "상점"
+
+#: llmcord_core/dashboard.py
+msgid "Drop entries here"
+msgstr "여기에 항목을 끌어다 놓으세요"
+
+#: llmcord_core/dashboard.py
+msgid "Follow each member's Discord language"
+msgstr "각 멤버의 Discord 언어 따르기"
+
+#: llmcord_core/dashboard.py
+msgid "llmcord / Servers"
+msgstr "llmcord / 서버"
+
+#: llmcord_core/dashboard.py
+msgid "Account menu"
+msgstr "계정 메뉴"
+
+#: llmcord_core/dashboard.py
+msgctxt "button"
+msgid "Sign out"
+msgstr "로그아웃"
+
+#: llmcord_core/dashboard.py
+msgid "Language"
+msgstr "언어"
+
+#: llmcord_core/dashboard.py
+msgid "$0.00"
+msgstr "$0.00"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "${value:,.2f}"
+msgstr "${value:,.2f}"
+
+#: llmcord_core/dashboard.py
+msgid "<$0.0001"
+msgstr "<$0.0001"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "${value}"
+msgstr "${value}"
+
+#: llmcord_core/dashboard.py
+msgid "7 days"
+msgstr "7일"
+
+#: llmcord_core/dashboard.py
+msgid "14 days"
+msgstr "14일"
+
+#: llmcord_core/dashboard.py
+msgid "30 days"
+msgstr "30일"
+
+#: llmcord_core/dashboard.py
+msgid "Full month"
+msgstr "한 달 전체"
+
+#: llmcord_core/dashboard.py
+msgid "Replies"
+msgstr "응답"
+
+#: llmcord_core/dashboard.py
+msgid "Ambient turns"
+msgstr "자율 참여 턴"
+
+#: llmcord_core/dashboard.py
+msgid "Summons"
+msgstr "소환"
+
+#: llmcord_core/dashboard.py
+msgid "Memory updates"
+msgstr "기억 업데이트"
+
+#: llmcord_core/dashboard.py
+msgid "Catch-ups"
+msgstr "놓친 대화 요약"
+
+#: llmcord_core/dashboard.py
+msgid "Game table talk"
+msgstr "게임 잡담"
+
+#: llmcord_core/dashboard.py
+msgid "Play style drafts"
+msgstr "플레이 스타일 초안"
+
+#: llmcord_core/dashboard.py
+msgid "Last 24 hours"
+msgstr "최근 24시간"
+
+#: llmcord_core/dashboard.py
+msgid "Last 14 days"
+msgstr "최근 14일"
+
+#: llmcord_core/dashboard.py
+msgid "This month"
+msgstr "이번 달"
+
+#: llmcord_core/dashboard.py
+msgid "Unknown (before this update)"
+msgstr "알 수 없음 (이번 업데이트 이전)"
+
+#: llmcord_core/dashboard.py
+msgctxt "chart series"
+msgid "Input"
+msgstr "입력"
+
+#: llmcord_core/dashboard.py
+msgctxt "chart series"
+msgid "Output"
+msgstr "출력"
+
+#: llmcord_core/dashboard.py
+msgid "tokens"
+msgstr "토큰"
+
+#: llmcord_core/dashboard.py
+msgid "Unknown feature"
+msgstr "알 수 없는 기능"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{inputs} in / {outputs} out"
+msgstr "입력 {inputs} / 출력 {outputs}"
+
+#: llmcord_core/dashboard.py
+msgctxt "status"
+msgid "Error"
+msgstr "오류"
+
+#: llmcord_core/dashboard.py
+msgctxt "status"
+msgid "OK"
+msgstr "정상"
+
+#: llmcord_core/dashboard.py
+msgid "Log"
+msgstr "로그"
+
+#: llmcord_core/dashboard.py
+msgid "Personal facts are hidden and API keys removed. Entries are kept for the current month (Server settings)."
+msgstr "개인 기억은 숨기고 API 키는 제거해요. 항목은 이번 달 동안 보관돼요 (서버 설정)."
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Personal facts are hidden and API keys removed. Entries are kept for {days} days (Server settings)."
+msgstr "개인 기억은 숨기고 API 키는 제거해요. 항목은 {days}일 동안 보관돼요 (서버 설정)."
+
+#: llmcord_core/dashboard.py
+msgid "All channels"
+msgstr "모든 채널"
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Channel"
+msgstr "채널"
+
+#: llmcord_core/dashboard.py
+msgid "Errors only"
+msgstr "오류만"
+
+#: llmcord_core/dashboard.py
+msgid "Reference ID"
+msgstr "참조 ID"
+
+#: llmcord_core/dashboard.py
+msgid "Logging is off; showing earlier entries."
+msgstr "로그 기록이 꺼져 있어요. 이전 항목을 표시해요."
+
+#: llmcord_core/dashboard.py
+msgid "This entry is no longer available."
+msgstr "이 항목은 더 이상 볼 수 없어요."
+
+#: llmcord_core/dashboard.py
+msgctxt "turn log"
+msgid "Request"
+msgstr "요청"
+
+#: llmcord_core/dashboard.py
+msgctxt "turn log"
+msgid "Response"
+msgstr "응답"
+
+#: llmcord_core/dashboard.py
+msgctxt "turn log"
+msgid "Error"
+msgstr "오류"
+
+#: llmcord_core/dashboard.py
+msgid "(empty)"
+msgstr "(비어 있음)"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Error · Ref {reference}"
+msgstr "오류 · 참조 {reference}"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "OK · Ref {reference}"
+msgstr "정상 · 참조 {reference}"
+
+#: llmcord_core/dashboard.py
+msgid "No entries match these filters."
+msgstr "필터와 일치하는 항목이 없어요."
+
+#: llmcord_core/dashboard.py
+msgid "No log entries yet."
+msgstr "아직 로그 항목이 없어요."
+
+#: llmcord_core/dashboard.py
+msgid "The turn log is off. Turn it on in Server settings to record model calls."
+msgstr "턴 로그가 꺼져 있어요. 모델 호출을 기록하려면 서버 설정에서 켜 주세요."
+
+#: llmcord_core/dashboard.py
+msgctxt "usage role"
+msgid "dialogue"
+msgstr "대화"
+
+#: llmcord_core/dashboard.py
+msgctxt "usage role"
+msgid "director"
+msgstr "디렉터"
+
+#: llmcord_core/dashboard.py
+msgctxt "usage role"
+msgid "memory"
+msgstr "기억"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Deleted channel (ID …{digits})"
+msgstr "삭제된 채널 (ID …{digits})"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Bot-wide spending: {spent} of {cap} hard cap this period"
+msgstr "봇 전체 지출: 이번 기간 하드 한도 {cap} 중 {spent}"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Bot-wide spending: {spent} this period; no hard cap set"
+msgstr "봇 전체 지출: 이번 기간 {spent}, 하드 한도 없음"
+
+#: llmcord_core/dashboard.py
+msgid "Open Bot settings"
+msgstr "봇 설정 열기"
+
+#: llmcord_core/dashboard.py
+msgid "Usage"
+msgstr "사용량"
+
+#: llmcord_core/dashboard.py
+msgid "Usage is kept for the current month (Server settings)."
+msgstr "사용량은 이번 달 동안 보관돼요 (서버 설정)."
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Usage is kept for {days} days (Server settings)."
+msgstr "사용량은 {days}일 동안 보관돼요 (서버 설정)."
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Input tokens"
+msgstr "입력 토큰"
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Output tokens"
+msgstr "출력 토큰"
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Estimated USD"
+msgstr "예상 비용 (USD)"
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Without cost estimate"
+msgstr "비용 추정 없음"
+
+#: llmcord_core/dashboard.py
+msgid "By model"
+msgstr "모델별"
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Model"
+msgstr "모델"
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Used for"
+msgstr "사용 역할"
+
+#: llmcord_core/dashboard.py
+msgid "By channel"
+msgstr "채널별"
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Channel"
+msgstr "채널"
+
+#: llmcord_core/dashboard.py
+msgid "By feature"
+msgstr "기능별"
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Feature"
+msgstr "기능"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{count:,} calls did not report token counts, so their tokens are not included."
+msgstr "호출 {count:,}건이 토큰 수를 보고하지 않아 해당 토큰은 포함되지 않았어요."
+
+#: llmcord_core/dashboard.py
+msgid "Tracked for this server, including internal model calls. Cost uses list rates or your configured rates; it is not a billing statement."
+msgstr "이 서버에서 집계한 사용량이며 내부 모델 호출도 포함해요. 비용은 공시 요금이나 설정한 요금으로 계산하며, 청구서가 아니에요."
+
+#: llmcord_core/dashboard.py
+msgctxt "space kind"
+msgid "world"
+msgstr "월드"
+
+#: llmcord_core/dashboard.py
+msgctxt "space kind"
+msgid "hub"
+msgstr "허브"
+
+#: llmcord_core/dashboard.py
+msgid "Worlds and hubs"
+msgstr "월드와 허브"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{name} · {kind}"
+msgstr "{name} · {kind}"
+
+#: llmcord_core/dashboard.py
+msgid "World guidelines"
+msgstr "월드 지침"
+
+#: llmcord_core/dashboard.py
+msgid "Hub guidelines"
+msgstr "허브 지침"
+
+#: llmcord_core/dashboard.py llmcord_core/scene_ui.py
+msgid "Delete world"
+msgstr "월드 삭제"
+
+#: llmcord_core/dashboard.py llmcord_core/scene_ui.py
+msgid "Delete hub"
+msgstr "허브 삭제"
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Kind"
+msgstr "종류"
+
+#: llmcord_core/dashboard.py
+msgctxt "button"
+msgid "Create"
+msgstr "만들기"
+
+#: llmcord_core/dashboard.py
+msgid "In character"
+msgstr "캐릭터 유지"
+
+#: llmcord_core/dashboard.py
+msgid "Off duty"
+msgstr "휴식 모드"
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Tone"
+msgstr "분위기"
+
+#: llmcord_core/dashboard.py
+msgid "Off duty: characters keep their personality but chat casually and don't push their world's plot. World channels are always in character."
+msgstr "휴식 모드: 캐릭터는 성격을 유지하지만 편하게 대화하고 자기 월드의 줄거리를 밀어붙이지 않아요. 월드 채널은 항상 캐릭터를 유지해요."
+
+#: llmcord_core/dashboard.py
+msgid "Save hub tone"
+msgstr "허브 분위기 저장"
+
+#: llmcord_core/dashboard.py
+msgid "Hub links"
+msgstr "허브 연결"
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Hub"
+msgstr "허브"
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "World"
+msgstr "월드"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Removed {pruned} cast entries no longer available in the hub."
+msgstr "허브에서 더 이상 사용할 수 없는 출연진 {pruned}명을 제외했어요."
+
+#: llmcord_core/dashboard.py
+msgctxt "button"
+msgid "Link"
+msgstr "연결"
+
+#: llmcord_core/dashboard.py
+msgctxt "button"
+msgid "Unlink"
+msgstr "연결 해제"
+
+#: llmcord_core/dashboard.py
+msgid "Channels and casts"
+msgstr "채널과 출연진"
+
+#: llmcord_core/dashboard.py
+msgid "Discord text channel"
+msgstr "Discord 텍스트 채널"
+
+#: llmcord_core/dashboard.py
+msgid "World or hub"
+msgstr "월드 또는 허브"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Removed from the cast (not available there): {names} ...and {count} more."
+msgstr "출연진에서 제외했어요 (이곳에서 사용할 수 없음): {names} 외 {count}명."
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Removed from the cast (not available there): {names}."
+msgstr "출연진에서 제외했어요 (이곳에서 사용할 수 없음): {names}."
+
+#: llmcord_core/dashboard.py
+msgid "Cast kept."
+msgstr "출연진을 유지했어요."
+
+#: llmcord_core/dashboard.py
+msgid "Bind channel"
+msgstr "채널 지정"
+
+#: llmcord_core/dashboard.py
+msgid "Rebinding a channel keeps its ambient mode and removes cast members not available in the new world or hub."
+msgstr "채널을 다시 지정해도 자율 참여 설정은 유지되며, 새 월드나 허브에서 사용할 수 없는 출연진은 제외돼요."
+
+#: llmcord_core/dashboard.py
+msgid "Server settings"
+msgstr "서버 설정"
+
+#: llmcord_core/dashboard.py
+msgid "Show model and cost footer on replies"
+msgstr "응답에 모델과 비용 정보 표시"
+
+#: llmcord_core/dashboard.py
+msgid "Allow /catchup in channels without characters"
+msgstr "캐릭터가 없는 채널에서도 /catchup 허용"
+
+#: llmcord_core/dashboard.py
+msgid "Members can then get a private summary of any channel they can read. Its messages are sent to the summary model."
+msgstr "켜면 멤버가 읽을 수 있는 모든 채널의 요약을 혼자 볼 수 있어요. 해당 채널의 메시지는 요약 모델로 전송돼요."
+
+#: llmcord_core/dashboard.py
+msgid "Keep a turn log"
+msgstr "턴 로그 기록"
+
+#: llmcord_core/dashboard.py
+msgid "Keep usage and log for"
+msgstr "사용량과 로그 보관 기간"
+
+#: llmcord_core/dashboard.py
+msgid "The turn log stores the prompt and reply of every model call on this server, including /catchup, so admins can check errors. Personal facts are hidden. Usage history is kept for the same period."
+msgstr "턴 로그에는 /catchup을 포함해 이 서버의 모든 모델 호출의 프롬프트와 응답이 저장되어 관리자가 오류를 확인할 수 있어요. 개인 기억은 가려져요. 사용량 기록도 같은 기간 동안 보관돼요."
+
+#: llmcord_core/dashboard.py
+msgid "Server timezone"
+msgstr "서버 시간대"
+
+#: llmcord_core/dashboard.py
+msgid "Characters use this for members who have not chosen their own with /time set. Without it they use UTC."
+msgstr "/time set으로 자기 시간대를 고르지 않은 멤버에게는 캐릭터가 이 시간대를 사용해요. 설정하지 않으면 UTC를 사용해요."
+
+#: llmcord_core/dashboard.py
+msgid "Bot language"
+msgstr "봇 언어"
+
+#: llmcord_core/dashboard.py
+msgid "Language of the bot's public messages: tables, game updates and notices. Replies only one member sees use that member's Discord language. Character lines are never translated."
+msgstr "봇이 공개로 보내는 메시지(테이블, 게임 진행, 알림)의 언어예요. 한 멤버만 보는 응답은 그 멤버의 Discord 언어를 사용해요. 캐릭터 대사는 번역하지 않아요."
+
+#: llmcord_core/dashboard.py
+msgid "Private text channel"
+msgstr "비공개 텍스트 채널"
+
+#: llmcord_core/dashboard.py
+msgid "Avatar asset channel: deny View Channel to @everyone and allow the bot to upload images. Images become Discord CDN assets."
+msgstr "아바타 에셋 채널: @everyone의 채널 보기 권한을 거부하고 봇에게 이미지 업로드를 허용해 주세요. 이미지는 Discord CDN 에셋이 돼요."
+
+#: llmcord_core/dashboard.py
+msgid "Largest cast"
+msgstr "최대 출연진 수"
+
+#: llmcord_core/dashboard.py
+msgid "Favorites per member"
+msgstr "멤버당 즐겨찾기 수"
+
+#: llmcord_core/dashboard.py
+msgid "A larger cast gives the director more characters to choose from, so more characters may answer a message. Each answer is a separate model call, and every prompt lists the cast. At most 3 characters answer one message."
+msgstr "출연진이 많을수록 디렉터가 고를 수 있는 캐릭터가 늘어나 더 많은 캐릭터가 메시지에 응답할 수 있어요. 응답마다 모델을 따로 호출하고, 모든 프롬프트에 출연진 목록이 들어가요. 한 메시지에는 최대 3명의 캐릭터가 응답해요."
+
+#: llmcord_core/dashboard.py
+msgid "With step in, a member's favorites outside the cast can also answer them, so more favorites can mean more model calls and longer prompts. Lowering a limit keeps existing casts and favorites; they can shrink but not grow."
+msgstr "끼어들기 모드에서는 출연진에 없는 멤버의 즐겨찾기도 응답할 수 있어서, 즐겨찾기가 많을수록 모델 호출이 늘고 프롬프트가 길어질 수 있어요. 한도를 낮춰도 기존 출연진과 즐겨찾기는 유지되며, 줄어들 수는 있지만 늘어날 수는 없어요."
+
+#: llmcord_core/dashboard.py
+msgid "Archived favorites can answer their members"
+msgstr "보관된 즐겨찾기가 멤버에게 응답 가능"
+
+#: llmcord_core/dashboard.py
+msgid "When on, members can keep archived characters as favorites. An archived favorite answers only the members who chose it, in channels where its world is available. It never joins a cast, a game or /summon."
+msgstr "켜면 멤버가 보관된 캐릭터를 즐겨찾기로 둘 수 있어요. 보관된 즐겨찾기는 그 캐릭터를 고른 멤버에게만, 그리고 캐릭터의 월드를 사용할 수 있는 채널에서만 응답해요. 출연진, 게임, /summon에는 참여하지 않아요."
+
+#: llmcord_core/dashboard.py
+msgid "Server settings saved"
+msgstr "서버 설정을 저장했어요"
+
+#: llmcord_core/dashboard.py
+msgid "Channel guidelines"
+msgstr "채널 지침"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Default cast (up to {limit})"
+msgstr "기본 출연진 (최대 {limit}명)"
+
+#: llmcord_core/dashboard.py
+msgid "Ambient participation"
+msgstr "자율 참여"
+
+#: llmcord_core/dashboard.py
+msgid "World or hub missing"
+msgstr "월드 또는 허브 없음"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{count} in cast"
+msgstr "출연진 {count}명"
+
+#: llmcord_core/dashboard.py
+msgctxt "pill"
+msgid "Ambient"
+msgstr "자율 참여"
+
+#: llmcord_core/dashboard.py
+msgid "Channel settings saved"
+msgstr "채널 설정을 저장했어요"
+
+#: llmcord_core/dashboard.py
+msgid "Create character"
+msgstr "캐릭터 만들기"
+
+#: llmcord_core/dashboard.py
+msgid "Start with an empty card, then add a description, personality, and dialogue examples."
+msgstr "빈 카드로 시작한 뒤 설명, 성격, 대화 예시를 추가해 주세요."
+
+#: llmcord_core/dashboard.py
+msgid "Character name"
+msgstr "캐릭터 이름"
+
+#: llmcord_core/dashboard.py
+msgid "Home world"
+msgstr "홈 월드"
+
+#: llmcord_core/dashboard.py
+msgid "Characters"
+msgstr "캐릭터"
+
+#: llmcord_core/dashboard.py
+msgid "Create a home world in Server setup first."
+msgstr "먼저 서버 설정에서 홈 월드를 만들어 주세요."
+
+#: llmcord_core/dashboard.py
+msgid "Create an empty character here or import a character card in Imports to get started."
+msgstr "시작하려면 여기서 빈 캐릭터를 만들거나 가져오기에서 캐릭터 카드를 가져와 주세요."
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{name} · Archived"
+msgstr "{name} · 보관됨"
+
+#: llmcord_core/dashboard.py
+msgctxt "menu"
+msgid "Restore"
+msgstr "복원"
+
+#: llmcord_core/dashboard.py
+msgctxt "menu"
+msgid "Archive"
+msgstr "보관"
+
+#: llmcord_core/dashboard.py
+msgid "Permanently delete this character, its lore, memories, and saved avatars, and remove it from all casts. Past Discord messages remain."
+msgstr "이 캐릭터와 로어, 기억, 저장된 아바타를 영구히 삭제하고 모든 출연진에서 제외해요. 지난 Discord 메시지는 남아요."
+
+#: llmcord_core/dashboard.py
+msgid "This cannot be undone. Use Archive if you may want to restore the character later."
+msgstr "되돌릴 수 없어요. 나중에 캐릭터를 복원할 수도 있다면 보관을 사용해 주세요."
+
+#: llmcord_core/dashboard.py
+msgid "Delete permanently"
+msgstr "영구 삭제"
+
+#: llmcord_core/dashboard.py
+msgid "Delete character"
+msgstr "캐릭터 삭제"
+
+#: llmcord_core/dashboard.py
+msgid "Loading…"
+msgstr "불러오는 중…"
+
+#: llmcord_core/dashboard.py
+msgid "Could not load this character. Reload the page."
+msgstr "캐릭터를 불러올 수 없어요. 페이지를 새로고침해 주세요."
+
+#: llmcord_core/dashboard.py
+msgid "Description"
+msgstr "설명"
+
+#: llmcord_core/dashboard.py
+msgid "Personality"
+msgstr "성격"
+
+#: llmcord_core/dashboard.py
+msgid "Scenario"
+msgstr "시나리오"
+
+#: llmcord_core/dashboard.py
+msgid "Opening line"
+msgstr "첫 대사"
+
+#: llmcord_core/dashboard.py
+msgid "Example dialogue"
+msgstr "대화 예시"
+
+#: llmcord_core/dashboard.py
+msgid "Card instructions"
+msgstr "카드 지침"
+
+#: llmcord_core/dashboard.py
+msgid "Card post-history instructions"
+msgstr "카드 대화 후 지침"
+
+#: llmcord_core/dashboard.py
+msgid "Confirm moving worlds; ineligible casts will be cleared"
+msgstr "월드 이동 확인 (조건에 맞지 않는 출연진은 비워져요)"
+
+#: llmcord_core/dashboard.py
+msgid "Emotion avatars"
+msgstr "감정 아바타"
+
+#: llmcord_core/dashboard.py
+msgid "The selected emotion image is used first. If unavailable, the fallback static avatar is used."
+msgstr "선택한 감정 이미지를 먼저 사용해요. 사용할 수 없으면 기본 정적 아바타를 사용해요."
+
+#: llmcord_core/dashboard.py
+msgid "New emotion key"
+msgstr "새 감정 키"
+
+#: llmcord_core/dashboard.py
+msgid "lowercase letters, digits, underscores, hyphens"
+msgstr "영문 소문자, 숫자, 밑줄, 하이픈"
+
+#: llmcord_core/dashboard.py
+msgid "Emotion label"
+msgstr "감정 이름"
+
+#: llmcord_core/dashboard.py
+msgid "Add emotion"
+msgstr "감정 추가"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Looseness"
+msgstr "루즈함"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Tight"
+msgstr "타이트"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Loose"
+msgstr "루즈"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Aggression"
+msgstr "공격성"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Passive"
+msgstr "소극적"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Aggressive"
+msgstr "공격적"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Bluffing"
+msgstr "블러핑"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Honest"
+msgstr "정직함"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Bluffer"
+msgstr "블러퍼"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Risk"
+msgstr "위험 감수"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Cautious"
+msgstr "신중함"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Reckless"
+msgstr "무모함"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Suspicion"
+msgstr "의심"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Trusting"
+msgstr "잘 믿음"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Suspicious"
+msgstr "의심 많음"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Stubbornness"
+msgstr "고집"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Folds easily"
+msgstr "쉽게 물러남"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Stubborn"
+msgstr "고집스러움"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Judgment"
+msgstr "판단력"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Foolish"
+msgstr "어수룩함"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Sharp"
+msgstr "예리함"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Unpredictability"
+msgstr "예측 불가성"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Steady"
+msgstr "한결같음"
+
+#: llmcord_core/dashboard.py
+msgctxt "play style"
+msgid "Erratic"
+msgstr "변덕스러움"
+
+#: llmcord_core/dashboard.py
+msgid "Play style"
+msgstr "플레이 스타일"
+
+#: llmcord_core/dashboard.py
+msgid "How this character plays card games."
+msgstr "이 캐릭터가 카드 게임을 하는 방식이에요."
+
+#: llmcord_core/dashboard.py
+msgid "How this character plays card games. No style is saved, so it plays in a style derived from the character; the sliders show that style. Save to keep your own."
+msgstr "이 캐릭터가 카드 게임을 하는 방식이에요. 저장된 스타일이 없어서 캐릭터에서 유도한 스타일로 플레이하며, 슬라이더는 그 스타일을 보여 줘요. 직접 정한 스타일을 유지하려면 저장해 주세요."
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Plays: {style}"
+msgstr "플레이 성향: {style}"
+
+#: llmcord_core/dashboard.py
+msgid "Draft from the description. Review it, then press Save play style; nothing is saved yet."
+msgstr "설명을 바탕으로 초안을 만들어요. 검토한 뒤 플레이 스타일 저장을 눌러 주세요. 아직 저장되지 않았어요."
+
+#: llmcord_core/dashboard.py
+msgid "Draft ready. Review the sliders, then save."
+msgstr "초안이 준비됐어요. 슬라이더를 검토한 뒤 저장해 주세요."
+
+#: llmcord_core/dashboard.py
+msgid "Generate from description"
+msgstr "설명에서 생성"
+
+#: llmcord_core/dashboard.py
+msgid "Asks the model to read the description and personality. Counts toward the spending cap."
+msgstr "모델이 설명과 성격을 읽어요. 지출 한도에 포함돼요."
+
+#: llmcord_core/dashboard.py
+msgid "Save play style"
+msgstr "플레이 스타일 저장"
+
+#: llmcord_core/dashboard.py
+msgid "Play style saved."
+msgstr "플레이 스타일을 저장했어요."
+
+#: llmcord_core/dashboard.py
+msgid "Reset to default"
+msgstr "기본값으로 재설정"
+
+#: llmcord_core/dashboard.py
+msgid "Play style reset."
+msgstr "플레이 스타일을 재설정했어요."
+
+#: llmcord_core/dashboard.py
+msgid "Fallback static avatar"
+msgstr "기본 정적 아바타"
+
+#: llmcord_core/dashboard.py
+msgid "No static fallback set. Import a card portrait or upload one here."
+msgstr "기본 정적 아바타가 없어요. 카드 초상화를 가져오거나 여기서 업로드해 주세요."
+
+#: llmcord_core/dashboard.py
+msgid "Used when the selected emotion has no usable image. No asset channel or publication is needed."
+msgstr "선택한 감정에 사용할 수 있는 이미지가 없을 때 사용해요. 에셋 채널이나 게시가 필요 없어요."
+
+#: llmcord_core/dashboard.py
+msgid "Upload fallback avatar"
+msgstr "기본 아바타 업로드"
+
+#: llmcord_core/dashboard.py
+msgid "Fallback avatar saved"
+msgstr "기본 아바타를 저장했어요"
+
+#: llmcord_core/dashboard.py
+msgid "Remove fallback avatar"
+msgstr "기본 아바타 제거"
+
+#: llmcord_core/dashboard.py
+msgid "Remove fallback avatar?"
+msgstr "기본 아바타를 제거할까요?"
+
+#: llmcord_core/dashboard.py
+msgid "The character falls back to emotion images only. Emotion images stay."
+msgstr "캐릭터는 감정 이미지만 사용하게 돼요. 감정 이미지는 그대로 남아요."
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Stable key: {key}"
+msgstr "고정 키: {key}"
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Label"
+msgstr "이름"
+
+#: llmcord_core/dashboard.py
+msgid "When to use this emotion"
+msgstr "이 감정을 사용할 때"
+
+#: llmcord_core/dashboard.py
+msgid "Upload avatar image"
+msgstr "아바타 이미지 업로드"
+
+#: llmcord_core/dashboard.py
+msgid "Emotion image saved"
+msgstr "감정 이미지를 저장했어요"
+
+#: llmcord_core/dashboard.py
+msgid "Save emotion"
+msgstr "감정 저장"
+
+#: llmcord_core/dashboard.py
+msgid "Publish / repair image"
+msgstr "이미지 게시 / 복구"
+
+#: llmcord_core/dashboard.py
+msgid "Image published"
+msgstr "이미지를 게시했어요"
+
+#: llmcord_core/dashboard.py
+msgid "Remove emotion image"
+msgstr "감정 이미지 제거"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Remove the image from {label}?"
+msgstr "{label}에서 이미지를 제거할까요?"
+
+#: llmcord_core/dashboard.py
+msgid "The emotion and its label stay; only the image is removed."
+msgstr "감정과 라벨은 그대로 두고 이미지만 제거해요."
+
+#: llmcord_core/dashboard.py
+msgid "Remove emotion"
+msgstr "감정 제거"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Remove emotion {label}?"
+msgstr "{label} 감정을 제거할까요?"
+
+#: llmcord_core/dashboard.py
+msgid "This removes the emotion and its image. The neutral emotion and the fallback avatar stay."
+msgstr "감정과 이미지를 제거해요. 중립 감정과 기본 아바타는 그대로 남아요."
+
+#: llmcord_core/dashboard.py
+msgid "Selective"
+msgstr "선택적 활성화"
+
+#: llmcord_core/dashboard.py
+msgid "Secondary key logic"
+msgstr "보조 키 논리"
+
+#: llmcord_core/dashboard.py
+msgid "Case sensitive"
+msgstr "대소문자 구분"
+
+#: llmcord_core/dashboard.py
+msgid "Whole words only"
+msgstr "전체 단어만 일치"
+
+#: llmcord_core/dashboard.py
+msgid "Depth"
+msgstr "깊이"
+
+#: llmcord_core/dashboard.py
+msgid "Scan depth (JSON, null for default)"
+msgstr "스캔 깊이 (JSON, 기본값은 null)"
+
+#: llmcord_core/dashboard.py
+msgid "Probability (%)"
+msgstr "확률 (%)"
+
+#: llmcord_core/dashboard.py
+msgid "Use probability"
+msgstr "확률 사용"
+
+#: llmcord_core/dashboard.py
+msgid "Groups (JSON list)"
+msgstr "그룹 (JSON 목록)"
+
+#: llmcord_core/dashboard.py
+msgid "Group weight"
+msgstr "그룹 가중치"
+
+#: llmcord_core/dashboard.py
+msgid "Group override"
+msgstr "그룹 우선 적용"
+
+#: llmcord_core/dashboard.py
+msgid "Use group scoring"
+msgstr "그룹 점수 사용"
+
+#: llmcord_core/dashboard.py
+msgid "Exclude from recursion"
+msgstr "재귀에서 제외"
+
+#: llmcord_core/dashboard.py
+msgid "Prevent recursion"
+msgstr "재귀 방지"
+
+#: llmcord_core/dashboard.py
+msgid "Delay until recursion"
+msgstr "재귀까지 지연"
+
+#: llmcord_core/dashboard.py
+msgid "Recursion level"
+msgstr "재귀 단계"
+
+#: llmcord_core/dashboard.py
+msgid "Sticky turns"
+msgstr "유지 턴 수"
+
+#: llmcord_core/dashboard.py
+msgid "Cooldown turns"
+msgstr "쿨타임 턴 수"
+
+#: llmcord_core/dashboard.py
+msgid "Delay turns"
+msgstr "지연 턴 수"
+
+#: llmcord_core/dashboard.py
+msgid "Character filter names (JSON list)"
+msgstr "캐릭터 필터 이름 (JSON 목록)"
+
+#: llmcord_core/dashboard.py
+msgid "Character filter tags (JSON list)"
+msgstr "캐릭터 필터 태그 (JSON 목록)"
+
+#: llmcord_core/dashboard.py
+msgid "Exclude filtered characters"
+msgstr "필터된 캐릭터 제외"
+
+#: llmcord_core/dashboard.py
+msgid "Match character description"
+msgstr "캐릭터 설명과 일치"
+
+#: llmcord_core/dashboard.py
+msgid "Match character personality"
+msgstr "캐릭터 성격과 일치"
+
+#: llmcord_core/dashboard.py
+msgid "Match scenario"
+msgstr "시나리오와 일치"
+
+#: llmcord_core/dashboard.py
+msgid "Edit lore"
+msgstr "로어 편집"
+
+#: llmcord_core/dashboard.py
+msgid "Create lore"
+msgstr "로어 만들기"
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Content"
+msgstr "내용"
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Keys"
+msgstr "키"
+
+#: llmcord_core/dashboard.py
+msgid "Secondary keys"
+msgstr "보조 키"
+
+#: llmcord_core/dashboard.py
+msgid "Press Enter after each key"
+msgstr "키마다 Enter를 눌러 주세요"
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Order"
+msgstr "순서"
+
+#: llmcord_core/dashboard.py
+msgid "Higher values appear later"
+msgstr "값이 클수록 뒤에 나와요"
+
+#: llmcord_core/dashboard.py llmcord_core/presets_ui.py
+msgctxt "field"
+msgid "Enabled"
+msgstr "사용"
+
+#: llmcord_core/dashboard.py
+msgid "Always active"
+msgstr "항상 활성"
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Pinned"
+msgstr "고정"
+
+#: llmcord_core/dashboard.py
+msgid "Advanced activation and placement rules"
+msgstr "고급 활성화 및 배치 규칙"
+
+#: llmcord_core/dashboard.py
+msgid "Preserved import fields / unsupported feature remapping"
+msgstr "가져온 필드 보존 / 지원하지 않는 기능 변환"
+
+#: llmcord_core/dashboard.py
+msgid "Original fields (JSON)"
+msgstr "원본 필드 (JSON)"
+
+#: llmcord_core/dashboard.py
+msgid "Detect /pattern/flags automatically"
+msgstr "/pattern/flags 자동 감지"
+
+#: llmcord_core/dashboard.py
+msgid "Regex patterns"
+msgstr "정규식 패턴"
+
+#: llmcord_core/dashboard.py
+msgid "Literal keywords"
+msgstr "일반 키워드"
+
+#: llmcord_core/dashboard.py
+msgid "Keyword matching"
+msgstr "키워드 일치"
+
+#: llmcord_core/dashboard.py
+msgid "Message role"
+msgstr "메시지 역할"
+
+#: llmcord_core/dashboard.py llmcord_core/presets_ui.py
+msgctxt "field"
+msgid "Placement"
+msgstr "배치"
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Destination"
+msgstr "대상"
+
+#: llmcord_core/dashboard.py
+msgid "Save lore"
+msgstr "로어 저장"
+
+#: llmcord_core/dashboard.py
+msgctxt "button"
+msgid "Move"
+msgstr "이동"
+
+#: llmcord_core/dashboard.py
+msgctxt "button"
+msgid "Copy"
+msgstr "복사"
+
+#: llmcord_core/dashboard.py
+msgid "Delete this lore entry?"
+msgstr "이 로어 항목을 삭제할까요?"
+
+#: llmcord_core/dashboard.py llmcord_core/lore_workspace.py
+msgid "This also keeps your deletion choice for future reimports."
+msgstr "다시 가져올 때도 이 삭제 선택이 유지돼요."
+
+#: llmcord_core/dashboard.py
+msgid "Delete entry"
+msgstr "항목 삭제"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Current: {text}"
+msgstr "현재: {text}"
+
+#: llmcord_core/dashboard.py
+msgid "(none)"
+msgstr "(없음)"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Incoming: {text}"
+msgstr "가져온 항목: {text}"
+
+#: llmcord_core/dashboard.py
+msgid "Keep current entry"
+msgstr "현재 항목 유지"
+
+#: llmcord_core/dashboard.py
+msgid "Use imported entry"
+msgstr "가져온 항목 사용"
+
+#: llmcord_core/dashboard.py
+msgid "Resolve conflict"
+msgstr "충돌 해결"
+
+#: llmcord_core/dashboard.py
+msgid "Character cards"
+msgstr "캐릭터 카드"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Preview: {name}"
+msgstr "미리보기: {name}"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Keep current {field}"
+msgstr "현재 {field} 유지"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Use imported {field}"
+msgstr "가져온 {field} 사용"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Resolve {field} conflict"
+msgstr "{field} 충돌 해결"
+
+#: llmcord_core/dashboard.py
+msgid "Confirm updating the existing character and home world"
+msgstr "기존 캐릭터와 홈 월드 업데이트 확인"
+
+#: llmcord_core/dashboard.py
+msgid "Apply card import"
+msgstr "카드 가져오기 적용"
+
+#: llmcord_core/dashboard.py
+msgid "Upload V2/V3 JSON or PNG card"
+msgstr "V2/V3 JSON 또는 PNG 카드 업로드"
+
+#: llmcord_core/dashboard.py
+msgid "Direct lore entry import"
+msgstr "로어 항목 직접 가져오기"
+
+#: llmcord_core/dashboard.py
+msgid "Destination owner"
+msgstr "대상 소유 범위"
+
+#: llmcord_core/dashboard.py
+msgid "Import entries into selected owner"
+msgstr "선택한 소유 범위로 항목 가져오기"
+
+#: llmcord_core/dashboard.py
+msgid "Named lorebooks"
+msgstr "이름 있는 로어북"
+
+#: llmcord_core/dashboard.py
+msgid "Lorebook name"
+msgstr "로어북 이름"
+
+#: llmcord_core/dashboard.py
+msgid "Server lorebook"
+msgstr "서버 로어북"
+
+#: llmcord_core/dashboard.py
+msgid "Channel lorebook"
+msgstr "채널 로어북"
+
+#: llmcord_core/dashboard.py
+msgid "Create lorebook"
+msgstr "로어북 만들기"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{name} · Server lorebook"
+msgstr "{name} · 서버 로어북"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{name} · Channel lorebook"
+msgstr "{name} · 채널 로어북"
+
+#: llmcord_core/dashboard.py
+msgid "Edit entries in Lore"
+msgstr "로어에서 항목 편집"
+
+#: llmcord_core/dashboard.py llmcord_core/scene_ui.py
+msgid "Delete lorebook"
+msgstr "로어북 삭제"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Disable in {space}"
+msgstr "{space}에서 끄기"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Enable in {space}"
+msgstr "{space}에서 켜기"
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{format} lorebook detected · {count} entries"
+msgstr "{format} 로어북 감지됨 · 항목 {count}개"
+
+#: llmcord_core/dashboard.py
+msgid "Apply lorebook sync"
+msgstr "로어북 동기화 적용"
+
+#: llmcord_core/dashboard.py
+msgid "Upload JSON lorebook for preview"
+msgstr "미리보기용 JSON 로어북 업로드"
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt role"
+msgid "System"
+msgstr "시스템"
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt role"
+msgid "User"
+msgstr "사용자"
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt role"
+msgid "Assistant"
+msgstr "어시스턴트"
+
+#: llmcord_core/dashboard.py
+msgid "Relative to the prompt"
+msgstr "프롬프트 기준 상대 위치"
+
+#: llmcord_core/dashboard.py
+msgid "In chat at depth"
+msgstr "채팅 내 깊이"
+
+#: llmcord_core/dashboard.py
+msgid "Before character"
+msgstr "캐릭터 앞"
+
+#: llmcord_core/dashboard.py
+msgid "After character"
+msgstr "캐릭터 뒤"
+
+#: llmcord_core/dashboard.py
+msgid "Before examples"
+msgstr "예시 앞"
+
+#: llmcord_core/dashboard.py
+msgid "After examples"
+msgstr "예시 뒤"
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt placement"
+msgid "Relative"
+msgstr "상대 위치"
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt placement"
+msgid "In chat"
+msgstr "채팅 내"
+
+#: llmcord_core/dashboard.py
+msgid "Custom text"
+msgstr "사용자 지정 텍스트"
+
+#: llmcord_core/dashboard.py
+msgid "Chat history"
+msgstr "대화 기록"
+
+#: llmcord_core/dashboard.py
+msgid "Request payload"
+msgstr "입력 내용"
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt source"
+msgid "Location"
+msgstr "장소"
+
+#: llmcord_core/dashboard.py
+msgid "Character description"
+msgstr "캐릭터 설명"
+
+#: llmcord_core/dashboard.py
+msgid "Character personality"
+msgstr "캐릭터 성격"
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt source"
+msgid "Scenario"
+msgstr "시나리오"
+
+#: llmcord_core/dashboard.py
+msgid "Opening message"
+msgstr "첫 메시지"
+
+#: llmcord_core/dashboard.py
+msgid "Lore before character"
+msgstr "캐릭터 앞 로어"
+
+#: llmcord_core/dashboard.py
+msgid "Lore after character"
+msgstr "캐릭터 뒤 로어"
+
+#: llmcord_core/dashboard.py
+msgid "Lore before examples"
+msgstr "예시 앞 로어"
+
+#: llmcord_core/dashboard.py
+msgid "Lore after examples"
+msgstr "예시 뒤 로어"
+
+#: llmcord_core/dashboard.py
+msgid "Lore in chat"
+msgstr "채팅 내 로어"
+
+#: llmcord_core/dashboard.py
+msgid "Personal facts"
+msgstr "개인 기억"
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt source"
+msgid "Encounters"
+msgstr "만남 기록"
+
+#: llmcord_core/dashboard.py
+msgid "Scene summary"
+msgstr "장면 요약"
+
+#: llmcord_core/dashboard.py
+msgid "Preceding messages"
+msgstr "이전 메시지"
+
+#: llmcord_core/dashboard.py
+msgid "Recent messages"
+msgstr "최근 메시지"
+
+#: llmcord_core/emotion_ui.py
+msgctxt "emotion"
+msgid "Neutral"
+msgstr "중립"
+
+#: llmcord_core/emotion_ui.py
+msgctxt "emotion"
+msgid "Happy"
+msgstr "기쁨"
+
+#: llmcord_core/emotion_ui.py
+msgctxt "emotion"
+msgid "Sad"
+msgstr "슬픔"
+
+#: llmcord_core/emotion_ui.py
+msgctxt "emotion"
+msgid "Angry"
+msgstr "분노"
+
+#: llmcord_core/emotion_ui.py
+msgctxt "emotion"
+msgid "Surprised"
+msgstr "놀람"
+
+#: llmcord_core/emotion_ui.py
+msgctxt "emotion"
+msgid "Embarrassed"
+msgstr "당황"
+
+#: llmcord_core/games_ui.py
+msgctxt "blackjack move"
+msgid "Hit"
+msgstr "히트"
+
+#: llmcord_core/games_ui.py
+msgctxt "blackjack move"
+msgid "Stand"
+msgstr "스탠드"
+
+#: llmcord_core/games_ui.py
+msgctxt "blackjack move"
+msgid "Double"
+msgstr "더블다운"
+
+#: llmcord_core/games_ui.py
+msgctxt "blackjack move"
+msgid "Surrender"
+msgstr "서렌더"
+
+#: llmcord_core/games_ui.py
+msgctxt "blackjack move"
+msgid "Insure"
+msgstr "인슈어런스"
+
+#: llmcord_core/games_ui.py
+msgctxt "blackjack move"
+msgid "Even money"
+msgstr "이븐 머니"
+
+#: llmcord_core/games_ui.py
+msgctxt "blackjack move"
+msgid "No insurance"
+msgstr "인슈어런스 안 함"
+
+#: llmcord_core/games_ui.py
+msgid "Table talk"
+msgstr "잡담"
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "Offered {move}"
+msgstr "{move} 제안"
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "Offered {moves} or {last}"
+msgstr "{moves} 또는 {last} 제안"
+
+#: llmcord_core/games_ui.py
+msgid "No check"
+msgstr "확인 없음"
+
+#: llmcord_core/games_ui.py
+msgid "Meant: table talk"
+msgstr "의도: 잡담"
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "Meant: {move}"
+msgstr "의도: {move}"
+
+#: llmcord_core/games_ui.py
+msgid "All games"
+msgstr "모든 게임"
+
+#: llmcord_core/games_ui.py
+msgid "Smallest bet"
+msgstr "최소 베팅"
+
+#: llmcord_core/games_ui.py
+msgid "Largest bet"
+msgstr "최대 베팅"
+
+#: llmcord_core/games_ui.py
+msgid "Bet limits"
+msgstr "베팅 한도"
+
+#: llmcord_core/games_ui.py
+msgid "Bet limits saved"
+msgstr "베팅 한도를 저장했어요"
+
+#: llmcord_core/games_ui.py
+msgid "Characters talk at the table"
+msgstr "캐릭터가 테이블에서 대화"
+
+#: llmcord_core/games_ui.py
+msgid "On: a character at a blackjack table asks the model for its move and may say a short line, one model call per decision. Off: characters play by the house rule (hit below 17) and stay quiet."
+msgstr "켜면: 블랙잭 테이블의 캐릭터가 모델에게 행동을 물어보고 짧은 대사를 할 수 있어요. 결정할 때마다 모델을 한 번 호출해요. 끄면: 캐릭터는 하우스 규칙(17 미만이면 히트)대로 플레이하고 말하지 않아요."
+
+#: llmcord_core/games_ui.py
+msgid "Character table talk"
+msgstr "캐릭터 잡담"
+
+#: llmcord_core/games_ui.py
+msgid "Character table talk saved"
+msgstr "캐릭터 잡담 설정을 저장했어요"
+
+#: llmcord_core/games_ui.py
+msgid "Model picks the move"
+msgstr "모델이 행동 선택"
+
+#: llmcord_core/games_ui.py
+msgid "Play style only"
+msgstr "플레이 스타일만 사용"
+
+#: llmcord_core/games_ui.py
+msgid "Character moves"
+msgstr "캐릭터 행동"
+
+#: llmcord_core/games_ui.py
+msgid "Model picks the move: with table talk on and the daily limit not reached, a model chooses each character's move; otherwise it plays by its play style (blackjack: the house rule). Play style only: I Doubt It characters never call the model for a move, which saves calls (a saved play style then sets their bluffing and suspicion); blackjack characters keep the house rule, and with table talk on the model only adds a line."
+msgstr "모델이 행동 선택: 잡담이 켜져 있고 하루 한도에 도달하지 않았으면 모델이 각 캐릭터의 행동을 골라요. 그렇지 않으면 플레이 스타일대로 플레이해요 (블랙잭은 하우스 규칙). 플레이 스타일만 사용: 다우트 캐릭터는 행동을 정할 때 모델을 호출하지 않아서 호출 수를 아낄 수 있어요 (저장된 플레이 스타일이 블러핑과 의심 정도를 정해요). 블랙잭 캐릭터는 하우스 규칙을 따르고, 잡담이 켜져 있으면 모델은 대사만 더해요."
+
+#: llmcord_core/games_ui.py
+msgid "Character moves saved"
+msgstr "캐릭터 행동 설정을 저장했어요"
+
+#: llmcord_core/games_ui.py
+msgid "Table talk calls per day"
+msgstr "하루 잡담 호출 수"
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "After about this many table talk calls in a server day (approximate when several tables play at once), characters play by the house rule and stay quiet until the next day. Used today: {count:,}."
+msgstr "서버 기준 하루에 잡담 호출이 대략 이 횟수에 이르면 (여러 테이블이 동시에 플레이하면 근사치예요) 다음 날까지 캐릭터는 하우스 규칙대로 플레이하고 말하지 않아요. 오늘 사용: {count:,}회."
+
+#: llmcord_core/games_ui.py
+msgid "Table talk limit"
+msgstr "잡담 한도"
+
+#: llmcord_core/games_ui.py
+msgid "Table talk limit saved"
+msgstr "잡담 한도를 저장했어요"
+
+#: llmcord_core/games_ui.py
+msgid "Game channels"
+msgstr "게임 채널"
+
+#: llmcord_core/games_ui.py
+msgid "Members play with /blackjack in game channels. Bets are taken when a member joins and paid when the round ends. Turning a channel off closes its open table and refunds the bets."
+msgstr "멤버는 게임 채널에서 /blackjack으로 플레이해요. 베팅은 멤버가 참가할 때 걷고 라운드가 끝나면 지급해요. 채널을 끄면 열려 있던 테이블이 닫히고 베팅이 환불돼요."
+
+#: llmcord_core/games_ui.py
+msgid "Rounds in the end-of-table summary"
+msgstr "테이블 종료 요약에 넣을 라운드 수"
+
+#: llmcord_core/games_ui.py
+msgid "When a table closes, its message lists this many of the last rounds."
+msgstr "테이블이 닫힐 때 메시지에 최근 라운드를 이 개수만큼 보여 줘요."
+
+#: llmcord_core/games_ui.py
+msgid "Summary rounds"
+msgstr "요약 라운드 수"
+
+#: llmcord_core/games_ui.py
+msgid "Summary rounds saved"
+msgstr "요약 라운드 수를 저장했어요"
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "{game} is on"
+msgstr "{game} 사용"
+
+#: llmcord_core/games_ui.py
+msgid "Off: /blackjack is refused and open blackjack tables close with every bet refunded."
+msgstr "끄면: /blackjack을 사용할 수 없고, 열려 있던 블랙잭 테이블은 모든 베팅을 환불하고 닫혀요."
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "{game} is off. Closed {n} open table."
+msgid_plural "{game} is off. Closed {n} open tables."
+msgstr[0] "{game} 사용을 껐어요. 열려 있던 테이블 {n}개를 닫았어요."
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "{game} setting saved"
+msgstr "{game} 설정을 저장했어요"
+
+#: llmcord_core/games_ui.py
+msgid "Push: bet comes back"
+msgstr "푸시: 베팅 반환"
+
+#: llmcord_core/games_ui.py
+msgid "Dealer wins"
+msgstr "딜러 승"
+
+#: llmcord_core/games_ui.py
+msgid "Dealer stands on"
+msgstr "딜러 스탠드 기준"
+
+#: llmcord_core/games_ui.py
+msgid "Blackjack pays"
+msgstr "블랙잭 배당"
+
+#: llmcord_core/games_ui.py
+msgctxt "field"
+msgid "Ties"
+msgstr "동점"
+
+#: llmcord_core/games_ui.py
+msgid "Dealer hits soft 17"
+msgstr "딜러는 소프트 17에서 히트"
+
+#: llmcord_core/games_ui.py
+msgid "Insurance and even money"
+msgstr "인슈어런스와 이븐 머니"
+
+#: llmcord_core/games_ui.py
+msgid "Late surrender"
+msgstr "레이트 서렌더"
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "{game} rules"
+msgstr "{game} 규칙"
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "Table rules line: {rules}"
+msgstr "테이블 규칙 줄: {rules}"
+
+#: llmcord_core/games_ui.py
+msgid "Rule changes apply from the next round. Open rounds keep the rules they were dealt with."
+msgstr "규칙 변경은 다음 라운드부터 적용돼요. 진행 중인 라운드는 처음 카드를 나눌 때의 규칙을 유지해요."
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "{game} rules saved"
+msgstr "{game} 규칙을 저장했어요"
+
+#: llmcord_core/games_ui.py
+msgid "Read moves from chat (Experimental)"
+msgstr "채팅에서 행동 읽기 (실험 기능)"
+
+#: llmcord_core/games_ui.py
+msgid "On: when it's a member's turn at a blackjack table, the bot reads their chat message and, if it looks like a move, replies with buttons to confirm it (for example Hit / Just table talk). Nothing is played until they press a button. English and Korean. Experimental: it can miss or misread moves, and it loads a small language model (about 0.5 GB of memory) the first time it reads a message."
+msgstr "켜면: 블랙잭 테이블에서 멤버의 차례일 때 봇이 그 멤버의 채팅 메시지를 읽고, 행동처럼 보이면 확인 버튼으로 답해요 (예: 히트 / 그냥 잡담이에요). 버튼을 누르기 전에는 아무것도 플레이되지 않아요. 영어와 한국어를 지원해요. 실험 기능이라 행동을 놓치거나 잘못 읽을 수 있고, 처음 메시지를 읽을 때 작은 언어 모델(메모리 약 0.5 GB)을 불러와요."
+
+#: llmcord_core/games_ui.py
+msgid "Read moves from chat"
+msgstr "채팅에서 행동 읽기"
+
+#: llmcord_core/games_ui.py
+msgid "Read moves from chat saved"
+msgstr "채팅에서 행동 읽기 설정을 저장했어요"
+
+#: llmcord_core/games_ui.py
+msgid "Tuning"
+msgstr "조정"
+
+#: llmcord_core/games_ui.py
+msgid "Keep phrases for tuning"
+msgstr "조정용 문장 보관"
+
+#: llmcord_core/games_ui.py
+msgid "On: when a move check was wrong (the member pressed Just table talk or picked the other move) or missed a move they then played with a table button, the bot keeps that chat message here so you can turn it into an example phrase for this server. Only while Read moves from chat is on. Members can turn it off for themselves with /game spoken_moves off. Turning this off deletes every kept phrase. Kept phrases are deleted after the history retention period."
+msgstr "켜면: 행동 확인이 틀렸을 때(멤버가 \"그냥 잡담이에요\" 버튼을 누르거나 다른 행동을 고른 경우)나 행동을 놓쳐서 멤버가 테이블 버튼으로 그 행동을 한 경우, 봇이 그 채팅 메시지를 여기에 보관해요. 보관된 문장은 이 서버의 예시 문장으로 만들 수 있어요. 채팅에서 행동 읽기가 켜져 있을 때만 동작해요. 멤버는 /game spoken_moves off로 자신에 대해서는 끌 수 있어요. 이 설정을 끄면 보관된 문장이 모두 삭제돼요. 보관된 문장은 기록 보관 기간이 지나면 삭제돼요."
+
+#: llmcord_core/games_ui.py
+msgid "Keep phrases for tuning saved"
+msgstr "조정용 문장 보관 설정을 저장했어요"
+
+#: llmcord_core/games_ui.py
+msgid "Already removed."
+msgstr "이미 제거되었어요."
+
+#: llmcord_core/games_ui.py
+msgid "Kept phrases"
+msgstr "보관된 문장"
+
+#: llmcord_core/games_ui.py
+msgid "No kept phrases yet."
+msgstr "아직 보관된 문장이 없어요."
+
+#: llmcord_core/games_ui.py
+msgctxt "field"
+msgid "Move"
+msgstr "행동"
+
+#: llmcord_core/games_ui.py
+msgid "Make example"
+msgstr "예시로 만들기"
+
+#: llmcord_core/games_ui.py
+msgid "Example phrase added"
+msgstr "예시 문장을 추가했어요"
+
+#: llmcord_core/games_ui.py
+msgid "Delete kept phrase"
+msgstr "보관된 문장 삭제"
+
+#: llmcord_core/games_ui.py
+msgid "This message is deleted from the kept list."
+msgstr "이 메시지를 보관 목록에서 삭제해요."
+
+#: llmcord_core/games_ui.py
+msgid "Kept phrase deleted"
+msgstr "보관된 문장을 삭제했어요"
+
+#: llmcord_core/games_ui.py
+msgid "Example phrases for this server"
+msgstr "이 서버의 예시 문장"
+
+#: llmcord_core/games_ui.py
+msgid "When a chat message is very close to one of these, the bot uses this example's move instead of its own guess. Up to 200."
+msgstr "채팅 메시지가 이 중 하나와 아주 비슷하면 봇이 자체 추측 대신 그 예시의 행동을 사용해요. 최대 200개까지 추가할 수 있어요."
+
+#: llmcord_core/games_ui.py
+msgid "No example phrases yet."
+msgstr "아직 예시 문장이 없어요."
+
+#: llmcord_core/games_ui.py
+msgctxt "button"
+msgid "Remove"
+msgstr "제거"
+
+#: llmcord_core/games_ui.py
+msgid "Remove example phrase"
+msgstr "예시 문장 제거"
+
+#: llmcord_core/games_ui.py
+msgid "The bot stops using this example for this server's move checks."
+msgstr "이 서버의 행동 확인에서 봇이 이 예시를 더 이상 사용하지 않아요."
+
+#: llmcord_core/games_ui.py
+msgid "Example phrase removed"
+msgstr "예시 문장을 제거했어요"
+
+#: llmcord_core/games_ui.py
+msgid "Turn off keeping?"
+msgstr "보관을 끌까요?"
+
+#: llmcord_core/games_ui.py
+msgid "Every kept phrase is deleted. Example phrases stay."
+msgstr "보관된 문장이 모두 삭제돼요. 예시 문장은 그대로 남아요."
+
+#: llmcord_core/games_ui.py
+msgid "Turn off and delete"
+msgstr "끄고 삭제"
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "{count} kept phrase is deleted. Example phrases stay."
+msgid_plural "{count} kept phrases are deleted. Example phrases stay."
+msgstr[0] "보관된 문장 {count}개가 삭제돼요. 예시 문장은 그대로 남아요."
+
+#: llmcord_core/games_ui.py
+msgid "Off: /game start refuses I Doubt It, and open I Doubt It tables close with every ante refunded."
+msgstr "끄면: /game start로 다우트를 시작할 수 없고, 열려 있던 다우트 테이블은 모든 판돈을 환불하고 닫혀요."
+
+#: llmcord_core/games_ui.py
+msgctxt "field"
+msgid "Ante"
+msgstr "판돈"
+
+#: llmcord_core/games_ui.py
+msgid "Turn timeout (seconds)"
+msgstr "차례 제한 시간 (초)"
+
+#: llmcord_core/games_ui.py
+msgid "Claim rule"
+msgstr "선언 규칙"
+
+#: llmcord_core/games_ui.py
+msgctxt "claim rule"
+msgid "Sequence"
+msgstr "순서대로"
+
+#: llmcord_core/games_ui.py
+msgid "Ante: each player pays this into the pot when joining; the winner takes the pot. 0 = no ante. Turn timeout: a player who runs out of time plays one card automatically; two automatic plays in a row forfeit the seat. Claims follow the sequence A, 2 … K, then A again. Changes apply to tables opened afterwards."
+msgstr "판돈: 각 플레이어가 참가할 때 이 금액을 팟에 내고, 이긴 사람이 팟을 가져가요. 0이면 판돈이 없어요. 차례 제한 시간: 시간이 다 된 플레이어는 카드 한 장이 자동으로 나가고, 두 번 연속 자동으로 내면 자리를 잃어요. 선언은 A, 2 … K, 그다음 다시 A 순서를 따라요. 변경 사항은 이후에 여는 테이블부터 적용돼요."
+
+#: llmcord_core/games_ui.py
+msgid "Read doubts from chat (Experimental)"
+msgstr "채팅에서 다우트 읽기 (실험 기능)"
+
+#: llmcord_core/games_ui.py
+msgid "On: during the few seconds after a claim, when a member at the table writes something like \"liar!\" or \"구라\", the bot replies with buttons to confirm it (Doubt it! / Just table talk). Nothing is played until they press a button, and the doubt window does not wait. English and Korean, by word list only (no language model). Members can turn move checks off for themselves with /game spoken_moves."
+msgstr "켜면: 선언 직후 몇 초 동안 테이블의 멤버가 \"liar!\"나 \"구라\" 같은 말을 쓰면 봇이 확인 버튼으로 답해요 (다우트! / 그냥 잡담이에요). 버튼을 누르기 전에는 아무것도 플레이되지 않고, 다우트 시간은 기다려 주지 않아요. 영어와 한국어를 지원하며 단어 목록만 사용해요 (언어 모델 없음). 멤버는 /game spoken_moves로 자신에 대한 행동 확인을 끌 수 있어요."
+
+#: llmcord_core/games_ui.py
+msgid "Read doubts from chat"
+msgstr "채팅에서 다우트 읽기"
+
+#: llmcord_core/games_ui.py
+msgid "Read doubts from chat saved"
+msgstr "채팅에서 다우트 읽기 설정을 저장했어요"
+
+#: llmcord_core/games_ui.py
+msgid "Off: /game start refuses Texas Hold'em, and open Hold'em tables close with every stack cashed out."
+msgstr "끄면: /game start로 텍사스 홀덤을 시작할 수 없고, 열려 있던 홀덤 테이블은 모든 스택을 정산하고 닫혀요."
+
+#: llmcord_core/games_ui.py
+msgid "Small blind"
+msgstr "스몰 블라인드"
+
+#: llmcord_core/games_ui.py
+msgid "Smallest buy-in (big blinds)"
+msgstr "최소 바이인 (빅 블라인드 배수)"
+
+#: llmcord_core/games_ui.py
+msgid "Largest buy-in (big blinds)"
+msgstr "최대 바이인 (빅 블라인드 배수)"
+
+#: llmcord_core/games_ui.py
+msgid "Action timeout (seconds)"
+msgstr "행동 제한 시간 (초)"
+
+#: llmcord_core/games_ui.py
+msgid "Allow assist"
+msgstr "어시스트 허용"
+
+#: llmcord_core/games_ui.py
+msgid "The big blind is twice the small blind. Buy-ins are counted in big blinds. A player who runs out of action time checks, or folds when there is a bet. Allow assist lets the host turn on private hand and odds hints for the table. Changes apply to hands dealt afterwards."
+msgstr "빅 블라인드는 스몰 블라인드의 두 배예요. 바이인은 빅 블라인드 배수로 계산해요. 행동 시간이 다 된 플레이어는 체크하고, 베팅이 있으면 폴드해요. 어시스트 허용을 켜면 호스트가 테이블에 개인용 패와 확률 힌트를 켤 수 있어요. 변경 사항은 이후에 나누는 판부터 적용돼요."
+
+#: llmcord_core/icons.py llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "More actions for {name}"
+msgstr "{name} 추가 작업"
+
+#: llmcord_core/icons.py
+msgid "More actions"
+msgstr "추가 작업"
+
+#: llmcord_core/lore_workspace.py
+msgid "Lore workspace"
+msgstr "로어 작업 공간"
+
+#: llmcord_core/lore_workspace.py
+msgid "Import lorebook"
+msgstr "로어북 가져오기"
+
+#: llmcord_core/lore_workspace.py
+msgid "Import JSON directly into either owner below, or manage reusable named lorebooks in Imports."
+msgstr "JSON을 아래 두 소유 범위 중 하나로 바로 가져오거나, 가져오기에서 재사용할 수 있는 이름 있는 로어북을 관리하세요."
+
+#: llmcord_core/lore_workspace.py
+msgid "Drag entries onto either drop area, or select entries to move or delete together. Higher insertion orders appear later in each prompt position."
+msgstr "항목을 두 드롭 영역 중 하나로 끌어다 놓거나, 여러 항목을 선택해 한꺼번에 이동하거나 삭제하세요. 삽입 순서가 높을수록 각 프롬프트 위치에서 뒤에 나와요."
+
+#: llmcord_core/lore_workspace.py
+msgid "Create a world or import a character first."
+msgstr "먼저 월드를 만들거나 캐릭터를 가져와 주세요."
+
+#: llmcord_core/lore_workspace.py
+msgid "Left owner"
+msgstr "왼쪽 소유 범위"
+
+#: llmcord_core/lore_workspace.py
+msgid "Right owner"
+msgstr "오른쪽 소유 범위"
+
+#: llmcord_core/lore_workspace.py
+msgid "Search content and keywords"
+msgstr "내용과 키워드 검색"
+
+#: llmcord_core/lore_workspace.py
+msgid "Saving lore changes…"
+msgstr "로어 변경 사항을 저장하는 중…"
+
+#: llmcord_core/lore_workspace.py
+msgid "Change could not be confirmed. Refresh to check your lore."
+msgstr "변경 사항을 확인할 수 없어요. 새로고침해서 로어를 확인해 주세요."
+
+#: llmcord_core/lore_workspace.py
+#, python-brace-format
+msgid "{count} selected"
+msgstr "{count}개 선택됨"
+
+#: llmcord_core/lore_workspace.py
+msgid "Move selected left"
+msgstr "선택 항목 왼쪽으로 이동"
+
+#: llmcord_core/lore_workspace.py
+msgid "Move selected right"
+msgstr "선택 항목 오른쪽으로 이동"
+
+#: llmcord_core/lore_workspace.py
+msgid "Delete selected"
+msgstr "선택 항목 삭제"
+
+#: llmcord_core/lore_workspace.py
+msgid "Clear selection"
+msgstr "선택 해제"
+
+#: llmcord_core/lore_workspace.py
+#, python-brace-format
+msgid "Deleted {count} lore entry"
+msgid_plural "Deleted {count} lore entries"
+msgstr[0] "로어 항목 {count}개를 삭제했어요"
+
+#: llmcord_core/lore_workspace.py
+#, python-brace-format
+msgid "Moved {count} lore entry"
+msgid_plural "Moved {count} lore entries"
+msgstr[0] "로어 항목 {count}개를 이동했어요"
+
+#: llmcord_core/lore_workspace.py
+msgid "Selected entries are already in that list."
+msgstr "선택한 항목이 이미 그 목록에 있어요."
+
+#: llmcord_core/lore_workspace.py
+#, python-brace-format
+msgid "Delete {count} lore entry?"
+msgid_plural "Delete {count} lore entries?"
+msgstr[0] "로어 항목 {count}개를 삭제할까요?"
+
+#: llmcord_core/lore_workspace.py
+msgid "(empty entry)"
+msgstr "(빈 항목)"
+
+#: llmcord_core/lore_workspace.py
+#, python-brace-format
+msgid "And {extra} more selected entries."
+msgstr "그 외에 선택한 항목이 {extra}개 더 있어요."
+
+#: llmcord_core/lore_workspace.py
+#, python-brace-format
+msgid "Delete {count} entry"
+msgid_plural "Delete {count} entries"
+msgstr[0] "항목 {count}개 삭제"
+
+#: llmcord_core/lore_workspace.py
+msgid "Move could not be confirmed. Refresh and try again."
+msgstr "이동이 성공했는지 확인할 수 없어요. 새로고침한 뒤 다시 시도해 주세요."
+
+#: llmcord_core/lore_workspace.py
+#, python-brace-format
+msgid "{count} entry"
+msgid_plural "{count} entries"
+msgstr[0] "항목 {count}개"
+
+#: llmcord_core/lore_workspace.py
+#, python-brace-format
+msgid "{label} · page {page} of {last_page}"
+msgstr "{label} · {last_page}쪽 중 {page}쪽"
+
+#: llmcord_core/lore_workspace.py
+msgctxt "field"
+msgid "Page"
+msgstr "페이지"
+
+#: llmcord_core/lore_workspace.py
+msgid "Select page"
+msgstr "페이지 선택"
+
+#: llmcord_core/lore_workspace.py
+msgid "Clear page"
+msgstr "페이지 선택 해제"
+
+#: llmcord_core/lore_workspace.py
+msgid "No keywords"
+msgstr "키워드 없음"
+
+#: llmcord_core/lore_workspace.py
+msgid "Select entry"
+msgstr "항목 선택"
+
+#: llmcord_core/lore_workspace.py
+#, python-brace-format
+msgid "Priority {order}"
+msgstr "우선순위 {order}"
+
+#: llmcord_core/lore_workspace.py llmcord_core/presets_ui.py
+msgctxt "status"
+msgid "Disabled"
+msgstr "사용 안 함"
+
+#: llmcord_core/lore_workspace.py
+msgid "Edit entry"
+msgstr "항목 편집"
+
+#: llmcord_core/lore_workspace.py
+msgid "Edit or transfer"
+msgstr "편집 또는 이동"
+
+#: llmcord_core/lore_workspace.py
+msgid "Move right"
+msgstr "오른쪽으로 이동"
+
+#: llmcord_core/lore_workspace.py
+msgid "Move left"
+msgstr "왼쪽으로 이동"
+
+#: llmcord_core/lore_workspace.py
+msgid "New entry"
+msgstr "새 항목"
+
+#: llmcord_core/lore_workspace.py
+msgid "Export owner"
+msgstr "소유 범위 내보내기"
+
+#: llmcord_core/lore_workspace.py
+msgid "Import JSON entries"
+msgstr "JSON 항목 가져오기"
+
+#: llmcord_core/presets_ui.py
+msgid "Extraction"
+msgstr "추출"
+
+#: llmcord_core/presets_ui.py
+msgid "Summary"
+msgstr "요약"
+
+#: llmcord_core/presets_ui.py
+msgid "Images"
+msgstr "이미지"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Main"
+msgstr "메인"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Location"
+msgstr "장소"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Time"
+msgstr "시간"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Name"
+msgstr "이름"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Lore Before Char"
+msgstr "캐릭터 앞 로어"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Description"
+msgstr "설명"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Personality"
+msgstr "성격"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Scenario"
+msgstr "시나리오"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Opening"
+msgstr "첫 메시지"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Card Instructions"
+msgstr "카드 지침"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Lore After Char"
+msgstr "캐릭터 뒤 로어"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Lore Before Examples"
+msgstr "예시 앞 로어"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Examples"
+msgstr "대화 예시"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Lore After Examples"
+msgstr "예시 뒤 로어"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Lore In Chat"
+msgstr "채팅 내 로어"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Personal"
+msgstr "개인 기억"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Encounters"
+msgstr "만남 기록"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Summary"
+msgstr "요약"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Preceding"
+msgstr "이전 메시지"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Recent"
+msgstr "최근 메시지"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "History"
+msgstr "대화 기록"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Character Voice"
+msgstr "캐릭터 말투"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Card Post History"
+msgstr "카드 대화 후 지침"
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Payload"
+msgstr "입력 내용"
+
+#: llmcord_core/presets_ui.py
+msgid "moved to top-level system instructions"
+msgstr "최상위 시스템 지침으로 옮김"
+
+#: llmcord_core/presets_ui.py
+msgid "converted to user instructions"
+msgstr "사용자 지침으로 변환함"
+
+#: llmcord_core/presets_ui.py
+msgid "Untitled block"
+msgstr "제목 없는 블록"
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "Custom-{code}"
+msgstr "사용자 지정-{code}"
+
+#: llmcord_core/presets_ui.py
+msgid "Built-in default"
+msgstr "기본 내장"
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "{name} · draft {revision}"
+msgstr "{name} · 초안 {revision}"
+
+#: llmcord_core/presets_ui.py
+msgid "Imported (not saved)"
+msgstr "가져옴 (저장 안 됨)"
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "Active preset: {label} · revision {revision}"
+msgstr "활성 프리셋: {label} · 리비전 {revision}"
+
+#: llmcord_core/presets_ui.py
+msgid "Save as new preset"
+msgstr "새 프리셋으로 저장"
+
+#: llmcord_core/presets_ui.py
+msgid "Activate saved revision"
+msgstr "저장된 리비전 활성화"
+
+#: llmcord_core/presets_ui.py
+msgid "Delete preset"
+msgstr "프리셋 삭제"
+
+#: llmcord_core/presets_ui.py
+msgid "Preset library"
+msgstr "프리셋 목록"
+
+#: llmcord_core/presets_ui.py
+msgid "Preset name"
+msgstr "프리셋 이름"
+
+#: llmcord_core/presets_ui.py
+msgid "Draft saved. Activate it when ready."
+msgstr "초안을 저장했어요. 준비되면 활성화해 주세요."
+
+#: llmcord_core/presets_ui.py
+msgid "Prompt blocks"
+msgstr "프롬프트 블록"
+
+#: llmcord_core/presets_ui.py
+msgctxt "field"
+msgid "Purpose"
+msgstr "용도"
+
+#: llmcord_core/presets_ui.py
+msgctxt "button"
+msgid "Save draft"
+msgstr "초안 저장"
+
+#: llmcord_core/presets_ui.py
+msgid "The built-in default cannot be deleted"
+msgstr "기본 내장 프리셋은 삭제할 수 없어요"
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "Delete preset {name}?"
+msgstr "{name} 프리셋을 삭제할까요?"
+
+#: llmcord_core/presets_ui.py
+msgid "This permanently deletes the preset. The active preset cannot be deleted; activate another one first."
+msgstr "프리셋이 영구적으로 삭제돼요. 활성 프리셋은 삭제할 수 없으니 먼저 다른 프리셋을 활성화해 주세요."
+
+#: llmcord_core/presets_ui.py
+msgid "Imported preset"
+msgstr "가져온 프리셋"
+
+#: llmcord_core/presets_ui.py
+msgid "Import preview loaded. Resolve compatibility items, save a draft, then activate."
+msgstr "가져오기 미리보기를 불러왔어요. 호환성 항목을 해결하고 초안을 저장한 뒤 활성화해 주세요."
+
+#: llmcord_core/presets_ui.py
+msgid "Move up"
+msgstr "위로 이동"
+
+#: llmcord_core/presets_ui.py
+msgid "Move down"
+msgstr "아래로 이동"
+
+#: llmcord_core/presets_ui.py
+msgid "Remove block"
+msgstr "블록 제거"
+
+#: llmcord_core/presets_ui.py
+msgid "Block name"
+msgstr "블록 이름"
+
+#: llmcord_core/presets_ui.py
+msgid "Context source"
+msgstr "컨텍스트 소스"
+
+#: llmcord_core/presets_ui.py
+msgid "Prompt text / template"
+msgstr "프롬프트 텍스트 / 템플릿"
+
+#: llmcord_core/presets_ui.py
+msgctxt "field"
+msgid "Role"
+msgstr "역할"
+
+#: llmcord_core/presets_ui.py
+msgctxt "field"
+msgid "Depth"
+msgstr "깊이"
+
+#: llmcord_core/presets_ui.py
+msgid "Injection order"
+msgstr "삽입 순서"
+
+#: llmcord_core/presets_ui.py
+msgid "Trimming priority"
+msgstr "잘라내기 우선순위"
+
+#: llmcord_core/presets_ui.py
+msgid "Exact placement"
+msgstr "정확한 위치 유지"
+
+#: llmcord_core/presets_ui.py
+msgid "Move to top-level system instructions"
+msgstr "최상위 시스템 지침으로 옮기기"
+
+#: llmcord_core/presets_ui.py
+msgid "Convert late system block to user instructions"
+msgstr "뒤쪽 시스템 블록을 사용자 지침으로 변환"
+
+#: llmcord_core/presets_ui.py
+msgid "System instruction placement"
+msgstr "시스템 지침 배치"
+
+#: llmcord_core/presets_ui.py
+msgid "Preserved import fields and compatibility remapping"
+msgstr "보존된 가져오기 필드와 호환성 재지정"
+
+#: llmcord_core/presets_ui.py
+msgid "Original prompt fields (JSON)"
+msgstr "원본 프롬프트 필드 (JSON)"
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "Block ID: {id}"
+msgstr "블록 ID: {id}"
+
+#: llmcord_core/presets_ui.py
+msgid "To remap triggers/extensions: clear injection_trigger and set extension to false."
+msgstr "트리거/확장 기능을 재지정하려면 injection_trigger를 비우고 extension을 false로 설정해 주세요."
+
+#: llmcord_core/presets_ui.py
+msgid "Add prompt block"
+msgstr "프롬프트 블록 추가"
+
+#: llmcord_core/presets_ui.py
+msgid "Disable imported assistant prefill"
+msgstr "가져온 어시스턴트 프리필 끄기"
+
+#: llmcord_core/presets_ui.py
+msgid "Import preset"
+msgstr "프리셋 가져오기"
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "SillyTavern order {label}"
+msgstr "SillyTavern 순서 {label}"
+
+#: llmcord_core/presets_ui.py
+msgid "Choose an order profile"
+msgstr "순서 프로필을 선택해 주세요"
+
+#: llmcord_core/presets_ui.py
+msgid "Preview selected profile"
+msgstr "선택한 프로필 미리보기"
+
+#: llmcord_core/presets_ui.py
+msgid "Upload native or SillyTavern Chat Completion JSON"
+msgstr "llmcord 기본 또는 SillyTavern Chat Completion JSON 업로드"
+
+#: llmcord_core/presets_ui.py
+msgid "Export preset"
+msgstr "프리셋 내보내기"
+
+#: llmcord_core/presets_ui.py
+msgid "Export full native bundle"
+msgstr "llmcord 기본 번들 전체 내보내기"
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "{label} — not portable"
+msgstr "{label} — 호환 안 됨"
+
+#: llmcord_core/presets_ui.py
+msgid "Leave out blocks"
+msgstr "제외할 블록"
+
+#: llmcord_core/presets_ui.py
+msgid "SillyTavern cannot represent some blocks; choose them here to export without them."
+msgstr "SillyTavern에서 표현할 수 없는 블록이 있어요. 여기서 선택하면 해당 블록을 빼고 내보내요."
+
+#: llmcord_core/presets_ui.py
+msgid "Export SillyTavern dialogue preset"
+msgstr "SillyTavern 대화 프리셋 내보내기"
+
+#: llmcord_core/presets_ui.py
+msgid "Assembled request preview"
+msgstr "조립된 요청 미리보기"
+
+#: llmcord_core/presets_ui.py
+msgid "Sample character"
+msgstr "예시 캐릭터"
+
+#: llmcord_core/presets_ui.py
+msgid "Sample channel (optional)"
+msgstr "예시 채널 (선택 사항)"
+
+#: llmcord_core/presets_ui.py
+msgid "Sample input"
+msgstr "예시 입력"
+
+#: llmcord_core/presets_ui.py
+msgctxt "sample input"
+msgid "Hello!"
+msgstr "안녕하세요!"
+
+#: llmcord_core/presets_ui.py
+msgid "Sample history (one message per line)"
+msgstr "예시 대화 기록 (한 줄에 메시지 하나)"
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "Estimated input tokens: {count}"
+msgstr "예상 입력 토큰: {count}"
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "{name} (history message {number})"
+msgstr "{name} (대화 기록 메시지 {number})"
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "Omitted: {items}"
+msgstr "제외됨: {items}"
+
+#: llmcord_core/presets_ui.py
+msgctxt "value"
+msgid "none"
+msgstr "없음"
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "Adaptations: {items}"
+msgstr "조정됨: {items}"
+
+#: llmcord_core/presets_ui.py
+msgid "Preview without a model call"
+msgstr "모델 호출 없이 미리보기"
+
+#: llmcord_core/savebar.py
+msgctxt "button"
+msgid "Save changes"
+msgstr "변경 사항 저장"
+
+#: llmcord_core/savebar.py
+msgctxt "button"
+msgid "Reset"
+msgstr "초기화"
+
+#: llmcord_core/savebar.py
+msgctxt "button"
+msgid "Reload"
+msgstr "새로고침"
+
+#: llmcord_core/savebar.py
+msgid "Unsaved changes"
+msgstr "저장하지 않은 변경 사항"
+
+#: llmcord_core/savebar.py
+#, python-brace-format
+msgid "{name} has unsaved changes."
+msgstr "{name}에 저장하지 않은 변경 사항이 있어요."
+
+#: llmcord_core/savebar.py
+#, python-brace-format
+msgid "Save or reset your changes to {name} first."
+msgstr "먼저 {name}의 변경 사항을 저장하거나 초기화해 주세요."
+
+#: llmcord_core/savebar.py
+#, python-brace-format
+msgid "{name} was changed somewhere else."
+msgstr "{name:이/가} 다른 곳에서 변경되었어요."
+
+#: llmcord_core/savebar.py
+msgid "Your other changes were not saved. They are still pending."
+msgstr "다른 변경 사항은 저장되지 않았어요. 아직 대기 중이에요."
+
+#: llmcord_core/savebar.py
+msgid "Saved, but the view could not refresh. Reload the page."
+msgstr "저장했지만 화면을 새로 고칠 수 없었어요. 페이지를 새로고침해 주세요."
+
+#: llmcord_core/scene_ui.py
+msgid "Setting, participants' fictional roles, tone, and interaction conventions"
+msgstr "배경, 참가자들의 가상 역할, 분위기, 상호작용 규칙"
+
+#. i18n: {label} is the guidelines field label in lower case, such as "world
+#. guidelines"
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "Save {label}"
+msgstr "{label} 저장"
+
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "This removes its guidelines, {entries} owned lore entries, encounters, and hub/lorebook links. Lorebooks and past messages remain."
+msgstr "지침, 이곳에 속한 로어 항목 {entries}개, 만남 기록, 허브/로어북 연결이 삭제돼요. 로어북과 지난 메시지는 남아요."
+
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "Move or delete these home characters first: {names}"
+msgstr "먼저 이 홈 캐릭터들을 옮기거나 삭제해 주세요: {names}"
+
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "Rebind its {count} Discord channel(s) to another world or hub first."
+msgstr "먼저 이곳에 지정된 Discord 채널 {count}개를 다른 월드 또는 허브에 지정해 주세요."
+
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "Delete world {name}?"
+msgstr "{name} 월드를 삭제할까요?"
+
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "Delete hub {name}?"
+msgstr "{name} 허브를 삭제할까요?"
+
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "Delete lorebook {name}?"
+msgstr "{name} 로어북을 삭제할까요?"
+
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "This deletes the lorebook, its {count} remaining entries, and its world/hub links. Entries moved to another owner remain."
+msgstr "로어북과 남은 항목 {count}개, 월드/허브 연결이 삭제돼요. 다른 소유 범위로 옮긴 항목은 남아요."
+
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "Import entries into {owner}"
+msgstr "{owner}에 항목 가져오기"
+
+#: llmcord_core/scene_ui.py
+msgid "Adds entries directly to this owner. Existing lore stays in place; identical entries are skipped. No new lorebook is created."
+msgstr "이 소유 범위에 항목을 바로 추가해요. 기존 로어는 그대로 두고, 똑같은 항목은 건너뛰어요. 새 로어북은 만들지 않아요."
+
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "{format}: {additions} new entries, {present} already present"
+msgstr "{format}: 새 항목 {additions}개, 이미 있는 항목 {present}개"
+
+#: llmcord_core/scene_ui.py
+msgctxt "status"
+msgid "add"
+msgstr "추가"
+
+#: llmcord_core/scene_ui.py
+msgctxt "status"
+msgid "duplicate"
+msgstr "중복"
+
+#: llmcord_core/scene_ui.py
+msgctxt "column"
+msgid "Source ID"
+msgstr "원본 ID"
+
+#: llmcord_core/scene_ui.py
+msgctxt "column"
+msgid "Action"
+msgstr "작업"
+
+#: llmcord_core/scene_ui.py
+msgctxt "column"
+msgid "Content"
+msgstr "내용"
+
+#: llmcord_core/scene_ui.py
+msgid "Compatibility notes"
+msgstr "호환성 참고"
+
+#: llmcord_core/scene_ui.py
+#, python-brace-format
+msgid "Imported {count} entries"
+msgstr "항목 {count}개를 가져왔어요"
+
+#: llmcord_core/scene_ui.py
+msgid "Apply entry import"
+msgstr "항목 가져오기 적용"
+
+#: llmcord_core/scene_ui.py
+msgid "Upload JSON entries"
+msgstr "JSON 항목 업로드"
+
+#: llmcord_core/shop_ui.py
+msgctxt "item kind"
+msgid "Random message"
+msgstr "랜덤 메시지"
+
+#: llmcord_core/shop_ui.py
+#, python-brace-format
+msgid "{kind} · Consumable"
+msgstr "{kind} · 소모품"
+
+#: llmcord_core/shop_ui.py
+#, python-brace-format
+msgid "{kind} · Reusable"
+msgstr "{kind} · 재사용 아이템"
+
+#: llmcord_core/shop_ui.py
+msgid "Items"
+msgstr "아이템"
+
+#: llmcord_core/shop_ui.py
+msgid "The built-in items. Members buy them with /shop and use them with /use. A price left blank uses the built-in price. Changes apply at once."
+msgstr "기본 제공 아이템이에요. 멤버는 /shop으로 구매하고 /use로 사용해요. 가격을 비워 두면 기본 가격을 사용해요. 변경 사항은 바로 적용돼요."
+
+#: llmcord_core/shop_ui.py
+msgid "Settings"
+msgstr "설정"
+
+#: llmcord_core/shop_ui.py
+msgid "Use log"
+msgstr "사용 기록"
+
+#: llmcord_core/shop_ui.py
+msgid "Every item use on this server, newest first."
+msgstr "이 서버의 모든 아이템 사용 기록이에요. 최신순으로 표시돼요."
+
+#: llmcord_core/shop_ui.py
+msgid "For sale"
+msgstr "판매 중"
+
+#: llmcord_core/shop_ui.py
+msgid "Allow use"
+msgstr "사용 허용"
+
+#: llmcord_core/shop_ui.py
+msgctxt "field"
+msgid "Price"
+msgstr "가격"
+
+#: llmcord_core/shop_ui.py
+#, python-brace-format
+msgid "Blank = built-in price ({price:,} {currency})"
+msgstr "비워 두면 기본 가격 ({price:,} {currency})"
+
+#: llmcord_core/shop_ui.py
+msgid "Cooldown (seconds)"
+msgstr "쿨타임 (초)"
+
+#: llmcord_core/shop_ui.py
+#, python-brace-format
+msgid "Blank = built-in ({seconds:,} s)"
+msgstr "비워 두면 기본값 ({seconds:,}초)"
+
+#: llmcord_core/shop_ui.py
+msgctxt "field"
+msgid "Sides"
+msgstr "면 수"
+
+#: llmcord_core/shop_ui.py
+msgid "Custom lines"
+msgstr "사용자 지정 문구"
+
+#: llmcord_core/shop_ui.py
+msgid "Extra lines"
+msgstr "추가 문구"
+
+#: llmcord_core/shop_ui.py
+msgid "One per line. Added to the built-in lines."
+msgstr "한 줄에 하나씩 입력해요. 기본 문구에 더해져요."
+
+#: llmcord_core/shop_ui.py
+msgid "Replace built-in lines"
+msgstr "기본 문구 대체"
+
+#: llmcord_core/shop_ui.py
+msgid "One per line. If any are given, only these are used. Leave empty to keep the built-in lines."
+msgstr "한 줄에 하나씩 입력해요. 하나라도 입력하면 이 문구만 사용해요. 비워 두면 기본 문구를 유지해요."
+
+#: llmcord_core/shop_ui.py
+#, python-brace-format
+msgid "{name} saved"
+msgstr "{name:을/를} 저장했어요"
+
+#: llmcord_core/shop_ui.py
+#, python-brace-format
+msgid "Save {name}"
+msgstr "{name} 저장"
+
+#: llmcord_core/shop_ui.py
+msgid "Most of a consumable one member can hold"
+msgstr "멤버 한 명이 가질 수 있는 소모품 최대 개수"
+
+#: llmcord_core/shop_ui.py
+msgid "A member cannot buy another of a consumable item at this number. A reusable item can be owned once."
+msgstr "소모품은 이 개수에 도달하면 더 살 수 없어요. 재사용 아이템은 하나만 가질 수 있어요."
+
+#: llmcord_core/shop_ui.py
+msgid "Hold cap saved"
+msgstr "보유 한도를 저장했어요"
+
+#: llmcord_core/shop_ui.py
+msgid "No items have been used yet."
+msgstr "아직 사용한 아이템이 없어요."
+
+#: llmcord_core/shop_ui.py
+msgctxt "column"
+msgid "Item"
+msgstr "아이템"
+
+#: llmcord_core/shop_ui.py
+msgctxt "column"
+msgid "Result"
+msgstr "결과"
+
+#: llmcord_core/web.py
+msgid "the file could not be read"
+msgstr "파일을 읽을 수 없음"
+
+#: llmcord_core/web.py
+msgid "Invalid OAuth state"
+msgstr "OAuth 상태 값이 올바르지 않아요"
+
+#: llmcord_core/web.py
+msgid "Discord sign-in failed"
+msgstr "Discord 로그인에 실패했어요"
+
+#: llmcord_core/web.py
+msgid "Unknown language"
+msgstr "알 수 없는 언어예요"
+
+#: llmcord_core/web.py
+msgid "Avatar not found"
+msgstr "아바타를 찾을 수 없어요"
+
+#: llmcord_core/web.py
+#, python-brace-format
+msgid "Invalid input: {error}"
+msgstr "입력이 올바르지 않아요: {error}"
+
+#: llmcord_core/web.py
+msgid "This name or entry already exists"
+msgstr "이미 있는 이름이나 항목이에요"
+

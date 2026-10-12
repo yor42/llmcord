@@ -18,12 +18,19 @@ from .games_discord import BLACKJACK_OFF, CLOSED, NO_MENTIONS, OFF_HERE, STALE
 from .spoken import blackjack as spoken_bj
 from .spoken import head as spoken_head
 from .spoken import interpret
+from llmcord_core.i18n import N_, discord_locale
 
 MAX_CHARS = 200  # longer messages are chat, not a move: ignored before any inference
 PREFIX = "llmcord:bjs"
-NOT_YOURS = "This isn't your move check."
-TALK_KEPT = "Got it — left as table talk. Tired of these? Turn them off with /game spoken_moves."
+NOT_YOURS = N_("This isn't your move check.")
+TALK_KEPT = N_("Got it — left as table talk. Tired of these? Turn them off with /game spoken_moves.")
 RUNTIME_OFF = "Spoken moves are unavailable: the reading model is not ready."
+
+
+def _names(t) -> dict:
+    """The move names as the move buttons and the check question show them (one render, in the audience's words)."""
+    return {"hit": t.p("button.blackjack", "Hit"), "stand": t.p("button.blackjack", "Stand"), "double": t.p("button.blackjack", "Double"), "surrender": t.p("button.blackjack", "Surrender"),
+            "insure": t.p("button.blackjack", "Insure"), "even_money": t.p("button.blackjack", "Even money"), "no_insurance": t.p("button.blackjack", "No insurance")}
 
 
 @dataclass
@@ -207,9 +214,12 @@ class SpokenMoves:
         if decision.band == "silent":
             return
         cost = snap["view"]["stakes"][seat] // 2
-        labels = {**spoken_bj.LABELS, "insure": f"Insure ({cost:,})"}
-        names = [spoken_bj.LABELS[m] for m in decision.moves]
-        question = "Did you mean " + " or ".join(f"**{n}**" for n in names) + "?"
+        t = discord_locale.channel_t(message.guild)  # the check is posted in the channel
+        all_names = _names(t)
+        labels = {**all_names, "insure": t.p("button.blackjack", "Insure ({cost:,})", cost=cost)}
+        names = [all_names[m] for m in decision.moves]
+        bold = [f"**{n}**" for n in names]
+        question = t("Did you mean {first} or {second}?", first=bold[0], second=bold[1]) if len(bold) == 2 else t("Did you mean {moves}?", moves=" or ".join(bold))
         async with games.runtime.lock(key):  # no HTTP in here
             if not self._current(key, turn, number):
                 return
@@ -219,7 +229,7 @@ class SpokenMoves:
         view = discord.ui.View(timeout=None)
         for move in decision.moves:
             view.add_item(SpokenButton("move", key[1], turn.round_id, turn.moves, move, labels[move], discord.ButtonStyle.primary))
-        view.add_item(SpokenButton("talk", key[1], turn.round_id, turn.moves, None, "Just table talk", discord.ButtonStyle.secondary))
+        view.add_item(SpokenButton("talk", key[1], turn.round_id, turn.moves, None, t.p("button.spoken", "Just table talk"), discord.ButtonStyle.secondary))
         try:
             posted = await message.reply(question, view=view, mention_author=False, allowed_mentions=NO_MENTIONS)
         except discord.HTTPException as error:
@@ -303,6 +313,7 @@ class SpokenMoves:
 
     @staticmethod
     async def _say(interaction, text) -> None:
+        text = discord_locale.invoker_t(interaction).render(text)
         try:
             if interaction.response.is_done():
                 await interaction.followup.send(text, ephemeral=True, allowed_mentions=NO_MENTIONS)
@@ -339,7 +350,8 @@ class SpokenMoves:
             self._keep(key[0], mine.member_id, mine.text, mine.offered, mine.band, mine.scores, "false_positive", move)
         try:
             if refused is None:
-                await interaction.edit_original_response(content=f"✔ {spoken_bj.LABELS[move]}", view=None)
+                shown = discord_locale.channel_t(interaction.guild)  # the check is a channel message
+                await interaction.edit_original_response(content=shown("✔ {move}", move=_names(shown)[move]), view=None)
             elif mine is not None or refused in (STALE, CLOSED, OFF_HERE, BLACKJACK_OFF):
                 await interaction.delete_original_response()  # a bystander's refusal leaves the check alone
         except Exception as error:

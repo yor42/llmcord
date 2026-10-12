@@ -28,21 +28,29 @@ from . import game_chooser
 from .games import DefaultPolicy, blackjack
 from .game_talk import TalkBudget
 from .table_runtime import TableRuntime
+from llmcord_core import i18n
+from llmcord_core.i18n import N_, NP_, discord_locale, terms
+from llmcord_core.i18n.discord_locale import C_
 
-STALE = "That table has moved on — use the latest buttons."
-OFF_HERE = "Games are off in this channel."
-BLACKJACK_OFF = "Blackjack is off on this server."
-BUSY = "A round is being played; join the next one with /blackjack when it ends."
-LEAVE_BUSY = "You can leave when this round ends."
-NOT_SEATED = "You're not seated at this table."
-NOT_YOUR_TURN = "It's not your turn."
-NO_CHARACTER_SEATS = "Characters can't sit at tables in this channel."
-SKIPPED = {"seated": "already at the table", "full": "table full", "archived": "archived"}
-CLOSED_OFF = "Table closed: games were turned off here."
-CLOSED_BLACKJACK_OFF = "Table closed: blackjack was turned off on this server."
-CLOSED = "Table closed."
+STALE = N_("That table has moved on — use the latest buttons.")
+OFF_HERE = N_("Games are off in this channel.")
+BLACKJACK_OFF = N_("Blackjack is off on this server.")
+BUSY = N_("A round is being played; join the next one with /blackjack when it ends.")
+LEAVE_BUSY = N_("You can leave when this round ends.")
+LEFT = N_("You left the table.")
+NOT_SEATED = N_("You're not seated at this table.")
+NOT_YOUR_TURN = N_("It's not your turn.")
+NO_CHARACTER_SEATS = N_("Characters can't sit at tables in this channel.")
+SKIPPED = {"seated": N_("already at the table"), "full": N_("table full"), "archived": N_("archived")}
+CLOSED_OFF = N_("Table closed: games were turned off here.")
+CLOSED_BLACKJACK_OFF = N_("Table closed: blackjack was turned off on this server.")
+CLOSED = N_("Table closed.")
 MAX_BET = 100_000
-HOW_TO_JOIN = "Join with /blackjack bet:<amount>; add favorites:True to bring your favorite characters."
+HOW_TO_JOIN = N_("Join with /blackjack bet:<amount>; add favorites:True to bring your favorite characters.")
+RESULT_REFUNDED = NP_("blackjack result", "refunded")
+RESULT_WORDS = {"surrender": NP_("blackjack result", "surrendered"), "even_money": NP_("blackjack result", "even money")}
+STATUS_WORDS = {"stand": NP_("blackjack status", "stands"), "bust": NP_("blackjack status", "bust"),
+                "blackjack": NP_("blackjack status", "blackjack"), "surrender": NP_("blackjack status", "surrendered")}
 PREFIX = "llmcord:bj"
 NO_MENTIONS = discord.AllowedMentions.none()
 
@@ -110,22 +118,28 @@ class GameButton(discord.ui.DynamicItem[discord.ui.Button], template=PREFIX + r"
         await interaction.client.games.press(interaction, self.action, self.table_id, self.round_id, self.moves)
 
 
+def words(t, value) -> str:
+    """An _Out.say or a refusal rendered for its audience: a coded error, a Msg, a Phrase or plain text."""
+    return t.error(value) if isinstance(value, BaseException) else t.render(value)
+
+
 def _sign(net: int) -> str:
     return f"+{net:,}" if net > 0 else f"−{-net:,}" if net < 0 else ""
 
 
-def _outcome(seat: dict, natural: bool = False) -> str:
+def _outcome(seat: dict, natural: bool = False, *, t=None) -> str:
     """The result words and net of a settled seat; an insurance bet is shown apart from the main bet (``natural``: the dealer had blackjack)."""
+    t = t or i18n.english()
     outcome, cost = seat["outcome"], seat.get("insurance") or 0
     net = (seat["payout"] or 0) - seat["stake"] - cost
     if outcome == "refund":
-        return "refunded"
-    word = {"surrender": "surrendered", "even_money": "even money"}.get(outcome, outcome)
-    main = f"{word} {_sign(net)}".strip()
+        return t.render(RESULT_REFUNDED)
+    word = t.render(RESULT_WORDS.get(outcome) or terms.BJ_OUTCOMES.get(outcome, outcome))
+    main = t("{outcome} {amount}", outcome=word, amount=_sign(net)).strip()
     if not cost:
         return main
     gain = 2 * cost if natural else -cost
-    return f"{word} {_sign(net - gain)}".strip() + f", insurance {_sign(gain)}"
+    return t("{outcome} {amount}", outcome=word, amount=_sign(net - gain)).strip() + t(", insurance {amount}", amount=_sign(gain))
 
 
 class GameTables:
@@ -316,29 +330,30 @@ class GameTables:
     def _paint(self, key, snap) -> Paint:
         """Call under the table lock: the content is computed from the state the lock protects and numbered.
         A round that just settled gets the dealer's play as extra frames (``after``), numbered before the final paint, so any newer paint outranks them all."""
-        sender = self.table(key).sender
+        sender, t = self.table(key).sender, self._t(key[0])
         paints = []
-        for content in self._frames(snap):
+        for content in self._frames(snap, t=t):
             sender.issued += 1
-            paints.append(Paint(key, sender, sender.issued, content, self._help_view(snap)))
+            paints.append(Paint(key, sender, sender.issued, content, self._help_view(snap, t=t)))
         sender.issued += 1
-        paints.append(Paint(key, sender, sender.issued, self.render(snap), self.buttons(snap)))
+        paints.append(Paint(key, sender, sender.issued, self.render(snap, t=t), self.buttons(snap, t=t)))
         paints[0].after = paints[1:]
         return paints[0]
 
-    def _frames(self, snap) -> list[str]:
+    def _frames(self, snap, *, t=None) -> list[str]:
         if not self.DEALER_STEP_SECONDS or snap["status"] != "settled" or not snap["view"]:
             return []
         view = snap["view"]
         if len(view["dealer"]) == 2 and not blackjack.is_natural(view["dealer"]) and "stand" not in view["status"]:
             return []  # everyone busted or has a blackjack: the dealer neither draws nor decides anything
-        return [self.render(snap, shown=n) for n in range(2, len(view["dealer"]) + 1)]
+        return [self.render(snap, shown=n, t=t) for n in range(2, len(view["dealer"]) + 1)]
 
     @staticmethod
-    def _help_view(snap) -> discord.ui.View:
+    def _help_view(snap, *, t=None) -> discord.ui.View:
         """The only button that is safe on a frame of the dealer's play, so a failed final edit never leaves a bare message."""
+        t = t or i18n.english()
         view = discord.ui.View(timeout=None)
-        view.add_item(GameButton("help", snap["table_id"], snap["round_id"], snap["moves"], "How to play", discord.ButtonStyle.secondary))
+        view.add_item(GameButton("help", snap["table_id"], snap["round_id"], snap["moves"], t.p("button.blackjack", "How to play"), discord.ButtonStyle.secondary))
         return view
 
     def summary_rounds(self, guild_id) -> int:
@@ -347,35 +362,45 @@ class GameTables:
     def _closing(self, key, text: str) -> Paint:
         sender = self.sender(key)
         sender.issued += 1
+        t = self._t(key[0])
+        text = t.render(text)
         try:
-            text = self._summary_text(text, self.store.game_table_summary(key[0], key[1], self.summary_rounds(key[0])))
+            text = self._summary_text(text, self.store.game_table_summary(key[0], key[1], self.summary_rounds(key[0])), t=t)
         except Exception:
             logging.exception("Could not build the blackjack table summary (table %s)", key[1])
         return Paint(key, sender, sender.issued, text, None, True)
 
-    def _summary_text(self, text: str, rounds: list) -> str:
+    def _summary_text(self, text: str, rounds: list, *, t=None) -> str:
         """The closing text plus the last rounds; the oldest rounds go first when it would not fit a message."""
         while rounds:
-            lines = [text, *(self._round_line(r) for r in rounds)]
+            lines = [text, *(self._round_line(r, t=t) for r in rounds)]
             if len(rounds) > 1:
-                lines.append(self._net_line(rounds))
+                lines.append(self._net_line(rounds, t=t))
             if len("\n".join(lines)) <= 2000:
                 return "\n".join(lines)
             rounds = rounds[1:]
         return text
 
-    def _round_line(self, rnd) -> str:
-        dealer = rnd.get("dealer_total")
-        head = f"Round {rnd['number']}:" + ("" if dealer is None else f" dealer {dealer}{' bust' if dealer > 21 else ''} —")
-        even = "even" if "winner" in rnd else "push"  # an I Doubt It row carries winner/pot, not a dealer
-        return head + " " + ", ".join(f"{self._who(s)} {_sign(s['net']) or even}" for s in rnd["seats"])
+    def _round_line(self, rnd, *, t=None) -> str:
+        t = t or i18n.english()
+        dealer, number = rnd.get("dealer_total"), rnd["number"]
+        if dealer is None:
+            head = t("Round {number}:", number=number)
+        elif dealer > 21:
+            head = t("Round {number}: dealer {total} bust —", number=number, total=dealer)
+        else:
+            head = t("Round {number}: dealer {total} —", number=number, total=dealer)
+        even = t.p("round net", "even") if "winner" in rnd else t.p("round net", "push")  # an I Doubt It row carries winner/pot, not a dealer
+        return head + " " + ", ".join(f"{self._who(s, t=t)} {_sign(s['net']) or even}" for s in rnd["seats"])
 
-    def _net_line(self, rounds) -> str:
+    def _net_line(self, rounds, *, t=None) -> str:
+        t = t or i18n.english()
         totals: dict = {}
         for rnd in rounds:
             for s in rnd["seats"]:
                 totals.setdefault((s["kind"], s["ref_id"]), [s, 0])[1] += s["net"]
-        return "Net: " + ", ".join(f"{self._who(s)} {_sign(net) or 'even'}" for s, net in totals.values())
+        even = t.p("round net", "even")
+        return t("Net: {entries}", entries=", ".join(f"{self._who(s, t=t)} {_sign(net) or even}" for s, net in totals.values()))
 
     async def _deliver(self, paint: Paint, via=None, pace=True) -> None:
         """Sends a paint, then (``pace``) the frames that follow it."""
@@ -417,15 +442,22 @@ class GameTables:
 
     # --- rendering --------------------------------------------------------------------------
 
+    def _t(self, guild_id):
+        """The channel's translator for a table message: resolved at each render, never kept."""
+        get_guild = getattr(self.bot, "get_guild", None)
+        return discord_locale.channel_t(get_guild(guild_id) if get_guild else None)
+
     @staticmethod
-    def _who(seat) -> str:
+    def _who(seat, *, t=None) -> str:
+        t = t or i18n.english()
         if seat["kind"] != "character":
             return f"<@{seat['ref_id']}>"
         who = f"**{discord.utils.escape_markdown(discord.utils.escape_mentions(seat['name']))}**"
-        return who + (f" (with <@{seat['brought_by']}>)" if seat["brought_by"] else "")
+        return who + (" " + t("(with {member})", member=f"<@{seat['brought_by']}>") if seat["brought_by"] else "")
 
-    def render(self, snap, shown=None) -> str:
+    def render(self, snap, shown=None, *, t=None) -> str:
         """``shown``: a frame of the dealer's play with that many dealer cards, before the results."""
+        t = t or i18n.english()
         if shown is not None:
             snap = {**snap, "status": "playing", "view": {**snap["view"], "dealer": snap["view"]["dealer"][:shown], "dealer_hidden": False, "turn": None}}
         key = (snap["guild_id"], snap["table_id"])
@@ -433,71 +465,74 @@ class GameTables:
         name, limits = store.currency_name(guild_id), store.game_settings(guild_id)
         status, view, deadline = snap["status"], snap["view"], table.deadline
         stamp = f"<t:{int(deadline)}:R>" if deadline else ""
-        lines = ["**Blackjack**"]
+        lines = [f"**{t.render(terms.GAME_BLACKJACK)}**"]
         for seat in snap["seats"]:
             i = seat["index"]
-            line = f"{i + 1}. {self._who(seat)} bet {(view['stakes'][i] if view else seat['stake']):,} {name}"
+            line = t("{number}. {who} bet {stake:,} {currency}", number=i + 1, who=self._who(seat, t=t), stake=(view['stakes'][i] if view else seat['stake']), currency=name)
             if view:
                 cards = view["hands"][i]
-                line += f" — {blackjack.hand_str(cards)} ({blackjack.total_str(cards)})"
+                line += " — " + t("{hand} ({total})", hand=blackjack.hand_str(cards), total=blackjack.total_phrase(cards))
                 if status == "playing":
-                    word = {"stand": "stands", "bust": "bust", "blackjack": "blackjack", "surrender": "surrendered"}.get(view["status"][i])
-                    line += f" {word}" if word else ""
-                    line += " (even money)" if view.get("even_money") and view["even_money"][i] else f" (insured {seat['insurance']:,})" if seat.get("insurance") else ""
-                    line += " (timed out)" if (snap["round_id"], i) in table.timeouts else ""
+                    word = STATUS_WORDS.get(view["status"][i])
+                    line += f" {t.render(word)}" if word else ""
+                    line += " " + t("(even money)") if view.get("even_money") and view["even_money"][i] else " " + t("(insured {amount:,})", amount=seat['insurance']) if seat.get("insurance") else ""
+                    line += " " + t("(timed out)") if (snap["round_id"], i) in table.timeouts else ""
             if status == "settled":
-                line += f" — {_outcome(seat, bool(view) and blackjack.is_natural(view['dealer']))}"
-                line += " (timed out)" if (snap["round_id"], i) in table.timeouts else ""
+                line += f" — {_outcome(seat, bool(view) and blackjack.is_natural(view['dealer']), t=t)}"
+                line += " " + t("(timed out)") if (snap["round_id"], i) in table.timeouts else ""
             lines.append(line)
         if view:
             dealer = view["dealer"]
             if view["dealer_hidden"]:
-                lines.append(f"Dealer: {blackjack.hand_str(dealer)} ??")
+                lines.append(t("Dealer: {hand} ??", hand=blackjack.hand_str(dealer)))
+            elif blackjack.hand_total(dealer)[0] > 21:
+                lines.append(t("Dealer: {hand} ({total}) bust", hand=blackjack.hand_str(dealer), total=blackjack.total_phrase(dealer)))
             else:
-                text = f"Dealer: {blackjack.hand_str(dealer)} ({blackjack.total_str(dealer)})"
-                lines.append(text + (" bust" if blackjack.hand_total(dealer)[0] > 21 else ""))
+                lines.append(t("Dealer: {hand} ({total})", hand=blackjack.hand_str(dealer), total=blackjack.total_phrase(dealer)))
         if status == "joining":
-            lines.append(f"Join with /blackjack bet:<amount> — dealing {stamp}." if stamp else "Join with /blackjack bet:<amount>.")
-            lines.append(f"Bets: {limits['min_bet']:,} to {limits['max_bet']:,} {name}.")
+            lines.append(t("Join with /blackjack bet:<amount> — dealing {stamp}.", stamp=stamp) if stamp else t("Join with /blackjack bet:<amount>."))
+            lines.append(t("Bets: {low:,} to {high:,} {currency}.", low=limits['min_bet'], high=limits['max_bet'], currency=name))
         elif status == "playing" and view and view["turn"] is not None:
             on_turn = snap["seats"][view["turn"]]
             if snap.get("phase") == "insurance":
-                lines.append("Dealer shows an ace. Insurance?")
+                lines.append(t("Dealer shows an ace. Insurance?"))
             if on_turn["kind"] == "character":
-                lines.append(f"On turn: {self._who({**on_turn, 'brought_by': None})}.")
+                lines.append(t("On turn: {who}.", who=self._who({**on_turn, 'brought_by': None}, t=t)))
             else:
-                lines.append(f"On turn: <@{on_turn['ref_id']}>" + (f" — decide {stamp}." if stamp else "."))
+                lines.append(t("On turn: {who} — decide {stamp}.", who=f"<@{on_turn['ref_id']}>", stamp=stamp) if stamp else t("On turn: {who}.", who=f"<@{on_turn['ref_id']}>"))
         elif status in ("settled", "cancelled"):
             if status == "cancelled":
-                lines.append("Round cancelled. Bets are refunded.")
-            lines.append(f"Play again or leave. The table closes {stamp} if nobody plays again." if stamp else "Play again or leave.")
+                lines.append(t("Round cancelled. Bets are refunded."))
+            lines.append(t("Play again or leave. The table closes {stamp} if nobody plays again.", stamp=stamp) if stamp else t("Play again or leave."))
         if shown is not None:
-            lines.append("Dealer plays.")
-        lines.append("-# " + blackjack.rules_text(snap.get("rules")))
+            lines.append(t("Dealer plays."))
+        lines.append("-# " + " · ".join(t.render(p) for p in blackjack.rules_phrases(snap.get("rules"))))
         if status in ("settled", "cancelled") and snap["seed"]:
-            lines.append(f"-# Seed: {snap['seed']} (hash {snap['seed_hash'][:12]})")
+            lines.append("-# " + t("Seed: {seed} (hash {hash})", seed=snap['seed'], hash=snap['seed_hash'][:12]))
         else:
-            lines.append(f"-# Seed hash: {snap['seed_hash'][:12]}")
+            lines.append("-# " + t("Seed hash: {hash}", hash=snap['seed_hash'][:12]))
         return "\n".join(lines)
 
-    def buttons(self, snap) -> discord.ui.View | None:
+    def buttons(self, snap, *, t=None) -> discord.ui.View | None:
+        t = t or i18n.english()
         status, table_id, round_id, moves = snap["status"], snap["table_id"], snap["round_id"], snap["moves"]
         spec = []
         if status == "joining":
-            spec = [("deal", "Deal now", discord.ButtonStyle.primary), ("leave", "Leave", discord.ButtonStyle.secondary)]
+            spec = [("deal", t.p("button.blackjack", "Deal now"), discord.ButtonStyle.primary), ("leave", t.p("button.blackjack", "Leave"), discord.ButtonStyle.secondary)]
         elif status == "playing":
             legal = next(iter(snap["legal"].values()), ())
             turn = snap["view"]["turn"] if snap["view"] else None
             if turn is not None and snap["seats"][turn]["kind"] == "character":
                 legal = ()  # members cannot press for a character
             cost = snap["view"]["stakes"][turn] // 2 if turn is not None else 0
-            labels = {"hit": "Hit", "stand": "Stand", "double": "Double", "surrender": "Surrender", "insure": f"Insure ({cost:,})", "even_money": "Even money", "no_insurance": "No insurance"}
+            labels = {"hit": t.p("button.blackjack", "Hit"), "stand": t.p("button.blackjack", "Stand"), "double": t.p("button.blackjack", "Double"), "surrender": t.p("button.blackjack", "Surrender"),
+                      "insure": t.p("button.blackjack", "Insure ({cost:,})", cost=cost), "even_money": t.p("button.blackjack", "Even money"), "no_insurance": t.p("button.blackjack", "No insurance")}
             spec = [(m, labels[m], discord.ButtonStyle.primary if m in ("hit", "insure") else discord.ButtonStyle.secondary) for m in labels if m in legal]
         elif status in ("settled", "cancelled"):
-            spec = [("again", "Play again (same bet)", discord.ButtonStyle.success), ("close", "Leave table", discord.ButtonStyle.secondary)]
+            spec = [("again", t.p("button.blackjack", "Play again (same bet)"), discord.ButtonStyle.success), ("close", t.p("button.blackjack", "Leave table"), discord.ButtonStyle.secondary)]
         if not spec and status not in ("joining", "playing", "settled", "cancelled"):
             return None
-        spec.append(("help", "How to play", discord.ButtonStyle.secondary))
+        spec.append(("help", t.p("button.blackjack", "How to play"), discord.ButtonStyle.secondary))
         view = discord.ui.View(timeout=None)
         for action, label, style in spec:
             view.add_item(GameButton(action, table_id, round_id, moves, label, style))
@@ -519,8 +554,9 @@ class GameTables:
         except Exception:
             logging.exception("Could not edit blackjack message %s in channel %s", message_id, channel_id)
 
-    async def _say(self, interaction, text: str) -> None:
+    async def _say(self, interaction, text) -> None:
         """An ephemeral reply: the first response, or a followup once the interaction was acknowledged."""
+        text = words(discord_locale.invoker_t(interaction), text)
         try:
             if interaction.response.is_done():
                 await interaction.followup.send(text, ephemeral=True, allowed_mentions=NO_MENTIONS)
@@ -606,9 +642,10 @@ class GameTables:
         # make impossible. The table lock is held for store work only (no HTTP), and `_finish` answers before any
         # table edit goes out, so the response does not wait for the edit queue or the channel HTTP.
         guild_id = interaction.guild_id
+        t = discord_locale.invoker_t(interaction)
         channel_id = getattr(interaction, "channel_id", None) or interaction.channel.id
         if interaction.user.bot:
-            await self._say(interaction, "Bots cannot play blackjack.")
+            await self._say(interaction, t("Bots cannot play blackjack."))
             return
         if not self.store.blackjack_enabled(guild_id):
             await self._say(interaction, BLACKJACK_OFF)
@@ -626,18 +663,18 @@ class GameTables:
         opened = None
         table = self.store.open_table_for(guild_id, channel_id)
         if table is not None and table["game"] != "blackjack":
-            await self._say(interaction, "An I Doubt It table is open in this channel.")
+            await self._say(interaction, t("An I Doubt It table is open in this channel."))
             return
         if table is None:
             try:
                 opened = self.store.open_table(guild_id, channel_id, "blackjack", interaction.user.id)
             except GameError as error:
-                await self._say(interaction, str(error))
+                await self._say(interaction, t.error(error))
                 return
             table = {"id": opened["table_id"]}
         key = (guild_id, table["id"])
         async with self.runtime.lock(key):
-            out = self._join(interaction.user.id, key, bet, opened, space_id=space_id, note=note)
+            out = self._join(interaction.user.id, key, bet, opened, space_id=space_id, note=note, t=t)
         if out.opened:
             await self._open_message(interaction, key, out.paints[0])
             if out.note:
@@ -645,16 +682,20 @@ class GameTables:
         else:
             await self._finish(interaction, out)
 
-    def _favorites_note(self, result, note) -> str:
+    def _favorites_note(self, result, note, *, t=None) -> str:
+        t = t or i18n.english()
         name, parts = self.store.currency_name(result["snapshot"]["guild_id"]), []
         if result["seated"]:
-            parts.append("Your favorites joined too: " + ", ".join(f"{s['name']} ({s['stake']:,})" for s in result["seated"]) + ".")
+            seated_names = ", ".join(t("{name} ({stake:,})", name=s['name'], stake=s['stake']) for s in result["seated"])
+            parts.append(t("Your favorites joined too: {names}.", names=seated_names))
         if result["skipped"]:
-            why = lambda reason: f"not enough {name}" if reason == "broke" else SKIPPED[reason]
-            parts.append("Not seated: " + ", ".join(f"{s['name']} ({why(s['reason'])})" for s in result["skipped"]) + ".")
-        return " ".join([*parts, note] if note else parts)
+            why = lambda reason: t("not enough {currency}", currency=name) if reason == "broke" else t.render(SKIPPED[reason])
+            skipped_names = ", ".join(t("{name} ({reason})", name=s['name'], reason=why(s['reason'])) for s in result["skipped"])
+            parts.append(t("Not seated: {names}.", names=skipped_names))
+        return " ".join([*parts, t.render(note)] if note else parts)
 
-    def _join(self, user_id, key, bet, opened, space_id=None, note="") -> _Out:
+    def _join(self, user_id, key, bet, opened, space_id=None, note="", *, t=None) -> _Out:
+        t = t or i18n.english()
         guild_id = key[0]
         if opened is None and (out := self._if_closed(key, OFF_HERE)) is not None:
             return out
@@ -668,7 +709,7 @@ class GameTables:
             try:
                 if space_id is not None:
                     result = self.store.join_with_favorites(guild_id, snap["round_id"], user_id, bet, space_id)
-                    snap, note = result["snapshot"], self._favorites_note(result, note)
+                    snap, note = result["snapshot"], self._favorites_note(result, note, t=t)
                 else:
                     snap = self.store.join_round(guild_id, snap["round_id"], user_id, bet)
             except GameError:
@@ -678,14 +719,14 @@ class GameTables:
         except GameError as error:
             if opened is not None:
                 self._close_in_store(key)
-            return _Out(str(error))
+            return _Out(error)
         self.table(key).bets[user_id] = bet
         self.table(key).present.add(user_id)
         self._after(key, snap)
         paint = self._paint(key, snap)
         if opened is not None:
             return _Out(paints=[paint], opened=True, note=note)
-        return _Out(f"You joined the table with {bet:,} {self.store.currency_name(guild_id)}." + (f" {note}" if note else ""), [paint], joined=True)
+        return _Out(t("You joined the table with {bet:,} {currency}.", bet=bet, currency=self.store.currency_name(guild_id)) + (f" {t.render(note)}" if note else ""), [paint], joined=True)
 
     async def _open_message(self, interaction, key, paint: Paint) -> None:
         """Posts the table message (the public response). Edits of this table wait behind it, so none is lost to a missing message id."""
@@ -712,27 +753,28 @@ class GameTables:
     # --- buttons ----------------------------------------------------------------------------
 
     @staticmethod
-    def how_to_play(rules=None) -> str:
-        return blackjack.how_to_play(rules) + "\n" + HOW_TO_JOIN
+    def how_to_play(rules=None, *, t=None) -> str:
+        t = t or i18n.english()
+        return "\n".join(t.render(p) for p in blackjack.how_to_play_phrases(rules)) + "\n" + t(HOW_TO_JOIN)
 
-    def _help_text(self, guild_id, table_id, round_id) -> str:
+    def _help_text(self, guild_id, table_id, round_id, *, t=None) -> str:
         """The guide for the rules the table's round was dealt with; the server's current rules when the round is unknown or has none."""
         if guild_id is None:
-            return self.how_to_play()
+            return self.how_to_play(t=t)
         rules = None
         try:
             snap = self.store.round_snapshot(guild_id, round_id)
             rules = snap["rules"] if snap["table_id"] == table_id else None
-            return self.how_to_play(rules or self.store.blackjack_rules(guild_id))
+            return self.how_to_play(rules or self.store.blackjack_rules(guild_id), t=t)
         except GameError:
-            return self.how_to_play(rules or self.store.blackjack_rules(guild_id))
+            return self.how_to_play(rules or self.store.blackjack_rules(guild_id), t=t)
         except Exception:
             logging.exception("Could not build the blackjack guide for table %s", table_id)
-            return self.how_to_play()
+            return self.how_to_play(t=t)
 
     async def press(self, interaction: discord.Interaction, action: str, table_id: int, round_id: int, moves: int) -> None:
         if action == "help":  # a guide, not a move: no state, no seat needed, works on old messages
-            await self._say(interaction, self._help_text(interaction.guild_id, table_id, round_id))
+            await self._say(interaction, self._help_text(interaction.guild_id, table_id, round_id, t=discord_locale.invoker_t(interaction)))
             return
         guild_id = interaction.guild_id
         if guild_id is None or interaction.user.bot or self._foreign((guild_id, table_id)):
@@ -754,13 +796,13 @@ class GameTables:
         guild_id = interaction.guild_id
         if guild_id is None or interaction.user.bot or self._foreign((guild_id, table_id)):
             await self._say(interaction, STALE)
-            return STALE
+            return discord_locale.invoker_t(interaction).render(STALE)
         await self._ack(interaction)
         key = (guild_id, table_id)
         async with self.runtime.lock(key):
             out = self._press(interaction.user.id, key, move, round_id, moves)
         await self._finish(interaction, out)
-        return None if out.say is None and out.paints else out.say or STALE
+        return None if out.say is None and out.paints else words(discord_locale.invoker_t(interaction), out.say or STALE)
 
     def _press(self, user_id, key, action, round_id, moves) -> _Out:
         """Store work for one button press, under the table lock. Returns what to send afterwards."""
@@ -791,7 +833,7 @@ class GameTables:
         except ConflictError:
             return _Out(STALE)
         except GameError as error:
-            return _Out(str(error))
+            return _Out(error)
 
     def _move(self, key, snap, seat, move, moves) -> _Out:
         if snap["status"] != "playing" or snap["moves"] != moves:
@@ -854,7 +896,7 @@ class GameTables:
         table.present.discard(user_id)
         table.bets.pop(user_id, None)
         if table.present or latest["status"] in ("joining", "playing"):
-            return _Out("You left the table.", paints)
+            return _Out(LEFT, paints)
         return self._close_empty(key)
 
     # --- timers' work -----------------------------------------------------------------------
@@ -1039,7 +1081,7 @@ class GameTables:
                 failed += 1
                 logging.exception("Could not close blackjack table %s on restart", table_id)
                 continue
-            await self.edit(channel_id, message_id, "This table closed when the bot restarted. Bets were refunded.", None)
+            await self.edit(channel_id, message_id, self._t(guild_id)("This table closed when the bot restarted. Bets were refunded."), None)
         if refunded or closed or failed:
             logging.info("Blackjack recovery: %d rounds refunded, %d tables closed, %d failures", refunded, closed, failed)
 
@@ -1050,36 +1092,37 @@ def register_game_commands(bot, ctx: SimpleNamespace, admin_games: app_commands.
     async def reply(interaction: discord.Interaction, message: str) -> None:
         await interaction.response.send_message(message, ephemeral=True, allowed_mentions=NO_MENTIONS)
 
-    @bot.tree.command(name="blackjack", description="Join or open a blackjack table in this channel")
-    @app_commands.describe(bet="How much to bet", favorites="Bring your favorite characters to the table")
+    @bot.tree.command(name="blackjack", description=C_("Join or open a blackjack table in this channel"))
+    @app_commands.describe(bet=C_("How much to bet"), favorites=C_("Bring your favorite characters to the table"))
     async def blackjack_command(interaction: discord.Interaction, bet: app_commands.Range[int, 1, MAX_BET], favorites: bool = False):
         require_guild(interaction)
         await bot.games.play_command(interaction, bet, favorites)
 
-    @admin_games.command(name="channel", description="Turn games on or off in a channel")
-    @app_commands.describe(enabled="On or off", channel="The channel (default: this one)")
+    @admin_games.command(name="channel", description=C_("Turn games on or off in a channel"))
+    @app_commands.describe(enabled=C_("On or off"), channel=C_("The channel (default: this one)"))
     @app_commands.checks.has_permissions(administrator=True)
     async def games_channel(interaction: discord.Interaction, enabled: bool, channel: discord.TextChannel | None = None):
         require_guild(interaction)
         channel_id = channel.id if channel else getattr(interaction, "channel_id", None) or interaction.channel.id
         where = channel.mention if channel else f"<#{channel_id}>"
         closed, paint = await bot.games.switch_channel(interaction.guild_id, channel_id, enabled)
-        text = f"Games are now {'on' if enabled else 'off'} in {where}."
+        t = discord_locale.invoker_t(interaction)
+        text = t("Games are now on in {where}.", where=where) if enabled else t("Games are now off in {where}.", where=where)
         try:
-            await reply(interaction, text + (" The open table was closed and bets were refunded." if closed else ""))
+            await reply(interaction, text + (" " + t("The open table was closed and bets were refunded.") if closed else ""))
         finally:
             if paint is not None:
                 await bot.games.send_paint(paint)
 
-    @admin_games.command(name="bets", description="Set the smallest and largest bet")
-    @app_commands.describe(min="Smallest bet", max="Largest bet")
+    @admin_games.command(name="bets", description=C_("Set the smallest and largest bet"))
+    @app_commands.describe(min=C_("Smallest bet"), max=C_("Largest bet"))
     @app_commands.checks.has_permissions(administrator=True)
     async def games_bets(interaction: discord.Interaction, min: app_commands.Range[int, 1, MAX_BET], max: app_commands.Range[int, 1, MAX_BET]):
         require_guild(interaction)
         try:
             saved = bot.store.set_game_settings(interaction.guild_id, min, max, expected=bot.store.game_settings(interaction.guild_id))
         except ConflictError:
-            await reply(interaction, "The game settings were changed elsewhere. Run the command again.")
+            await reply(interaction, discord_locale.invoker_t(interaction)("The game settings were changed elsewhere. Run the command again."))
             return
         name = bot.store.currency_name(interaction.guild_id)
-        await reply(interaction, f"Bets are now {saved['min_bet']:,} to {saved['max_bet']:,} {name}.")
+        await reply(interaction, discord_locale.invoker_t(interaction)("Bets are now {low:,} to {high:,} {currency}.", low=saved['min_bet'], high=saved['max_bet'], currency=name))

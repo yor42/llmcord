@@ -1238,8 +1238,8 @@ class ReviewFindingTests(HoldemCase):
             self.delete_ann()
         self.assertTrue(self.character_exists())
 
-    def test_known_defect_delete_character_is_refused_between_hands_of_an_open_table(self):
-        """FEAT-33 review: a character seated in a settled newest hand of an open cash table still holds chips there, so deleting it is refused."""
+    def test_delete_character_is_refused_between_hands_of_an_open_table(self):
+        """FEAT-33 (fixed): a character seated in a settled newest hand of an open cash table still holds chips there, so deleting it is refused."""
         rid = self.seated_character_table()
         self.store.deal(G, rid)
         self.hand(rid, self.fold_out)
@@ -1260,8 +1260,8 @@ class ReviewFindingTests(HoldemCase):
         self.assertFalse(self.character_exists())
 
     # ---- (2) open_cash_tables
-    def test_known_defect_open_cash_tables_lists_open_holdem_tables_with_newest_status(self):
-        """FEAT-33 review: open_cash_tables() lists open cash tables (any newest-round status, settled included) for startup recovery, not closed, blackjack or doubt tables."""
+    def test_open_cash_tables_lists_open_holdem_tables_with_newest_status(self):
+        """FEAT-33 (fixed): open_cash_tables() lists open cash tables (any newest-round status, settled included) for startup recovery, not closed, blackjack or doubt tables."""
         s = self.store
         for ch in (CH + 1, CH + 2, CH + 3, CH + 4):
             s.set_game_channel(G, ch, True)
@@ -1288,8 +1288,8 @@ class ReviewFindingTests(HoldemCase):
 
 
     # ---- (3) pot excludes the uncalled excess
-    def test_known_defect_summary_pot_excludes_an_uncalled_all_in_excess(self):
-        """FEAT-33 review: the table summary's pot is the sum of result pots; shove 1000 into a 200 all-in call is a 400 pot."""
+    def test_summary_pot_excludes_an_uncalled_all_in_excess(self):
+        """FEAT-33 (fixed): the table summary's pot is the sum of result pots; shoving 1000 into a 200 all-in call makes a 400 pot."""
         rules = {"min_buy_in_bb": 20}
         snap = self.open(seed="pot", rules=rules)
         rid = snap["round_id"]
@@ -1312,8 +1312,8 @@ class ReviewFindingTests(HoldemCase):
 
 
     # ---- (4) buy-in wording
-    def test_known_defect_non_integer_buy_in_message_says_buy_in(self):
-        """FEAT-33 review: a non-whole or boolean buy-in at a Hold'em table is refused in terms of the buy-in, not a bet."""
+    def test_non_integer_buy_in_message_says_buy_in(self):
+        """FEAT-33 (fixed): a non-whole or boolean buy-in at a Hold'em table is refused in terms of the buy-in, not a bet."""
         rid = self.open()["round_id"]
         self.wallet(ALICE)
         for bad in ("1000", 10.5, True):

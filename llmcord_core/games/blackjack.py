@@ -6,6 +6,7 @@ Pure functions over an immutable ``State``. Cards are ints 0..51: rank = card % 
 from dataclasses import dataclass, field, replace
 from typing import Optional, Sequence
 
+from ..i18n import Phrase, UserError, codes, terms
 from .base import IllegalMove, Seat, short_seed_hash, shuffled
 
 DECKS = 6
@@ -25,20 +26,21 @@ def normalize_rules(value=None):
     if value is None:
         value = {}
     if not isinstance(value, dict):
-        raise ValueError("The blackjack rules must be a set of options.")
+        raise UserError(codes.RULES_BLACKJACK_OPTIONS)
     unknown = sorted(str(k) for k in value if k not in CLASSIC_RULES)
     if unknown:
-        raise ValueError(f"Unknown blackjack rule: {', '.join(unknown)}.")
+        raise UserError(codes.RULES_BLACKJACK_UNKNOWN, names=", ".join(unknown))
     r = {**CLASSIC_RULES, **value}
     if type(r["stand_on"]) is not int or r["stand_on"] not in (16, 17, 18):
-        raise ValueError("The dealer must stand on 16, 17 or 18.")
-    for key, label in (("hit_soft_17", "Dealer on soft 17"), ("insurance", "Insurance"), ("surrender", "Late surrender")):
+        raise UserError(codes.RULES_BLACKJACK_STAND_ON)
+    for key, code in (("hit_soft_17", codes.RULES_BLACKJACK_SOFT_17_FLAG), ("insurance", codes.RULES_BLACKJACK_INSURANCE_FLAG),
+                      ("surrender", codes.RULES_BLACKJACK_SURRENDER_FLAG)):
         if type(r[key]) is not bool:
-            raise ValueError(f"{label} must be on or off.")
+            raise UserError(code)
     if r["blackjack_pays"] not in ("3:2", "6:5"):
-        raise ValueError("Blackjack must pay 3:2 or 6:5.")
+        raise UserError(codes.RULES_BLACKJACK_PAYS)
     if r["ties"] not in ("push", "dealer"):
-        raise ValueError("Ties must push or go to the dealer.")
+        raise UserError(codes.RULES_BLACKJACK_TIES)
     if r["stand_on"] != 17:
         r["hit_soft_17"] = False
     return {k: r[k] for k in CLASSIC_RULES}
@@ -53,37 +55,53 @@ def _display_rules(rules):
     return r
 
 
+def rules_phrases(rules=None):
+    """The table's rules in plain words, one Phrase per part (display only); join with " · "."""
+    r = _display_rules(rules)
+    if r["hit_soft_17"]:
+        dealer = Phrase(terms.BJ_RULE_DEALER_HITS_S17)
+    elif r["stand_on"] == 17:
+        dealer = Phrase(terms.BJ_RULE_DEALER_STANDS_ALL_17)
+    else:
+        dealer = Phrase(terms.BJ_RULE_DEALER_STANDS_ON, total=r["stand_on"])
+    parts = [dealer, Phrase(terms.BJ_RULE_PAYS, ratio=r["blackjack_pays"]),
+             Phrase(terms.BJ_RULE_TIES_DEALER if r["ties"] == "dealer" else terms.BJ_RULE_TIES_PUSH),
+             Phrase(terms.BJ_RULE_DOUBLE if r["double"] else terms.BJ_RULE_NO_DOUBLE),
+             Phrase(terms.BJ_RULE_SPLIT if r["split"] else terms.BJ_RULE_NO_SPLIT)]
+    if r["insurance"]:
+        parts.append(Phrase(terms.BJ_RULE_INSURANCE))
+    if r["surrender"]:
+        parts.append(Phrase(terms.BJ_RULE_SURRENDER))
+    parts.append(Phrase(terms.BJ_RULE_DECK_ONE if r["decks"] == 1 else terms.BJ_RULE_DECKS, count=r["decks"]))  # engine plural, branch-chosen
+    return parts
+
+
 def rules_text(rules=None):
     """The table's rules in plain words (display only)."""
+    return " · ".join(str(p) for p in rules_phrases(rules))
+
+
+def how_to_play_phrases(rules=None):
+    """The how-to-play lines, one Phrase per line (display only); join with a newline."""
     r = _display_rules(rules)
-    dealer = "Dealer hits soft 17" if r["hit_soft_17"] else "Dealer stands on all 17s" if r["stand_on"] == 17 else f"Dealer stands on {r['stand_on']}"
-    parts = [dealer, f"Blackjack pays {r['blackjack_pays']}", "Dealer wins ties" if r["ties"] == "dealer" else "Ties push",
-             "Double on the first two cards" if r["double"] else "No doubling", "Splitting allowed" if r["split"] else "No splitting"]
+    lines = [
+        Phrase(terms.BJ_HOW_TITLE),
+        Phrase(terms.BJ_HOW_GOAL),
+        Phrase(terms.BJ_HOW_CARDS),
+        Phrase(terms.BJ_HOW_HIT_STAND_DOUBLE if r["double"] else terms.BJ_HOW_HIT_STAND),
+        Phrase(terms.BJ_HOW_BUST, ratio=r["blackjack_pays"]),
+        Phrase(terms.BJ_HOW_DEALER_SOFT_17 if r["hit_soft_17"] else terms.BJ_HOW_DEALER, stand_on=r["stand_on"]),
+        Phrase(terms.BJ_HOW_WIN_TIE_DEALER if r["ties"] == "dealer" else terms.BJ_HOW_WIN_TIE_PUSH),
+    ]
     if r["insurance"]:
-        parts.append("Insurance")
+        lines.append(Phrase(terms.BJ_HOW_INSURANCE))
     if r["surrender"]:
-        parts.append("Late surrender")
-    parts.append(f"{r['decks']} deck{'' if r['decks'] == 1 else 's'}")
-    return " · ".join(parts)
+        lines.append(Phrase(terms.BJ_HOW_SURRENDER))
+    return lines
 
 
 def how_to_play(rules=None):
-    r = _display_rules(rules)
-    draws = f"it draws until {r['stand_on']} or more" + (", and also hits a soft 17." if r["hit_soft_17"] else ".")
-    lines = [
-        "**Blackjack in short**",
-        "Get closer to 21 than the dealer without going over.",
-        "• Cards: 2–10 are face value, J/Q/K are 10, an ace is 1 or 11.",
-        "• Hit takes a card. Stand keeps your hand." + (" Double doubles your bet, takes one card and ends your turn (first two cards only)." if r["double"] else ""),
-        f"• Over 21 is a bust: you lose. An ace with a ten-value card on your first two cards is blackjack and pays {r['blackjack_pays']}.",
-        f"• The dealer plays after everyone: {draws}",
-        "• Win: you get your bet back plus the same again. " + ("Tie: the dealer wins." if r["ties"] == "dealer" else "Tie: your bet comes back."),
-    ]
-    if r["insurance"]:
-        lines.append("• Insurance: when the dealer shows an ace you may put up half your bet (bets of 2 or more) that the dealer has blackjack; it pays 2 to 1. With a blackjack you may take even money (paid 1 to 1 right away) instead.")
-    if r["surrender"]:
-        lines.append("• Surrender: on your first two cards, once the dealer has checked for blackjack, you may give up the hand and get half your bet back.")
-    return "\n".join(lines)
+    return "\n".join(str(p) for p in how_to_play_phrases(rules))
 
 
 def new_shoe(seed):
@@ -106,9 +124,14 @@ def hand_total(cards):
     return total, False
 
 
-def total_str(cards):
+def total_phrase(cards):
+    """The hand's total for a message param: a Phrase when soft, else the number as plain text."""
     total, soft = hand_total(cards)
-    return f"soft {total}" if soft else str(total)
+    return Phrase(terms.BJ_TOTAL_SOFT, total=total) if soft else str(total)
+
+
+def total_str(cards):
+    return str(total_phrase(cards))
 
 
 def is_natural(cards):
@@ -175,6 +198,7 @@ class Result:
     seed: str
     seed_hash: str
     summary: str
+    summary_phrases: tuple = ()  # the summary lines as Phrases (English join is `summary`)
 
 
 def _draw(state):
@@ -388,16 +412,19 @@ def result(state):
         if cost and state.dealer_natural:
             returned += cost * 3
         seats.append(SeatResult(i, outcome, state.stakes[i], returned, cost))
-        note = f", insurance {'paid 2:1' if state.dealer_natural else 'lost'}" if cost else ""
-        lines.append(f"Seat {i + 1}: {hand_str(state.hands[i])} ({total_str(state.hands[i])}) {outcome}{note}")
+        line = terms.BJ_SUMMARY_SEAT
+        if cost:
+            line = terms.BJ_SUMMARY_SEAT_INSURANCE_PAID if state.dealer_natural else terms.BJ_SUMMARY_SEAT_INSURANCE_LOST
+        lines.append(Phrase(line, seat=i + 1, hand=hand_str(state.hands[i]), total=total_phrase(state.hands[i]), outcome=terms.BJ_OUTCOMES[outcome]))
     dealer_total = hand_total(state.dealer)[0]
-    head = f"Dealer: {hand_str(state.dealer)} ({total_str(state.dealer)})"
+    head = terms.BJ_SUMMARY_DEALER
     if dealer_total > 21:
-        head += " bust"
+        head = terms.BJ_SUMMARY_DEALER_BUST
     elif state.dealer_natural:
-        head += " blackjack"
+        head = terms.BJ_SUMMARY_DEALER_BLACKJACK
+    phrases = (Phrase(head, hand=hand_str(state.dealer), total=total_phrase(state.dealer)), *lines)
     return Result(
         seats=tuple(seats), dealer=state.dealer, dealer_total=dealer_total,
         seed=state.seed, seed_hash=short_seed_hash(state.seed),
-        summary="\n".join([head, *lines]),
+        summary="\n".join(str(p) for p in phrases), summary_phrases=phrases,
     )

@@ -14,6 +14,7 @@ from . import budget
 from .backend import settings_source
 from .config import ModelProfile, Settings, check_key_pin
 from .errors import ModelConfigError, error_detail
+from .i18n import ErrorCode, Phrase, codes
 from .usage import collect_usage, mask_for_log
 
 
@@ -140,9 +141,14 @@ class ModelGateway:
             try:
                 check_key_pin(profile, self.source.key_hosts)
             except ValueError as error:
-                raise ModelConfigError(f'Profile {profile_name}: {error}') from None
+                inner = Phrase(error.code.msgid, **error.params) if isinstance(getattr(error, 'code', None), ErrorCode) else str(error)
+                raise ModelConfigError(codes.MODEL_CONFIG_PROFILE, profile=profile_name, error=inner) from None
             if profile.api_key_env and not environ.get(profile.api_key_env):
-                raise ModelConfigError(f"{profile.api_key_env} is not set in {self.environment}'s environment (profile {profile_name})")
+                if self.environment == 'the bot':
+                    raise ModelConfigError(codes.MODEL_CONFIG_ENV_MISSING_BOT, env=profile.api_key_env, profile=profile_name)
+                if self.environment == 'the dashboard':
+                    raise ModelConfigError(codes.MODEL_CONFIG_ENV_MISSING_DASHBOARD, env=profile.api_key_env, profile=profile_name)
+                raise ModelConfigError(codes.MODEL_CONFIG_ENV_MISSING, env=profile.api_key_env, environment=self.environment, profile=profile_name)
         fingerprint = (profile.provider, profile.base_url, profile.api_key_env, profile.timeout_seconds, profile.max_retries, profile.source)
         if profile_name in self.clients and self.fingerprints.get(profile_name, fingerprint) == fingerprint:
             return self.clients[profile_name]

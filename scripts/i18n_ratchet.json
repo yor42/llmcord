@@ -1,0 +1,71 @@
+{
+  "files": {
+    "llmcord_core/admin_store.py": {
+      "raise": 2
+    },
+    "llmcord_core/auth.py": {
+      "raise": 1
+    },
+    "llmcord_core/avatars.py": {
+      "raise": 2
+    },
+    "llmcord_core/dashboard.py": {
+      "ui": 1
+    },
+    "llmcord_core/discord_bot.py": {
+      "raise": 3
+    },
+    "llmcord_core/engine.py": {
+      "raise": 1
+    },
+    "llmcord_core/game_chooser.py": {
+      "raise": 1
+    },
+    "llmcord_core/games/base.py": {
+      "raise": 3
+    },
+    "llmcord_core/games/blackjack.py": {
+      "raise": 9
+    },
+    "llmcord_core/games/doubt.py": {
+      "raise": 16
+    },
+    "llmcord_core/games/holdem.py": {
+      "raise": 15
+    },
+    "llmcord_core/games/playstyle.py": {
+      "raise": 3
+    },
+    "llmcord_core/icons.py": {
+      "raise": 1
+    },
+    "llmcord_core/items/catalog.py": {
+      "raise": 2
+    },
+    "llmcord_core/models.py": {
+      "raise": 5
+    },
+    "llmcord_core/playstyle_generate.py": {
+      "raise": 3
+    },
+    "llmcord_core/presets_ui.py": {
+      "ui": 1
+    },
+    "llmcord_core/savebar.py": {
+      "raise": 2
+    },
+    "llmcord_core/spoken/head.py": {
+      "raise": 12
+    },
+    "llmcord_core/spoken/onnx_embedder.py": {
+      "raise": 5
+    },
+    "llmcord_core/store.py": {
+      "raise": 2
+    },
+    "llmcord_core/web.py": {
+      "raise": 1
+    }
+  },
+  "version": 1
+}

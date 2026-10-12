@@ -6,20 +6,26 @@ from __future__ import annotations
 
 from discord import app_commands
 
+from .i18n import UserError, codes, terms
+
 CHOICE_LIMIT = 25
-PLURALS = {'world or hub': 'worlds or hubs'}
+SINGULAR = {'character': terms.NOUN_CHARACTER, 'world': terms.NOUN_WORLD, 'hub': terms.NOUN_HUB, 'world or hub': terms.NOUN_WORLD_OR_HUB}
+PLURALS = {'character': terms.NOUN_CHARACTERS, 'world': terms.NOUN_WORLDS, 'hub': terms.NOUN_HUBS, 'world or hub': terms.NOUN_WORLDS_OR_HUBS}
+NOT_FOUND = {'': codes.NAME_NOT_FOUND, ' in this server': codes.NAME_NOT_FOUND_IN_SERVER, ' available here': codes.NAME_NOT_FOUND_AVAILABLE_HERE,
+             ' available here or in the cast': codes.NAME_NOT_FOUND_HERE_OR_CAST}
 VALUE_LIMIT = 100
 
 
-class NameNotFound(ValueError):
+class NameNotFound(UserError):
     pass
 
 
 def resolve(rows, text: str, noun: str, where: str = ''):
     """An exact name wins; otherwise one casefold match; several casefold matches or none raise ValueError."""
     wanted = text.strip()
+    noun = SINGULAR.get(noun, noun)
     if not wanted:
-        raise ValueError(f'Give a {noun} name.')
+        raise UserError(codes.NAME_GIVE, noun=noun)
     exact = [row for row in rows if row['name'] == wanted]
     if len(exact) == 1:
         return exact[0]
@@ -28,8 +34,10 @@ def resolve(rows, text: str, noun: str, where: str = ''):
         return folded[0]
     if folded:
         names = ', '.join(row['name'] for row in folded[:10])
-        raise ValueError(f'Several {PLURALS.get(noun, noun + "s")} match {wanted}: {names}. Use the exact name.')
-    raise NameNotFound(f'No {noun} named {wanted}{where}.')
+        raise UserError(codes.NAME_AMBIGUOUS, plural=PLURALS.get(noun, noun + 's'), wanted=wanted, names=names)
+    if where in NOT_FOUND:
+        raise NameNotFound(NOT_FOUND[where], noun=noun, wanted=wanted)
+    raise NameNotFound(codes.NAME_NOT_FOUND_WHERE, noun=noun, wanted=wanted, where=where)
 
 
 def resolve_space(rows, text: str, kind: str | None = None):
@@ -43,7 +51,7 @@ def resolve_space(rows, text: str, kind: str | None = None):
             other = resolve([row for row in rows if row['kind'] != kind], text, 'world or hub')
         except ValueError:
             raise missing from None
-        raise ValueError(f"{other['name']} is a {other['kind']}, not a {kind}.") from None
+        raise UserError(codes.NAME_WRONG_KIND, name=other['name'], actual=SINGULAR.get(other['kind'], other['kind']), kind=SINGULAR.get(kind, kind)) from None
 
 
 def suggest(names, current: str, many: bool = False) -> list[app_commands.Choice[str]]:

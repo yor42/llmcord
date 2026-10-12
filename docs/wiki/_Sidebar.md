@@ -16,6 +16,7 @@
 - [Scenes and ambient mode](Scenes-and-Ambient-Mode)
 - [Discord commands](Discord-Commands)
 - [Favorites](Favorites)
+- [Language](Language)
 - [Lore and memory](Lore-and-Memory)
 
 **Currency and games**

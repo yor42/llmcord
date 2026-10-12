@@ -16,6 +16,7 @@ import httpx
 
 from .config import LIMIT_DEFAULTS, ModelProfile, Settings, check_key_pin, key_hosts_from_env, profile_from_mapping, validate_profile_name
 from .errors import error_detail, is_timeout, redact, register_secret_names
+from .i18n import ErrorCode, Msg, Phrase, UserError, codes, terms
 
 ROLES = ('dialogue', 'director', 'memory')
 PROBE_TIMEOUT_SECONDS = 25
@@ -28,6 +29,12 @@ class Backend:
     roles: dict[str, str]
     problems: tuple[str, ...]
     version: int
+    problem_phrases: tuple[Phrase, ...] = ()
+
+
+def _error_phrase(error) -> Phrase | None:
+    code = getattr(error, 'code', None)
+    return Phrase(Msg(code.msgid), **error.params) if isinstance(code, ErrorCode) and isinstance(getattr(error, 'params', None), dict) else None
 
 
 def effective_backend(config_profiles, config_roles, rows, roles) -> Backend:
@@ -38,23 +45,24 @@ def effective_backend(config_profiles, config_roles, rows, roles) -> Backend:
             try:
                 validate_profile_name(name)
             except ValueError:
-                problems.append('A saved profile with an invalid name was skipped.')
+                problems.append(Phrase(terms.BACKEND_BAD_NAME))
                 continue
             if not isinstance(row['data'], dict):
-                raise ValueError('its saved settings could not be read')
+                problems.append(Phrase(terms.BACKEND_PROFILE_SKIPPED, name=name, reason=Phrase(terms.BACKEND_UNREADABLE)))
+                continue
             profiles[name] = profile_from_mapping(name, row['data'], source='dashboard')
         except ValueError as error:
-            problems.append(f'Profile {name} was skipped: {error}')
+            problems.append(Phrase(terms.BACKEND_PROFILE_SKIPPED, name=name, reason=_error_phrase(error) or str(error)))
     merged = {}
     for role in ROLES:
         chosen = roles.get(role)
         if chosen is not None and chosen not in profiles:
-            problems.append(f'The {role} role names profile {chosen}, which is not available; using the config.yaml setting.')
+            problems.append(Phrase(terms.BACKEND_ROLE_MISSING, role=role, chosen=chosen))
             chosen = None
         chosen = chosen or config_roles.get(role)
         if chosen in profiles:
             merged[role] = chosen
-    return Backend(profiles, merged, tuple(problems), roles.get('version', 0))
+    return Backend(profiles, merged, tuple(str(p) for p in problems), roles.get('version', 0), tuple(problems))
 
 
 def apply_backend(settings: Settings, backend: Backend) -> Settings:
@@ -196,10 +204,14 @@ class ModelListResult:
     ok: bool
     models: tuple[ModelInfo, ...]
     message: str
+    phrase: Phrase | None = None
 
 
-def _list_failure(message: str, secret: str | None = None) -> ModelListResult:
-    return ModelListResult(False, (), redact(message, extra_values=[secret], strict=True)[:300])
+def _list_failure(message, secret: str | None = None) -> ModelListResult:
+    """`message` is a Phrase (fixed text) or finished text; the phrase is kept only if redaction left the English unchanged."""
+    phrase = message if isinstance(message, Phrase) else None
+    text = redact(str(message), extra_values=[secret], strict=True)[:300]
+    return ModelListResult(False, (), text, phrase if phrase is not None and text == str(phrase) else None)
 
 
 class _ListFailure(Exception):
@@ -213,20 +225,20 @@ async def _get_json(client, url, headers, keyed=True):
             if response.status_code == 404:
                 raise _ListFailure('not_found')
             if response.status_code in (401, 403):
-                raise _ListFailure(f'The provider refused the key (HTTP {response.status_code}).' if keyed else f'The provider needs an API key (HTTP {response.status_code}).')
+                raise _ListFailure(Phrase(terms.LIST_REFUSED if keyed else terms.LIST_NEEDS_KEY, status=response.status_code))
             if response.status_code != 200:
-                raise _ListFailure(f'The provider answered HTTP {response.status_code} instead of a model list.')
+                raise _ListFailure(Phrase(terms.LIST_HTTP_STATUS, status=response.status_code))
             body = bytearray()
             async for chunk in response.aiter_bytes():
                 body += chunk
                 if len(body) > MODEL_LIST_MAX_BYTES:
-                    raise _ListFailure('The provider\'s model list is too large to read.')
+                    raise _ListFailure(Phrase(terms.LIST_TOO_LARGE))
     except _ListFailure:
         raise
     except (httpx.TimeoutException, asyncio.TimeoutError):
-        raise _ListFailure('The provider did not respond in time.') from None
+        raise _ListFailure(Phrase(terms.LIST_TIMEOUT)) from None
     except httpx.HTTPError:
-        raise _ListFailure('Could not reach the provider.') from None
+        raise _ListFailure(Phrase(terms.LIST_UNREACHABLE)) from None
     try:
         return json.loads(bytes(body))
     except ValueError:
@@ -265,11 +277,11 @@ async def list_profile_models(name, mapping, key_hosts, environ=os.environ, tran
             profile = profile_from_mapping(name, mapping, source='dashboard')
             check_key_pin(profile, key_hosts)
         except ValueError as error:
-            return _list_failure(str(error))
+            return _list_failure(_error_phrase(error) or str(error))
         if profile.api_key_env:
             secret = environ.get(profile.api_key_env)
             if not secret:
-                return _list_failure(f"{profile.api_key_env} is not set in the dashboard's environment.")
+                return _list_failure(Phrase(terms.LIST_ENV_MISSING, env=profile.api_key_env))
         base = (profile.base_url or '').rstrip('/')
         if profile.provider == 'anthropic':
             url, headers = 'https://api.anthropic.com/v1/models?limit=1000', {'x-api-key': secret or '', 'anthropic-version': '2023-06-01'}
@@ -303,20 +315,24 @@ async def list_profile_models(name, mapping, key_hosts, environ=os.environ, tran
         try:
             await asyncio.wait_for(collect(url), MODEL_LIST_DEADLINE_SECONDS)
         except asyncio.TimeoutError:
-            return _list_failure('The provider did not respond in time.')
+            return _list_failure(Phrase(terms.LIST_TIMEOUT))
         except _ListFailure as error:
+            fixed = error.args[0] if error.args and isinstance(error.args[0], Phrase) else None
             text = str(error)
             if text in ('not_found', 'unparseable'):
                 if profile.provider == 'compatible':
-                    return _list_failure("This provider doesn't list its models; type the ID.")
-                return _list_failure("The provider's answer was not a model list; type the ID.")
-            return _list_failure(text, secret)
+                    return _list_failure(Phrase(terms.LIST_NOT_LISTED))
+                return _list_failure(Phrase(terms.LIST_NOT_A_LIST))
+            return _list_failure(fixed or text, secret)
         if not found:
-            return _list_failure('The provider returned no models; type the ID.')
-        return ModelListResult(True, tuple(found[key] for key in sorted(found)), f'{len(found)} model{"" if len(found) == 1 else "s"} found.')
+            return _list_failure(Phrase(terms.LIST_EMPTY))
+        count = len(found)
+        phrase = Phrase(terms.LIST_FOUND_ONE if count == 1 else terms.LIST_FOUND_MANY, count=count)
+        return ModelListResult(True, tuple(found[key] for key in sorted(found)), str(phrase), phrase)
     except Exception as error:
         logging.warning('Model list failed unexpectedly: %s', type(error).__name__)
-        return ModelListResult(False, (), 'The model list could not be fetched; see the dashboard log.')
+        phrase = Phrase(terms.LIST_FAILED)
+        return ModelListResult(False, (), str(phrase), phrase)
 
 
 def dashboard_gateway(backend: Backend, limits, store, key_hosts=None, environ=os.environ):
@@ -326,7 +342,7 @@ def dashboard_gateway(backend: Backend, limits, store, key_hosts=None, environ=o
     from .models import ModelGateway
     name = backend.roles.get('director') or backend.roles.get('dialogue')
     if name is None or name not in backend.profiles:
-        raise ValueError('No model is set up for this bot. Choose one on the Backend tab.')
+        raise UserError(codes.BACKEND_NO_MODEL)
     settings = Settings('', None, Path(':memory:'), 0, backend.profiles, name, name, name, {**LIMIT_DEFAULTS, **limits})
     source = _ProbeSource(settings, key_hosts_from_env() if key_hosts is None else key_hosts, environ)
     return ModelGateway(source, usage_sink=store.record_model_usage, budget_gate=lambda: budget.state(store), environment='the dashboard')

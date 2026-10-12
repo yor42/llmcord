@@ -5,6 +5,8 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from .i18n import N_, Phrase
+
 DEFAULT_WINDOW_HOURS = 24
 MAX_MESSAGES = 200
 SCAN_LIMIT = 800
@@ -39,10 +41,16 @@ def cutoff(now: datetime, hours: int | None = None) -> datetime:
     return now - timedelta(hours=hours if hours else DEFAULT_WINDOW_HOURS)
 
 
-def nothing_new(hours: int | None) -> str:
+def nothing_new_phrase(hours: int | None) -> Phrase:
     if hours is None:
-        return "Nothing new here since you last spoke."
-    return "Nothing new here in the last hour." if hours == 1 else f"Nothing new here in the last {hours} hours."
+        return Phrase(N_("Nothing new here since you last spoke."))
+    if hours == 1:
+        return Phrase(N_("Nothing new here in the last hour."))
+    return Phrase(N_("Nothing new here in the last {hours} hours."), hours=hours)
+
+
+def nothing_new(hours: int | None) -> str:
+    return str(nothing_new_phrase(hours))
 
 
 def _flat(text: str) -> str:

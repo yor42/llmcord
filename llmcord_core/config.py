@@ -9,6 +9,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from .errors import register_secret_names
+from .i18n import UserError, codes
 
 
 def prompt_provider(provider: str, base_url: str | None = None) -> str:
@@ -86,7 +87,7 @@ def resolve_database_path(config_path: str | Path = "config.yaml") -> Path:
     except FileNotFoundError:
         raw = {}
     if not isinstance(raw, dict):
-        raise ValueError(f"{config_path} must contain a mapping")
+        raise UserError(codes.CONFIG_NOT_MAPPING, path=str(config_path))
     return _database_path(raw)
 
 
@@ -99,7 +100,7 @@ def operator_ids_from_env(environ=os.environ) -> frozenset[int]:
             continue
         if len(entry) > 20 or not (entry.isascii() and entry.isdigit() and int(entry)):
             shown = entry if len(entry) <= 24 else entry[:24] + "…"
-            raise ValueError(f"LLMCORD_OPERATOR_IDS must be comma-separated Discord user IDs; bad entry: {shown!r}")
+            raise UserError(codes.CONFIG_OPERATOR_IDS, shown=repr(shown))
         ids.add(int(entry))
     return frozenset(ids)
 
@@ -118,13 +119,12 @@ PROFILE_KEYS = frozenset({
     'structured_outputs', 'stream_usage', 'billing_tier', 'input_cost_per_million', 'output_cost_per_million',
     'cached_input_cost_per_million', 'timeout_seconds', 'max_retries',
 })
-_KEY_REF_TEXT = 'API key must be a ${NAME} reference to a variable ending in _API_KEY'
 _ORIGIN_RE = re.compile(r'(?:(https?)://)?([a-z0-9][a-z0-9.-]*)(?::([0-9]{1,5}))?', re.ASCII | re.IGNORECASE)
 
 
 def validate_profile_name(name: str) -> None:
     if not isinstance(name, str) or not PROFILE_NAME_RE.fullmatch(name):
-        raise ValueError('Profile name must be 1-64 characters: lowercase letters, digits, and . _ / -, starting with a letter or digit')
+        raise UserError(codes.PROFILE_NAME_FORMAT)
 
 
 def parse_key_ref(text: str | None) -> str | None:
@@ -133,7 +133,7 @@ def parse_key_ref(text: str | None) -> str | None:
         return None
     match = re.fullmatch(r'\$\{([^{}]*)\}', text.strip()) if isinstance(text, str) else None
     if not match or not KEY_REF_RE.fullmatch(match.group(1)):
-        raise ValueError(_KEY_REF_TEXT)
+        raise UserError(codes.PROFILE_KEY_REF)
     return match.group(1)
 
 
@@ -150,7 +150,7 @@ def _split_origin(url: str) -> tuple[str, str, int]:
     except (ValueError, AttributeError, TypeError):
         bad = True
     if bad:
-        raise ValueError('base_url must be an http or https URL with a host and a valid port')
+        raise UserError(codes.PROFILE_BASE_URL_FORM)
     return scheme, host.lower(), port if port is not None else (443 if scheme == 'https' else 80)
 
 
@@ -175,7 +175,7 @@ def key_hosts_from_env(environ=os.environ) -> dict[str, frozenset[tuple[str, str
             else:
                 parsed = None
             if not parsed:
-                raise ValueError(f'LLMCORD_KEY_HOSTS must look like NAME_API_KEY=host[:port]|https://host2,...; entry {number} is invalid')
+                raise UserError(codes.CONFIG_KEY_HOSTS, number=number)
             result.setdefault(name, set()).update(parsed)
     return {name: frozenset(origins) for name, origins in result.items()}
 
@@ -186,7 +186,7 @@ def profile_origin(profile: ModelProfile) -> tuple[str, str, int]:
     if profile.base_url:
         return _split_origin(profile.base_url)
     if profile.provider not in PROVIDER_ORIGINS:
-        raise ValueError(f'base_url is required for {profile.provider} profiles')
+        raise UserError(codes.PROFILE_BASE_URL_REQUIRED_PROVIDER, provider=profile.provider)
     return _split_origin(PROVIDER_ORIGINS[profile.provider])
 
 
@@ -195,35 +195,34 @@ def check_key_pin(profile: ModelProfile, key_hosts: dict[str, frozenset[tuple[st
     if name is None:
         return
     if not KEY_REF_RE.fullmatch(name):
-        raise ValueError('API key variable must end in _API_KEY and use capital letters, digits and underscores')
+        raise UserError(codes.PROFILE_KEY_VAR_FORM)
     origin = profile_origin(profile)
     if origin not in key_hosts.get(name, frozenset()):
-        raise ValueError(f'{name} may only be sent to its pinned hosts; {origin[1]} is not one of them. '
-                         'Add it to LLMCORD_KEY_HOSTS to allow it.')
+        raise UserError(codes.PROFILE_KEY_PINNED, name=name, host=origin[1])
 
 
 def profile_from_mapping(name: str, value: dict, *, source: str = 'config') -> ModelProfile:
     """Build and validate one profile from a config.yaml-shaped mapping (the key's presence is not checked)."""
     if source not in {'config', 'dashboard'}:
-        raise ValueError("source must be 'config' or 'dashboard'")
+        raise UserError(codes.PROFILE_SOURCE)
     if not isinstance(value, dict):
-        raise ValueError(f'Profile {name} must be a mapping')
+        raise UserError(codes.PROFILE_NOT_MAPPING, name=name)
     model, tokens, base_url, api_key_env = value.get('model'), value.get('context_tokens'), value.get('base_url'), value.get('api_key_env')
     if source == 'dashboard':
         unknown = sorted(str(key) for key in value if key not in PROFILE_KEYS)
         if unknown:
-            raise ValueError(f'Unknown setting in {name}: {", ".join(unknown)}')
+            raise UserError(codes.PROFILE_UNKNOWN_SETTING, name=name, unknown=', '.join(unknown))
         if not isinstance(model, str) or not model.strip() or len(model) > 200:
-            raise ValueError(f'model in {name} must be a name of 1 to 200 characters')
+            raise UserError(codes.PROFILE_MODEL_NAME, name=name)
         if type(tokens) is not int:
-            raise ValueError(f'context_tokens in {name} must be a whole number of at least 1')
+            raise UserError(codes.PROFILE_CONTEXT_TOKENS, name=name)
         if any(key in value and type(value[key]) is not bool for key in ('supports_images', 'structured_outputs', 'stream_usage')):
-            raise ValueError(f'supports_images, structured_outputs and stream_usage in {name} must be true or false')
+            raise UserError(codes.PROFILE_BOOL_FIELDS, name=name)
         if api_key_env is not None and (not isinstance(api_key_env, str) or not KEY_REF_RE.fullmatch(api_key_env)):
-            raise ValueError(f'api_key_env in {name} must be a variable ending in _API_KEY')
+            raise UserError(codes.PROFILE_KEY_ENV_FORM, name=name)
         if base_url is not None:
             if value.get('provider') == 'anthropic':
-                raise ValueError(f'base_url is not used by anthropic profiles ({name})')
+                raise UserError(codes.PROFILE_BASE_URL_ANTHROPIC, name=name)
             bad = not isinstance(base_url, str) or any(c.isspace() or not c.isprintable() for c in base_url)
             if not bad:
                 try:
@@ -232,16 +231,16 @@ def profile_from_mapping(name: str, value: dict, *, source: str = 'config') -> M
                 except ValueError:
                     bad = True
             if bad:
-                raise ValueError(f'base_url in {name} must be an http or https URL with a host and no login')
+                raise UserError(codes.PROFILE_BASE_URL_NO_LOGIN, name=name)
     else:
         try:
             tokens = int(tokens) if type(tokens) is not bool else None
         except (TypeError, ValueError):
             tokens = None
         if model is None:
-            raise ValueError(f'model is required for {name}')
+            raise UserError(codes.PROFILE_MODEL_REQUIRED, name=name)
     if type(tokens) is not int or tokens < 1:
-        raise ValueError(f'context_tokens in {name} must be a whole number of at least 1')
+        raise UserError(codes.PROFILE_CONTEXT_TOKENS, name=name)
     profile = ModelProfile(
         provider=value.get('provider'), model=model, context_tokens=tokens,
         supports_images=bool(value.get('supports_images', False)),
@@ -255,21 +254,21 @@ def profile_from_mapping(name: str, value: dict, *, source: str = 'config') -> M
         source=source,
     )
     if profile.billing_tier not in {'paid', 'free'} or type(profile.stream_usage) is not bool:
-        raise ValueError(f'Invalid billing_tier or stream_usage in {name}')
+        raise UserError(codes.PROFILE_BILLING_OR_STREAM, name=name)
     for rate in (profile.input_cost_per_million, profile.output_cost_per_million, profile.cached_input_cost_per_million):
         if rate is not None and (type(rate) not in {int, float} or not math.isfinite(rate) or rate < 0):
-            raise ValueError(f'Invalid token price in {name}')
+            raise UserError(codes.PROFILE_TOKEN_PRICE, name=name)
     timeout = profile.timeout_seconds
     if type(timeout) not in {int, float} or not math.isfinite(timeout) or timeout <= 0:
-        raise ValueError(f'timeout_seconds in {name} must be a finite number greater than 0')
+        raise UserError(codes.PROFILE_TIMEOUT, name=name)
     if type(profile.max_retries) is not int or profile.max_retries < 0:
-        raise ValueError(f'max_retries in {name} must be a whole number of at least 0')
+        raise UserError(codes.PROFILE_MAX_RETRIES, name=name)
     if profile.provider not in {"openai", "anthropic", "compatible"}:
-        raise ValueError(f"Unsupported provider in {name}")
+        raise UserError(codes.PROFILE_PROVIDER, name=name)
     if profile.provider == "compatible" and not profile.base_url:
-        raise ValueError(f"base_url is required for {name}")
+        raise UserError(codes.PROFILE_BASE_URL_REQUIRED, name=name)
     if profile.reasoning_effort is not None and (profile.provider != "compatible" or profile.reasoning_effort not in {"none", "minimal", "low", "medium", "high"}):
-        raise ValueError(f"Invalid compatible reasoning_effort in {name}")
+        raise UserError(codes.PROFILE_REASONING_EFFORT, name=name)
     return profile
 
 
@@ -304,26 +303,26 @@ def load_settings(path: str | Path = "config.yaml") -> Settings:
     discord = raw.get("discord", {})
     token = os.environ.get(discord.get("token_env", "DISCORD_BOT_TOKEN"), "")
     if not token:
-        raise ValueError("Discord token environment variable is missing")
+        raise UserError(codes.CONFIG_TOKEN_MISSING)
     models = raw.get("models", {})
     profiles, choices = _profiles_and_roles(models)
     if not profiles or any(value not in profiles for value in choices.values()):
-        raise ValueError("Each model role must name a configured profile")
+        raise UserError(codes.CONFIG_ROLE_PROFILE)
     for name, profile in profiles.items():
         if name in choices.values() and (profile.provider != "compatible" or profile.api_key_env) and not os.environ.get(profile.api_key_env or ""):
-            raise ValueError(f"API key environment variable is missing for {name}")
+            raise UserError(codes.CONFIG_API_KEY_MISSING, name=name)
     register_secret_names(p.api_key_env for p in profiles.values())
     limits = {key: int(raw.get("limits", {}).get(key, value)) for key, value in LIMIT_DEFAULTS.items()}
     if any(value <= 0 for value in limits.values()) or limits["max_speakers"] > 3:
-        raise ValueError("Limits must be positive and max_speakers cannot exceed 3")
+        raise UserError(codes.CONFIG_LIMITS)
     if limits["summary_every_messages"] > 100 or limits["extraction_every_turns"] > 100:
-        raise ValueError("summary_every_messages and extraction_every_turns must be between 1 and 100")
+        raise UserError(codes.CONFIG_EVERY_RANGE)
     guild_id = os.environ.get("DISCORD_GUILD_ID") or discord.get("development_guild_id")
     if guild_id and int(guild_id) <= 0:
-        raise ValueError("DISCORD_GUILD_ID must be a positive server ID")
+        raise UserError(codes.CONFIG_GUILD_ID)
     retention = int(raw.get("history_retention_days", 90))
     if retention <= 0:
-        raise ValueError("history_retention_days must be positive")
+        raise UserError(codes.CONFIG_RETENTION)
     return Settings(
         token=token, development_guild_id=int(guild_id) if guild_id else None,
         database_path=_database_path(raw),

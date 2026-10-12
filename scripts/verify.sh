@@ -40,6 +40,7 @@ secret_scan() {
 
 stage "ruff (bug-class lint)" "$PY" -m ruff check .
 stage "repository hygiene" "$PY" scripts/check_repository.py
+stage "i18n catalogs and string ratchet" "$PY" scripts/i18n.py check
 stage "wiki build and docs links" "$PY" scripts/build_wiki.py --check
 stage "compile" "$PY" -m compileall -q llmcord_core scripts tests llmcord.py web_main.py migrate.py
 stage "offline unit tests" "$PY" -m unittest discover -s tests
@@ -52,7 +53,7 @@ else
   SUMMARY+=("SKIP  secret scan (gitleaks not installed)")
 fi
 if [ "$BROWSER" = 1 ]; then
-  stage "dashboard browser suite" env LLMCORD_BROWSER_TESTS=1 "$PY" -m unittest discover -s tests -p test_dashboard_browser.py
+  stage "dashboard browser suite" env LLMCORD_BROWSER_TESTS=1 "$PY" -m unittest discover -s tests -p 'test_dashboard_browser*.py'
 fi
 if [ "$BENCH" = 1 ]; then
   stage "dashboard perf bench" "$PY" scripts/bench_dashboard.py

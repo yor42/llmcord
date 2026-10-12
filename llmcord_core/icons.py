@@ -11,6 +11,8 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote
 
+from .i18n import web_locale
+
 ICON_DIR = Path(__file__).with_name('icons') / 'lucide'
 BUTTON_SIZE = '1.715em'  # same as Quasar's button icons
 SMALL_BUTTON_SIZE = '1.3em'  # icons in size=xs/sm buttons
@@ -76,13 +78,14 @@ def more_menu(name: str):
     The button is named ``More actions for <name>`` and does not propagate its click, so it can sit in an expansion header.
     """
     from nicegui import ui
+    t = web_locale.current()
     button = ui.button().props('flat round dense text-color=white').classes('ll-more')
-    button.props['aria-label'] = f'More actions for {name}'  # not string-parsed: names are user data
+    button.props['aria-label'] = t('More actions for {name}', name=name)  # not string-parsed: names are user data
     stop = '(event) => event.stopPropagation()'
     button.on('click', js_handler=stop).on('keyup', js_handler=stop)
     with button:
         lucide('ellipsis', '1.4em').classes('ll-icon-solo')
-        tooltip = ui.tooltip('More actions')
+        tooltip = ui.tooltip(t('More actions'))
         menu = ui.menu().classes('ll-menu')
     menu.on('before-show', js_handler=f'() => getElement({tooltip.id}).hide()')  # the tooltip would stay over the open menu
     return menu

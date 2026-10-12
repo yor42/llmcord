@@ -1036,8 +1036,8 @@ def assert_conserved(test, state):
 class ShortBlindTests(unittest.TestCase):
     """Review finding 1: a big blind below the small blind or the big blind must not make the other seat act."""
 
-    def test_known_defect_heads_up_big_blind_below_small_blind_asks_nobody(self):
-        """FEAT-33 (Opus review 1): the small blind already matched all the big blind can win; no decision is asked."""
+    def test_heads_up_big_blind_below_small_blind_asks_nobody(self):
+        """FEAT-33 (fixed): heads-up, a big blind all-in below the small blind leaves no decision; the hand runs out without asking anyone (Opus review 1)."""
         s = mk((1000, 3), button=0)  # seat 0 posts 5, seat 1 is all-in for 3: nothing left to decide
         self.assertTrue(s.finished)
         self.assertIsNone(s.turn)
@@ -1051,15 +1051,15 @@ class ShortBlindTests(unittest.TestCase):
         self.assertEqual((s.turn, s.to_call), (0, 10))
         self.assertEqual(holdem.legal_moves(s, 0)[:2], ["fold", "call"])
 
-    def test_known_defect_three_handed_after_the_button_folds_the_small_blind_is_not_asked(self):
-        """FEAT-33 (Opus review 1): small blind 5 vs a 3 all-in with nobody else live has nothing to decide."""
+    def test_three_handed_after_the_button_folds_the_small_blind_is_not_asked(self):
+        """FEAT-33 (fixed): a small blind of 5 against a 3 all-in with nobody else live is not asked to act (Opus review 1)."""
         s = act(mk((1000, 1000, 3), button=0), "fold")
         self.assertTrue(s.finished)
         self.assertIsNone(s.turn)
         assert_conserved(self, s)
 
-    def test_known_defect_heads_up_big_blind_all_in_for_seven_costs_the_small_blind_two(self):
-        """FEAT-33 (Opus review 1): to call is 2 (the 7 the big blind could post minus the 5 already in), not 5."""
+    def test_heads_up_big_blind_all_in_for_seven_costs_the_small_blind_two(self):
+        """FEAT-33 (fixed): against a big blind all-in for 7, the small blind's to-call is 2 (7 minus the 5 already in), not 5 (Opus review 1)."""
         s = mk((1000, 7), button=0)
         self.assertEqual(s.turn, 0)
         self.assertEqual(holdem.view(s, 0).to_call, 2)
@@ -1075,8 +1075,8 @@ class NoRaiseWithoutResponderTests(unittest.TestCase):
         # Seat 0 shoves 100, the small blind folds: the big blind faces an all-in with nobody left to answer a raise.
         self.s = act(mk((100, 1000, 1000)), "raise:100", "fold")
 
-    def test_known_defect_no_raise_options_when_every_other_live_seat_is_all_in(self):
-        """FEAT-33 (Opus review 2): a raise nobody can respond to is not offered."""
+    def test_no_raise_options_when_every_other_live_seat_is_all_in(self):
+        """FEAT-33 (fixed): a raise nobody can respond to is not offered (Opus review 2)."""
         self.assertEqual(self.s.turn, 2)
         legal = holdem.legal_moves(self.s, 2)
         self.assertEqual(legal[:2], ["fold", "call"])
@@ -1085,15 +1085,15 @@ class NoRaiseWithoutResponderTests(unittest.TestCase):
         self.assertFalse(v.can_raise)
         self.assertEqual([m for m in holdem.legal_moves_for_view(v) if m.startswith("raise:")], [])
 
-    def test_known_defect_applying_a_raise_with_no_responder_is_illegal(self):
-        """FEAT-33 (Opus review 2): a raise with no live seat able to respond raises IllegalMove."""
+    def test_applying_a_raise_with_no_responder_is_illegal(self):
+        """FEAT-33 (fixed): a raise with no live seat able to respond raises IllegalMove (Opus review 2)."""
         with self.assertRaises(IllegalMove):
             holdem.apply(self.s, 2, "raise:300")
 
 
 class RaiseParsingTests(unittest.TestCase):
-    def test_known_defect_leading_zeros_are_illegal(self):
-        """FEAT-33 (Opus review 3): raise:020 is not the canonical spelling of raise:20."""
+    def test_leading_zeros_are_illegal(self):
+        """FEAT-33 (fixed): raise amounts with leading zeros (raise:020) are illegal; only the canonical spelling is accepted (Opus review 3)."""
         s = mk()
         for move in ("raise:020", "raise:0020", "raise:00"):
             with self.subTest(move=move), self.assertRaises(IllegalMove):
@@ -1104,8 +1104,8 @@ class RaiseParsingTests(unittest.TestCase):
         with self.assertRaises(IllegalMove):
             holdem.apply(s, s.turn, "raise:" + "9" * 13)
 
-    def test_known_defect_absurdly_long_amount_is_illegal_not_value_error(self):
-        """FEAT-33 (Opus review 3): int() of a 4301+ digit string raises ValueError, which escapes apply()."""
+    def test_absurdly_long_amount_is_illegal_not_value_error(self):
+        """FEAT-33 (fixed): a 4301+ digit raise amount raises IllegalMove from apply(), not int()'s ValueError (Opus review 3)."""
         s = mk()
         for move in ("raise:" + "9" * 5000, "raise:" + "1" * 4301):
             with self.subTest(length=len(move)), self.assertRaises(IllegalMove):
@@ -1118,8 +1118,8 @@ class RaiseParsingTests(unittest.TestCase):
 
 
 class RunOutViewTests(unittest.TestCase):
-    def test_known_defect_view_bets_are_zero_once_the_board_has_run_out(self):
-        """FEAT-33 (Opus review 4): a finished all-in hand shows no open bets."""
+    def test_view_bets_are_zero_once_the_board_has_run_out(self):
+        """FEAT-33 (fixed): a finished all-in hand shows no open bets in the view (Opus review 4)."""
         s = act(mk((100, 100)), "raise:100", "call")
         self.assertTrue(s.finished)
         self.assertIn(s.street, ("showdown", "done"))
@@ -1134,8 +1134,8 @@ class RunOutViewTests(unittest.TestCase):
 
 
 class ViewSafetyTests(unittest.TestCase):
-    def test_known_defect_view_repr_does_not_show_the_hole_cards(self):
-        """FEAT-33 (Opus review 5): printing a View must not leak the viewer's hole cards."""
+    def test_view_repr_does_not_show_the_hole_cards(self):
+        """FEAT-33 (fixed): printing a View does not leak the viewer's hole cards (Opus review 5)."""
         s = mk((1000, 1000, 1000), seed="repr-hole")
         v = holdem.view(s, 0)
         self.assertEqual(tuple(v.hole), tuple(s.holes[0]))
@@ -1198,8 +1198,8 @@ class ExactSidePotTests(unittest.TestCase):
         self.assertEqual(r.seats[0].outcome, "win")
         self.assertEqual(r.seats[2].outcome, "lose")
 
-    def test_known_defect_seat_that_only_gets_its_own_chips_back_is_not_a_winner(self):
-        """FEAT-33 (Opus review 7b): winning a side pot with net 0 is labelled 'lose', not 'win'."""
+    def test_seat_that_only_gets_its_own_chips_back_is_not_a_winner(self):
+        """FEAT-33 (fixed): a seat that wins a side pot for a net 0 is labelled 'lose', not 'win' (Opus review 7b)."""
         stacks = (50, 100, 100)
         seed = find_seed(stacks, lambda st: eval7(st, 0) > eval7(st, 1) > eval7(st, 2))
         r = holdem.result(act(mk(stacks, seed), "raise:50", "raise:100", "call"))

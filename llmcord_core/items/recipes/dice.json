@@ -1,7 +1,10 @@
 {
   "key": "dice",
   "kind": "random_message",
-  "name": "Dice",
+  "name": {
+    "en": "Dice",
+    "ko": "주사위"
+  },
   "emoji": "🎲",
   "consumable": false,
   "default_price": 50,
@@ -21,6 +24,9 @@
   "template": {
     "en": {
       "text": "You rolled a **{roll}** (1-{sides})."
+    },
+    "ko": {
+      "text": "주사위 결과: **{roll}** (1-{sides})"
     }
   }
 }

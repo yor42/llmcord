@@ -14,6 +14,7 @@ import hashlib
 import json
 import math
 
+from ..i18n import Phrase, terms
 from .base import seed_hash
 
 TRAITS = (
@@ -21,25 +22,16 @@ TRAITS = (
     "suspicion", "risk", "judgment", "unpredictability",
 )
 NEUTRAL = 50
-GROUPS = {
-    "Style": ("looseness", "aggression", "bluffing", "risk"),
-    "Reads": ("suspicion", "stubbornness"),
-    "Mind": ("judgment", "unpredictability"),
+GROUPS = {  # keys are Msg (str) terms: the dashboard shows them through t()
+    terms.PLAY_STYLE_GROUP_STYLE: ("looseness", "aggression", "bluffing", "risk"),
+    terms.PLAY_STYLE_GROUP_READS: ("suspicion", "stubbornness"),
+    terms.PLAY_STYLE_GROUP_MIND: ("judgment", "unpredictability"),
 }
 MAX_ERRATIC = 0.35
 MAX_BIAS = 0.25  # upward estimate bias at judgment 0
 NOISE_SHARP, NOISE_FOOL = 0.02, 0.05
 
-_WORDS = {
-    "looseness": ("loose", "tight"),
-    "aggression": ("aggressive", "passive"),
-    "bluffing": ("bluffs often", "rarely bluffs"),
-    "stubbornness": ("stubborn", "quick to fold"),
-    "suspicion": ("suspicious", "trusting"),
-    "risk": ("reckless", "cautious"),
-    "judgment": ("sharp", "foolish"),
-    "unpredictability": ("erratic", "steady"),
-}
+_WORDS = terms.PLAY_STYLE_WORDS
 
 
 @dataclasses.dataclass(frozen=True)
@@ -136,15 +128,20 @@ def misjudge(strength, style, seed, tag):
     return max(0.0, min(1.0, strength + bias + noise))
 
 
-def describe(style):
+def describe_phrases(style):
+    """The trait words worth saying, each a Msg or a Phrase for Translator.render; [balanced] when none is."""
     parts = []
     for t in TRAITS:
         v = getattr(style, t)
         if 40 <= v <= 60:
             continue
         word = _WORDS[t][0 if v > 50 else 1]
-        parts.append(word if v >= 75 or v <= 25 else f"somewhat {word}")
-    return ", ".join(parts) or "balanced"
+        parts.append(word if v >= 75 or v <= 25 else Phrase(terms.PLAY_STYLE_SOMEWHAT, word=word))
+    return parts or [terms.PLAY_STYLE_BALANCED]
+
+
+def describe(style):
+    return ", ".join(str(p) for p in describe_phrases(style))
 
 
 def never_fold_free(legal, move):

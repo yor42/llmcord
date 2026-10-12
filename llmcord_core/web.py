@@ -16,6 +16,8 @@ from fastapi.responses import PlainTextResponse, RedirectResponse, Response
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES, GZipMiddleware
 
+from . import i18n
+from .i18n import UserError, codes, web_locale
 from .store import Store
 from .auth import AuthService
 from .discord_api import DISCORD_API
@@ -24,6 +26,7 @@ from .config import profiles_from_models
 from .errors import register_secret_names
 
 
+CONFIG_UNREADABLE = i18n.N_("the file could not be read")
 AVATAR_CACHE = {"Cache-Control": "private, max-age=300"}
 
 
@@ -79,6 +82,7 @@ class SecurityHeaders:
 def _load_config(app: FastAPI, config_path: str) -> None:
     # config.yaml is parsed once; the Backend tab, the prompt preview and AdminService share the result. A bad file leaves empty sets and a message.
     app.state.config_profiles, app.state.config_roles, app.state.config_error = {}, {}, None
+    app.state.config_error_value = None
     app.state.config_models, app.state.config_limits = {}, {}
     try:
         raw = {}
@@ -92,7 +96,9 @@ def _load_config(app: FastAPI, config_path: str) -> None:
         register_secret_names(p.api_key_env for p in app.state.config_profiles.values())
     except (ValueError, OSError, yaml.YAMLError, TypeError, AttributeError) as error:
         app.state.config_profiles, app.state.config_roles = {}, {}
-        app.state.config_error = str(error) if isinstance(error, ValueError) else "the file could not be read"
+        # config_error stays the English text; config_error_value is what the dashboard renders in the viewer's language.
+        app.state.config_error_value = error if isinstance(error, ValueError) else CONFIG_UNREADABLE
+        app.state.config_error = str(error) if isinstance(error, ValueError) else str(CONFIG_UNREADABLE)
 
 
 def _register_auth_routes(app: FastAPI, base_url: str, client_id: str, client_secret: str) -> None:
@@ -115,19 +121,20 @@ def _register_auth_routes(app: FastAPI, base_url: str, client_id: str, client_se
 
     @app.get("/auth/callback")
     async def callback(request: Request, code: str, state: str):
+        t = web_locale.request_t(request)
         if not secrets.compare_digest(request.cookies.get("llmcord_oauth_state", ""), state):
-            raise HTTPException(403, "Invalid OAuth state")
+            raise HTTPException(403, t("Invalid OAuth state"))
         expiry = app.state.states.pop(state, 0)
         if expiry < time.time():
-            raise HTTPException(403, "Invalid OAuth state")
+            raise HTTPException(403, t("Invalid OAuth state"))
         response = await app.state.http.post(DISCORD_API + "/oauth2/token",
             data={"grant_type": "authorization_code", "code": code,
                   "redirect_uri": base_url + "/auth/callback",
                   "client_id": client_id, "client_secret": client_secret})
         if response.status_code >= 400:
-            raise HTTPException(401, "Discord sign-in failed")
+            raise HTTPException(401, t("Discord sign-in failed"))
         tokens = response.json()
-        user = await discord_get("/users/@me", "Bearer " + tokens["access_token"])
+        user = await discord_get("/users/@me", "Bearer " + tokens["access_token"], t=t)
         ident = secrets.token_urlsafe(40)
         app.state.auth.prune()
         app.state.sessions[ident] = {"user": user, "access": tokens["access_token"],
@@ -143,14 +150,30 @@ def _register_auth_routes(app: FastAPI, base_url: str, client_id: str, client_se
 
     @app.post("/logout")
     async def logout(request: Request):
+        t = web_locale.request_t(request)
         session = await session_for(request)
-        app.state.auth.check_origin(request.headers.get("origin"))
+        app.state.auth.check_origin(request.headers.get("origin"), t=t)
         form = await request.form()
         if not secrets.compare_digest(str(form.get("csrf", "")), session["csrf"]):
-            raise HTTPException(403, "Invalid form token")
+            raise HTTPException(403, t("Invalid form token"))
         app.state.auth.drop_session(request.cookies.get("llmcord_session", ""))
         result = RedirectResponse("/", status_code=303)
         result.delete_cookie("llmcord_session")
+        return result
+
+    @app.post("/lang")
+    async def switch_language(request: Request):
+        t = web_locale.request_t(request)
+        session = await session_for(request)
+        app.state.auth.check_origin(request.headers.get("origin"), t=t)
+        form = await request.form()
+        if not secrets.compare_digest(str(form.get("csrf", "")), session["csrf"]):
+            raise HTTPException(403, t("Invalid form token"))
+        locale = form.get("locale")
+        if not isinstance(locale, str) or locale not in i18n.available_locales():
+            raise HTTPException(400, t("Unknown language"))
+        result = RedirectResponse(web_locale.safe_next(form.get("next")), status_code=303)
+        result.set_cookie(web_locale.COOKIE, locale, max_age=web_locale.COOKIE_MAX_AGE, secure=True, httponly=True, samesite="lax")
         return result
 
 
@@ -159,19 +182,21 @@ def _register_avatar_routes(app: FastAPI) -> set:
 
     @app.get("/guild/{guild_id}/characters/{character_id}/avatar")
     async def character_avatar(request: Request, guild_id: int, character_id: int):
+        t = web_locale.request_t(request)
         await require_admin(request, guild_id)
         row = app.state.store.one("SELECT avatar FROM characters WHERE guild_id=? AND id=?",
             (guild_id, character_id))
         if not row or not row["avatar"]:
-            raise HTTPException(404, "Avatar not found")
+            raise HTTPException(404, t("Avatar not found"))
         return Response(row["avatar"], media_type="image/png", headers=AVATAR_CACHE)
 
     @app.get('/guild/{guild_id}/characters/{character_id}/avatars/{slot_key}')
     async def emotion_avatar(request: Request, guild_id: int, character_id: int, slot_key: str):
+        t = web_locale.request_t(request)
         await require_admin(request, guild_id)
         row = app.state.store.avatar_slot(guild_id, character_id, slot_key)
         if not row['image']:
-            raise HTTPException(404, 'Avatar not found')
+            raise HTTPException(404, t('Avatar not found'))
         return Response(row['image'], media_type='image/png', headers=AVATAR_CACHE)
 
     return {character_avatar, emotion_avatar}
@@ -182,9 +207,9 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
     base_url = base_url.rstrip("/")
     parsed_url = urlparse(base_url)
     if parsed_url.scheme != "https" or not parsed_url.hostname:
-        raise ValueError("WEB_BASE_URL must be a private HTTPS URL")
+        raise UserError(codes.WEB_BASE_URL)
     if not client_id or not client_secret or not bot_token:
-        raise ValueError("Discord OAuth and bot credentials are required")
+        raise UserError(codes.WEB_CREDENTIALS)
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         try:
@@ -208,12 +233,14 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
 
     # ConflictError is a ValueError; no parent-app route writes, so none reaches here (NiceGUI actions handle it).
     @app.exception_handler(ValueError)
-    async def invalid_value(_request: Request, error: ValueError):
-        return PlainTextResponse(f"Invalid input: {str(error)}", status_code=400)
+    async def invalid_value(request: Request, error: ValueError):
+        t = web_locale.request_t(request)
+        return PlainTextResponse(t('Invalid input: {error}', error=t.error(error)), status_code=400)
 
     @app.exception_handler(sqlite3.IntegrityError)
-    async def duplicate_value(_request: Request, _error: sqlite3.IntegrityError):
-        return PlainTextResponse("This name or entry already exists", status_code=409)
+    async def duplicate_value(request: Request, _error: sqlite3.IntegrityError):
+        t = web_locale.request_t(request)
+        return PlainTextResponse(t("This name or entry already exists"), status_code=409)
 
     _load_config(app, config_path)
     app.state.auth = AuthService(app)
