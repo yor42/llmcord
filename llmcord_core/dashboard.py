@@ -363,12 +363,17 @@ async def backend_panel(ctx, config):
                     name.props('hint="Lowercase letters, digits and . _ / -"')
                 provider = ui.select(['openai', 'anthropic', 'compatible'], value=initial.get('provider', 'compatible'), label='Provider').classes('w-full')
                 model = ui.input('Model', value=initial.get('model', '')).classes('w-full')
+                fetch_row = ui.element('div').classes('ll-form-row w-full')
+                picker = ui.select([], value=None, label='Fetched models', with_input=True).classes('w-full')
+                picker.set_visibility(False)
                 key = ui.input('API key', value=format_key_ref(initial['api_key_env']) if initial.get('api_key_env') else '',
                                placeholder='${OPENAI_API_KEY}').classes('w-full').props(f'hint="{KEY_HINT}"')
                 base = ui.input('Base URL', value=initial.get('base_url', '')).classes('w-full').props('hint="Required for compatible providers."')
                 base.bind_visibility_from(provider, 'value', lambda value: value != 'anthropic')
                 tokens = ui.number('Context tokens', value=initial.get('context_tokens'), min=1, step=1, format='%d').classes('w-full')
                 images = ui.switch('Supports images', value=initial.get('supports_images', False))
+                images_touched = []
+                images.on('update:model-value', lambda _event: images_touched.append(True))  # client events only, not programmatic sets
                 with ui.expansion('Advanced').classes('w-full'):
                     with ui.column().classes('ll-stack w-full'):
                         effort = ui.select(['', 'none', 'minimal', 'low', 'medium', 'high'], value=initial.get('reasoning_effort') or '',
@@ -383,11 +388,20 @@ async def backend_panel(ctx, config):
                         timeout = ui.number('Timeout (seconds)', value=initial.get('timeout_seconds', 120), min=0).classes('w-full')
                         retries = ui.number('Max retries', value=initial.get('max_retries', 1), min=0, step=1, format='%d').classes('w-full')
 
+            def mapping_values():
+                return {'provider': provider.value, 'model': model.value, 'api_key': key.value, 'base_url': base.value, 'context_tokens': tokens.value,
+                        'supports_images': images.value, 'reasoning_effort': effort.value, 'structured_outputs': structured.value,
+                        'stream_usage': usage.value, 'billing_tier': tier.value, 'timeout_seconds': timeout.value,
+                        'max_retries': retries.value, **{field: control.value for field, control in costs.items()}}
+
             def mapping():
-                return profile_mapping({'provider': provider.value, 'model': model.value, 'api_key': key.value, 'base_url': base.value, 'context_tokens': tokens.value,
-                                        'supports_images': images.value, 'reasoning_effort': effort.value, 'structured_outputs': structured.value,
-                                        'stream_usage': usage.value, 'billing_tier': tier.value, 'timeout_seconds': timeout.value,
-                                        'max_retries': retries.value, **{field: control.value for field, control in costs.items()}})
+                return profile_mapping(mapping_values())
+
+            def listing_mapping():
+                values = mapping_values()
+                values['model'] = (values.get('model') or '').strip() or 'model-list'
+                values['context_tokens'] = values.get('context_tokens') or 1
+                return profile_mapping(values)
 
             def save():
                 new_name = (name.value or '').strip()
@@ -431,18 +445,82 @@ async def backend_panel(ctx, config):
                     if not dialog.is_deleted:
                         test.enable()
 
+            fetching = False
+            fetched = {}
+
+            async def fetch():
+                nonlocal fetching
+                from . import backend as backend_module
+                from .config import key_hosts_from_env
+                if fetching:
+                    raise ValueError('The model list is already being fetched.')
+                fetching = True
+                try:
+                    list_name = (name.value or '').strip()
+                    if not editing:
+                        validate_profile_name(list_name)
+                    values = listing_mapping()
+                    # Test seam only: tests/dashboard_server.py sets this; production uses the real lister.
+                    lister = getattr(ctx.service.app.state, 'model_lister', None) or backend_module.list_profile_models
+                    fetch_button.disable()
+                    return await lister(list_name or 'profile', values, key_hosts_from_env())
+                finally:
+                    fetching = False
+                    if not dialog.is_deleted:
+                        fetch_button.enable()
+
+            def fetched_models(result):
+                if dialog.is_deleted:
+                    return
+                outcome.clear()
+                if not result.ok:
+                    picker.set_visibility(False)
+                    with outcome:
+                        ui.label(result.message).classes('text-negative').props('role=status')
+                    return
+                fetched.clear()
+                fetched.update({info.id: info for info in result.models})
+                picker.set_options(sorted(fetched), value=None)
+                picker.set_visibility(True)
+                with outcome:
+                    ui.label(result.message).classes('text-positive').props('role=status')
+
+            def stale_list(_event=None):
+                fetched.clear()
+                picker.set_options([], value=None)
+                picker.set_visibility(False)
+
+            for control in (provider, base, key):
+                control.on_value_change(stale_list)
+
+            def picked(event):
+                info = fetched.get(event.value)
+                if info is None:
+                    return
+                model.value = info.id
+                if info.context_tokens and tokens.value is None:
+                    tokens.value = info.context_tokens
+                if info.supports_images is not None and not images_touched:
+                    images.value = info.supports_images
+
+            picker.on_value_change(picked)
+
             def tested(result):
                 if dialog.is_deleted:
                     return
                 outcome.clear()
                 with outcome:
                     ui.label(result.message).classes('text-positive' if result.ok else 'text-negative').props('role=status')
+            with fetch_row:
+                fetch_button = ctx.button('Fetch models', fetch, 'backend.models', lambda result: {'name': (name.value or '').strip(), 'ok': result.ok, 'count': len(result.models)},
+                                          then=fetched_models).props('outline')
             with ui.element('div').classes('ll-form-row justify-end'):
                 ui.button('Cancel', on_click=dialog.close).props('flat')
                 test = ctx.button('Test connection', probe, 'backend.test', lambda result: {'name': (name.value or '').strip(), 'ok': result.ok}, then=tested).props('outline')
                 ctx.button('Save profile', save, 'backend.profile', detail, then=saved, success='Profile saved.', conflict=stale)
             outcome = ui.column().classes('w-full')
-            ui.label('Sends one short request from the dashboard with these settings. It is not counted in usage.').classes('ll-muted')
+            ui.label('Test connection sends one short request from the dashboard with these settings. It is not counted in usage.').classes('ll-muted')
+            ui.label('Fetch models asks the provider for its model list with these settings. Nothing is saved; you can still type any model ID.').classes('ll-muted')
         dialog.on('hide', dialog.delete)
         dialog.open()
 

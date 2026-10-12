@@ -4,11 +4,15 @@ from __future__ import annotations
 import contextlib
 import asyncio
 import contextvars
+import json
 import logging
 import os
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
+from urllib.parse import quote
+
+import httpx
 
 from .config import LIMIT_DEFAULTS, ModelProfile, Settings, check_key_pin, key_hosts_from_env, profile_from_mapping, validate_profile_name
 from .errors import error_detail, is_timeout, redact, register_secret_names
@@ -172,6 +176,147 @@ async def test_profile_connection(name, mapping, key_hosts, environ=os.environ) 
                 await gateway.close()
             except Exception as error:
                 logging.warning('Connection test client did not close: %s', type(error).__name__)
+
+
+MODEL_LIST_TIMEOUT_SECONDS = 15
+MODEL_LIST_DEADLINE_SECONDS = 20
+MODEL_LIST_MAX_BYTES = 8 * 1024 * 1024
+MODEL_LIST_MAX_PAGES = 5
+
+
+@dataclass(frozen=True)
+class ModelInfo:
+    id: str
+    context_tokens: int | None = None
+    supports_images: bool | None = None
+
+
+@dataclass(frozen=True)
+class ModelListResult:
+    ok: bool
+    models: tuple[ModelInfo, ...]
+    message: str
+
+
+def _list_failure(message: str, secret: str | None = None) -> ModelListResult:
+    return ModelListResult(False, (), redact(message, extra_values=[secret], strict=True)[:300])
+
+
+class _ListFailure(Exception):
+    pass
+
+
+async def _get_json(client, url, headers, keyed=True):
+    """GET `url` without following redirects and read at most MODEL_LIST_MAX_BYTES; raises _ListFailure with a fixed, key-free message."""
+    try:
+        async with client.stream('GET', url, headers=headers) as response:
+            if response.status_code == 404:
+                raise _ListFailure('not_found')
+            if response.status_code in (401, 403):
+                raise _ListFailure(f'The provider refused the key (HTTP {response.status_code}).' if keyed else f'The provider needs an API key (HTTP {response.status_code}).')
+            if response.status_code != 200:
+                raise _ListFailure(f'The provider answered HTTP {response.status_code} instead of a model list.')
+            body = bytearray()
+            async for chunk in response.aiter_bytes():
+                body += chunk
+                if len(body) > MODEL_LIST_MAX_BYTES:
+                    raise _ListFailure('The provider\'s model list is too large to read.')
+    except _ListFailure:
+        raise
+    except (httpx.TimeoutException, asyncio.TimeoutError):
+        raise _ListFailure('The provider did not respond in time.') from None
+    except httpx.HTTPError:
+        raise _ListFailure('Could not reach the provider.') from None
+    try:
+        return json.loads(bytes(body))
+    except ValueError:
+        raise _ListFailure('unparseable') from None
+
+
+def _positive_int(value):
+    return value if type(value) is int and value > 0 else None
+
+
+def _compatible_info(item) -> ModelInfo | None:
+    if isinstance(item, str):
+        item = {'id': item}
+    if not isinstance(item, dict) or not isinstance(item.get('id'), str) or not item['id'].strip():
+        return None
+    model_id = item['id'].strip().removeprefix('models/')
+    modalities = (item.get('architecture') or {}).get('input_modalities') if isinstance(item.get('architecture'), dict) else None
+    images = ('image' in modalities) if isinstance(modalities, list) else None
+    return ModelInfo(model_id, _positive_int(item.get('context_length')), images)
+
+
+def _anthropic_info(item) -> ModelInfo | None:
+    if not isinstance(item, dict) or not isinstance(item.get('id'), str) or not item['id'].strip():
+        return None
+    capabilities = item.get('capabilities')
+    image = capabilities.get('image_input') if isinstance(capabilities, dict) else None
+    images = image.get('supported') if isinstance(image, dict) and type(image.get('supported')) is bool else None
+    return ModelInfo(item['id'].strip(), _positive_int(item.get('max_input_tokens')), images)
+
+
+async def list_profile_models(name, mapping, key_hosts, environ=os.environ, transport=None) -> ModelListResult:
+    """List the provider's models for the unsaved profile `mapping` (GET only, no redirects); never raises and never returns the key value."""
+    secret = None
+    try:
+        try:
+            profile = profile_from_mapping(name, mapping, source='dashboard')
+            check_key_pin(profile, key_hosts)
+        except ValueError as error:
+            return _list_failure(str(error))
+        if profile.api_key_env:
+            secret = environ.get(profile.api_key_env)
+            if not secret:
+                return _list_failure(f"{profile.api_key_env} is not set in the dashboard's environment.")
+        base = (profile.base_url or '').rstrip('/')
+        if profile.provider == 'anthropic':
+            url, headers = 'https://api.anthropic.com/v1/models?limit=1000', {'x-api-key': secret or '', 'anthropic-version': '2023-06-01'}
+        elif profile.provider == 'openai':
+            url, headers = f'{base or "https://api.openai.com/v1"}/models', {'Authorization': f'Bearer {secret}'} if secret else {}
+        else:
+            url, headers = f'{base}/models', {'Authorization': f'Bearer {secret}'} if secret else {}
+        headers = {**headers, 'Accept-Encoding': 'identity'}
+        found: dict[str, ModelInfo] = {}
+        async def collect(url):
+            async with httpx.AsyncClient(transport=transport, follow_redirects=False, timeout=MODEL_LIST_TIMEOUT_SECONDS) as client:
+                for _page in range(MODEL_LIST_MAX_PAGES if profile.provider == 'anthropic' else 1):
+                    data = await _get_json(client, url, headers, bool(secret))
+                    if profile.provider == 'anthropic':
+                        items = data.get('data') if isinstance(data, dict) else None
+                        parse = _anthropic_info
+                    else:
+                        items = data.get('data') if isinstance(data, dict) else data
+                        parse = _compatible_info
+                    if not isinstance(items, list):
+                        raise _ListFailure('unparseable')
+                    for item in items:
+                        info = parse(item)
+                        if info is not None:
+                            found.setdefault(info.id, info)
+                    last = data.get('last_id') if isinstance(data, dict) else None
+                    if profile.provider != 'anthropic' or not (isinstance(data, dict) and data.get('has_more') is True and isinstance(last, str) and last):
+                        break
+                    url = f'https://api.anthropic.com/v1/models?limit=1000&after_id={quote(last, safe="")}'
+
+        try:
+            await asyncio.wait_for(collect(url), MODEL_LIST_DEADLINE_SECONDS)
+        except asyncio.TimeoutError:
+            return _list_failure('The provider did not respond in time.')
+        except _ListFailure as error:
+            text = str(error)
+            if text in ('not_found', 'unparseable'):
+                if profile.provider == 'compatible':
+                    return _list_failure("This provider doesn't list its models; type the ID.")
+                return _list_failure("The provider's answer was not a model list; type the ID.")
+            return _list_failure(text, secret)
+        if not found:
+            return _list_failure('The provider returned no models; type the ID.')
+        return ModelListResult(True, tuple(found[key] for key in sorted(found)), f'{len(found)} models found.')
+    except Exception as error:
+        logging.warning('Model list failed unexpectedly: %s', type(error).__name__)
+        return ModelListResult(False, (), 'The model list could not be fetched; see the dashboard log.')
 
 
 def dashboard_gateway(backend: Backend, limits, store, key_hosts=None, environ=os.environ):

@@ -672,6 +672,25 @@ def main():
     async def backend_tester_calls():
         return tester['calls']
 
+    lister = {'mode': 'ok', 'calls': []}
+    async def fake_model_lister(name, mapping, key_hosts):
+        from llmcord_core.backend import ModelInfo, ModelListResult
+        lister['calls'].append({'name': name, 'mapping': mapping})
+        if lister['mode'] == 'ok':
+            return ModelListResult(True, (ModelInfo('fetched-alpha', 32000, True), ModelInfo('fetched-beta')), '2 models found.')
+        return ModelListResult(False, (), "This provider doesn't list its models; type the ID.")
+    app.state.model_lister = fake_model_lister
+
+    @app.post('/_test/backend-lister')
+    async def backend_lister(request: Request):
+        value = await request.json()
+        lister.update(mode=value.get('mode', 'ok'), calls=[])
+        return {'ok': True}
+
+    @app.get('/_test/backend-lister-calls')
+    async def backend_lister_calls():
+        return lister['calls']
+
     @app.post('/_test/backend-reset')
     async def backend_reset():
         # Drop every dashboard profile and role assignment (cleanup after the Backend tab tests).
