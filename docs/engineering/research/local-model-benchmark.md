@@ -136,3 +136,79 @@ Scripts are in `prototypes/local_director/` (they expect the runtime and models 
 - `cases.py` (the 30 cases and expected sets), `bench.py` (starts llama-server, runs the calls, records timings and RSS), `runall.sh` (waits for under 65 C between models), `score.py` (scoring), `tables.md` (tables used here).
 - `results/` is created by `bench.py` (raw per-call text and timings, server logs); not committed.
 - Downloaded GGUF files and the runtime were deleted after the run.
+
+## Round 2: Qwen 3.5 4B on Ollama (remote)
+
+Run 2026-10-12. Everything below is **[M] measured** unless marked **[E] estimated**. Scripts: `prototypes/local_director/` (`ollama_bench.py` director + client, `memory_cases.py`, `spoken_llm.py`, `stub_ollama.py` offline dry-run server). Raw per-call results were written to a scratchpad directory, not the repo.
+
+### Setup
+- Server: Ollama 0.40.3 on the user's other device (reached over the tailnet; set `OLLAMA_URL` to run the scripts), model tag `qwen3.5:4b` (4.2B, Q4_K_M, 3.3 GB file, capabilities completion/vision/tools/thinking).
+- `/api/ps` after the director run: `size` 8.64 GB, `size_vram` 5.52 GB, context 131072. So the model was **not fully in VRAM**; about 3.1 GB (the remainder, likely the large KV cache for the 131k context) sat in system RAM. The GPU model is unknown; the latency below is for this unknown machine, **not** the Pi.
+- Every call: `POST /api/chat`, `stream:false`, `format:<JSON schema>` (omitted for the free-text summary), `options {temperature:0, seed:1}`, `think:false` (main runs). One warm-up call first. Per-call counters recorded: wall, `prompt_eval_count/duration`, `eval_count/duration`, `load_duration`.
+- Prompts are the real ones: the director system prompt and payload shape of round 1 (30 cases), the `summary` and `extraction` presets from `llmcord_core/prompts.py` with `MEMORY_SCHEMA`.
+
+### 1. Director (30 cases, think off)
+
+| metric | 0.5B Q4_K_M (R1) | 1.5B Q4_K_M (R1) | Qwen 3.5 4B (R2) |
+|---|---|---|---|
+| valid JSON | 30/30 | 30/30 | 30/30 |
+| exact all | 1/30 | 1/30 | 21/30 |
+| exact en / ko / mix | 1/15, 0/10, 0/5 | 1/15, 0/10, 0/5 | 11/15, 7/10, 3/5 |
+| contains addressed (all) | 24/24 | 22/24 | 20/24 (en 10/12, ko 7/8, mix 3/4) |
+| ambient silence | 0/6 | 0/6 | **0/6** |
+| wall s per call (median) | 5.1 | 9.8 | 0.70 (max 0.88) |
+| prompt tokens / output tokens (median) | 262 / 15 | 262 / 15 | 267 / 9 |
+| prefill ms / decode ms (median) | 4516 / 603 | 8239 / 1551 | 275 / 377 |
+
+The 4B no longer returns the whole cast; it picks the right speaker or pair in 21/30 cases. It still **never stays silent** on ambient chit-chat: in all 6 cases it named one speaker (the director's silence behavior is the point of ambient mode, so this is the same blocking defect as round 1, only less visible). All 9 misses are accounted for: the 6 ambient cases (one speaker named instead of none) and 3 follow-up cases where it picked the wrong character (#6 Mira instead of Bram, #20 민준 instead of 하늘, #29 서연 instead of Luna). Every addressed-by-name case with a single target was right, including Korean and mixed.
+
+Thinking on (`think:true`, 10 cases = every 3rd, `num_predict` 2048): **unusable**. 9 of 10 calls spent the whole 2048-token budget thinking (about 115 s each, ~18 tokens/s) and returned empty content; only the first finished (1122 tokens). Valid 1/10. So thinking mode would cost minutes per director call on this machine; not pursued further. Not run for memory or spoken moves.
+
+### 2. Memory (12 synthetic transcripts: 5 EN, 5 KO, 2 mixed; keyword checklist, no judge)
+
+| metric (think off) | all | EN | KO | mixed |
+|---|---|---|---|---|
+| extraction schema-valid | 12/12 | 5/5 | 5/5 | 2/2 |
+| summary fact recall (keyword groups) | 24/31 | 12/12 | 6/13 | 6/6 |
+| shared/encounter fact recall | 5/10 | 2/4 | 2/4 | 1/2 |
+| personal fact recall (user's own facts, in `personal_facts`) | 4/11 | 1/4 | 3/5 | 0/2 |
+| personal facts returned on "none" cases (false positives) | 0 | 0 | 0 | 0 |
+| forbidden items in personal_facts | 1 | 0 | 1 | 0 |
+| latency per call (median / max, 24 calls) | 9.7 s / 29.6 s | | | |
+
+Latency split: the summary takes 15 to 30 s (median ~185 output tokens, the model writes far more than needed), extraction 1 to 5 s.
+
+Reading the numbers (the keyword scorer is blunt, so these are judgments from reading the outputs):
+- **Korean summaries came out in English** with romanized names (e.g. "Taewoo", "Su-a", "Borigae"). That is why KO recall is 6/13: the content is mostly right but the Korean keywords are absent. For a Korean server this is a real defect; a prompt that says "write in the transcript's language" would be the first thing to try (not tested).
+- **Invention.** The automated invented-items counter reported 17 for summaries and 2 for extraction, but almost all are false alarms (sentence-initial words such as "This", "Despite"; romanized Korean names). Real problems seen by reading: summaries **embellish** ("long-standing camaraderie", "fracture under the weight of their conflicting natures", a "musician" status), and one extraction invented events ("민준과 태오는 떡볶이를 먹으러 갔다", they only talked about going). In the prompt-injection case (en4) the summary dramatized the attack text, but the injected fact (the password) was **not** saved; extraction kept only "Eli likes chess".
+- **Fact routing is weak.** The model often files the user's own facts under `encounter_facts` instead of `personal_facts` (en2, ko2, ko1), so personal recall is 4/11.
+- Consent: the extraction prompt has no consent distinction (opt-in is enforced later in the store), so a consented vs not-consented case was not applicable at the prompt level.
+
+### 3. Game-action interpretation
+
+Test set: all **195** rows of `prototypes/spoken_moves/phrases.csv` (133 move rows, 62 table-talk rows; the labelled set the FEAT-36/D34 numbers use). The brief's "673 phrases" is the size of the whole data directory including the example lists the e5 head trains on; scoring on those would be circular, so they were not used. No sampling. Model got the phrase plus the row's legal moves (with a one-line meaning each) and answered with a schema enum of legal moves plus `talk`. Metric as `bands.passes`: move rows right when the answer is the label or an accepted move; talk rows silent when the answer is `talk`.
+
+| metric | e5 int8 + head + word rule (FEAT-36/D34, as recorded) | Qwen 3.5 4B, think off |
+|---|---|---|
+| right move on real moves | about 95% | **70.7%** (94/133) |
+| silent on table talk | about 70% | **95.2%** (59/62; 96.8% counting accepted moves) |
+| by language, pass overall | n/a | en 62/71, ko 73/101, mixed 19/23 |
+| wall s per phrase (median / max) | tens of ms on the Pi [E] | 0.66 s / 0.93 s |
+| invalid answers | n/a | 0/195 |
+
+The LLM errs the opposite way from e5: it is conservative. Most of its 39 move misses are `talk` on valid phrases, especially Korean slang and short stands ("ㄱㄱ", "고고", "ㅎㅌ", "서렌 ㄱ", "됐어요", "그만할게", "nah im good", "that's enough") and negated hits ("don't hit me", "안 받아"). A smaller group is the wrong move: insurance vs even money ("이븐 머니요" read as no_insurance), "따블" and "dd". Since a missed move only means the player taps a button, and a false move on table talk is the costly error, this profile (95% silent) is nicer than the e5 head's 70% silent, but the right-move rate is 25 points worse.
+
+Doubt reader (I Doubt It; 116 phrases from `tests/test_spoken_doubt.py`, 60 doubt, 56 not):
+
+| | doubt recall | silent on non-doubt |
+|---|---|---|
+| `read_doubt` (word rule) | 60/60 | 56/56 |
+| Qwen 3.5 4B, think off | 60/60 | 31/56 |
+
+The model answered "doubt" for every negation and exclude phrase ("never lies", "구라 아니야", "거짓말하지마", "Without doubt, nice hand", "의심할 여지가 없어") and for lexical false friends ("lying on the couch", "the answer lies in luck", "뻥!"). The word rule is clearly better here and costs nothing.
+
+### Conclusions
+- **Director:** a large improvement over the 0.5B/1.5B in speaker picking (21/30 exact vs 1/30) and fast (0.7 s) on the remote GPU, but it still cannot do ambient silence (0/6) and is not better than the hosted director where silence matters. Thinking mode is unusable. It is not a drop-in replacement for the hosted call. A partial design that might work (not tested): keep the ambient/silence decision in a cheap rule or the hosted model, and use the local model only for choosing among addressed speakers. The latency is for the user's other machine over the tailnet; on the Pi itself a 4B model is not tested and, from round 1's scaling, would be far slower **[E]**.
+- **Memory:** not good enough to replace the hosted memory role. Schema validity is perfect, but Korean summaries come out in English, summaries embellish, user facts land in the wrong array, and a summary costs ~15 to 30 s. Extraction alone (1 to 5 s) is the more plausible local job, after prompt tuning.
+- **Game actions:** not a replacement for the e5 head on right-move rate (71% vs 95%), better on table-talk silence (95% vs 70%), and 0.66 s vs tens of ms. Possible as a fallback only for utterances the head cannot place; for doubts, keep `read_doubt`.
+- Caveats: one model, one run (temperature 0, seed 1), small hand-written sets, a keyword scorer for memory, remote GPU of unknown type partly spilling to RAM. Differences of a case or two are noise.
