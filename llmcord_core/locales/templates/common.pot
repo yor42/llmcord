@@ -53,6 +53,9 @@ msgctxt "game name"
 msgid "Blackjack"
 msgstr ""
 
+#. i18n: Korean: 다우트 (카드게임), or 다우트(Doubt) if the glossary picks it. 다우트 alone
+#. reads as the word "doubt"; the suffix marks the card game. See i18n-plan.md
+#. section 5.
 #: llmcord_core/i18n/terms.py
 msgctxt "game name"
 msgid "I Doubt It"
@@ -68,6 +71,9 @@ msgctxt "game noun"
 msgid "blackjack"
 msgstr ""
 
+#. i18n: Korean: plain 다우트, without (카드게임). It sits inside a sentence and takes
+#. particles ({game:이/가}); a closing parenthesis would break the particle
+#. choice.
 #: llmcord_core/i18n/terms.py
 msgctxt "game noun"
 msgid "I Doubt It"

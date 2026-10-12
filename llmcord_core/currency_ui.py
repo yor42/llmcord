@@ -327,6 +327,7 @@ class CurrencyPanel:
                        ('reason', t.p('column', 'Reason')), ('admin', t.p('column', 'Admin')), ('note', t.p('column', 'Status')), ('action', t.p('column', 'Actions'))]
             grid = table(columns, ledger_rows(entries, self.names, self.store.guild_timezone(self.gid), self.characters, t=t), 'id')
             reverse_label = escape(t.p('button', 'Reverse'))
+            # i18n: also used in a JavaScript template literal (the button's aria-label): the translation must not contain a backtick (`) or ${.
             reverse_aria = escape(t('Reverse entry {entry}', entry='${props.row.entry}'))
             grid.add_slot('body-cell-action', f'<q-td :props="props"><q-btn v-if="props.row.can_reverse" flat dense no-caps color="negative" label="{reverse_label}" '
                           f':aria-label="`{reverse_aria}`" @click="() => $parent.$emit(\'reverse\', props.row.id)" /></q-td>')

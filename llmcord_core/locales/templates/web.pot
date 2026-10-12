@@ -247,6 +247,8 @@ msgctxt "button"
 msgid "Reverse"
 msgstr ""
 
+#. i18n: also used in a JavaScript template literal (the button's aria-label):
+#. the translation must not contain a backtick (`) or ${.
 #: llmcord_core/currency_ui.py
 #, python-brace-format
 msgid "Reverse entry {entry}"

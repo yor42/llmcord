@@ -26,9 +26,11 @@ NOUN_WORLDS_OR_HUBS = NP_('lookup noun plural', 'worlds or hubs')
 
 # Game names, and the same names inside a sentence (Game.name, Game.noun in games/registry.py).
 GAME_BLACKJACK = NP_('game name', 'Blackjack')
+# i18n: Korean: 다우트 (카드게임), or 다우트(Doubt) if the glossary picks it. 다우트 alone reads as the word "doubt"; the suffix marks the card game. See i18n-plan.md section 5.
 GAME_DOUBT = NP_('game name', 'I Doubt It')
 GAME_HOLDEM = NP_('game name', "Texas Hold'em")
 NOUN_BLACKJACK = NP_('game noun', 'blackjack')
+# i18n: Korean: plain 다우트, without (카드게임). It sits inside a sentence and takes particles ({game:이/가}); a closing parenthesis would break the particle choice.
 NOUN_DOUBT = NP_('game noun', 'I Doubt It')
 NOUN_HOLDEM = NP_('game noun', "Texas Hold'em")
 
