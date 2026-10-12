@@ -826,3 +826,66 @@ msgstr ""
 msgid "No saved context for that character line. Leave the ID empty to use the latest one."
 msgstr ""
 
+#: llmcord_core/i18n/codes.py
+msgid "Ambient participation changed in Discord. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Choose a text channel in this server"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "This channel is no longer bound in Discord. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "A connection test is already running."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Context tokens must be a whole number of at least 1."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Default cast changed in Discord. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That emotion key already exists; edit that emotion instead"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Enter a model ID first."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The model list is already being fetched."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Model is required."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{label} must be a number."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{label} must be a whole number."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The prices are already being looked up."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "A profile named {name} already exists. Use Edit to change it."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Confirm the world move before saving"
+msgstr ""
+

@@ -35,6 +35,8 @@ from .prices import NOT_FOUND
 from .shop_ui import shop_panel
 from .presets_ui import presets_panel
 from .config import PROFILE_KEYS, format_key_ref, parse_key_ref, validate_profile_name
+from . import i18n
+from .i18n import N_, NP_, UserError, codes, web_locale
 from .icons import icon_css, lucide, lucide_button, more_menu
 from .lorebooks import parse_lorebook
 from .macro_highlight import MacroHighlight
@@ -42,8 +44,8 @@ from .savebar import SaveBar
 from .scene_ui import confirm_dialog, delete_book_dialog, delete_space_dialog, direct_import_dialog, guideline_editor
 
 
-_BUSY = 'The database is busy. Try again.'
-_UNEXPECTED = 'Something went wrong. Try again.'
+_BUSY = N_('The database is busy. Try again.')
+_UNEXPECTED = N_('Something went wrong. Try again.')
 
 
 class OperatorContext:
@@ -55,18 +57,19 @@ class OperatorContext:
 
     async def _attempt(self, operation, action=None, detail=None):
         from nicegui import ui
+        t = web_locale.current()
         try:
             return True, await self.service.run_operator(self.ident, operation, action, detail)
         except (ValueError, HTTPException) as error:
-            ui.notify(error.detail if isinstance(error, HTTPException) else str(error), type='negative', timeout=8000)
+            ui.notify(error.detail if isinstance(error, HTTPException) else t.error(error), type='negative', timeout=8000)
             return False, error
         except sqlite3.OperationalError as error:
             logging.warning('Operator action hit a database error', exc_info=True)
-            ui.notify(_BUSY, type='negative', timeout=8000)
+            ui.notify(t(_BUSY), type='negative', timeout=8000)
             return False, error
         except Exception as error:
             logging.exception('Operator action failed')
-            ui.notify(_UNEXPECTED, type='negative', timeout=8000)
+            ui.notify(t(_UNEXPECTED), type='negative', timeout=8000)
             return False, error
 
     async def read(self, operation):
@@ -96,41 +99,46 @@ class OperatorContext:
 def budget_panel(ctx):
     from nicegui import ui
     from . import budget
-    with section('Spending caps'):
+    t = web_locale.current()
+    with section(t('Spending caps')):
         body = ui.column().classes('ll-stack w-full')
 
     def render():
         state = budget.state(ctx.store)
         body.clear()
         with body:
-            ui.label('Applies to the whole bot. Operators get a DM when spending passes each cap. At the hard cap, new character replies, '
-                     'ambient turns, catch-ups and memory updates pause until the reset day or until you raise the cap.').classes('ll-muted')
-            ui.label(f'{format_usd(state.spent_usd)} spent since {state.period}. The period resets on {state.resets_on.isoformat()} (UTC).')
+            ui.label(t('Applies to the whole bot. Operators get a DM when spending passes each cap. At the hard cap, new character replies, '
+                       'ambient turns, catch-ups and memory updates pause until the reset day or until you raise the cap.')).classes('ll-muted')
+            ui.label(t('{spent} spent since {period}. The period resets on {date} (UTC).',
+                       spent=format_usd(state.spent_usd, t=t), period=state.period, date=state.resets_on.isoformat()))
             if state.hard_reached:
-                ui.label('Hard cap reached: character replies are paused.').classes('font-bold')
+                ui.label(t('Hard cap reached: character replies are paused.')).classes('font-bold')
             elif state.soft_reached:
-                ui.label('Soft cap reached: operators were warned.').classes('font-bold')
+                ui.label(t('Soft cap reached: operators were warned.')).classes('font-bold')
             if state.unpriced_calls:
                 n = state.unpriced_calls
-                ui.label(f'{n} model call{"" if n == 1 else "s"} without a cost estimate this period {"was" if n == 1 else "were"} counted as $0. '
-                         'Set prices for those models to include them.').classes('text-warning')
+                ui.label(t.n('{n} model call without a cost estimate this period was counted as $0. Set prices for those models to include them.',
+                             '{n} model calls without a cost estimate this period were counted as $0. Set prices for those models to include them.', n, n=n)).classes('text-warning')
             with ui.element('div').classes('ll-form-row'):
-                soft = ui.number('Soft cap (USD)', value=state.soft_cap_usd, min=0, step=1).props('hint="Blank means off" clearable')
-                hard = ui.number('Hard cap (USD)', value=state.hard_cap_usd, min=0, step=1).props('hint="Blank means off" clearable')
-                day = ui.select(list(range(1, 29)), value=state.reset_day, label='Reset day').props('hint="Day of the month, UTC"')
-            notice = ui.switch('Post a notice in the channel when the hard cap pauses a reply (at most once an hour per channel)', value=state.channel_notice)
+                soft = ui.number(t('Soft cap (USD)'), value=state.soft_cap_usd, min=0, step=1).props('clearable')
+                soft.props['hint'] = t('Blank means off')
+                hard = ui.number(t('Hard cap (USD)'), value=state.hard_cap_usd, min=0, step=1).props('clearable')
+                hard.props['hint'] = t('Blank means off')
+                day = ui.select(list(range(1, 29)), value=state.reset_day, label=t('Reset day'))
+                day.props['hint'] = t('Day of the month, UTC')
+            notice = ui.switch(t('Post a notice in the channel when the hard cap pauses a reply (at most once an hour per channel)'), value=state.channel_notice)
 
             def values():
-                def cap(control, name):
+                def cap(control, invalid):
                     if control.value in (None, ''):
                         return None
                     try:
                         return float(control.value)
                     except (TypeError, ValueError):
-                        raise ValueError(f'{name} cap must be blank or a number of dollars, zero or more.')
+                        raise UserError(invalid)
                 if isinstance(day.value, bool) or not isinstance(day.value, int) or not 1 <= day.value <= 28:
-                    raise ValueError('Reset day must be a whole number from 1 to 28.')
-                return cap(soft, 'Soft'), cap(hard, 'Hard'), day.value, bool(notice.value)
+                    raise UserError(codes.DASH_RESET_DAY_INVALID)
+                return cap(soft, codes.DASH_SOFT_CAP_INVALID), cap(hard, codes.DASH_HARD_CAP_INVALID), day.value, bool(notice.value)
 
             def save():
                 return ctx.store.save_budget(*values(), state.revision)
@@ -139,14 +147,14 @@ def budget_panel(ctx):
                 soft_cap, hard_cap, reset_day, channel_notice = values()
                 return {'soft_cap_usd': soft_cap, 'hard_cap_usd': hard_cap, 'reset_day': reset_day, 'channel_notice': channel_notice}
             with ui.element('div').classes('ll-form-row'):
-                ctx.button('Save', save, 'budget.settings', lambda _result: detail(), then=lambda _result: render(), success='Spending caps saved.', conflict=render)
+                ctx.button(t.p('button', 'Save'), save, 'budget.settings', lambda _result: detail(), then=lambda _result: render(), success=t('Spending caps saved.'), conflict=render)
     render()
 
-ROLE_LABELS = {'dialogue': 'Dialogue', 'director': 'Director', 'memory': 'Memory'}
-PROFILE_SOURCES = {'config': 'config.yaml', 'dashboard': 'Dashboard', 'override': 'Dashboard (overrides config.yaml)', 'skipped': 'Dashboard (skipped, see warning)'}
-BACKEND_NOTE = ('Changes apply from the next message. "Set" means this dashboard\'s environment has the variable; '
-                'the bot checks its own environment when it calls the model.')
-KEY_HINT = 'A ${NAME} reference to a variable ending in _API_KEY. Never paste the key itself.'
+ROLE_LABELS = {'dialogue': NP_('model role', 'Dialogue'), 'director': NP_('model role', 'Director'), 'memory': NP_('model role', 'Memory')}
+PROFILE_SOURCES = {'config': 'config.yaml', 'dashboard': N_('Dashboard'), 'override': N_('Dashboard (overrides config.yaml)'), 'skipped': N_('Dashboard (skipped, see warning)')}
+BACKEND_NOTE = N_('Changes apply from the next message. "Set" means this dashboard\'s environment has the variable; '
+                  'the bot checks its own environment when it calls the model.')
+KEY_HINT = N_('A ${{NAME}} reference to a variable ending in _API_KEY. Never paste the key itself.')
 
 
 def profile_mapping_of(profile):
@@ -154,16 +162,19 @@ def profile_mapping_of(profile):
     return {key: getattr(profile, key) for key in PROFILE_KEYS if getattr(profile, key) is not None}
 
 
-def key_status(name, environ=os.environ):
+def key_status(name, environ=os.environ, *, t=None):
     """('none' | 'set' | 'missing', text) for a profile's key reference; only whether the variable has a value is read."""
+    t = t or i18n.english()
     if not name:
-        return 'none', 'No key'
-    state = 'set' if environ.get(name) else 'missing'
-    return state, f'{format_key_ref(name)} ({state})'
+        return 'none', t('No key')
+    if environ.get(name):
+        return 'set', t('{ref} (set)', ref=format_key_ref(name))
+    return 'missing', t('{ref} (missing)', ref=format_key_ref(name))
 
 
-def profile_view(backend, config_profiles, db_rows, environ=os.environ):
+def profile_view(backend, config_profiles, db_rows, environ=os.environ, *, t=None):
     """Row view-model for the Profiles list, sorted by name; never carries an environment value."""
+    t = t or i18n.english()
     revisions = {row['name']: row['revision'] for row in db_rows}
     badges = {}
     for role in ROLES:
@@ -173,9 +184,10 @@ def profile_view(backend, config_profiles, db_rows, environ=os.environ):
     for name in sorted(backend.profiles):
         profile = backend.profiles[name]
         kind = ('override' if name in config_profiles else 'dashboard') if profile.source == 'dashboard' else 'config'
-        state, key = key_status(profile.api_key_env, environ)
+        state, key = key_status(profile.api_key_env, environ, t=t)
+        source = PROFILE_SOURCES[kind]
         views.append({'name': name, 'provider': profile.provider, 'model': profile.model, 'key': key, 'key_state': state, 'kind': kind,
-                      'source': PROFILE_SOURCES[kind], 'revision': revisions.get(name) if kind != 'config' else None,
+                      'source': t(source), 'revision': revisions.get(name) if kind != 'config' else None,
                       'roles': badges.get(name, []), 'initial': profile_mapping_of(profile)})
     for row in db_rows:  # saved rows the merge skipped stay listed so they can be fixed or deleted
         name = row['name']
@@ -187,19 +199,21 @@ def profile_view(backend, config_profiles, db_rows, environ=os.environ):
             continue
         data = row['data'] if isinstance(row['data'], dict) else {}
         ref = data.get('api_key_env') if isinstance(data.get('api_key_env'), str) else None
-        state, key = key_status(ref, environ)
+        state, key = key_status(ref, environ, t=t)
+        skipped = PROFILE_SOURCES['skipped']
         views.append({'name': name, 'provider': str(data.get('provider', '')), 'model': str(data.get('model', '')), 'key': key, 'key_state': state,
-                      'kind': 'skipped', 'source': PROFILE_SOURCES['skipped'], 'revision': row['revision'], 'roles': [],
+                      'kind': 'skipped', 'source': t(skipped), 'revision': row['revision'], 'roles': [],
                       'initial': {k: v for k, v in data.items() if k in PROFILE_KEYS}})
     return sorted(views, key=lambda view: view['name'])
 
 
-def role_options(saved_value, backend_profiles, config_role):
+def role_options(saved_value, backend_profiles, config_role, *, t=None):
     """Options for a role select: use config.yaml, each available profile, and a saved value that no longer resolves."""
-    options = {'': f'Use config.yaml ({config_role or "none"})'}
+    t = t or i18n.english()
+    options = {'': t('Use config.yaml ({role})', role=config_role) if config_role else t('Use config.yaml (none)')}
     options.update({name: f'{name} · {profile.model}' for name, profile in backend_profiles.items()})
     if saved_value and saved_value not in options:
-        options[saved_value] = f'{saved_value} (not available)'
+        options[saved_value] = t('{name} (not available)', name=saved_value)
     return options
 
 
@@ -225,10 +239,10 @@ def _number(value, label, whole=False):
         if not math.isfinite(number):
             raise ValueError
     except (TypeError, ValueError):
-        raise ValueError(f'{label} must be a number.') from None
+        raise UserError(codes.DASH_NUMBER_INVALID, label=label) from None
     if whole:
         if not number.is_integer():
-            raise ValueError(f'{label} must be a whole number.')
+            raise UserError(codes.DASH_NUMBER_WHOLE, label=label)
         return int(number)
     return number
 
@@ -238,10 +252,10 @@ def profile_mapping(values):
     provider = values.get('provider')
     model = (values.get('model') or '').strip()
     if not model:
-        raise ValueError('Model is required.')
-    tokens = _number(values.get('context_tokens'), 'Context tokens', whole=True)
+        raise UserError(codes.DASH_MODEL_REQUIRED)
+    tokens = _number(values.get('context_tokens'), N_('Context tokens'), whole=True)
     if tokens is None or tokens < 1:
-        raise ValueError('Context tokens must be a whole number of at least 1.')
+        raise UserError(codes.DASH_CONTEXT_TOKENS_MIN)
     mapping = {'provider': provider, 'model': model, 'context_tokens': tokens, 'supports_images': bool(values.get('supports_images')),
                'structured_outputs': bool(values.get('structured_outputs')), 'stream_usage': bool(values.get('stream_usage', True)),
                'billing_tier': values.get('billing_tier') or 'paid'}
@@ -253,12 +267,12 @@ def profile_mapping(values):
         mapping['base_url'] = base_url
     if values.get('reasoning_effort') and provider == 'compatible':
         mapping['reasoning_effort'] = values['reasoning_effort']
-    for field, label in (('input_cost_per_million', 'Input cost'), ('output_cost_per_million', 'Output cost'), ('cached_input_cost_per_million', 'Cached input cost'),
-                         ('timeout_seconds', 'Timeout')):
+    for field, label in (('input_cost_per_million', N_('Input cost')), ('output_cost_per_million', N_('Output cost')), ('cached_input_cost_per_million', N_('Cached input cost')),
+                         ('timeout_seconds', N_('Timeout'))):
         number = _number(values.get(field), label)
         if number is not None:
             mapping[field] = number
-    retries = _number(values.get('max_retries'), 'Max retries', whole=True)
+    retries = _number(values.get('max_retries'), N_('Max retries'), whole=True)
     if retries is not None:
         mapping['max_retries'] = retries
     return mapping
@@ -278,11 +292,12 @@ async def backend_panel(ctx, config):
     """Backend tab: role assignment and the profile list/editor. `config` has .profiles, .roles and .error from config.yaml."""
     from nicegui import ui
     from .scene_ui import confirm_dialog
+    t = web_locale.current()
     config_names = set(config.profiles)
     current_views = []
-    with section('Roles'):
+    with section(t('Roles')):
         roles_body = ui.column().classes('ll-stack w-full')
-    with section('Profiles'):
+    with section(t('Profiles')):
         profiles_body = ui.column().classes('ll-stack w-full')
 
     async def render():
@@ -291,7 +306,7 @@ async def backend_panel(ctx, config):
             return
         rows, saved = state
         backend = effective_backend(config.profiles, config.roles, rows, saved)
-        views = profile_view(backend, config.profiles, rows)
+        views = profile_view(backend, config.profiles, rows, t=t)
         current_views[:] = views
         roles_body.clear()
         profiles_body.clear()
@@ -304,49 +319,50 @@ async def backend_panel(ctx, config):
         selects = {}
         with ui.element('div').classes('ll-form-row'):
             for role in ROLES:
-                selects[role] = ui.select(role_options(saved.get(role), backend.profiles, config.roles.get(role)), value=saved.get(role) or '', label=ROLE_LABELS[role]).classes('ll-wide')
-        ui.label('Roles choose from your profiles. Add a profile below to use another model. A role set here replaces the config.yaml role of the same name.').classes('ll-muted')
+                role_label = ROLE_LABELS[role]
+                selects[role] = ui.select(role_options(saved.get(role), backend.profiles, config.roles.get(role), t=t), value=saved.get(role) or '', label=t(role_label)).classes('ll-wide')
+        ui.label(t('Roles choose from your profiles. Add a profile below to use another model. A role set here replaces the config.yaml role of the same name.')).classes('ll-muted')
 
         def chosen():
             return {role: selects[role].value or None for role in ROLES}
         with ui.element('div').classes('ll-form-row'):
-            ctx.button('Save roles', lambda: ctx.store.save_model_roles(chosen(), saved['revision'], config_names),
-                       'backend.roles', lambda _result: roles_detail(saved, chosen()), then=lambda _result: render(), success='Roles saved.', conflict=render)
+            ctx.button(t('Save roles'), lambda: ctx.store.save_model_roles(chosen(), saved['revision'], config_names),
+                       'backend.roles', lambda _result: roles_detail(saved, chosen()), then=lambda _result: render(), success=t('Roles saved.'), conflict=render)
 
     def render_profiles(views, backend):
         if config.error:
-            ui.label(f'config.yaml could not be read, so only dashboard profiles are listed. {config.error}').classes('text-warning')
+            ui.label(t('config.yaml could not be read, so only dashboard profiles are listed. {error}', error=config.error)).classes('text-warning')
         for problem in backend.problems:
             ui.label(problem).classes('text-warning')
         if not views:
-            ui.label('No profiles yet.').classes('ll-muted')
+            ui.label(t('No profiles yet.')).classes('ll-muted')
         for view in views:
             with ui.element('div').classes('ll-stack ll-result w-full'):
                 with ui.element('div').classes('ll-form-row'):
                     ui.label(view['name']).classes('font-bold')
                     for role in view['roles']:
-                        ui.badge(f'{ROLE_LABELS[role]} role').props('outline')
+                        ui.badge(t('{role} role', role=ROLE_LABELS[role])).props('outline')
                 ui.label(f"{view['provider']} · {view['model']}")
-                ui.label(f"Key: {view['key']}").classes('ll-muted')
-                ui.label(f"From: {view['source']}").classes('ll-muted')
+                ui.label(t('Key: {key}', key=view['key'])).classes('ll-muted')
+                ui.label(t('From: {source}', source=view['source'])).classes('ll-muted')
                 with ui.element('div').classes('ll-form-row'):
-                    edit = ui.button('Edit', on_click=lambda v=view: open_editor(v)).props('outline size=sm')
-                    edit.props['aria-label'] = f"Edit {view['name']}"
+                    edit = ui.button(t.p('button', 'Edit'), on_click=lambda v=view: open_editor(v)).props('outline size=sm')
+                    edit.props['aria-label'] = t('Edit {name}', name=view['name'])
                     if view['kind'] in ('dashboard', 'skipped'):
-                        drop = ui.button('Delete', on_click=lambda v=view: confirm_drop(v)).props('outline size=sm color=negative')
-                        drop.props['aria-label'] = f"Delete {view['name']}"
+                        drop = ui.button(t.p('button', 'Delete'), on_click=lambda v=view: confirm_drop(v)).props('outline size=sm color=negative')
+                        drop.props['aria-label'] = t('Delete {name}', name=view['name'])
                     elif view['kind'] == 'override':
-                        reset = ui.button('Reset to config.yaml', on_click=lambda v=view: confirm_drop(v)).props('outline size=sm')
-                        reset.props['aria-label'] = f"Reset to config.yaml for {view['name']}"
+                        reset = ui.button(t('Reset to config.yaml'), on_click=lambda v=view: confirm_drop(v)).props('outline size=sm')
+                        reset.props['aria-label'] = t('Reset to config.yaml for {name}', name=view['name'])
         with ui.element('div').classes('ll-form-row'):
-            lucide_button('Add profile', 'plus', on_click=lambda: open_editor(None))
-        ui.label(BACKEND_NOTE).classes('ll-muted')
+            lucide_button(t('Add profile'), 'plus', on_click=lambda: open_editor(None))
+        ui.label(t(BACKEND_NOTE)).classes('ll-muted')
 
     def confirm_drop(view):
         name, reset = view['name'], view['kind'] == 'override'
-        lines = (['The config.yaml version of this profile applies again. Edits made on the dashboard are lost.'] if reset else
-                 ['This removes the saved profile. Roles assigned to it must be changed first.'])
-        confirm_dialog(ctx, f'Reset {name} to config.yaml?' if reset else f'Delete {name}?', lines, 'Reset profile' if reset else 'Delete profile',
+        lines = ([t('The config.yaml version of this profile applies again. Edits made on the dashboard are lost.')] if reset else
+                 [t('This removes the saved profile. Roles assigned to it must be changed first.')])
+        confirm_dialog(ctx, t('Reset {name} to config.yaml?', name=name) if reset else t('Delete {name}?', name=name), lines, t('Reset profile') if reset else t('Delete profile'),
                        lambda: ctx.store.delete_model_profile(name, view['revision'], config_names), 'backend.profile_delete', {'name': name},
                        then=lambda _result: render(), conflict=lambda: render())
 
@@ -355,41 +371,49 @@ async def backend_panel(ctx, config):
         initial = editor_initial(view['initial']) if editing else {}
         revision = view['revision'] if editing else None
         with ui.dialog() as dialog, ui.card().classes('w-full max-w-2xl'):
-            ui.label(f"Edit {view['name']}" if editing else 'Add profile').classes('text-xl font-bold')
+            ui.label(t('Edit {name}', name=view['name']) if editing else t('Add profile')).classes('text-xl font-bold')
             with ui.column().classes('ll-stack w-full'):
-                name = ui.input('Name', value=view['name'] if editing else '').classes('w-full')
+                name = ui.input(t.p('field', 'Name'), value=view['name'] if editing else '').classes('w-full')
                 if editing:
                     name.props('readonly')
                 else:
-                    name.props('hint="Lowercase letters, digits and . _ / -"')
-                provider = ui.select(['openai', 'anthropic', 'compatible'], value=initial.get('provider', 'compatible'), label='Provider').classes('w-full')
-                model = ui.input('Model', value=initial.get('model', '')).classes('w-full')
+                    name.props['hint'] = t('Lowercase letters, digits and . _ / -')
+                provider = ui.select(['openai', 'anthropic', 'compatible'], value=initial.get('provider', 'compatible'), label=t.p('field', 'Provider')).classes('w-full')
+                model = ui.input(t.p('field', 'Model'), value=initial.get('model', '')).classes('w-full')
                 fetch_row = ui.element('div').classes('ll-form-row w-full')
-                picker = ui.select([], value=None, label='Fetched models', with_input=True).classes('w-full')
+                picker = ui.select([], value=None, label=t('Fetched models'), with_input=True).classes('w-full')
                 picker.set_visibility(False)
-                key = ui.input('API key', value=format_key_ref(initial['api_key_env']) if initial.get('api_key_env') else '',
-                               placeholder='${OPENAI_API_KEY}').classes('w-full').props(f'hint="{KEY_HINT}"')
-                base = ui.input('Base URL', value=initial.get('base_url', '')).classes('w-full').props('hint="Required for compatible providers."')
+                key = ui.input(t('API key'), value=format_key_ref(initial['api_key_env']) if initial.get('api_key_env') else '',
+                               placeholder='${OPENAI_API_KEY}').classes('w-full')
+                key.props['hint'] = t(KEY_HINT)
+                base = ui.input(t('Base URL'), value=initial.get('base_url', '')).classes('w-full')
+                base.props['hint'] = t('Required for compatible providers.')
                 base.bind_visibility_from(provider, 'value', lambda value: value != 'anthropic')
-                tokens = ui.number('Context tokens', value=initial.get('context_tokens'), min=1, step=1, format='%d').classes('w-full')
-                images = ui.switch('Supports images', value=initial.get('supports_images', False))
+                tokens = ui.number(t('Context tokens'), value=initial.get('context_tokens'), min=1, step=1, format='%d').classes('w-full')
+                images = ui.switch(t('Supports images'), value=initial.get('supports_images', False))
                 images_touched = []
                 images.on('update:model-value', lambda _event: images_touched.append(True))  # client events only, not programmatic sets
-                with ui.expansion('Advanced').classes('w-full'):
+                with ui.expansion(t('Advanced')).classes('w-full'):
                     with ui.column().classes('ll-stack w-full'):
                         effort = ui.select(['', 'none', 'minimal', 'low', 'medium', 'high'], value=initial.get('reasoning_effort') or '',
-                                           label='Reasoning effort').classes('w-full').props('hint="Compatible providers only"')
+                                           label=t('Reasoning effort')).classes('w-full')
+                        effort.props['hint'] = t('Compatible providers only')
                         effort.bind_visibility_from(provider, 'value', lambda value: value == 'compatible')
-                        structured = ui.switch('Structured outputs', value=initial.get('structured_outputs', False))
-                        usage = ui.switch('Stream usage', value=initial.get('stream_usage', True))
-                        tier = ui.select(['paid', 'free'], value=initial.get('billing_tier', 'paid'), label='Billing tier').classes('w-full')
-                        costs = {field: ui.number(label, value=initial.get(field), min=0).props('clearable hint="Blank means none"').classes('w-full')
-                                 for field, label in (('input_cost_per_million', 'Input cost per million (USD)'), ('output_cost_per_million', 'Output cost per million (USD)'),
-                                                      ('cached_input_cost_per_million', 'Cached input cost per million (USD)'))}
+                        structured = ui.switch(t('Structured outputs'), value=initial.get('structured_outputs', False))
+                        usage = ui.switch(t('Stream usage'), value=initial.get('stream_usage', True))
+                        tier = ui.select(['paid', 'free'], value=initial.get('billing_tier', 'paid'), label=t('Billing tier')).classes('w-full')
+
+                        def cost_input(field, label):
+                            control = ui.number(label, value=initial.get(field), min=0).props('clearable').classes('w-full')
+                            control.props['hint'] = t('Blank means none')
+                            return control
+                        costs = {field: cost_input(field, label)
+                                 for field, label in (('input_cost_per_million', t('Input cost per million (USD)')), ('output_cost_per_million', t('Output cost per million (USD)')),
+                                                      ('cached_input_cost_per_million', t('Cached input cost per million (USD)')))}
                         price_row = ui.element('div').classes('ll-form-row w-full')
                         price_status = ui.column().classes('w-full')
-                        timeout = ui.number('Timeout (seconds)', value=initial.get('timeout_seconds', 120), min=0).classes('w-full')
-                        retries = ui.number('Max retries', value=initial.get('max_retries', 1), min=0, step=1, format='%d').classes('w-full')
+                        timeout = ui.number(t('Timeout (seconds)'), value=initial.get('timeout_seconds', 120), min=0).classes('w-full')
+                        retries = ui.number(t('Max retries'), value=initial.get('max_retries', 1), min=0, step=1, format='%d').classes('w-full')
 
             def mapping_values():
                 return {'provider': provider.value, 'model': model.value, 'api_key': key.value, 'base_url': base.value, 'context_tokens': tokens.value,
@@ -411,7 +435,7 @@ async def backend_panel(ctx, config):
                 if not editing:
                     validate_profile_name(new_name)
                     if new_name in config_names or any(v['name'] == new_name for v in current_views):
-                        raise ValueError(f'A profile named {new_name} already exists. Use Edit to change it.')
+                        raise UserError(codes.DASH_PROFILE_EXISTS, name=new_name)
                 return ctx.store.save_model_profile(new_name, mapping(), revision)
 
             def detail(_result):
@@ -432,7 +456,7 @@ async def backend_panel(ctx, config):
                 from . import backend as backend_module
                 from .config import key_hosts_from_env
                 if running:
-                    raise ValueError('A connection test is already running.')
+                    raise UserError(codes.DASH_CONNECTION_TEST_RUNNING)
                 running = True
                 try:
                     probe_name = (name.value or '').strip()
@@ -457,7 +481,7 @@ async def backend_panel(ctx, config):
                 from . import backend as backend_module
                 from .config import key_hosts_from_env
                 if fetching:
-                    raise ValueError('The model list is already being fetched.')
+                    raise UserError(codes.DASH_MODEL_LIST_RUNNING)
                 fetching = True
                 try:
                     list_name = (name.value or '').strip()
@@ -529,10 +553,10 @@ async def backend_panel(ctx, config):
                 nonlocal pricing
                 from . import prices as prices_module
                 if pricing:
-                    raise ValueError('The prices are already being looked up.')
+                    raise UserError(codes.DASH_PRICES_RUNNING)
                 wanted = (model.value or '').strip()
                 if not wanted:
-                    raise ValueError('Enter a model ID first.')
+                    raise UserError(codes.DASH_MODEL_ID_FIRST)
                 pricing = True
                 try:
                     price_state['snapshot'] = (provider.value, base.value, wanted)
@@ -555,7 +579,8 @@ async def backend_panel(ctx, config):
                         return
                     for field, value in zip(costs, (result.input, result.output, result.cached_input)):
                         costs[field].value = value
-                    ui.label(f'Suggested prices from {result.source} ({result.fetched}) filled all three cost fields. Check them before saving.').props('role=status')
+                    ui.label(t('Suggested prices from {source} ({fetched}) filled all three cost fields. Check them before saving.',
+                               source=result.source, fetched=result.fetched)).props('role=status')
 
             def stale_prices(_event=None):
                 price_status.clear()
@@ -563,27 +588,27 @@ async def backend_panel(ctx, config):
             for control in (model, provider, base):
                 control.on_value_change(stale_prices)
             with fetch_row:
-                fetch_button = ctx.button('Fetch models', fetch, 'backend.models', lambda result: {'name': (name.value or '').strip(), 'ok': result.ok, 'count': len(result.models)},
+                fetch_button = ctx.button(t('Fetch models'), fetch, 'backend.models', lambda result: {'name': (name.value or '').strip(), 'ok': result.ok, 'count': len(result.models)},
                                           then=fetched_models).props('outline')
             with price_row:
-                price_button = ctx.button('Look up prices', look_up_prices, 'backend.prices',
+                price_button = ctx.button(t('Look up prices'), look_up_prices, 'backend.prices',
                                           lambda result: {'name': (name.value or '').strip(), 'ok': result.found or result.message == NOT_FOUND, 'found': result.found, 'source': result.source},
                                           then=prices_found).props('outline')
             with ui.element('div').classes('ll-form-row justify-end'):
-                ui.button('Cancel', on_click=dialog.close).props('flat')
-                test = ctx.button('Test connection', probe, 'backend.test', lambda result: {'name': (name.value or '').strip(), 'ok': result.ok}, then=tested).props('outline')
-                ctx.button('Save profile', save, 'backend.profile', detail, then=saved, success='Profile saved.', conflict=stale)
+                ui.button(t.p('button', 'Cancel'), on_click=dialog.close).props('flat')
+                test = ctx.button(t('Test connection'), probe, 'backend.test', lambda result: {'name': (name.value or '').strip(), 'ok': result.ok}, then=tested).props('outline')
+                ctx.button(t('Save profile'), save, 'backend.profile', detail, then=saved, success=t('Profile saved.'), conflict=stale)
             outcome = ui.column().classes('w-full')
-            ui.label('Test connection sends one short request from the dashboard with these settings. It is not counted in usage.').classes('ll-muted')
-            ui.label('Fetch models asks the provider for its model list with these settings. Nothing is saved; you can still type any model ID.').classes('ll-muted')
-            ui.label('Look up prices fills the cost fields (under Advanced) with suggested prices from a public price list. Nothing is saved until you save the profile.').classes('ll-muted')
+            ui.label(t('Test connection sends one short request from the dashboard with these settings. It is not counted in usage.')).classes('ll-muted')
+            ui.label(t('Fetch models asks the provider for its model list with these settings. Nothing is saved; you can still type any model ID.')).classes('ll-muted')
+            ui.label(t('Look up prices fills the cost fields (under Advanced) with suggested prices from a public price list. Nothing is saved until you save the profile.')).classes('ll-muted')
         dialog.on('hide', dialog.delete)
         dialog.open()
 
     await render()
 
 
-OPERATOR_USAGE_PERIODS = {'period': 'This spending period', '7': 'Last 7 days', '30': 'Last 30 days'}
+OPERATOR_USAGE_PERIODS = {'period': N_('This spending period'), '7': N_('Last 7 days'), '30': N_('Last 30 days')}
 
 
 def operator_usage_since(key, reset_day, now):
@@ -593,20 +618,23 @@ def operator_usage_since(key, reset_day, now):
     return now - int(key) * 86400
 
 
-def server_usage_label(guild_id, names):
+def server_usage_label(guild_id, names, *, t=None):
+    t = t or i18n.english()
     if not guild_id:
-        return 'No server'
-    return names.get(str(guild_id)) or f'Server (ID …{str(guild_id)[-4:]})'
+        return t('No server')
+    return names.get(str(guild_id)) or t('Server (ID …{tail})', tail=str(guild_id)[-4:])
 
 
 async def usage_by_server_panel(ctx, guild_names):
     from nicegui import ui
+    t = web_locale.current()
     try:  # names come from the operator's own Discord guild list; any failure falls back to the server ID
         names = {str(g.get('id')): str(g.get('name', '')) for g in await guild_names() if g.get('name')}
     except (httpx.HTTPError, ValueError, HTTPException):
         names = {}
-    with section('Usage by server'):
-        select = ui.select(OPERATOR_USAGE_PERIODS, value='period', label='Period')
+    with section(t('Usage by server')):
+        periods = {key: t(label) for key, label in OPERATOR_USAGE_PERIODS.items()}
+        select = ui.select(periods, value='period', label=t.p('field', 'Period'))
         body = ui.column().classes('w-full gap-4')
 
         async def render():
@@ -617,16 +645,17 @@ async def usage_by_server_panel(ctx, guild_names):
                 return
             with body:
                 if not report['rows']:
-                    ui.label('No model calls in this period.')
+                    ui.label(t('No model calls in this period.'))
                     return
                 def cells(label, r):
                     return {'key': label, 'server': label, 'requests': f"{r['requests']:,}", 'input': f"{r['input_tokens']:,}", 'output': f"{r['output_tokens']:,}",
-                            'cost': format_usd(r['cost_usd']), 'unpriced': r['unpriced']}
-                rows = [cells(server_usage_label(r['guild_id'], names), r) | {'key': str(r['guild_id'])} for r in report['rows']]
-                usage_table([('server', 'Server'), ('requests', 'Requests'), ('input', 'Input tokens'), ('output', 'Output tokens'), ('cost', 'Estimated USD'), ('unpriced', 'Without cost estimate')],
-                            [*rows, cells('Total', report['totals']) | {'key': 'total'}], 'key')
-                ui.label('Each server keeps usage for its own period (Server settings), so this table can show less than the Spending tab.').classes('ll-muted')
-                ui.label('Cost uses list rates or your configured rates; it is not a billing statement.').classes('ll-muted')
+                            'cost': format_usd(r['cost_usd'], t=t), 'unpriced': r['unpriced']}
+                rows = [cells(server_usage_label(r['guild_id'], names, t=t), r) | {'key': str(r['guild_id'])} for r in report['rows']]
+                usage_table([('server', t.p('column', 'Server')), ('requests', t.p('column', 'Requests')), ('input', t('Input tokens')), ('output', t('Output tokens')),
+                             ('cost', t('Estimated USD')), ('unpriced', t('Without cost estimate'))],
+                            [*rows, cells(t.p('row', 'Total'), report['totals']) | {'key': 'total'}], 'key')
+                ui.label(t('Each server keeps usage for its own period (Server settings), so this table can show less than the Spending tab.')).classes('ll-muted')
+                ui.label(t('Cost uses list rates or your configured rates; it is not a billing statement.')).classes('ll-muted')
         select.on_value_change(render)
         await render()
 
@@ -657,11 +686,12 @@ class LiveContext:
     async def load_channel_names(self):
         # One Discord channel fetch per page render; a failure leaves the mapping empty.
         from nicegui import ui
+        t = web_locale.current()
         try:
             channels = await self.service.run(self.ident, self.guild_id, lambda: self.service.avatars.channels(self.guild_id)) or []
         except (httpx.HTTPError, ValueError, HTTPException):
             self.channels_failed = True
-            ui.notify('Discord channels could not be loaded. Showing channel IDs.', type='negative', timeout=8000)
+            ui.notify(t('Discord channels could not be loaded. Showing channel IDs.'), type='negative', timeout=8000)
             channels = []
         self.channel_names = {int(c['id']): '#' + c['name'] for c in channels if c['type'] == 0}
         return self.channel_names
@@ -672,14 +702,15 @@ class LiveContext:
         if not self.thread_scopes:
             return self.thread_names
         from nicegui import ui
+        t = web_locale.current()
         try:
             threads = await self.service.run(self.ident, self.guild_id, lambda: self.service.avatars.active_threads(self.guild_id)) or []
         except (httpx.HTTPError, ValueError, HTTPException):
             self.thread_names = None  # unknown, not archived: labels fall back to "Thread ...NNNN"
             if not self.channels_failed:  # a channel failure already toasted; one notice per page load
-                ui.notify('Thread names could not be loaded. Showing thread IDs.', type='warning', timeout=8000)
+                ui.notify(t('Thread names could not be loaded. Showing thread IDs.'), type='warning', timeout=8000)
             return self.thread_names
-        self.thread_names = {int(t['id']): '#' + t['name'] for t in threads}
+        self.thread_names = {int(thread['id']): '#' + thread['name'] for thread in threads}
         return self.thread_names
 
     @functools.cached_property
@@ -752,23 +783,25 @@ class LiveContext:
     async def _attempt(self, operation, action=None, detail=None):
         """Run an operation, returning (succeeded, result); a failure is notified and yields (False, None), a tuple carrying the error as .error."""
         from nicegui import ui
+        t = web_locale.current()
         try:
             return True, await self.service.run(self.ident, self.guild_id, operation, action, detail)
         except (ValueError, HTTPException, sqlite3.IntegrityError, TypeError, KeyError) as error:
-            message = error.detail if isinstance(error, HTTPException) else 'This name already exists' if isinstance(error, sqlite3.IntegrityError) else 'Choose valid values for all required fields' if isinstance(error, (TypeError, KeyError)) else str(error)
+            message = error.detail if isinstance(error, HTTPException) else t('This name already exists') if isinstance(error, sqlite3.IntegrityError) else t('Choose valid values for all required fields') if isinstance(error, (TypeError, KeyError)) else t.error(error)
             ui.notify(message, type='negative', timeout=8000)
             return AttemptFailed((False, None), error)
         except sqlite3.OperationalError as error:
             logging.warning('Admin action hit a database error', exc_info=True)
-            ui.notify(_BUSY, type='negative', timeout=8000)
+            ui.notify(t(_BUSY), type='negative', timeout=8000)
             return AttemptFailed((False, None), error)
         except Exception as error:
             logging.exception('Admin action failed')
-            ui.notify(_UNEXPECTED, type='negative', timeout=8000)
+            ui.notify(t(_UNEXPECTED), type='negative', timeout=8000)
             return AttemptFailed((False, None), error)
 
     def button(self, text, operation, action=None, detail=None, then=None, success=None, prepare=None, conflict=None, **kwargs):
         from nicegui import ui
+        t = web_locale.current()
         async def clicked():
             if self.savebar and self.savebar.refuse():
                 return
@@ -777,7 +810,7 @@ class LiveContext:
                     await prepare()
                 except Exception:
                     logging.exception('Form check before saving failed')
-                    ui.notify('Could not check the form before saving. Try again', type='negative', timeout=8000)
+                    ui.notify(t('Could not check the form before saving. Try again'), type='negative', timeout=8000)
                     return
             outcome = await self._attempt(operation, action, detail)
             ok, result = outcome
@@ -821,13 +854,14 @@ def pretty(value):
     return json.dumps(value, ensure_ascii=False, indent=2)
 
 
-def rejection_notice(error):
+def rejection_notice(error, *, t=None):
     """Negative-notification text for a live event rejected after the client was confirmed bound to its session."""
+    t = t or i18n.english()
     if not isinstance(error, HTTPException):
         return None
     if error.status_code == 401:
-        return 'Your Discord sign-in expired. Sign in again.'
-    return str(error.detail or 'This action was rejected')
+        return t('Your Discord sign-in expired. Sign in again.')
+    return str(error.detail or t('This action was rejected'))
 
 
 NOTICE_WINDOW = 8.0  # seconds; matches the 8000 ms toast timeout
@@ -1063,7 +1097,7 @@ def _install_socket_auth(app):
         allowed, client, error = await socket_check(sid, message)
         if allowed:
             original_event(sid, message)
-        elif client is not None and (notice := rejection_notice(error)):
+        elif client is not None and (notice := rejection_notice(error, t=i18n.english())):  # i18n: FEAT-45 request locale
             # The event itself is still dropped; only the bound client is told why.
             now = time.monotonic()
             last = getattr(client, 'llmcord_last_notice', None)  # lives and dies with the client
@@ -1095,6 +1129,7 @@ def _install_socket_auth(app):
 
 def _install_upload_guard(app):
     from nicegui import Client
+    t = i18n.english()  # i18n: FEAT-45 request locale
 
     @app.middleware('http')
     async def protected_uploads(request, call_next):
@@ -1104,15 +1139,15 @@ def _install_upload_guard(app):
             client = Client.instances.get(parts[4]) if len(parts) > 4 else None
             binding = getattr(client, 'llmcord_binding', None)
             if not binding or request.cookies.get('llmcord_session') != binding[0]:
-                return PlainTextResponse('Sign in with Discord', 401)
+                return PlainTextResponse(t('Sign in with Discord'), 401)
             if binding[1] is OPERATOR:
-                return PlainTextResponse('Uploads are not available here', 403)
+                return PlainTextResponse(t('Uploads are not available here'), 403)
             try:
                 await app.state.auth.guard(binding[0], binding[1], request.headers.get('x-csrf-token', ''), request.headers.get('origin'))
             except HTTPException as error:
                 return PlainTextResponse(error.detail, error.status_code)
             if int(request.headers.get('content-length', 0)) > MAX_AVATAR_BYTES + 65536:
-                return PlainTextResponse('Upload exceeds 8 MiB', 413)
+                return PlainTextResponse(t('Upload exceeds 8 MiB'), 413)
             received = 0
             receive = request._receive
             async def bounded_receive():
@@ -1120,7 +1155,7 @@ def _install_upload_guard(app):
                 message = await receive()
                 received += len(message.get('body', b''))
                 if received > MAX_AVATAR_BYTES + 65536:
-                    raise HTTPException(413, 'Upload exceeds 8 MiB')
+                    raise HTTPException(413, t('Upload exceeds 8 MiB'))
                 return message
             request._receive = bounded_receive
         return await call_next(request)
@@ -1131,6 +1166,7 @@ def _register_pages(app):
 
     @ui.page('/')
     async def servers(request: Request):
+        t = web_locale.current()
         apply_theme()
         try:
             session = await app.state.auth.session_for(request)
@@ -1138,9 +1174,9 @@ def _register_pages(app):
             with ui.card().classes('ll-signin-card'):
                 ui.label('l').classes('ll-logo').props('aria-hidden=true')
                 ui.label('llmcord').classes('text-3xl font-bold')
-                ui.label('Manage your characters, worlds, lore, and prompt presets.').classes('ll-muted')
-                ui.link('Sign in with Discord', app.state.base_url + '/login').classes('ll-signin-btn')
-                ui.label('You will see the servers where you are an administrator.').classes('ll-faint text-sm')
+                ui.label(t('Manage your characters, worlds, lore, and prompt presets.')).classes('ll-muted')
+                ui.link(t('Sign in with Discord'), app.state.base_url + '/login').classes('ll-signin-btn')
+                ui.label(t('You will see the servers where you are an administrator.')).classes('ll-faint text-sm')
             return
         ui.context.client.llmcord_binding = (request.cookies['llmcord_session'], None)
         guilds = await app.state.auth.guilds(session)
@@ -1148,8 +1184,8 @@ def _register_pages(app):
             header_crumb()
             account_menu(session, app.state.auth.is_operator(session))
         with ui.column().classes('ll-servers gap-1'):
-            ui.label('Your servers').classes('text-3xl font-bold')
-            ui.label('Servers where you are an administrator.').classes('ll-muted')
+            ui.label(t('Your servers')).classes('text-3xl font-bold')
+            ui.label(t('Servers where you are an administrator.')).classes('ll-muted')
             with ui.element('div').classes('grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full mt-4'):
                 for guild in guilds:
                     if not is_server_admin(guild):
@@ -1166,27 +1202,28 @@ def _register_pages(app):
 
     @ui.page('/operator', response_timeout=30)
     async def operator(request: Request):
+        t = web_locale.current()
         try:
             session = await app.state.auth.guard_operator(request.cookies.get('llmcord_session', ''), origin=request.headers.get('origin'))
         except HTTPException:
             raise HTTPException(404)  # indistinguishable from an unknown path
         apply_theme()
         ui.context.client.llmcord_binding = (request.cookies['llmcord_session'], OPERATOR)
-        ui.page_title('Bot settings')
+        ui.page_title(t('Bot settings'))
         with ui.header().classes('items-center justify-between no-wrap'):
             header_crumb()
             account_menu(session, True)
         with ui.column().classes('ll-page'):
-            ui.label('Bot settings').classes('text-3xl font-bold')
-            ui.label('Bot-wide settings. Only operators can see this page.').classes('ll-muted')
+            ui.label(t('Bot settings')).classes('text-3xl font-bold')
+            ui.label(t('Bot-wide settings. Only operators can see this page.')).classes('ll-muted')
             ctx = OperatorContext(app, request)
             selected_tab = request.query_params.get('tab')
             if selected_tab not in ('spending', 'usage', 'backend'):
                 selected_tab = 'spending'
             with ui.tabs().classes('w-full ll-tabs').props('align=left outside-arrows mobile-arrows') as tabs:
-                spending = ui.tab('spending', 'Spending')
-                usage = ui.tab('usage', 'Usage by server')
-                backend = ui.tab('backend', 'Backend')
+                spending = ui.tab('spending', t.p('tab', 'Spending'))
+                usage = ui.tab('usage', t.p('tab', 'Usage by server'))
+                backend = ui.tab('backend', t.p('tab', 'Backend'))
             built = set()
             async def build(tab):
                 if tab in built:
@@ -1212,6 +1249,7 @@ def _register_pages(app):
 
     @ui.page('/guild/{guild_id}', response_timeout=30)
     async def guild(request: Request, guild_id: int):
+        t = web_locale.current()
         apply_theme()
         session = await app.state.auth.require_admin(request, guild_id)
         ui.context.client.llmcord_binding = (request.cookies['llmcord_session'], guild_id)
@@ -1225,24 +1263,24 @@ def _register_pages(app):
             header_crumb(current)
             account_menu(session, app.state.auth.is_operator(session))
         with ui.column().classes('ll-page'):
-            ui.label('Server administration').classes('text-3xl font-bold')
-            ui.label('Changes apply on the next bot turn. Prompt drafts require activation.').classes('ll-muted')
+            ui.label(t('Server administration')).classes('text-3xl font-bold')
+            ui.label(t('Changes apply on the next bot turn. Prompt drafts require activation.')).classes('ll-muted')
             with ui.tabs().classes('w-full ll-tabs').props('align=left outside-arrows mobile-arrows') as tabs:
-                setup = ui.tab('setup', 'Server setup')
-                characters = ui.tab('characters', 'Characters')
-                lore = ui.tab('lore', 'Lore')
-                imports = ui.tab('imports', 'Imports')
-                prompts = ui.tab('prompts', 'Prompt presets')
-                monitoring = ui.tab('monitoring', 'Monitoring')
-                currency = ui.tab('currency', 'Currency')
-                games = ui.tab('games', 'Games')
-                shop = ui.tab('shop', 'Shop')
+                setup = ui.tab('setup', t.p('tab', 'Server setup'))
+                characters = ui.tab('characters', t.p('tab', 'Characters'))
+                lore = ui.tab('lore', t.p('tab', 'Lore'))
+                imports = ui.tab('imports', t.p('tab', 'Imports'))
+                prompts = ui.tab('prompts', t.p('tab', 'Prompt presets'))
+                monitoring = ui.tab('monitoring', t.p('tab', 'Monitoring'))
+                currency = ui.tab('currency', t.p('tab', 'Currency'))
+                games = ui.tab('games', t.p('tab', 'Games'))
+                shop = ui.tab('shop', t.p('tab', 'Shop'))
             selected_tab = request.query_params.get('tab')
             if selected_tab not in ('setup', 'characters', 'lore', 'imports', 'prompts', 'monitoring', 'currency', 'games', 'shop'):
                 selected_tab = 'setup'
             await ctx.load_channel_names()  # must precede any ctx.snapshot access: it bakes channel names into owner labels
             await ctx.load_thread_names()
-            ui.add_css('.lore-drop-zone:empty::before { content: "Drop entries here"; color: #94a3b8; pointer-events: none; }')
+            ui.add_css('.lore-drop-zone:empty::before { content: ' + json.dumps(t('Drop entries here'), ensure_ascii=False) + '; color: #94a3b8; pointer-events: none; }')
             ui.add_css('.q-select:not(.owner-heading) { min-width: min(16rem, 100%); }')
             async def changed(event):
                 ctx.set_url(tab=event.value)
@@ -1301,9 +1339,10 @@ def timezone_detail(result):
 def header_crumb(current=None):
     """Header crumb: the llmcord link, plus the current server's icon (or initials tile) and name when given."""
     from nicegui import ui
+    t = web_locale.current()
     with ui.element('div').classes('ll-crumb'):
         crumb = ui.link('llmcord', '/')
-        crumb.props['aria-label'] = 'llmcord / Servers'
+        crumb.props['aria-label'] = t('llmcord / Servers')
         if current:
             ui.label('/').classes('ll-crumb-sep').props('aria-hidden=true')
             # guild_icon_url only returns a CDN URL built from a digit snowflake and a hex hash, so it is safe inside the quoted prop.
@@ -1319,9 +1358,11 @@ def account_menu(session, is_operator=False):
     """Header account button (avatar plus name) opening a menu with the name and a Sign out item."""
     from nicegui import ui
     import html
+    t = web_locale.current()
     user = session['user']
     name = str(user.get('global_name') or user['username'])
-    with ui.button().props('flat no-caps aria-label="Account menu"').classes('ll-account'):
+    with ui.button().props('flat no-caps').classes('ll-account') as account:
+        account.props['aria-label'] = t('Account menu')
         # user_avatar_url only returns a CDN URL built from a digit snowflake and a hex hash, so it is safe inside the quoted prop.
         url = user_avatar_url(user, 64)
         if url:
@@ -1336,29 +1377,31 @@ def account_menu(session, is_operator=False):
                 if str(user['username']) != name:
                     ui.label('@' + str(user['username'])).classes('ll-muted text-sm')
             if is_operator:
-                ui.link('Bot settings', '/operator').classes('ll-menu-item no-underline')  # ui.link adds the /admin mount prefix
+                ui.link(t('Bot settings'), '/operator').classes('ll-menu-item no-underline')  # ui.link adds the /admin mount prefix
             ui.separator()
             # A normal POST retains the existing origin and CSRF checks.
-            ui.html('<form action="/logout" method="post"><input type="hidden" name="csrf" value="' + html.escape(session['csrf'], quote=True) + '"><button type="submit" class="ll-menu-item">Sign out</button></form>', sanitize=False)
+            ui.html('<form action="/logout" method="post"><input type="hidden" name="csrf" value="' + html.escape(session['csrf'], quote=True) + '"><button type="submit" class="ll-menu-item">' + html.escape(t.p('button', 'Sign out')) + '</button></form>', sanitize=False)
 
 
-def format_usd(value):
+def format_usd(value, *, t=None):
     """Dashboard cost: $0.00, two decimals from a cent up, else up to four decimals trimmed (<$0.0001 below that)."""
+    t = t or i18n.english()
     value = float(value or 0)
     if not math.isfinite(value) or value <= 0:
-        return '$0.00'
+        return t('$0.00')
     if value >= 0.01:
-        return f'${value:,.2f}'
+        return t('${value:,.2f}', value=value)
     text = f'{value:.4f}'.rstrip('0')
     if text == '0.':
-        return '<$0.0001'
-    return '$' + text
+        return t('<$0.0001')
+    return t('${value}', value=text)
 
 
-RETENTION_OPTIONS = {7: '7 days', 14: '14 days', 30: '30 days', 0: 'Full month'}
-USAGE_FEATURES = {'reply': 'Replies', 'ambient': 'Ambient turns', 'summon': 'Summons', 'memory': 'Memory updates', 'catchup': 'Catch-ups', 'game': 'Game table talk', 'playstyle': 'Play style drafts'}
-USAGE_RANGES = {'day': ('Last 24 hours', 1), '7': ('Last 7 days', 7), '14': ('Last 14 days', 14), '30': ('Last 30 days', 30), 'month': ('This month', 31)}
-USAGE_UNKNOWN = 'Unknown (before this update)'
+RETENTION_OPTIONS = {7: N_('7 days'), 14: N_('14 days'), 30: N_('30 days'), 0: N_('Full month')}
+USAGE_FEATURES = {'reply': N_('Replies'), 'ambient': N_('Ambient turns'), 'summon': N_('Summons'), 'memory': N_('Memory updates'), 'catchup': N_('Catch-ups'),
+                  'game': N_('Game table talk'), 'playstyle': N_('Play style drafts')}
+USAGE_RANGES = {'day': (N_('Last 24 hours'), 1), '7': (N_('Last 7 days'), 7), '14': (N_('Last 14 days'), 14), '30': (N_('Last 30 days'), 30), 'month': (N_('This month'), 31)}
+USAGE_UNKNOWN = N_('Unknown (before this update)')
 
 
 def usage_since(zone_name, key, now):
@@ -1372,7 +1415,8 @@ def usage_since(zone_name, key, now):
     return now - USAGE_RANGES[key][1] * 86400
 
 
-def usage_chart_options(report, since, now):
+def usage_chart_options(report, since, now, *, t=None):
+    t = t or i18n.english()
     zone = ZoneInfo(report['zone'])
     day, last, days = datetime.fromtimestamp(since, zone).date(), datetime.fromtimestamp(now, zone).date(), []
     while day <= last:
@@ -1381,14 +1425,15 @@ def usage_chart_options(report, since, now):
     series = []
     for index, (model, cells) in enumerate(sorted(report['daily'].items())):
         color = palette[index % len(palette)]
-        for pos, label in ((0, 'Input'), (1, 'Output')):
-            series.append({'name': f'{model} · {label}', 'type': 'bar', 'stack': label, 'data': [cells.get(d, [0, 0])[pos] for d in days],
+        for pos, label, shown in ((0, 'Input', t.p('chart series', 'Input')), (1, 'Output', t.p('chart series', 'Output'))):
+            series.append({'name': f'{model} · {shown}', 'type': 'bar', 'stack': label, 'data': [cells.get(d, [0, 0])[pos] for d in days],
                            'itemStyle': {'color': color, 'opacity': 1 if pos == 0 else 0.6}})
     axis = {'axisLabel': {'color': THEME_TEXT_MUTED}, 'axisLine': {'lineStyle': {'color': THEME_BORDER}}}
+    unit = (' ' + t('tokens')).replace('\\', '\\\\').replace("'", "\\'")
     return {'backgroundColor': 'transparent', 'textStyle': {'color': THEME_TEXT_MUTED}, 'color': palette,
             'legend': {'type': 'scroll', 'bottom': 0, 'textStyle': {'color': THEME_TEXT_MUTED}},
             'tooltip': {'trigger': 'axis', 'axisPointer': {'type': 'shadow'}, 'backgroundColor': THEME_CARD_HOVER, 'borderColor': THEME_BORDER, 'textStyle': {'color': THEME_TILE_TEXT},
-                        ':formatter': "params => params[0].axisValueLabel + '<br>' + params.filter(p => p.value > 0).map(p => p.marker + p.seriesName + ': ' + Number(p.value).toLocaleString('en-US') + ' tokens').join('<br>')"},
+                        ':formatter': "params => params[0].axisValueLabel + '<br>' + params.filter(p => p.value > 0).map(p => p.marker + p.seriesName + ': ' + Number(p.value).toLocaleString('en-US') + '" + unit + "').join('<br>')"},
             'grid': {'left': 8, 'right': 8, 'top': 16, 'bottom': 48, 'containLabel': True},
             'xAxis': {'type': 'category', 'data': [d[5:] for d in days], **axis},
             'yAxis': {'type': 'value', 'splitLine': {'lineStyle': {'color': THEME_DIVIDER}}, 'axisLabel': {'color': THEME_TEXT_MUTED, ':formatter': "v => v >= 1000000 ? v / 1000000 + 'M' : v >= 1000 ? v / 1000 + 'k' : v"}},
@@ -1402,12 +1447,14 @@ def usage_range_keys(days):
     return [k for k in USAGE_RANGES if k == 'month' and days == 30 or k != 'month' and USAGE_RANGES[k][1] <= days]
 
 
-def usage_feature_rows(rows):
+def usage_feature_rows(rows, *, t=None):
     """By-feature rows with display labels: empty -> before-update bucket; unrecognised names merge into one 'Unknown feature' row."""
+    t = t or i18n.english()
     merged = {}
     for r in rows:
         feature = r['feature']
-        label = USAGE_FEATURES.get(feature) or (USAGE_UNKNOWN if not feature else 'Unknown feature')
+        known = USAGE_FEATURES.get(feature)
+        label = t(known) if known else (t(USAGE_UNKNOWN) if not feature else t('Unknown feature'))
         row = merged.setdefault(label, {'feature': label, 'requests': 0, 'input_tokens': 0, 'output_tokens': 0, 'cost_usd': 0.0, 'unpriced': 0, 'unreported': 0})
         for field in ('requests', 'input_tokens', 'output_tokens', 'unpriced', 'unreported'):
             row[field] += r[field] or 0
@@ -1434,17 +1481,18 @@ def normalize_reference(text):
     return (found.group(0) if found else text.strip(' \t#[](){}.,:;')).lower()
 
 
-def turn_log_row(entry, zone_name, channel_label):
+def turn_log_row(entry, zone_name, channel_label, *, t=None):
     """Display strings for one turn log summary row (time in the server timezone, falling back to UTC)."""
+    t = t or i18n.english()
     try:
         zone = ZoneInfo(zone_name or 'UTC')
     except Exception:
         zone = ZoneInfo('UTC')
     inputs, outputs = entry['input_tokens'], entry['output_tokens']
-    tokens = '—' if inputs is None and outputs is None else f"{'—' if inputs is None else format(inputs, ',')} in / {'—' if outputs is None else format(outputs, ',')} out"
+    tokens = '—' if inputs is None and outputs is None else t('{inputs} in / {outputs} out', inputs='—' if inputs is None else format(inputs, ','), outputs='—' if outputs is None else format(outputs, ','))
     return {'time': datetime.fromtimestamp(entry['created_at'], zone).strftime('%Y-%m-%d %H:%M'), 'channel': channel_label(entry['channel_id']),
             'stage': entry['stage'] or '—', 'model': entry['model'] or '—', 'tokens': tokens, 'error': entry['status'] == 'error',
-            'status': 'Error' if entry['status'] == 'error' else 'OK', 'reference': entry['reference_id'] or '', 'preview': (entry['preview'] or '').strip()}
+            'status': t.p('status', 'Error') if entry['status'] == 'error' else t.p('status', 'OK'), 'reference': entry['reference_id'] or '', 'preview': (entry['preview'] or '').strip()}
 
 
 async def turn_log_section(ctx, channel_label, live=lambda: True):
@@ -1642,73 +1690,80 @@ async def monitoring_panel(ctx):
 
 def worlds_hubs_section(ctx):
     from nicegui import ui
+    t = web_locale.current()
     store, gid = ctx.store, ctx.guild_id
-    with section('Worlds and hubs'):
+    kinds = {'world': t.p('space kind', 'world'), 'hub': t.p('space kind', 'hub')}
+    with section(t('Worlds and hubs')):
         for space in ctx.snapshot.spaces:
-            with ui.expansion(f"{space['name']} · {space['kind']}").classes('space-card w-full rounded-lg'):
-                guideline_editor(ctx, 'space', space['id'], 'World guidelines' if space['kind'] == 'world' else 'Hub guidelines')
+            with ui.expansion(t('{name} · {kind}', name=space['name'], kind=kinds[space['kind']])).classes('space-card w-full rounded-lg'):
+                guideline_editor(ctx, 'space', space['id'], t('World guidelines') if space['kind'] == 'world' else t('Hub guidelines'))
                 if space['kind'] == 'hub':
                     hub_tone_editor(ctx, space)
-                lucide_button('Delete ' + space['kind'], 'trash-2', color='negative', on_click=lambda space=space: delete_space_dialog(ctx, space))
+                lucide_button(t('Delete world') if space['kind'] == 'world' else t('Delete hub'), 'trash-2', color='negative', on_click=lambda space=space: delete_space_dialog(ctx, space))
         with ui.element('div').classes('ll-form-row ll-field-row'):
-            name = ui.input('Name')
-            kind = ui.select(['world', 'hub'], value='world', label='Kind')
-            ctx.button('Create', lambda: store.create_space(gid, name.value or '', kind.value), 'space.create', then=lambda _: ctx.refresh())
+            name = ui.input(t.p('field', 'Name'))
+            kind = ui.select(kinds, value='world', label=t.p('field', 'Kind'))
+            ctx.button(t.p('button', 'Create'), lambda: store.create_space(gid, name.value or '', kind.value), 'space.create', then=lambda _: ctx.refresh())
 
 
-HUB_TONES = {'in_character': 'In character', 'off_duty': 'Off duty'}
+HUB_TONES = {'in_character': N_('In character'), 'off_duty': N_('Off duty')}
 
 
 def hub_tone_editor(ctx, space):
     from nicegui import ui
+    t = web_locale.current()
     store, gid, ident, saved = ctx.store, ctx.guild_id, space['id'], space['hub_tone']
-    tone = ui.select(HUB_TONES, value=saved, label='Tone').classes('w-full')
-    ui.label("Off duty: characters keep their personality but chat casually and don't push their world's plot. World channels are always in character.").classes('ll-muted')
-    ctx.button('Save hub tone', lambda: store.set_hub_tone(gid, ident, tone.value, saved), 'space.hub_tone',
+    tones = {key: t(label) for key, label in HUB_TONES.items()}
+    tone = ui.select(tones, value=saved, label=t.p('field', 'Tone')).classes('w-full')
+    ui.label(t("Off duty: characters keep their personality but chat casually and don't push their world's plot. World channels are always in character.")).classes('ll-muted')
+    ctx.button(t('Save hub tone'), lambda: store.set_hub_tone(gid, ident, tone.value, saved), 'space.hub_tone',
                lambda result: {'id': ident, 'tone': result}, then=lambda _: ctx.refresh())
 
 
 def hub_links_section(ctx):
     from nicegui import ui
+    t = web_locale.current()
     store, gid = ctx.store, ctx.guild_id
-    with section('Hub links'):
+    with section(t('Hub links')):
         hubs, worlds = ctx.snapshot.hubs, ctx.snapshot.worlds
         with ui.element('div').classes('ll-form-row ll-field-row'):
-            hub = ui.select(hubs, label='Hub')
-            world = ui.select(worlds, label='World')
+            hub = ui.select(hubs, label=t.p('field', 'Hub'))
+            world = ui.select(worlds, label=t.p('field', 'World'))
             def link(enabled):
                 return link_operation(store, gid, hub.value, world.value, enabled)
             def linked(result):
                 if result['pruned']:
-                    ui.notify(f"Removed {result['pruned']} cast entries no longer available in the hub.")
+                    ui.notify(t('Removed {pruned} cast entries no longer available in the hub.', pruned=result['pruned']))
                 return ctx.refresh()
-            ctx.button('Link', lambda: link(True), 'hub.link', link_detail, then=linked)
-            ctx.button('Unlink', lambda: link(False), 'hub.unlink', link_detail, then=linked).props('outline')
+            ctx.button(t.p('button', 'Link'), lambda: link(True), 'hub.link', link_detail, then=linked)
+            ctx.button(t.p('button', 'Unlink'), lambda: link(False), 'hub.unlink', link_detail, then=linked).props('outline')
         for ident in hubs:
             ui.label(hubs[ident] + ': ' + ', '.join(worlds.get(x, str(x)) for x in store.allowed_worlds(ident)))
 
 
 def channels_section(ctx, channel_names, spaces):
     from nicegui import ui
+    t = web_locale.current()
     store, gid = ctx.store, ctx.guild_id
-    with section('Channels and casts'):
+    with section(t('Channels and casts')):
         with ui.element('div').classes('ll-form-row ll-field-row'):
-            channel = ui.select(channel_names, label='Discord text channel')
-            space = ui.select(spaces, label='World or hub')
+            channel = ui.select(channel_names, label=t('Discord text channel'))
+            space = ui.select(spaces, label=t('World or hub'))
             def bind():
                 if channel.value not in channel_names:
-                    raise ValueError('Choose a text channel in this server')
+                    raise UserError(codes.DASH_CHANNEL_CHOOSE)
                 return bind_operation(store, gid, channel.value, space.value)
             def bound(result):
                 names = result['names']
-                if names:
-                    shown = ', '.join(names[:5]) + (f' ...and {len(names) - 5} more' if len(names) > 5 else '')
-                    ui.notify(f'Removed from the cast (not available there): {shown}.')
+                if len(names) > 5:
+                    ui.notify(t('Removed from the cast (not available there): {names} ...and {count} more.', names=', '.join(names[:5]), count=len(names) - 5))
+                elif names:
+                    ui.notify(t('Removed from the cast (not available there): {names}.', names=', '.join(names)))
                 else:
-                    ui.notify('Cast kept.')
+                    ui.notify(t('Cast kept.'))
                 return ctx.refresh()
-            ctx.button('Bind channel', bind, 'channel.bind', bind_detail, then=bound)
-        ui.label('Rebinding a channel keeps its ambient mode and removes cast members not available in the new world or hub.').classes('ll-muted')
+            ctx.button(t('Bind channel'), bind, 'channel.bind', bind_detail, then=bound)
+        ui.label(t('Rebinding a channel keeps its ambient mode and removes cast members not available in the new world or hub.')).classes('ll-muted')
         max_cast = store.cast_limits(gid)['max_cast']
         eligible = {}  # one eligible_characters read per space within this build; never kept across builds
         for binding in ctx.snapshot.channels:
@@ -1717,34 +1772,36 @@ def channels_section(ctx, channel_names, spaces):
 
 def server_settings_section(ctx, channel_names):
     from nicegui import ui
+    t = web_locale.current()
     store, gid = ctx.store, ctx.guild_id
-    with section('Server settings'):
-        footer = ui.switch('Show model and cost footer on replies', value=store.usage_footer_enabled(gid))
-        catchup = ui.switch('Allow /catchup in channels without characters', value=store.catchup_anywhere(gid))
-        ui.label('Members can then get a private summary of any channel they can read. Its messages are sent to the summary model.').classes('ll-muted')
+    with section(t('Server settings')):
+        footer = ui.switch(t('Show model and cost footer on replies'), value=store.usage_footer_enabled(gid))
+        catchup = ui.switch(t('Allow /catchup in channels without characters'), value=store.catchup_anywhere(gid))
+        ui.label(t('Members can then get a private summary of any channel they can read. Its messages are sent to the summary model.')).classes('ll-muted')
         turn_log = store.turn_log_settings(gid)
-        log_switch = ui.switch('Keep a turn log', value=turn_log['enabled'])
+        log_switch = ui.switch(t('Keep a turn log'), value=turn_log['enabled'])
         with ui.element('div').classes('ll-form-row ll-field-row'):
-            log_days = ui.select(RETENTION_OPTIONS, value=turn_log['days'], label='Keep usage and log for')
-        ui.label('The turn log stores the prompt and reply of every model call on this server, including /catchup, so admins can check errors. Personal facts are hidden. Usage history is kept for the same period.').classes('ll-muted')
+            retention = {key: t(label) for key, label in RETENTION_OPTIONS.items()}
+            log_days = ui.select(retention, value=turn_log['days'], label=t('Keep usage and log for'))
+        ui.label(t('The turn log stores the prompt and reply of every model call on this server, including /catchup, so admins can check errors. Personal facts are hidden. Usage history is kept for the same period.')).classes('ll-muted')
         current = store.guild_timezone(gid)
         with ui.element('div').classes('ll-form-row ll-field-row'):
             timezone = ui.select(timezone_options(current), value=current or None,
-                                 label='Server timezone', with_input=True, clearable=True)
-        ui.label('Characters use this for members who have not chosen their own with /time set. Without it they use UTC.').classes('ll-muted')
+                                 label=t('Server timezone'), with_input=True, clearable=True)
+        ui.label(t('Characters use this for members who have not chosen their own with /time set. Without it they use UTC.')).classes('ll-muted')
         current_asset = store.asset_channel_id(gid)
         saved_asset = current_asset if current_asset in channel_names else None
         with ui.element('div').classes('ll-form-row ll-field-row'):
-            asset_channel = ui.select(channel_names, value=saved_asset, label='Private text channel')
-        ui.label('Avatar asset channel: deny View Channel to @everyone and allow the bot to upload images. Images become Discord CDN assets.').classes('ll-muted')
+            asset_channel = ui.select(channel_names, value=saved_asset, label=t('Private text channel'))
+        ui.label(t('Avatar asset channel: deny View Channel to @everyone and allow the bot to upload images. Images become Discord CDN assets.')).classes('ll-muted')
         limits = store.cast_limits(gid)
         with ui.element('div').classes('ll-form-row ll-field-row'):
-            max_cast = ui.number('Largest cast', value=limits['max_cast'], min=1, max=15, precision=0, format='%d')
-            max_favorites = ui.number('Favorites per member', value=limits['max_favorites'], min=1, max=15, precision=0, format='%d')
-        ui.label('A larger cast gives the director more characters to choose from, so more characters may answer a message. Each answer is a separate model call, and every prompt lists the cast. At most 3 characters answer one message.').classes('ll-muted')
-        ui.label("With step in, a member's favorites outside the cast can also answer them, so more favorites can mean more model calls and longer prompts. Lowering a limit keeps existing casts and favorites; they can shrink but not grow.").classes('ll-muted')
-        archived_switch = ui.switch('Archived favorites can answer their members', value=store.archived_favorites(gid))
-        ui.label('When on, members can keep archived characters as favorites. An archived favorite answers only the members who chose it, in channels where its world is available. It never joins a cast, a game or /summon.').classes('ll-muted')
+            max_cast = ui.number(t('Largest cast'), value=limits['max_cast'], min=1, max=15, precision=0, format='%d')
+            max_favorites = ui.number(t('Favorites per member'), value=limits['max_favorites'], min=1, max=15, precision=0, format='%d')
+        ui.label(t('A larger cast gives the director more characters to choose from, so more characters may answer a message. Each answer is a separate model call, and every prompt lists the cast. At most 3 characters answer one message.')).classes('ll-muted')
+        ui.label(t("With step in, a member's favorites outside the cast can also answer them, so more favorites can mean more model calls and longer prompts. Lowering a limit keeps existing casts and favorites; they can shrink but not grow.")).classes('ll-muted')
+        archived_switch = ui.switch(t('Archived favorites can answer their members'), value=store.archived_favorites(gid))
+        ui.label(t('When on, members can keep archived characters as favorites. An archived favorite answers only the members who chose it, in channels where its world is available. It never joins a cast, a game or /summon.')).classes('ll-muted')
         archived_saved = store.archived_favorites(gid)
         def save_archived_favorites():
             nonlocal archived_saved
@@ -1775,7 +1832,7 @@ def server_settings_section(ctx, channel_names):
             # runs as soon as the retention part saved (even if a later part fails); a build it overtook stops filling (ctx.live)
             if ctx.selector.value == 'monitoring':
                 await ctx.build('monitoring')
-        ctx.savebar.track('Server settings', {}, parts=[
+        ctx.savebar.track(t('Server settings'), {}, parts=[
             {'controls': {footer: store.usage_footer_enabled(gid)}, 'operation': save_footer, 'action': 'settings.footer',
              'detail': lambda _: {'enabled': bool(footer.value)}},
             {'controls': {max_cast: limits['max_cast'], max_favorites: limits['max_favorites']}, 'operation': save_cast_limits, 'action': 'settings.cast_limits',
@@ -1789,11 +1846,13 @@ def server_settings_section(ctx, channel_names):
             {'controls': {timezone: current or None}, 'operation': lambda: timezone_operation(store, gid, timezone.value),
              'action': 'settings.timezone', 'detail': timezone_detail},
             {'controls': {asset_channel: saved_asset}, 'operation': configure, 'action': 'avatar.channel'}],
-            success='Server settings saved')
+            success=t('Server settings saved'))
 
 
 async def setup_panel(ctx):
-    spaces = {r['id']: r['name'] + ' (' + r['kind'] + ')' for r in ctx.snapshot.spaces}
+    t = web_locale.current()
+    kinds = {'world': t.p('space kind', 'world'), 'hub': t.p('space kind', 'hub')}
+    spaces = {r['id']: r['name'] + ' (' + kinds[r['kind']] + ')' for r in ctx.snapshot.spaces}
     worlds_hubs_section(ctx)
     hub_links_section(ctx)
     channels_section(ctx, ctx.channel_names, spaces)
@@ -1812,13 +1871,13 @@ def channel_savers(store, gid, cid, cast_value, ambient_value, cast, ambient):
     def current():
         row = store.channel(cid)
         if row is None or row['guild_id'] != gid:
-            raise ConflictError('This channel is no longer bound in Discord. Reload the page and try again.')
+            raise ConflictError(codes.DASH_CHANNEL_UNBOUND)
         return row
     def save_cast():
         value = list(cast())
         with store.write_admin():
             if json.loads(current()['default_cast']) != baseline['cast']:
-                raise ConflictError('Default cast changed in Discord. Reload the page and try again.')
+                raise ConflictError(codes.DASH_DEFAULT_CAST_CHANGED)
             store.set_cast(cid, None, value, default=True)
         baseline['cast'] = list(dict.fromkeys(value))
         return True
@@ -1826,7 +1885,7 @@ def channel_savers(store, gid, cid, cast_value, ambient_value, cast, ambient):
         value = bool(ambient())
         with store.write_admin():
             if bool(current()['ambient']) != baseline['ambient']:
-                raise ConflictError('Ambient participation changed in Discord. Reload the page and try again.')
+                raise ConflictError(codes.DASH_AMBIENT_CHANGED)
             store.set_ambient(cid, value)
         baseline['ambient'] = value
         return True
@@ -1841,6 +1900,7 @@ def binding_space_name(spaces, space_id):
 def channel_card(ctx, binding, channel_names, spaces, eligible=None, max_cast=None):
     """One channel binding: a collapsed summary row that expands to a single save-bar editor (guidelines, cast, ambient)."""
     from nicegui import ui
+    t = web_locale.current()
     store, gid = ctx.store, ctx.guild_id
     cid = binding['channel_id']
     name = channel_names.get(cid, str(cid))
@@ -1852,7 +1912,7 @@ def channel_card(ctx, binding, channel_names, spaces, eligible=None, max_cast=No
             toggle.props['aria-expanded'] = 'false'
         body = ui.element('div').classes('ll-stack w-full ll-collapsed')
         with body:
-            control, current = guideline_editor(ctx, 'channel', cid, 'Channel guidelines', button=False)
+            control, current = guideline_editor(ctx, 'channel', cid, t('Channel guidelines'), button=False)
             space_id = binding['space_id']
             if eligible is None or space_id not in eligible:
                 rows = store.eligible_characters(gid, space_id)
@@ -1862,16 +1922,17 @@ def channel_card(ctx, binding, channel_names, spaces, eligible=None, max_cast=No
                 rows = eligible[space_id]
             options = {r['id']: r['name'] for r in rows}
             saved_cast = json.loads(binding['default_cast'])
-            cast = ui.select(options, value=saved_cast, multiple=True, label=f"Default cast (up to {max_cast if max_cast is not None else store.cast_limits(gid)['max_cast']})").classes('w-full')
-            ambient = ui.switch('Ambient participation', value=bool(binding['ambient']))
+            cast_limit = max_cast if max_cast is not None else store.cast_limits(gid)['max_cast']
+            cast = ui.select(options, value=saved_cast, multiple=True, label=t('Default cast (up to {limit})', limit=cast_limit)).classes('w-full')
+            ambient = ui.switch(t('Ambient participation'), value=bool(binding['ambient']))
         with toggle:
             _span(name + ' ').classes('ll-block-name')
             with ui.element('span').classes('ll-block-meta'):
                 _span(' \u00b7 ')
-                _span(space_name or 'World or hub missing').classes('' if space_name else 'll-block-missing')
+                _span(space_name or t('World or hub missing')).classes('' if space_name else 'll-block-missing')
                 _span(' \u00b7 ')
-                _span().bind_text_from(cast, 'value', backward=lambda v: f"{len(v or [])} in cast ")
-            _span('Ambient').classes('ll-pill').bind_visibility_from(ambient, 'value')
+                _span().bind_text_from(cast, 'value', backward=lambda v: t('{count} in cast', count=len(v or [])) + ' ')
+            _span(t.p('pill', 'Ambient')).classes('ll-pill').bind_visibility_from(ambient, 'value')
             lucide('chevron-down', '1.25em').classes('ll-icon-solo ll-block-caret')
         def flip():
             now_open = toggle.props['aria-expanded'] != 'true'
@@ -1892,44 +1953,46 @@ def channel_card(ctx, binding, channel_names, spaces, eligible=None, max_cast=No
          'detail': {'kind': 'channel', 'id': cid}},
         {'controls': {cast: saved_cast}, 'operation': save_cast, 'action': 'cast.default'},
         {'controls': {ambient: bool(binding['ambient'])}, 'operation': save_ambient, 'action': 'channel.ambient'}],
-        success='Channel settings saved')
+        success=t('Channel settings saved'))
 
 
 def characters_panel(ctx):
     from nicegui import ui
+    t = web_locale.current()
     store, gid = ctx.store, ctx.guild_id
     worlds = ctx.snapshot.worlds
     def new_character():
         with ui.dialog() as dialog, ui.card().classes('w-full max-w-lg'):
-            ui.label('Create character').classes('text-xl font-bold')
-            ui.label('Start with an empty card, then add a description, personality, and dialogue examples.').classes('ll-muted')
-            name = ui.input('Character name').classes('w-full')
-            world = ui.select(worlds, value=next(iter(worlds), None), label='Home world').classes('w-full')
+            ui.label(t('Create character')).classes('text-xl font-bold')
+            ui.label(t('Start with an empty card, then add a description, personality, and dialogue examples.')).classes('ll-muted')
+            name = ui.input(t('Character name')).classes('w-full')
+            world = ui.select(worlds, value=next(iter(worlds), None), label=t('Home world')).classes('w-full')
             with ui.element('div').classes('ll-form-row justify-end'):
-                ui.button('Cancel', on_click=dialog.close).props('flat')
-                ctx.button('Create', lambda: store.create_character(gid, world.value, name.value or ''),
+                ui.button(t.p('button', 'Cancel'), on_click=dialog.close).props('flat')
+                ctx.button(t.p('button', 'Create'), lambda: store.create_character(gid, world.value, name.value or ''),
                            'character.create', then=lambda _: ctx.refresh('characters'))
         dialog.on('hide', dialog.delete)
         dialog.open()
     rows = ctx.snapshot.characters
     MacroHighlight()
-    with section('Characters'):
-        lucide_button('Create character', 'plus', on_click=new_character).set_enabled(bool(worlds))
+    with section(t('Characters')):
+        lucide_button(t('Create character'), 'plus', on_click=new_character).set_enabled(bool(worlds))
         if not worlds:
-            ui.label('Create a home world in Server setup first.').classes('ll-muted')
+            ui.label(t('Create a home world in Server setup first.')).classes('ll-muted')
         for row in rows:
             character_card(ctx, row, worlds)
         if not rows:
-            ui.label('Create an empty character here or import a character card in Imports to get started.').classes('ll-muted')
+            ui.label(t('Create an empty character here or import a character card in Imports to get started.')).classes('ll-muted')
 
 
 def character_card(ctx, row, worlds):
     from nicegui import ui
+    t = web_locale.current()
     store, gid = ctx.store, ctx.guild_id
     revision = store.owner_revision(gid, 'character', row['id'])
     with ui.expansion().classes('w-full character-card') as card_panel:
         with card_panel.add_slot('header'), ui.element('div').classes('ll-card-header'):
-            ui.label(row['name'] + (' · Archived' if row['archived'] else '')).classes('ll-card-title')
+            ui.label(t('{name} · Archived', name=row['name']) if row['archived'] else row['name']).classes('ll-card-title')
             with more_menu(row['name']):
                 async def archive_item(row=row, revision=revision):
                     if ctx.savebar and ctx.savebar.refuse():
@@ -1941,19 +2004,19 @@ def character_card(ctx, row, worlds):
                     # .error lives on the outcome tuple, not its items
                     if outcome[0] or isinstance(getattr(outcome, 'error', None), ConflictError):
                         await ctx.refresh('characters')
-                ui.menu_item('Restore' if row['archived'] else 'Archive', on_click=archive_item).props('role=menuitem')
+                ui.menu_item(t.p('menu', 'Restore') if row['archived'] else t.p('menu', 'Archive'), on_click=archive_item).props('role=menuitem')
                 ui.separator()
                 def confirm_delete(row=row, revision=revision):
-                    confirm_dialog(ctx, f"Delete {row['name']}?",
-                                   ['Permanently delete this character, its lore, memories, and saved avatars, and remove it from all casts. Past Discord messages remain.',
-                                    'This cannot be undone. Use Archive if you may want to restore the character later.'],
-                                   'Delete permanently', lambda: store.delete_character(gid, row['id'], revision),
+                    confirm_dialog(ctx, t('Delete {name}?', name=row['name']),
+                                   [t('Permanently delete this character, its lore, memories, and saved avatars, and remove it from all casts. Past Discord messages remain.'),
+                                    t('This cannot be undone. Use Archive if you may want to restore the character later.')],
+                                   t('Delete permanently'), lambda: store.delete_character(gid, row['id'], revision),
                                    'character.delete', {'id': row['id']}, then=lambda _: ctx.refresh('characters'))
-                ui.menu_item('Delete character', on_click=confirm_delete).classes('text-negative').props('role=menuitem')
+                ui.menu_item(t('Delete character'), on_click=confirm_delete).classes('text-negative').props('role=menuitem')
         # The body (about 35 controls) is built once, after the 300 ms expand animation, so the click does not stall on it.
         stack = ui.element('div').classes('ll-stack')
         with stack:
-            ui.label('Loading…').classes('ll-muted').style('min-height: 12rem').props('role=status')
+            ui.label(t('Loading…')).classes('ll-muted').style('min-height: 12rem').props('role=status')
         built = False
         def build():
             stack.clear()
@@ -1964,7 +2027,7 @@ def character_card(ctx, row, worlds):
                 logging.exception('Character card body failed to build')
                 stack.clear()
                 with stack:
-                    ui.label('Could not load this character. Reload the page.').classes('ll-muted')
+                    ui.label(t('Could not load this character. Reload the page.')).classes('ll-muted')
         def opened(event):
             nonlocal built
             if event.value and not built:
@@ -1975,16 +2038,17 @@ def character_card(ctx, row, worlds):
         def fill():
             card = json.loads(row['card'])
             with ui.element('div').classes('ll-form-row'):
-                name = ui.input('Name', value=row['name'])
-                world = ui.select(worlds, value=row['world_id'], label='Home world')
+                name = ui.input(t.p('field', 'Name'), value=row['name'])
+                world = ui.select(worlds, value=row['world_id'], label=t('Home world'))
             fields = {field: ui.textarea(label, value=card.get(field, '')).classes('w-full ll-macro') for field, label in
-                [('description', 'Description'), ('personality', 'Personality'), ('scenario', 'Scenario'), ('first_mes', 'Opening line'), ('mes_example', 'Example dialogue'), ('system_prompt', 'Card instructions'), ('post_history_instructions', 'Card post-history instructions')]}
-            confirm = ui.checkbox('Confirm moving worlds; ineligible casts will be cleared')
+                [('description', t('Description')), ('personality', t('Personality')), ('scenario', t('Scenario')), ('first_mes', t('Opening line')), ('mes_example', t('Example dialogue')),
+                 ('system_prompt', t('Card instructions')), ('post_history_instructions', t('Card post-history instructions'))]}
+            confirm = ui.checkbox(t('Confirm moving worlds; ineligible casts will be cleared'))
             confirm.bind_visibility_from(world, 'value', backward=lambda value, saved=row['world_id']: value != saved)
             world.on_value_change(lambda _: confirm.set_value(False))  # a world move needs a fresh tick
             def save(row=row, card=card, name=name, world=world, fields=fields, confirm=confirm, revision=revision):
                 if world.value != row['world_id'] and not confirm.value:
-                    raise ValueError('Confirm the world move before saving')
+                    raise UserError(codes.DASH_WORLD_MOVE_CONFIRM)
                 new = {**card, **{key: control.value or '' for key, control in fields.items()}, 'name': name.value}
                 store.update_character(gid, row['id'], world.value, name.value or '', new, expected_revision=revision)
                 return True
@@ -1992,60 +2056,64 @@ def character_card(ctx, row, worlds):
             ctx.savebar.track(row['name'], tracked, save, 'character.edit', {'id': row['id']}, then=lambda _: ctx.refresh('characters'), on_reset=lambda: confirm.set_value(False), reload=lambda: ctx.refresh('characters'))
             play_style_editor(ctx, row, revision)
             static_avatar_editor(ctx, row, revision)
-            ui.label('Emotion avatars').classes('ll-subtitle')
-            ui.label('The selected emotion image is used first. If unavailable, the fallback static avatar is used.').classes('ll-muted')
+            ui.label(t('Emotion avatars')).classes('ll-subtitle')
+            ui.label(t('The selected emotion image is used first. If unavailable, the fallback static avatar is used.')).classes('ll-muted')
             for slot in store.avatar_slots(gid, row['id']):
                 avatar_editor(ctx, row['id'], slot)
             with ui.element('div').classes('ll-form-row'):
-                key = ui.input('New emotion key').props('hint="lowercase letters, digits, underscores, hyphens"')
-                label = ui.input('Emotion label')
+                key = ui.input(t('New emotion key'))
+                key.props['hint'] = t('lowercase letters, digits, underscores, hyphens')
+                label = ui.input(t('Emotion label'))
                 def add_slot(row=row, key=key, label=label):
                     if any(s['slot_key'] == key.value for s in store.avatar_slots(gid, row['id'])):
-                        raise ValueError('That emotion key already exists; edit that emotion instead')
+                        raise UserError(codes.DASH_EMOTION_KEY_EXISTS)
                     store.save_avatar(gid, row['id'], key.value or '', label.value or '', '')
                     return True
-                ctx.button('Add emotion', add_slot, 'avatar.slot.create', then=lambda _: ctx.refresh())
+                ctx.button(t('Add emotion'), add_slot, 'avatar.slot.create', then=lambda _: ctx.refresh())
 
 
 PLAY_STYLE_LABELS = {
-    'looseness': ('Looseness', 'Tight', 'Loose'),
-    'aggression': ('Aggression', 'Passive', 'Aggressive'),
-    'bluffing': ('Bluffing', 'Honest', 'Bluffer'),
-    'risk': ('Risk', 'Cautious', 'Reckless'),
-    'suspicion': ('Suspicion', 'Trusting', 'Suspicious'),
-    'stubbornness': ('Stubbornness', 'Folds easily', 'Stubborn'),
-    'judgment': ('Judgment', 'Foolish', 'Sharp'),
-    'unpredictability': ('Unpredictability', 'Steady', 'Erratic'),
+    'looseness': (NP_('play style', 'Looseness'), NP_('play style', 'Tight'), NP_('play style', 'Loose')),
+    'aggression': (NP_('play style', 'Aggression'), NP_('play style', 'Passive'), NP_('play style', 'Aggressive')),
+    'bluffing': (NP_('play style', 'Bluffing'), NP_('play style', 'Honest'), NP_('play style', 'Bluffer')),
+    'risk': (NP_('play style', 'Risk'), NP_('play style', 'Cautious'), NP_('play style', 'Reckless')),
+    'suspicion': (NP_('play style', 'Suspicion'), NP_('play style', 'Trusting'), NP_('play style', 'Suspicious')),
+    'stubbornness': (NP_('play style', 'Stubbornness'), NP_('play style', 'Folds easily'), NP_('play style', 'Stubborn')),
+    'judgment': (NP_('play style', 'Judgment'), NP_('play style', 'Foolish'), NP_('play style', 'Sharp')),
+    'unpredictability': (NP_('play style', 'Unpredictability'), NP_('play style', 'Steady'), NP_('play style', 'Erratic')),
 }
 
 
 def play_style_editor(ctx, character, revision):
     """Collapsed Play style section (FEAT-32): eight sliders with their own Save/Reset, written through AdminService.set_play_style."""
     from nicegui import ui
+    t = web_locale.current()
     store, gid, cid = ctx.store, ctx.guild_id, character['id']
     saved = store.character_play_style(gid, cid)
     shown = saved or store.resolved_play_style(gid, cid)
-    with ui.expansion('Play style').classes('w-full play-style ll-subpanel'), ui.element('div').classes('ll-stack'):
-        ui.label('How this character plays card games.' if saved else
-                 'How this character plays card games. No style is saved, so it plays in a style derived from the character; the sliders show that style. Save to keep your own.').classes('ll-muted')
+    with ui.expansion(t('Play style')).classes('w-full play-style ll-subpanel'), ui.element('div').classes('ll-stack'):
+        ui.label(t('How this character plays card games.') if saved else
+                 t('How this character plays card games. No style is saved, so it plays in a style derived from the character; the sliders show that style. Save to keep your own.')).classes('ll-muted')
         sliders, reasons = {}, {}
         for group, traits in playstyle.GROUPS.items():
-            ui.label(group).classes('ll-subtitle')
+            ui.label(t.render(group)).classes('ll-subtitle')
             for trait in traits:
                 label, low, high = PLAY_STYLE_LABELS[trait]
+                trait_label = t(label)
                 with ui.element('div').classes(f'play-style-row play-style-{trait}'):
-                    ui.label(label)
-                    sliders[trait] = ui.slider(min=0, max=100, step=1, value=getattr(shown, trait)).props(f'label aria-label="{label}"').classes(f'play-style-slider-{trait}')
+                    ui.label(trait_label)
+                    sliders[trait] = ui.slider(min=0, max=100, step=1, value=getattr(shown, trait)).props('label').classes(f'play-style-slider-{trait}')
+                    sliders[trait].props['aria-label'] = trait_label
                     reasons[trait] = ui.label().classes(f'play-style-reason play-style-reason-{trait} ll-muted')
                     with ui.element('div').classes('ll-form-row justify-between'):
-                        ui.label(low).classes('ll-muted')
-                        ui.label(high).classes('ll-muted')
+                        ui.label(t(low)).classes('ll-muted')
+                        ui.label(t(high)).classes('ll-muted')
         draft_note = ui.label().classes('play-style-draft ll-muted').props('role=status')
         summary = ui.label().classes('play-style-summary').props('role=status')
         def current():
             return playstyle.PlayStyle(**{trait: int(slider.value) for trait, slider in sliders.items()})
         def update():
-            summary.set_text('Plays: ' + playstyle.describe(current()))
+            summary.set_text(t('Plays: {style}', style=', '.join(t.render(p) for p in playstyle.describe_phrases(current()))))
         for slider in sliders.values():
             slider.on_value_change(lambda _: update())
         update()
@@ -2063,8 +2131,8 @@ def play_style_editor(ctx, character, revision):
             for trait, value in result['values'].items():
                 sliders[trait].set_value(value)
                 reasons[trait].set_text(result['reasons'].get(trait, ''))
-            draft_note.set_text('Draft from the description. Review it, then press Save play style; nothing is saved yet.')
-            ui.notify('Draft ready. Review the sliders, then save.', type='positive')
+            draft_note.set_text(t('Draft from the description. Review it, then press Save play style; nothing is saved yet.'))
+            ui.notify(t('Draft ready. Review the sliders, then save.'), type='positive')
         async def generate():
             if generate_button.is_deleted:
                 return
@@ -2075,75 +2143,77 @@ def play_style_editor(ctx, character, revision):
                 if not generate_button.is_deleted:
                     generate_button.props(remove='loading').enable()
         with ui.element('div').classes('ll-form-row'):
-            generate_button = ctx.button('Generate from description', generate, 'character.play_style_generate', {'id': cid}, then=fill).props('outline')
-            ui.label('Asks the model to read the description and personality. Counts toward the spending cap.').classes('ll-muted')
+            generate_button = ctx.button(t('Generate from description'), generate, 'character.play_style_generate', {'id': cid}, then=fill).props('outline')
+            ui.label(t('Asks the model to read the description and personality. Counts toward the spending cap.')).classes('ll-muted')
         with ui.element('div').classes('ll-form-row'):
-            ui.button('Save play style', on_click=lambda: apply(current(), 'Play style saved.'))
-            ui.button('Reset to default', on_click=lambda: apply(None, 'Play style reset.')).props('outline').set_enabled(saved is not None)
+            ui.button(t('Save play style'), on_click=lambda: apply(current(), t('Play style saved.')))
+            ui.button(t('Reset to default'), on_click=lambda: apply(None, t('Play style reset.'))).props('outline').set_enabled(saved is not None)
 
 
 def static_avatar_editor(ctx, character, revision):
     from nicegui import ui
-    with ui.expansion('Fallback static avatar').classes('w-full fallback-avatar ll-subpanel'), ui.element('div').classes('ll-stack'):
+    t = web_locale.current()
+    with ui.expansion(t('Fallback static avatar')).classes('w-full fallback-avatar ll-subpanel'), ui.element('div').classes('ll-stack'):
         if character['avatar']:
             ui.image(ctx.app.state.base_url + f"/guild/{ctx.guild_id}/characters/{character['id']}/avatar?v={avatar_version(character['avatar'])}").classes('w-24 h-24 rounded-lg')
         else:
-            ui.label('No static fallback set. Import a card portrait or upload one here.').classes('ll-muted')
-        ui.label('Used when the selected emotion has no usable image. No asset channel or publication is needed.').classes('ll-muted')
+            ui.label(t('No static fallback set. Import a card portrait or upload one here.')).classes('ll-muted')
+        ui.label(t('Used when the selected emotion has no usable image. No asset channel or publication is needed.')).classes('ll-muted')
         def reload(_):
             return ctx.refresh('characters')
         async def upload(event):
             ctx.store.save_static_avatar(ctx.guild_id, character['id'], normalize_avatar(await event.file.read()), revision)
             return True
         with ui.element('div').classes('ll-form-row'):
-            ctx.upload(upload, 'Upload fallback avatar', 'avatar.fallback.edit', {'character': character['id']}, then=reload, success='Fallback avatar saved')
+            ctx.upload(upload, t('Upload fallback avatar'), 'avatar.fallback.edit', {'character': character['id']}, then=reload, success=t('Fallback avatar saved'))
             if character['avatar']:
                 def remove():
                     ctx.store.save_static_avatar(ctx.guild_id, character['id'], None, revision)
                     return True
-                lucide_button('Remove fallback avatar', 'trash-2', color='negative', on_click=lambda: confirm_dialog(
-                    ctx, 'Remove fallback avatar?', ['The character falls back to emotion images only. Emotion images stay.'],
-                    'Remove fallback avatar', remove, 'avatar.fallback.delete', {'character': character['id']}, then=reload))
+                lucide_button(t('Remove fallback avatar'), 'trash-2', color='negative', on_click=lambda: confirm_dialog(
+                    ctx, t('Remove fallback avatar?'), [t('The character falls back to emotion images only. Emotion images stay.')],
+                    t('Remove fallback avatar'), remove, 'avatar.fallback.delete', {'character': character['id']}, then=reload))
 
 
 def avatar_editor(ctx, character_id, slot):
     from nicegui import ui
+    t = web_locale.current()
     with ui.expansion(slot['label']).classes('w-full ll-subpanel'), ui.element('div').classes('ll-stack'):
         if slot['has_image']:
             ui.image(ctx.app.state.base_url + f"/guild/{ctx.guild_id}/characters/{character_id}/avatars/{slot['slot_key']}?v={slot['image_version']}").classes('w-24 h-24 rounded-lg')
-        ui.label('Stable key: ' + slot['slot_key']).classes('ll-muted')
+        ui.label(t('Stable key: {key}', key=slot['slot_key'])).classes('ll-muted')
         with ui.element('div').classes('ll-form-row'):
-            label = ui.input('Label', value=slot['label'])
-            description = ui.input('When to use this emotion', value=slot['description'])
+            label = ui.input(t.p('field', 'Label'), value=slot['label'])
+            description = ui.input(t('When to use this emotion'), value=slot['description'])
         async def upload(event):
             image = normalize_avatar(await event.file.read())
             ctx.store.save_avatar(ctx.guild_id, character_id, slot['slot_key'], label.value or '', description.value or '', image, slot['revision'])
             return True
-        ctx.upload(upload, 'Upload avatar image', 'avatar.slot.edit', {'character': character_id, 'slot': slot['slot_key']},
-                   then=lambda _: ctx.refresh(), success='Emotion image saved')
+        ctx.upload(upload, t('Upload avatar image'), 'avatar.slot.edit', {'character': character_id, 'slot': slot['slot_key']},
+                   then=lambda _: ctx.refresh(), success=t('Emotion image saved'))
         with ui.element('div').classes('ll-form-row'):
             def save():
                 ctx.store.save_avatar(ctx.guild_id, character_id, slot['slot_key'], label.value or '', description.value or '', None, slot['revision'])
                 return True
-            ctx.button('Save emotion', save, 'avatar.slot.edit', {'character': character_id, 'slot': slot['slot_key']}, then=lambda _: ctx.refresh())
+            ctx.button(t('Save emotion'), save, 'avatar.slot.edit', {'character': character_id, 'slot': slot['slot_key']}, then=lambda _: ctx.refresh())
             async def publish():
                 return await ctx.service.avatars.publish(ctx.guild_id, character_id, slot['slot_key'], repair=True)
-            ctx.button('Publish / repair image', publish, 'avatar.publish', {'character': character_id, 'slot': slot['slot_key']}, success='Image published').props('outline')
+            ctx.button(t('Publish / repair image'), publish, 'avatar.publish', {'character': character_id, 'slot': slot['slot_key']}, success=t('Image published')).props('outline')
             if slot['has_image']:
                 def remove_image():
                     ctx.store.clear_avatar_image(ctx.guild_id, character_id, slot['slot_key'], slot['revision'])
                     return True
-                lucide_button('Remove emotion image', 'trash-2', color='negative', on_click=lambda: confirm_dialog(
-                    ctx, f"Remove the image from {slot['label']}?", ['The emotion and its label stay; only the image is removed.'],
-                    'Remove emotion image', remove_image, 'avatar.image.delete', {'character': character_id, 'slot': slot['slot_key']},
+                lucide_button(t('Remove emotion image'), 'trash-2', color='negative', on_click=lambda: confirm_dialog(
+                    ctx, t('Remove the image from {label}?', label=slot['label']), [t('The emotion and its label stay; only the image is removed.')],
+                    t('Remove emotion image'), remove_image, 'avatar.image.delete', {'character': character_id, 'slot': slot['slot_key']},
                     then=lambda _: ctx.refresh('characters')))
             if slot['slot_key'] != 'neutral':
                 def delete():
                     ctx.store.delete_avatar(ctx.guild_id, character_id, slot['slot_key'], slot['revision'])
                     return True
-                lucide_button('Remove emotion', 'trash-2', color='negative', on_click=lambda: confirm_dialog(
-                    ctx, f"Remove emotion {slot['label']}?", ['This removes the emotion and its image. The neutral emotion and the fallback avatar stay.'],
-                    'Remove emotion', delete, 'avatar.slot.delete', then=lambda _: ctx.refresh()))
+                lucide_button(t('Remove emotion'), 'trash-2', color='negative', on_click=lambda: confirm_dialog(
+                    ctx, t('Remove emotion {label}?', label=slot['label']), [t('This removes the emotion and its image. The neutral emotion and the fallback avatar stay.')],
+                    t('Remove emotion'), delete, 'avatar.slot.delete', then=lambda _: ctx.refresh()))
 
 
 def lore_panel(ctx, on_import=None):
