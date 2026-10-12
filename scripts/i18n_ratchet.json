@@ -30,14 +30,10 @@
       "ui": 265
     },
     "llmcord_core/discord_bot.py": {
-      "raise": 15,
-      "ui": 42
+      "raise": 3
     },
     "llmcord_core/engine.py": {
       "raise": 2
-    },
-    "llmcord_core/favorites_discord.py": {
-      "ui": 5
     },
     "llmcord_core/game_chooser.py": {
       "raise": 1
@@ -90,9 +86,6 @@
     },
     "llmcord_core/items/registry.py": {
       "raise": 2
-    },
-    "llmcord_core/items_discord.py": {
-      "ui": 2
     },
     "llmcord_core/items_store.py": {
       "raise": 16

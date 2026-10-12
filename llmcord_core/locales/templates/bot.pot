@@ -1,0 +1,870 @@
+#: llmcord_core/discord_bot.py
+msgctxt "space kind"
+msgid "world"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgctxt "space kind"
+msgid "hub"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "space ref"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "An admin can find details in the dashboard under Monitoring → Log."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "An admin can find details in the bot log."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "internal error. {pointer}"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Your turn failed during {stage} (ref {ref}): {detail}"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "speaker selection"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "image description"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "dialogue generation"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "saving scene input"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "preparing character prompt"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "webhook setup"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "avatar lookup"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "webhook delivery"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "saving character reply"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "The bot's model setup needs attention. An admin can look it up with the reference ID."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "⏳ {phase} · {model} · 24h tracked: {tokens:,} tokens (+{unreported} unreported calls)"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "⏳ {phase} · {model} · 24h tracked: {tokens:,} tokens"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Use this command in a server channel."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "/catchup works only in character channels on this server. A server admin can allow it in other channels under Server settings in the dashboard."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Created {space} (#{ident})."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "#{ident} {kind}: {name} (off duty)"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "#{ident} {kind}: {name}"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "No worlds or hubs yet."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "{channel} is already bound to {target}; its cast and ambient setting were kept."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Bound {channel} to {target}. Removed from its cast (not available there): {names}."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Bound {channel} to {target}. Its cast and ambient setting were kept."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Bound {channel} to {target}."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Linked {world} to {hub}."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "{world} is no longer linked to {hub}; removed {count} cast entry."
+msgid_plural "{world} is no longer linked to {hub}; removed {count} cast entries."
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/discord_bot.py
+msgid "in character"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "off duty"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Hub {hub} tone: {tone}."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Imported {name} (#{ident}) into {home} with {count} lore entries."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "No characters available."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "{name} — home world: {world}"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Active cast: {names}"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Added {name} to the active cast."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Removed {name} from the active cast."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Also dropped {count} character no longer available here."
+msgid_plural "Also dropped {count} characters no longer available here."
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/discord_bot.py
+msgid "The active cast is empty. Use /cast set to choose one."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Channel default cast updated."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Ambient is on for {channel}."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Ambient is off for {channel}."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Character replies"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "{subject} are paused: this bot reached its spending limit for this period. They resume on {date} (UTC), or sooner if an operator raises the limit."
+msgstr ""
+
+#. i18n: {hard_cap} is either "off" or a dollar amount
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Spending warning: this bot has spent {spent} since {period}, past the soft cap of {soft_cap}. Hard cap: {hard_cap}. The period resets on {resets} (UTC)."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "off"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Spending limit reached: this bot has spent {spent} since {period}, at or past the hard cap of {hard_cap}. Character replies, ambient turns, catch-ups and memory updates are paused until {resets} (UTC) or until an operator raises the cap in the dashboard's Bot settings."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "{count} model call without a cost estimate was counted as $0."
+msgid_plural "{count} model calls without a cost estimate were counted as $0."
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/discord_bot.py
+msgid "Only the characters seated at this table can speak in its thread."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "The table's characters aren't talking right now (table talk is off or today's limit is reached)."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "You can't read this channel's message history, so I can't summarize it."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Catch-ups"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "You can use /catchup here again in {minutes} minute."
+msgid_plural "You can use /catchup here again in {minutes} minutes."
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/discord_bot.py
+msgid "I can't read this channel's message history."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Could not write the catch-up: {detail} (ref {ref})"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "The model returned nothing. Try again later."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Personal memory enabled. Use /memory list or /memory opt_out anytime."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Personal memory disabled and your saved personal facts erased."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "#{ident} {name}: {content}"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Unknown"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "No personal memories saved."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Memory #{memory_id} removed."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "No memory #{memory_id} of yours was found."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Unknown timezone. Pick one from the list, such as Asia/Seoul."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Your timezone here is now {zone}. Local time: {time}."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Your timezone here is {zone} (your setting). Local time: {time}."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Your timezone here is {zone} (server default). Local time: {time}. Use /time set to choose your own."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Your timezone here is UTC (no timezone set). Local time: {time}. Use /time set to choose yours."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "You had no timezone set here."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Cleared your timezone. Characters now use {zone} (server default)."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Cleared your timezone. Characters now use UTC (no timezone set)."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Choose a member or a character, not both."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "{who} has {amount:,} {currency}."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "You have {amount:,} {currency}."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Daily check-ins are off on this server."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "You already checked in today. Next check-in {reset}."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Checked in: +{payout:,} {currency} (day {streak} streak). Balance: {balance:,} {currency}. Next check-in {reset}."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "The daily check-in settings were changed elsewhere. Run the command again."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Daily check-ins are now off."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Daily check-in: {amount:,} {currency}, no streak bonus."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Daily check-in: {amount:,} {currency}, +{bonus:,} per streak day for up to {days:,} days."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Bots cannot hold a balance."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Gave {amount:,} {currency} to {member}. New balance: {balance:,} {currency}."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Took {amount:,} {currency} from {member}. New balance: {balance:,} {currency}."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "This server's currency is now called {name}."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgctxt "lore scope"
+msgid "channel"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgctxt "lore scope"
+msgid "world or hub"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Added {label} lore #{ident}."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgctxt "lore scope"
+msgid "thread"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "#{ident} [{scope}] {content}"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "No lore for this channel or its world or hub yet."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Pinned lore #{lore_id}."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Updated lore #{lore_id}."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Promoted lore #{lore_id} to {where} as lore #{ident}."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Deleted lore #{lore_id}."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "No lore #{lore_id} in this server."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Scene reset. Your next mention or summon starts fresh."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Deleted {count} stored messages from this scene."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Also forgot {personal} personal fact and {encounters} encounter."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Also forgot {personal} personal fact and {encounters} encounters."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Also forgot {personal} personal facts and {encounters} encounter."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Also forgot {personal} personal facts and {encounters} encounters."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "an unnamed entry"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "a world or hub"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "character {name}"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "a character"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "lorebook {name}"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "a lorebook"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "server-wide lore"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "a thread"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "#unknown-channel"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "another owner"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "{label} ({owner}, {reason})"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "sticky"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "constant"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "keyword: {word}"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Lore: {lore}"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "none"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Branch messages: {branch}; nearby group messages: {nearby}"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Personal facts: {facts}; character encounters: {encounters}"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Built-in default"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Preset: {name} (revision {revision}); emotion: {emotion}"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Prompt blocks: {blocks}; trimmed blocks: {trimmed}"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Provider adaptations: {adaptations}"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Only server administrators can use that command."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "That already exists."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "The error was logged."
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+#, python-brace-format
+msgid "Something went wrong (ref {ref}). {pointer}"
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+msgid "You have no favorites yet. Add one with /favorites add."
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+#, python-brace-format
+msgid "Added {name} to your favorites."
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+#, python-brace-format
+msgid "{name} is not one of your favorites."
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+#, python-brace-format
+msgid "Removed {name} from your favorites."
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+#, python-brace-format
+msgid "{n}. {name} (archived) (not available here)"
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+#, python-brace-format
+msgid "{n}. {name} (archived)"
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+#, python-brace-format
+msgid "{n}. {name} (not available here)"
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+#, python-brace-format
+msgid "{n}. {name}"
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+msgid "Mode: lean — your favorites in the cast are more likely to answer you."
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+msgid "Mode: step in — your favorites can also answer you when they are not in the cast."
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+msgid "Favorites mode: lean."
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+msgid "Favorites mode: step in."
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+#, python-brace-format
+msgid "Cleared {count} favorite."
+msgid_plural "Cleared {count} favorites."
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/items_discord.py
+msgid "Nothing is for sale on this server right now."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "You are not holding any items. Visit /shop to buy some."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "This menu belongs to someone else. Run the command yourself to get your own."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+#, python-brace-format
+msgid "Your {name} was used, but the result could not be posted. It is saved in the use log an admin can see."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+#, python-brace-format
+msgid "Something went wrong with {name}. Check /inventory and try again."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "The menu could not be refreshed. Open /shop again."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+#, python-brace-format
+msgid "+{hidden} more not shown"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgctxt "item kind"
+msgid "consumable"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgctxt "item kind"
+msgid "reusable"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "Ask a question and get an answer."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "Crack it open for a fortune and a lucky number."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "Roll a die."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "Roll a twenty-sided die."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "Draw a tarot card."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "A toy from the shop."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+#, python-brace-format
+msgid "{name} is not for sale right now."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+#, python-brace-format
+msgid "You already own {name}."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+#, python-brace-format
+msgid "You can hold at most {cap} of {name}."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+#, python-brace-format
+msgid "You do not have {name}. Buy one with /shop."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+#, python-brace-format
+msgid "{name} cannot be used on this server right now."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+#, python-brace-format
+msgid "{name} is recharging. Try again in {remaining} s."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "Toy shop"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+#, python-brace-format
+msgid "{qty} left"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "Someone"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgctxt "button.shop"
+msgid "Owned"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+#, python-brace-format
+msgctxt "button.shop"
+msgid "At the limit ({cap})"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+#, python-brace-format
+msgctxt "button.shop"
+msgid "Need {short:,} {currency} more"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+#, python-brace-format
+msgctxt "button.shop"
+msgid "Buy {emoji} {name} · {price:,}"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+#, python-brace-format
+msgid "Your balance: {balance:,} {currency}"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+#, python-brace-format
+msgid "You hold {qty}"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "You hold none"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "Your items"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "use is off right now"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+#, python-brace-format
+msgid "recharging, ready {when}"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "ready"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+#, python-brace-format
+msgid "Bought {emoji} {name} for {price:,} {currency}."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+#, python-brace-format
+msgctxt "button.inventory"
+msgid "Use {emoji} {name}"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "that item"
+msgstr ""
+
+#: llmcord_core/usage.py
+msgid "unavailable"
+msgstr ""
+
+#: llmcord_core/usage.py
+#, python-brace-format
+msgid " (incl. {thinking:,} thinking)"
+msgstr ""
+
+#: llmcord_core/usage.py
+#, python-brace-format
+msgid ""
+"\n"
+"\n"
+"-# {model} · Reply input: {inputs} · Output: {outputs} · Est. paid cost: {cost}"
+msgstr ""
+
+#: llmcord_core/usage.py
+#, python-brace-format
+msgid ""
+"\n"
+"\n"
+"-# {model} · Reply input: {inputs} · Output: {outputs} · Est. cost: {cost}"
+msgstr ""
+
