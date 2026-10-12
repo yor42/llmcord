@@ -4482,6 +4482,141 @@ class DashboardBrowserTests(unittest.TestCase):
             self.post_hook('/_test/games', {'spoken_moves': False})
             context.close()
 
+    def test_games_tab_keep_phrases_switch_saves_and_persists(self):
+        """FEAT-37 F3: the Blackjack section shows 'Keep phrases for tuning' with its help line, Save persists with a games.spoken_keep audit row, reload shows it on, and guild 2 is untouched."""
+        from playwright.sync_api import expect
+        other = self.state()['games']['2']
+        self.post_hook('/_test/games', {'spoken_moves': True})
+        context, page, errors = self.open_games()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            switch = page.get_by_role('switch', name='Keep phrases for tuning')
+            switch.wait_for(timeout=5000)
+            page.get_by_text('On: when a move check was wrong (the member pressed Just table talk or picked the other move) or missed a move they then played with a table button, the bot keeps that chat message here so you can turn it into an example phrase for this server. Only while Read moves from chat is on. Members can turn it off for themselves with /games spoken_moves off. Turning this off deletes every kept phrase. Kept phrases are deleted after the history retention period.', exact=True).wait_for(timeout=5000)
+            page.get_by_text('No kept phrases yet.', exact=True).wait_for(timeout=5000)
+            page.get_by_text('No example phrases yet.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(switch.get_attribute('aria-checked'), 'false')
+            switch.click()
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Keep phrases for tuning saved', exact=True).wait_for(timeout=5000)
+            self.assertTrue(self.state()['games']['1']['spoken_keep'])
+            self.assertIn('games.spoken_keep', self.audit_actions())
+            self.assertEqual(self.state()['games']['2']['spoken_keep'], other['spoken_keep'])
+            page.reload()
+            expect(page.get_by_role('switch', name='Keep phrases for tuning')).to_have_attribute('aria-checked', 'true', timeout=5000)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'spoken_keep': False, 'spoken_moves': False})
+            context.close()
+
+    def test_games_tab_kept_phrases_become_examples_or_are_deleted(self):
+        """FEAT-37 F3: kept phrases list newest first with what the check did and what the member meant; Make example with a changed move adds the example (audit games.spoken_example_add, no text), Delete drops a phrase, Remove drops an example, and guild 2 is untouched."""
+        self.post_hook('/_test/games', {'spoken_moves': True, 'spoken_keep': True, 'kept_phrases': [
+            {'text': 'sure why not', 'offered': ['hit'], 'label': 'talk'}, {'text': 'nope stay', 'offered': ['hit', 'stand'], 'label': 'stand'}, {'text': 'ignore me', 'offered': [], 'label': 'hit'}]})
+        other = {k: v for k, v in self.state()['games']['2'].items()}
+        context, page, errors = self.open_games()
+        try:
+            page.get_by_text('\u201cnope stay\u201d', exact=True).wait_for(timeout=5000)
+            rows = page.locator('.ll-spoken-row')
+            self.assertEqual(rows.count(), 3)
+            self.assertIn('ignore me', rows.nth(0).inner_text())
+            self.assertIn('No check', rows.nth(0).inner_text())
+            self.assertIn('Offered Hit or Stand', rows.nth(1).inner_text())
+            self.assertIn('Meant: Stand', rows.nth(1).inner_text())
+            self.assertIn('Offered Hit', rows.nth(2).inner_text())
+            self.assertIn('Meant: table talk', rows.nth(2).inner_text())
+            rows.nth(2).get_by_label('Move', exact=True).click()
+            page.get_by_role('option', name='Hit', exact=True).click()
+            rows.nth(2).get_by_role('button', name='Make example').click()
+            page.get_by_text('Example phrase added', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['examples'], [['sure why not', 'hit']])
+            self.assertNotIn('sure why not', self.state()['games']['1']['kept_phrases'])
+            self.assertEqual(page.locator('.ll-spoken-row').count(), 2)
+            self.assertEqual(page.locator('.ll-spoken-example').count(), 1)
+            self.assertIn('Hit', page.locator('.ll-spoken-example').inner_text())
+            audit = [row for row in self.state()['audit'] if row['action'] == 'games.spoken_example_add']
+            self.assertEqual(len(audit), 1)
+            self.assertIn('hit', str(audit[0]))
+            self.assertNotIn('sure why not', str(audit[0]))
+            page.locator('.ll-spoken-row').nth(0).get_by_role('button', name='Delete').click()
+            dialog = page.get_by_role('dialog')
+            dialog.get_by_text('Delete kept phrase', exact=True).wait_for(timeout=5000)
+            dialog.get_by_text('This message is deleted from the kept list.', exact=True).wait_for(timeout=5000)
+            dialog.get_by_role('button', name='Cancel').click()
+            dialog.wait_for(state='hidden', timeout=5000)
+            self.assertEqual(len(self.state()['games']['1']['kept_phrases']), 2)
+            page.locator('.ll-spoken-row').nth(0).get_by_role('button', name='Delete').click()
+            page.get_by_role('dialog').get_by_role('button', name='Delete', exact=True).click()
+            page.get_by_text('Kept phrase deleted', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['kept_phrases'], ['nope stay'])
+            self.assertIn('games.spoken_phrase_delete', self.audit_actions())
+            page.locator('.ll-spoken-example').get_by_role('button', name='Remove').click()
+            page.get_by_role('dialog').get_by_text('Remove example phrase', exact=True).wait_for(timeout=5000)
+            page.get_by_role('dialog').get_by_text("The bot stops using this example for this server's move checks.", exact=True).wait_for(timeout=5000)
+            page.get_by_role('dialog').get_by_role('button', name='Remove', exact=True).click()
+            page.get_by_text('Example phrase removed', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['examples'], [])
+            self.assertIn('games.spoken_example_delete', self.audit_actions())
+            page.get_by_text('No example phrases yet.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['2'], other)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'spoken_keep': False, 'spoken_moves': False, 'clear_spoken_examples': True})
+            context.close()
+
+    def test_games_tab_keep_off_confirms_before_deleting_kept_phrases(self):
+        """FEAT-37 F3: saving Keep phrases for tuning Off with kept phrases asks first; Cancel keeps the phrases and the bar dirty, confirming saves and deletes them; with none kept there is no dialog."""
+        self.post_hook('/_test/games', {'spoken_moves': True, 'spoken_keep': True, 'kept_phrases': [{'text': 'one'}, {'text': 'two'}]})
+        context, page, errors = self.open_games()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            page.get_by_role('switch', name='Keep phrases for tuning').click()
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            dialog = page.get_by_role('dialog')
+            dialog.get_by_text('Turn off keeping?', exact=True).wait_for(timeout=5000)
+            dialog.get_by_text('2 kept phrases are deleted. Example phrases stay.', exact=True).wait_for(timeout=5000)
+            dialog.get_by_role('button', name='Cancel').click()
+            dialog.wait_for(state='hidden', timeout=5000)
+            self.assertTrue(self.state()['games']['1']['spoken_keep'])
+            self.assertEqual(len(self.state()['games']['1']['kept_phrases']), 2)
+            bar.wait_for(state='visible', timeout=5000)
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_role('dialog').get_by_role('button', name='Turn off and delete', exact=True).click()
+            page.get_by_text('Keep phrases for tuning saved', exact=True).wait_for(timeout=5000)
+            self.assertFalse(self.state()['games']['1']['spoken_keep'])
+            self.assertEqual(self.state()['games']['1']['kept_phrases'], [])
+            page.get_by_text('No kept phrases yet.', exact=True).wait_for(timeout=5000)
+            page.get_by_role('switch', name='Keep phrases for tuning').click()
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Keep phrases for tuning saved', exact=True).wait_for(timeout=5000)
+            page.get_by_role('switch', name='Keep phrases for tuning').click()
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.wait_for_timeout(500)
+            self.assertEqual(page.get_by_role('dialog').count(), 0)
+            self.assertFalse(self.state()['games']['1']['spoken_keep'])
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'spoken_keep': False, 'spoken_moves': False})
+            context.close()
+
+    def test_games_tab_stale_example_revision_shows_conflict_and_refreshes_lists(self):
+        """FEAT-37 F3: Make example after the example list changed elsewhere shows the standard conflict message, adds nothing, and refreshes the lists."""
+        self.post_hook('/_test/games', {'spoken_moves': True, 'spoken_keep': True, 'kept_phrases': [{'text': 'late answer'}]})
+        context, page, errors = self.open_games()
+        try:
+            page.get_by_text('\u201clate answer\u201d', exact=True).wait_for(timeout=5000)
+            self.post_hook('/_test/games', {'add_example': 'elsewhere'})
+            page.locator('.ll-spoken-row').get_by_role('button', name='Make example').click()
+            page.get_by_text('The example phrases were changed elsewhere. Reload the page and try again.', exact=True).wait_for(timeout=5000)
+            page.locator('.ll-spoken-example').wait_for(timeout=5000)
+            self.assertIn('elsewhere', page.locator('.ll-spoken-example').inner_text())
+            self.assertEqual(self.state()['games']['1']['examples'], [['elsewhere', 'hit']])
+            self.assertEqual(self.state()['games']['1']['kept_phrases'], ['late answer'])
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'spoken_keep': False, 'spoken_moves': False, 'clear_spoken_examples': True})
+            context.close()
+
     def test_games_tab_doubt_switch_and_rules_save_persist_and_conflict(self):
         """FEAT-21 D: the I Doubt It section saves its switch and its ante/timeout rules with audit rows, shows the claim rule read-only as Sequence, persists after reload, refuses a stale save and leaves guild 2 alone."""
         from playwright.sync_api import expect

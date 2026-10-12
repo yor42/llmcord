@@ -31,7 +31,7 @@ class SaveBar:
         self.bar.set_visibility(False)
 
     def track(self, name, controls, save=None, action=None, detail=None, then=None, success=None, on_reset=None,
-              dirty=None, reset=None, save_label=_SAVE_LABEL, parts=None, reload=None, enabled=None):
+              dirty=None, reset=None, save_label=_SAVE_LABEL, parts=None, reload=None, enabled=None, confirm=None):
         """Register an editor: controls maps each tracked control to its saved value; save runs guarded/audited on Save.
 
         dirty: optional callable replacing the per-control comparison (an exception counts as dirty).
@@ -39,6 +39,7 @@ class SaveBar:
         save_label: the bar's Save button text while this editor is active.
         reload: optional async callable used by Reload after a save conflict (default: refresh the current tab).
         enabled: optional callable(control) -> bool; settle() re-enables a control of this editor only when it returns true (otherwise it stays disabled).
+        confirm: optional callable returning None, or (title, lines, button_label) to ask before Save writes; Cancel leaves the bar dirty (not used with parts).
         Writes made through ctx._attempt (not ctx.run/button) are never refused, so an editor may run its own
         write (e.g. Save as new) that way and then call settle().
 
@@ -66,7 +67,7 @@ class SaveBar:
             controls.update(part.controls)
         editor = types.SimpleNamespace(name=name, controls=[], save=save, action=action, detail=detail, then=then,
                                        success=success, on_reset=on_reset, dirty=dirty, reset=reset, save_label=save_label,
-                                       parts=[], reload=reload, stale=False, enabled=enabled)
+                                       parts=[], reload=reload, stale=False, enabled=enabled, confirm=confirm)
         self.editors.append(editor)
         self.retrack(editor, controls)
         editor.parts = parts
@@ -181,6 +182,28 @@ class SaveBar:
         from nicegui import ui
         editor = self.active
         if editor is None or self.saving:
+            return
+        ask = editor.confirm() if editor.confirm and not editor.parts else None
+        if ask:
+            title, lines, button_label = ask
+            with ui.dialog() as dialog, ui.card().classes('w-full max-w-lg'):
+                ui.label(title).classes('text-xl font-bold')
+                for line in lines:
+                    ui.label(line).classes('ll-muted')
+                async def confirmed():
+                    dialog.close()
+                    await self._commit(editor)
+                with ui.element('div').classes('ll-form-row justify-end'):
+                    ui.button('Cancel', on_click=dialog.close).props('flat')
+                    ui.button(button_label, on_click=confirmed, color='negative')
+            dialog.on('hide', dialog.delete)
+            dialog.open()
+            return
+        await self._commit(editor)
+
+    async def _commit(self, editor):
+        from nicegui import ui
+        if self.active is not editor or self.saving:
             return
         self.saving = True
         self.save_button.disable()

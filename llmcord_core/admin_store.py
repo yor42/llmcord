@@ -1476,9 +1476,13 @@ class AdminStore:
     def set_spoken_moves_enabled(self, guild_id, on, expected=None):
         return self._set_pseudo_flag(guild_id, self._SPOKEN_KEY, on, expected, 'read moves from chat')
 
+    def spoken_keep_setting(self, guild_id):
+        """The stored "Keep phrases for tuning" flag only (what the dashboard switch shows and saves against)."""
+        return self._pseudo_flag(guild_id, self._SPOKEN_KEEP_KEY)
+
     def spoken_keep_phrases(self, guild_id):
-        """"Keep phrases for tuning": reads False whenever the main switch is off."""
-        return self.spoken_moves_enabled(guild_id) and self._pseudo_flag(guild_id, self._SPOKEN_KEEP_KEY)
+        """"Keep phrases for tuning" in effect: reads False whenever the main switch is off."""
+        return self.spoken_moves_enabled(guild_id) and self.spoken_keep_setting(guild_id)
 
     def set_spoken_keep_phrases(self, guild_id, on, expected=None):
         purge = lambda: self.db.execute('DELETE FROM spoken_phrases WHERE guild_id=?', (guild_id,)) if not on else None  # noqa: E731

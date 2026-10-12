@@ -633,7 +633,7 @@ class LiveContext:
             ui.notify(_UNEXPECTED, type='negative', timeout=8000)
             return AttemptFailed((False, None), error)
 
-    def button(self, text, operation, action=None, detail=None, then=None, success=None, prepare=None, **kwargs):
+    def button(self, text, operation, action=None, detail=None, then=None, success=None, prepare=None, conflict=None, **kwargs):
         from nicegui import ui
         async def clicked():
             if self.savebar and self.savebar.refuse():
@@ -645,8 +645,13 @@ class LiveContext:
                     logging.exception('Form check before saving failed')
                     ui.notify('Could not check the form before saving. Try again', type='negative', timeout=8000)
                     return
-            ok, result = await self._attempt(operation, action, detail)
+            outcome = await self._attempt(operation, action, detail)
+            ok, result = outcome
             if not ok:
+                if conflict and isinstance(getattr(outcome, 'error', None), ConflictError):
+                    followup = conflict()
+                    if inspect.isawaitable(followup):
+                        await followup
                 return
             if success:
                 ui.notify(success, type='positive')

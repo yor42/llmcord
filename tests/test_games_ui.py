@@ -120,5 +120,72 @@ class SpokenMovesSetting(TableCase):
         self.assertTrue(self.store.spoken_moves_enabled(G))
 
 
+class KeepPhrasesSetting(TableCase):
+    def test_default_off_save_round_trip_stays_in_guild(self):
+        """FEAT-37 F3: Keep phrases for tuning is off by default, saves per server and leaves guild 2 alone."""
+        self.store.set_spoken_moves_enabled(G, True)
+        self.store.set_spoken_moves_enabled(2, True)
+        self.assertFalse(self.store.spoken_keep_phrases(G))
+        self.assertIs(self.store.set_spoken_keep_phrases(G, True, False), True)
+        self.assertTrue(self.store.spoken_keep_phrases(G))
+        self.assertFalse(self.store.spoken_keep_phrases(2))
+
+    def test_setting_reads_stored_flag_while_read_moves_is_off(self):
+        """FEAT-37 F3: the dashboard switch shows the stored flag and saves against it without a false conflict, even while Read moves from chat is off."""
+        self.store.set_spoken_moves_enabled(G, True)
+        self.store.set_spoken_keep_phrases(G, True)
+        self.store.set_spoken_moves_enabled(G, False)
+        self.assertTrue(self.store.spoken_keep_setting(G))
+        self.assertFalse(self.store.spoken_keep_phrases(G))
+        self.assertIs(self.store.set_spoken_keep_phrases(G, False, self.store.spoken_keep_setting(G)), False)
+        self.assertFalse(self.store.spoken_keep_setting(G))
+
+    def test_stale_save_conflicts(self):
+        self.store.set_spoken_keep_phrases(G, True)
+        with self.assertRaises(ConflictError):
+            self.store.set_spoken_keep_phrases(G, False, False)
+
+
+class KeptPhraseRows(TableCase):
+    def keep(self, text, offered, label, user=7):
+        self.store.set_spoken_moves_enabled(G, True)
+        self.store.set_spoken_keep_phrases(G, True)
+        return self.store.keep_spoken_phrase(G, user, 'blackjack', text, offered, 'unsure', {}, 'false_positive', label)
+
+    def test_rows_describe_the_check_and_the_meaning_without_naming_anyone(self):
+        self.keep('hit me', ['hit'], 'talk')
+        self.keep('bust it', ['hit', 'stand'], 'stand')
+        self.keep('what', [], 'hit')
+        rows = games_ui.phrase_rows(self.store.spoken_phrases(G, 'blackjack', 200), 'UTC')
+        self.assertEqual([r['text'] for r in rows], ['what', 'bust it', 'hit me'])
+        self.assertEqual([r['check'] for r in rows], ['No check', 'Offered Hit or Stand', 'Offered Hit'])
+        self.assertEqual([r['meant'] for r in rows], ['Meant: Hit', 'Meant: Stand', 'Meant: table talk'])
+        self.assertTrue(all('user' not in k for r in rows for k in r))
+
+    def test_promote_delete_and_remove_are_guild_scoped_and_revision_checked(self):
+        first, second = self.keep('hit me', ['hit'], 'talk'), self.keep('stay put', ['hit'], 'talk')
+        revision = self.store.spoken_examples_revision(G)
+        self.store.promote_spoken_phrase(G, first, 'hit', 99, revision)
+        self.assertEqual([(e['text'], e['label']) for e in self.store.spoken_examples(G, 'blackjack')], [('hit me', 'hit')])
+        self.assertEqual([p['id'] for p in self.store.spoken_phrases(G)], [second])
+        with self.assertRaises(ConflictError):
+            self.store.promote_spoken_phrase(G, second, 'stand', 99, revision)
+        self.assertFalse(self.store.delete_spoken_phrase(2, second))
+        self.assertTrue(self.store.delete_spoken_phrase(G, second))
+        example = self.store.spoken_examples(G, 'blackjack')[0]['id']
+        with self.assertRaises(ConflictError):
+            self.store.delete_spoken_example(G, example, revision)
+        self.assertFalse(self.store.delete_spoken_example(2, example))
+        self.assertTrue(self.store.delete_spoken_example(G, example, self.store.spoken_examples_revision(G)))
+
+    def test_keeping_off_deletes_kept_phrases_but_not_examples(self):
+        first = self.keep('hit me', ['hit'], 'talk')
+        self.keep('stay put', ['hit'], 'talk')
+        self.store.promote_spoken_phrase(G, first, 'hit', 99)
+        self.store.set_spoken_keep_phrases(G, False, True)
+        self.assertEqual(self.store.spoken_phrases(G), [])
+        self.assertEqual(len(self.store.spoken_examples(G, 'blackjack')), 1)
+
+
 if __name__ == '__main__':
     unittest.main()

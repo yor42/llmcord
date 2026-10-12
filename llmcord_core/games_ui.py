@@ -1,9 +1,33 @@
 """Dashboard Games tab (FEAT-27): settings shared by all games, then one section per game (blackjack first)."""
 from __future__ import annotations
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from .currency_ui import channels_toast, save_bets, save_channels
 
 _whole = lambda value: int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value == int(value) else value
+
+
+def _move_name(label, labels):
+    return labels.get(label, 'Table talk')
+
+
+def phrase_rows(phrases, zone_name):
+    """Display rows for kept phrases (newest first). The message text is shown as-is by the caller; no member is ever named."""
+    from .spoken.blackjack import LABELS
+    try:
+        zone = ZoneInfo(zone_name or 'UTC')
+    except Exception:
+        zone = ZoneInfo('UTC')
+    rows = []
+    for p in phrases:
+        offered = [LABELS.get(m, str(m)) for m in p['offered']]
+        check = 'Offered ' + (offered[0] if len(offered) == 1 else ', '.join(offered[:-1]) + ' or ' + offered[-1]) if offered else 'No check'
+        meant = 'Meant: ' + ('table talk' if p['label'] == 'talk' else _move_name(p['label'], LABELS))
+        rows.append({'id': p['id'], 'text': p['text'], 'check': check, 'meant': meant, 'label': p['label'] if p['label'] in LABELS else 'talk',
+                     'when': datetime.fromtimestamp(p['created_at'], zone).strftime('%Y-%m-%d %H:%M')})
+    return rows
 
 
 def all_games_section(ctx):
@@ -158,6 +182,74 @@ def blackjack_section(ctx):
                           detail=lambda result: {'enabled': result}, success='Read moves from chat saved',
                           dirty=lambda: bool(spoken_switch.value) != spoken['value'],
                           reset=lambda: spoken_switch.set_value(spoken['value']))
+
+        from .icons import lucide_button
+        from .scene_ui import confirm_dialog
+        from .spoken.blackjack import LABELS
+        move_options = {**LABELS, 'talk': 'Table talk'}
+        ui.label('Tuning').classes('ll-subtitle')
+        keep = {'value': store.spoken_keep_setting(gid)}
+        keep_switch = ui.switch('Keep phrases for tuning', value=keep['value'])
+        ui.label('On: when a move check was wrong (the member pressed Just table talk or picked the other move) or missed a move they then played with a table button, the bot keeps that chat message here '
+                 'so you can turn it into an example phrase for this server. Only while Read moves from chat is on. Members can turn it off for themselves with /games spoken_moves off. '
+                 'Turning this off deletes every kept phrase. Kept phrases are deleted after the history retention period.').classes('ll-muted')
+        def save_keep():
+            keep['value'] = store.set_spoken_keep_phrases(gid, bool(keep_switch.value), keep['value'])
+            return keep['value']
+        def confirm_keep():
+            count = len(store.spoken_phrases(gid, 'blackjack', 500)) if keep['value'] and not keep_switch.value else 0
+            if count:
+                return 'Turn off keeping?', [f"{count} kept {'phrase is' if count == 1 else 'phrases are'} deleted. Example phrases stay."], 'Turn off and delete'
+        ctx.savebar.track('Keep phrases for tuning', {keep_switch: keep['value']}, save=save_keep, action='games.spoken_keep',
+                          detail=lambda result: {'enabled': result}, success='Keep phrases for tuning saved',
+                          dirty=lambda: bool(keep_switch.value) != keep['value'],
+                          reset=lambda: keep_switch.set_value(keep['value']),
+                          then=lambda result: lists.refresh(), confirm=confirm_keep)
+
+        def actor():
+            return int(ctx.app.state.sessions[ctx.ident]['user']['id'])
+
+        async def refreshed(result=None):
+            lists.refresh()
+
+        def gone(done):
+            return lambda result: (ui.notify(done if result else 'Already removed.', type='positive' if result else 'warning'), lists.refresh())[1]
+
+        @ui.refreshable
+        def lists():
+            revision = store.spoken_examples_revision(gid)
+            ui.label('Kept phrases').classes('ll-subtitle')
+            rows = phrase_rows(store.spoken_phrases(gid, 'blackjack', 200), store.guild_timezone(gid))
+            if not rows:
+                ui.label('No kept phrases yet.').classes('ll-muted')
+            for row in rows:
+                with ui.card().classes('w-full ll-stack ll-result ll-spoken-row'):
+                    ui.label(f"\u201c{row['text']}\u201d").classes('break-words')
+                    ui.label(f"{row['check']} \u00b7 {row['meant']} \u00b7 {row['when']}").classes('ll-muted')
+                    with ui.element('div').classes('ll-form-row ll-field-row'):
+                        pick = ui.select(move_options, value=row['label'], label='Move').classes('ll-wide')
+                        ctx.button('Make example', lambda row=row, pick=pick: store.promote_spoken_phrase(gid, row['id'], pick.value, actor(), revision),
+                                   'games.spoken_example_add', lambda result, pick=pick: {'label': pick.value}, then=gone('Example phrase added'), success=None,
+                                   conflict=refreshed).props('outline size=sm')
+                        lucide_button('Delete', 'trash-2', on_click=lambda row=row: confirm_dialog(
+                            ctx, 'Delete kept phrase', ['This message is deleted from the kept list.'], 'Delete',
+                            lambda: store.delete_spoken_phrase(gid, row['id']), 'games.spoken_phrase_delete', None,
+                            then=gone('Kept phrase deleted'), conflict=refreshed)).props('outline size=sm color=negative')
+            ui.label('Example phrases for this server').classes('ll-subtitle')
+            ui.label("When a chat message is very close to one of these, the bot uses this example's move instead of its own guess. Up to 200.").classes('ll-muted')
+            examples = store.spoken_examples(gid, 'blackjack')
+            if not examples:
+                ui.label('No example phrases yet.').classes('ll-muted')
+            for example in examples:
+                with ui.card().classes('w-full ll-stack ll-result ll-spoken-example'):
+                    ui.label(f"\u201c{example['text']}\u201d").classes('break-words')
+                    with ui.element('div').classes('ll-form-row ll-field-row'):
+                        ui.label(_move_name(example['label'], LABELS)).classes('ll-muted')
+                        lucide_button('Remove', 'trash-2', on_click=lambda example=example: confirm_dialog(
+                            ctx, 'Remove example phrase', ["The bot stops using this example for this server's move checks."], 'Remove',
+                            lambda: store.delete_spoken_example(gid, example['id'], revision), 'games.spoken_example_delete', None,
+                            then=gone('Example phrase removed'), conflict=refreshed)).props('outline size=sm color=negative')
+        lists()
 
 
 def doubt_section(ctx):
