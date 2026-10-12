@@ -188,6 +188,40 @@ def _check_catalogs(root: Path, tool, errors: list[str], warnings: list[str]) ->
                     seen.setdefault(key, (domain, strings))
 
 
+def incomplete_locales(root: Path) -> set[str] | None:
+    """Locales exempt from the completeness gate; None when there is no incomplete.txt (the gate is off)."""
+    try:
+        text = (root / LOCALES / 'incomplete.txt').read_text(encoding='utf-8')
+    except OSError:
+        return None
+    return {line.strip() for line in text.splitlines() if line.strip() and not line.strip().startswith('#')}
+
+
+def _check_coverage(root: Path, tool, errors: list[str]) -> None:
+    exempt = incomplete_locales(root)
+    if exempt is None:
+        return
+    for locale in tool._locale_dirs(root):
+        if locale in exempt:
+            continue
+        for domain in tool.DOMAINS:
+            path = root / LOCALES / locale / 'LC_MESSAGES' / f'{domain}.po'
+            if not path.exists():
+                if (root / LOCALES / 'templates' / f'{domain}.pot').exists():
+                    errors.append(f'[coverage] {locale}/{domain}: missing catalog')
+                continue
+            try:
+                messages = _messages(_read(path))
+            except Exception:
+                continue  # reported as [po-parse] by the catalog check
+            fuzzy = sum(1 for m in messages if m.fuzzy)
+            if fuzzy:
+                errors.append(f'[fuzzy] {locale}/{domain}: {fuzzy} fuzzy entries')
+            done = sum(1 for m in messages if not m.fuzzy and all(_strings(m)))
+            if done < len(messages):
+                errors.append(f'[coverage] {locale}/{domain}: {done}/{len(messages)} translated')
+
+
 def _call_name(node: ast.Call) -> str | None:
     func = node.func
     return func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) else None
@@ -370,6 +404,7 @@ def check(root: Path | None = None) -> tuple[list[str], list[str]]:
         if actual != expected:
             errors.append(f'[stale-template] templates/{domain}.pot is out of date; run python scripts/i18n.py extract')
     _check_catalogs(root, tool, errors, warnings)
+    _check_coverage(root, tool, errors)
     _check_markers(root, tool, errors)
     errors += check_ratchet(root)
     return errors, warnings

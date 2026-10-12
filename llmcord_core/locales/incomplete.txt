@@ -1,0 +1,5 @@
+# Locale packs that are still being translated (one locale per line; # starts a comment).
+# `python scripts/i18n.py check` fails any locale below 100% translated unless it is listed here.
+# The gate is only active while this file exists: keep it (comments only) when no pack is incomplete.
+# Remove a locale from this list when its translation is complete.
+ko

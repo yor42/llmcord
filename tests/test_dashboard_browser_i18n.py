@@ -1,6 +1,7 @@
 """FEAT-45 (D39, batch 2b): opt-in browser test of the dashboard language switch (same harness and gating as
 test_dashboard_browser.py; the fixture server runs with LLMCORD_I18N_PSEUDO=1)."""
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -14,6 +15,49 @@ import httpx
 from llmcord_core import i18n
 
 SESSION = 'browser-lang-session'
+TABS = ('setup', 'characters', 'lore', 'imports', 'prompts', 'monitoring', 'currency', 'games', 'shop')
+# MNT-75 automation: things that are never translated, each tied to what produces it (tests/dashboard_server.py). Any other run
+# of 3+ ASCII letters outside a pseudo marker is reported. Words match case-insensitively; NEVER_TRANSLATED_NODES match a whole
+# text node (after pseudo markers are removed) so a real label cannot hide behind a fixture word.
+NEVER_TRANSLATED = frozenset("""
+alice cheerful courier
+scene assets
+magic ball fortune cookie tarot
+discord nicegui tailscale openai json png jpg url usd utc api cfg
+""".split())
+# fixture: character Alice ("A cheerful courier"); channels scene and assets; built-in shop catalog item names (Magic 8-ball,
+# Fortune cookie, Tarot); brand, format and unit names.
+NEVER_TRANSLATED_NODES = tuple(re.compile(pattern) for pattern in (
+    r'World',                                        # the fixture's space name
+    r'fixture',                                      # lorebook entry key
+    r'Fixture entry \d+',                            # lorebook entry content
+    r'(fixture|second)-model( · —| ·)?',            # model names in the usage list
+    r'FIXTURE-[A-Z-]+|Provider returned 500 FIXTURE-ERROR-DETAIL',  # stored request/response/error text
+    r'Log (request|reply) \d+',                      # stored model-call log text
+    r'user\d+',                                      # fixture member names
+    r'Seed grant \d+',                               # ledger reason typed by the fixture
+    r'Aria',                                         # member nickname from the mock Discord API
+    r'.*Dice',                                       # built-in shop item name with its emoji (stored catalog name)
+    r'You rolled a \d \(1-6\)\.',                    # stored use-log text (SUSPECTED untranslated, see report)
+))
+COLLECT_TEXT = """
+() => {
+  const root = [...document.querySelectorAll('.q-tab-panel')].find(p => p.offsetParent !== null);
+  if (!root) return null;
+  const out = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const text = node.textContent.trim();
+    const parent = node.parentElement;
+    if (!text || !parent || parent.closest('script, style, textarea, code, pre, kbd, option, .q-icon, .material-icons')) continue;
+    const box = parent.getBoundingClientRect();
+    const style = getComputedStyle(parent);
+    if (style.visibility === 'hidden' || style.display === 'none' || (box.width === 0 && box.height === 0)) continue;
+    out.push(text);
+  }
+  return out;
+}
+"""
 
 
 @unittest.skipUnless(os.environ.get('LLMCORD_BROWSER_TESTS') == '1', 'Set LLMCORD_BROWSER_TESTS=1 to run browser integration tests')
@@ -145,3 +189,37 @@ class DashboardLanguageBrowserTests(unittest.TestCase):
         save("Follow each member's Discord language")
         wait_for(lambda: state()['guild_language'] == '')
         expect(self.page.get_by_label('Bot language', exact=True)).to_be_visible()
+
+
+    def pseudo_texts(self, tab):
+        self.load(f'/admin/guild/1?tab={tab}')
+        self.page.wait_for_function(f'(() => {{ const t = ({COLLECT_TEXT})(); return t !== null && t.length > 1; }})()')
+        texts = None
+        for _ in range(40):  # sample until two consecutive reads agree, so a panel that is still filling is not scanned
+            current = self.page.evaluate(COLLECT_TEXT)
+            if current == texts:
+                return current
+            texts = current
+            self.page.wait_for_timeout(250)
+        return texts
+
+    def test_pseudo_marks_visible_text_on_every_tab(self):
+        """MNT-75 automation: with pseudo selected every top-level tab shows marked text and no unmarked plain-English text node of 3+ letters."""
+        self.context.add_cookies([{'name': 'llmcord_lang', 'value': 'pseudo', 'url': self.url, 'secure': True, 'httpOnly': True, 'sameSite': 'Lax'}])
+        self.addCleanup(self.context.clear_cookies, name='llmcord_lang')
+        offenders = {}
+        for tab in TABS:
+            texts = self.pseudo_texts(tab)
+            self.assertTrue(any('[!!' in text for text in texts), f'{tab}: no pseudo-marked text in {texts[:5]}')
+            bad = []
+            for text in texts:
+                rest = re.sub(r'\[!!.*?!!\]', ' ', text, flags=re.S)
+                if rest.lstrip().startswith('/'):  # slash commands such as /admin ...
+                    continue
+                if any(node.fullmatch(' '.join(rest.split())) for node in NEVER_TRANSLATED_NODES):
+                    continue
+                if [w for w in re.findall(r'[A-Za-z]{3,}', rest) if w.lower() not in NEVER_TRANSLATED]:
+                    bad.append(text if len(text) <= 80 else text[:77] + '...')
+            if bad:
+                offenders[tab] = bad
+        self.assertEqual(offenders, {}, 'untranslated visible text under pseudo: ' + '; '.join(f'{k}: {v}' for k, v in offenders.items()))

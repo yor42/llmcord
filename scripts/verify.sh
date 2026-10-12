@@ -53,7 +53,7 @@ else
   SUMMARY+=("SKIP  secret scan (gitleaks not installed)")
 fi
 if [ "$BROWSER" = 1 ]; then
-  stage "dashboard browser suite" env LLMCORD_BROWSER_TESTS=1 "$PY" -m unittest discover -s tests -p test_dashboard_browser.py
+  stage "dashboard browser suite" env LLMCORD_BROWSER_TESTS=1 "$PY" -m unittest discover -s tests -p 'test_dashboard_browser*.py'
 fi
 if [ "$BENCH" = 1 ]; then
   stage "dashboard perf bench" "$PY" scripts/bench_dashboard.py
