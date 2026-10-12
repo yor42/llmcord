@@ -223,6 +223,24 @@ NO_SAVED_CONTEXT = E_('discord.no_saved_context', 'No saved context for that cha
 
 
 # --- MNT-72 (1g): dashboard.py part 1
+DASH_AMBIENT_CHANGED = E_('dash.ambient_changed', 'Ambient participation changed in Discord. Reload the page and try again.')
+DASH_CHANNEL_CHOOSE = E_('dash.channel_choose', 'Choose a text channel in this server')
+DASH_CHANNEL_UNBOUND = E_('dash.channel_unbound', 'This channel is no longer bound in Discord. Reload the page and try again.')
+DASH_CONNECTION_TEST_RUNNING = E_('dash.connection_test_running', 'A connection test is already running.')
+DASH_CONTEXT_TOKENS_MIN = E_('dash.context_tokens_min', 'Context tokens must be a whole number of at least 1.')
+DASH_DEFAULT_CAST_CHANGED = E_('dash.default_cast_changed', 'Default cast changed in Discord. Reload the page and try again.')
+DASH_EMOTION_KEY_EXISTS = E_('dash.emotion_key_exists', 'That emotion key already exists; edit that emotion instead')
+DASH_HARD_CAP_INVALID = E_('dash.hard_cap_invalid', 'Hard cap must be blank or a number of dollars, zero or more.')
+DASH_MODEL_ID_FIRST = E_('dash.model_id_first', 'Enter a model ID first.')
+DASH_MODEL_LIST_RUNNING = E_('dash.model_list_running', 'The model list is already being fetched.')
+DASH_MODEL_REQUIRED = E_('dash.model_required', 'Model is required.')
+DASH_NUMBER_INVALID = E_('dash.number_invalid', '{label} must be a number.')
+DASH_NUMBER_WHOLE = E_('dash.number_whole', '{label} must be a whole number.')
+DASH_PRICES_RUNNING = E_('dash.prices_running', 'The prices are already being looked up.')
+DASH_PROFILE_EXISTS = E_('dash.profile_exists', 'A profile named {name} already exists. Use Edit to change it.')
+DASH_RESET_DAY_INVALID = E_('dash.reset_day_invalid', 'Reset day must be a whole number from 1 to 28.')
+DASH_SOFT_CAP_INVALID = E_('dash.soft_cap_invalid', 'Soft cap must be blank or a number of dollars, zero or more.')
+DASH_WORLD_MOVE_CONFIRM = E_('dash.world_move_confirm', 'Confirm the world move before saving')
 
 
 
