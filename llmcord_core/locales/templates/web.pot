@@ -1811,8 +1811,8 @@ msgid "How this character plays card games. No style is saved, so it plays in a 
 msgstr ""
 
 #: llmcord_core/dashboard.py
-msgctxt "Plays: {style}"
-msgid ", "
+#, python-brace-format
+msgid "Plays: {style}"
 msgstr ""
 
 #: llmcord_core/dashboard.py
@@ -2664,8 +2664,8 @@ msgid "{game} rules"
 msgstr ""
 
 #: llmcord_core/games_ui.py
-msgctxt "Table rules line: {rules}"
-msgid " · "
+#, python-brace-format
+msgid "Table rules line: {rules}"
 msgstr ""
 
 #: llmcord_core/games_ui.py

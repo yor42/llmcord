@@ -171,7 +171,8 @@ def blackjack_section(ctx):
             if stand_on.value != 17:
                 soft.set_value(False)
             soft.set_enabled(stand_on.value == 17 and (ctx.savebar.active is None or ctx.savebar.active.name == rules_name))
-            preview.set_text(t('Table rules line: {rules}', rules=' · '.join(t.render(p) for p in blackjack.rules_phrases(current()))))
+            rules_text = ' · '.join(t.render(p) for p in blackjack.rules_phrases(current()))
+            preview.set_text(t('Table rules line: {rules}', rules=rules_text))
         for control in controls:
             control.on_value_change(refresh)
         refresh()

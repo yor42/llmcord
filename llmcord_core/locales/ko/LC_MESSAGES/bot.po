@@ -30,8 +30,10 @@ msgid "hub"
 msgstr "허브"
 
 #: llmcord_core/discord_bot.py
-msgid "space ref"
-msgstr "공간 참조"
+#, python-brace-format
+msgctxt "space ref"
+msgid "{kind} {name}"
+msgstr "{name} {kind}"
 
 #: llmcord_core/discord_bot.py
 msgid "An admin can find details in the dashboard under Monitoring → Log."
@@ -956,6 +958,11 @@ msgstr "이 채널에 다우트 테이블이 열려 있어요."
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
+msgid "{name} ({stake:,})"
+msgstr "{name} ({stake:,})"
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
 msgid "Your favorites joined too: {names}."
 msgstr "즐겨찾기 캐릭터도 함께 참가했어요: {names}."
 
@@ -963,6 +970,11 @@ msgstr "즐겨찾기 캐릭터도 함께 참가했어요: {names}."
 #, python-brace-format
 msgid "not enough {currency}"
 msgstr "{currency} 부족"
+
+#: llmcord_core/games_discord.py llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "{name} ({reason})"
+msgstr "{name} ({reason})"
 
 #: llmcord_core/games_discord.py llmcord_core/games_holdem_discord.py
 #, python-brace-format
@@ -1956,6 +1968,11 @@ msgstr "호스트가 테이블을 닫았어요."
 #, python-brace-format
 msgid "**Your cards:** {cards}"
 msgstr "**내 카드:** {cards}"
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "Assist — you have: {current}. Likely final hands: {chances}. Chance to win against random hands: {win:.0%}."
+msgstr "어시스트 — 현재 패: {current}. 가능한 최종 패: {chances}. 무작위 패를 상대로 이길 확률: {win:.0%}."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Choose your raise (the total bet this round)."

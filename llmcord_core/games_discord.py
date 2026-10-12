@@ -686,10 +686,12 @@ class GameTables:
         t = t or i18n.english()
         name, parts = self.store.currency_name(result["snapshot"]["guild_id"]), []
         if result["seated"]:
-            parts.append(t("Your favorites joined too: {names}.", names=", ".join(t("{name} ({stake:,})", name=s['name'], stake=s['stake']) for s in result["seated"])))
+            seated_names = ", ".join(t("{name} ({stake:,})", name=s['name'], stake=s['stake']) for s in result["seated"])
+            parts.append(t("Your favorites joined too: {names}.", names=seated_names))
         if result["skipped"]:
             why = lambda reason: t("not enough {currency}", currency=name) if reason == "broke" else t.render(SKIPPED[reason])
-            parts.append(t("Not seated: {names}.", names=", ".join(t("{name} ({reason})", name=s['name'], reason=why(s['reason'])) for s in result["skipped"])))
+            skipped_names = ", ".join(t("{name} ({reason})", name=s['name'], reason=why(s['reason'])) for s in result["skipped"])
+            parts.append(t("Not seated: {names}.", names=skipped_names))
         return " ".join([*parts, t.render(note)] if note else parts)
 
     def _join(self, user_id, key, bet, opened, space_id=None, note="", *, t=None) -> _Out:

@@ -22,7 +22,9 @@ msgid "hub"
 msgstr ""
 
 #: llmcord_core/discord_bot.py
-msgid "space ref"
+#, python-brace-format
+msgctxt "space ref"
+msgid "{kind} {name}"
 msgstr ""
 
 #: llmcord_core/discord_bot.py
@@ -953,12 +955,22 @@ msgstr ""
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
+msgid "{name} ({stake:,})"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
 msgid "Your favorites joined too: {names}."
 msgstr ""
 
 #: llmcord_core/games_discord.py llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "not enough {currency}"
+msgstr ""
+
+#: llmcord_core/games_discord.py llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "{name} ({reason})"
 msgstr ""
 
 #: llmcord_core/games_discord.py llmcord_core/games_holdem_discord.py
@@ -1950,6 +1962,11 @@ msgstr ""
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "**Your cards:** {cards}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "Assist — you have: {current}. Likely final hands: {chances}. Chance to win against random hands: {win:.0%}."
 msgstr ""
 
 #: llmcord_core/games_holdem_discord.py
