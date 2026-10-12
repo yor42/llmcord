@@ -63,7 +63,7 @@ def all_games_section(ctx):
             for f, key in zip(limits, bet_keys):
                 f.set_value(bets[key])
         ctx.savebar.track(t('Bet limits'), {f: bets[key] for f, key in zip(limits, bet_keys)}, save=save_bet_limits, action='games.bets',
-                          detail=lambda result: {'enabled': result['enabled'], 'closed_tables': list(result['closed_tables'])}, success=t('Bet limits saved'),
+                          detail=lambda result: {'min_bet': result['min_bet'], 'max_bet': result['max_bet']}, success=t('Bet limits saved'),
                           dirty=lambda: [f.value for f in limits] != [bets[key] for key in bet_keys],
                           reset=bets_reset)
         talk = {'value': store.game_character_talk(gid)}

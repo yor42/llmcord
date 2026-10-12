@@ -9,35 +9,8 @@ from dataclasses import replace
 from . import items
 from .admin_store import ConflictError
 from .games import new_seed
-from .i18n import ErrorCode, UserError, codes, terms
+from .i18n import UserError, codes, terms
 from .items.recipe import DEFAULT_LOCALE, MAX_COOLDOWN, MAX_PRICE
-
-
-class _ItemCode(ErrorCode):
-    """The ErrorCode of a raised item error; it also equals the stable string (`insufficient`) that callers compare `error.code` with. Only ==, != and ordering accept the string; it hashes as a tuple, so do not use it as a set member or dict key."""
-
-    def __eq__(self, other):
-        return other == self.legacy if isinstance(other, str) else tuple.__eq__(self, other)
-
-    def __ne__(self, other):
-        return not self == other
-
-    def _key(self, other):
-        return other.legacy if isinstance(other, _ItemCode) else other
-
-    def __lt__(self, other):
-        return self.legacy < o if isinstance(o := self._key(other), str) else tuple.__lt__(self, other)
-
-    def __gt__(self, other):
-        return self.legacy > o if isinstance(o := self._key(other), str) else tuple.__gt__(self, other)
-
-    def __le__(self, other):
-        return self == other or self < other
-
-    def __ge__(self, other):
-        return self == other or self > other
-
-    __hash__ = tuple.__hash__
 
 
 def _rebuild_item_error(cls, message, params, state):
@@ -48,17 +21,12 @@ def _rebuild_item_error(cls, message, params, state):
 
 
 class ItemError(UserError):
-    """A shop or item action refused; `code` is stable so callers can phrase it themselves."""
-    code = 'item_error'
+    """A shop or item action refused; `code` is the ErrorCode (as on every UserError) and `kind` is the stable string (`insufficient`, `on_cooldown`, ...) set on each subclass, for callers that branch on the refusal."""
+    kind = 'item_error'
 
     def __init__(self, message, /, **params):
         super().__init__(message, **params)
         self._message = message
-        if self.code is None:
-            self.code = type(self).code
-        else:
-            self.code = _ItemCode(*self.code)
-            self.code.legacy = type(self).code
 
     def __reduce__(self):
         state = {k: v for k, v in self.__dict__.items() if k not in {'code', 'params', '_message'}}
@@ -66,11 +34,11 @@ class ItemError(UserError):
 
 
 class NotForSale(ItemError):
-    code = 'not_for_sale'
+    kind = 'not_for_sale'
 
 
 class HoldCapReached(ItemError):
-    code = 'hold_cap'
+    kind = 'hold_cap'
 
     def __init__(self, message, cap, /, **params):
         super().__init__(message, **params)
@@ -78,11 +46,11 @@ class HoldCapReached(ItemError):
 
 
 class AlreadyOwned(ItemError):
-    code = 'already_owned'
+    kind = 'already_owned'
 
 
 class InsufficientFunds(ItemError):
-    code = 'insufficient'
+    kind = 'insufficient'
 
     def __init__(self, message, balance, price, /, **params):
         super().__init__(message, **params)
@@ -90,7 +58,7 @@ class InsufficientFunds(ItemError):
 
 
 class PriceChanged(ItemError):
-    code = 'price_changed'
+    kind = 'price_changed'
 
     def __init__(self, message, price, /, **params):
         super().__init__(message, **params)
@@ -98,15 +66,15 @@ class PriceChanged(ItemError):
 
 
 class NotHeld(ItemError):
-    code = 'not_held'
+    kind = 'not_held'
 
 
 class UseDisabled(ItemError):
-    code = 'use_disabled'
+    kind = 'use_disabled'
 
 
 class OnCooldown(ItemError):
-    code = 'on_cooldown'
+    kind = 'on_cooldown'
 
     def __init__(self, message, remaining, /, **params):
         super().__init__(message, **params)
