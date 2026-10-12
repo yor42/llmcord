@@ -142,13 +142,13 @@ class ItemsStore:
         params = dict(params or {})
         unknown = set(params) - set(recipe.params)
         if unknown:
-            raise UserError(codes.ITEM_NO_SETTING, name=recipe.name, settings=', '.join(sorted(map(str, unknown))))
+            raise UserError(codes.ITEM_NO_SETTING, name=recipe.name, item=recipe.key, settings=', '.join(sorted(map(str, unknown))))
         items.get_kind(recipe.kind).validate(replace(recipe, params={**recipe.params, **params}))
         extra, swap = items.validate_entries(recipe, extra_entries or None, replace_entries or None)
         with self.write_admin():
             row = self._shop_row(guild_id, item_key)
             if (row['revision'] if row else 0) != expected_revision:
-                raise ConflictError(codes.ITEM_CHANGED, name=recipe.name)
+                raise ConflictError(codes.ITEM_CHANGED, name=recipe.name, item=recipe.key)
             values = (int(for_sale), int(allow_use), price, cooldown_seconds, json.dumps(extra, ensure_ascii=False), json.dumps(swap, ensure_ascii=False),
                       json.dumps(params, sort_keys=True))
             if row:
@@ -198,13 +198,13 @@ class ItemsStore:
                 raise PriceChanged(codes.ITEM_PRICE_CHANGED, entry['price'], price=entry['price'])
             qty = self.item_qty(guild_id, user_id, item_key)
             if recipe.reusable and qty >= 1:
-                raise AlreadyOwned(codes.ITEM_ALREADY_OWNED, name=recipe.name)
+                raise AlreadyOwned(codes.ITEM_ALREADY_OWNED, name=recipe.name, item=recipe.key)
             cap = self.item_hold_cap(guild_id)
             if recipe.consumable and qty >= cap:
-                raise HoldCapReached(codes.ITEM_HOLD_CAP, cap, cap=cap, name=recipe.name)
+                raise HoldCapReached(codes.ITEM_HOLD_CAP, cap, cap=cap, name=recipe.name, item=recipe.key)
             balance = self.balance(guild_id, user_id)
             if balance < entry['price']:
-                raise InsufficientFunds(codes.ITEM_INSUFFICIENT, balance, entry['price'], name=recipe.name, price=entry['price'], currency=self.currency_name(guild_id), balance=balance)
+                raise InsufficientFunds(codes.ITEM_INSUFFICIENT, balance, entry['price'], name=recipe.name, item=recipe.key, price=entry['price'], currency=self.currency_name(guild_id), balance=balance)
             ledger = self._append_ledger(guild_id, user_id, -entry['price'], f'Bought {recipe.name}', user_id, 'shop', None)
             self.db.execute('INSERT INTO shop_purchases(ledger_id,guild_id,user_id,item_key) VALUES(?,?,?,?)', (ledger['id'], guild_id, user_id, item_key))
             self.db.execute('INSERT INTO inventory(guild_id,user_id,item_key,qty) VALUES(?,?,?,1) ON CONFLICT(guild_id,user_id,item_key) DO UPDATE SET qty=qty+1', (guild_id, user_id, item_key))
@@ -221,11 +221,11 @@ class ItemsStore:
                 raise NotHeld(codes.ITEM_NOT_HELD)
             entry = self._shop_entry(recipe, self._shop_row(guild_id, item_key))
             if not entry['allow_use']:
-                raise UseDisabled(codes.ITEM_USE_DISABLED, name=recipe.name)
+                raise UseDisabled(codes.ITEM_USE_DISABLED, name=recipe.name, item=recipe.key)
             cooldown = entry['cooldown_seconds']
             if recipe.reusable and cooldown and held['last_used_at'] is not None and now < held['last_used_at'] + cooldown:
                 remaining = math.ceil(held['last_used_at'] + cooldown - now)
-                raise OnCooldown(codes.ITEM_ON_COOLDOWN, remaining, name=recipe.name, remaining=remaining)
+                raise OnCooldown(codes.ITEM_ON_COOLDOWN, remaining, name=recipe.name, item=recipe.key, remaining=remaining)
             seed = new_seed() if seed is None else str(seed)
             result = items.roll(recipe, seed, locale, entry['extra_entries'], entry['replace_entries'], entry['params'])
             qty = held['qty'] - 1 if recipe.consumable else held['qty']

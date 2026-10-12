@@ -2143,9 +2143,7 @@ msgid "Need {short:,} {currency} more"
 msgstr ""
 
 #: llmcord_core/items_discord.py
-#, python-brace-format
-msgctxt "button.shop"
-msgid "Buy {emoji} {name} · {price:,}"
+msgid "button.shop"
 msgstr ""
 
 #: llmcord_core/items_discord.py
@@ -2185,9 +2183,7 @@ msgid "Bought {emoji} {name} for {price:,} {currency}."
 msgstr ""
 
 #: llmcord_core/items_discord.py
-#, python-brace-format
-msgctxt "button.inventory"
-msgid "Use {emoji} {name}"
+msgid "button.inventory"
 msgstr ""
 
 #: llmcord_core/items_discord.py

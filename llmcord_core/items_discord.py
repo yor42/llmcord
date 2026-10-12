@@ -1,6 +1,7 @@
 """``/shop``, ``/inventory`` and ``/use``: buying and using toy-shop items (FEAT-22 part C). No model call; every store call is scoped by guild."""
 from __future__ import annotations
 
+import copy
 import logging
 import time
 import zlib
@@ -11,7 +12,7 @@ from discord import app_commands
 
 from .errors import error_detail
 from .items_store import AlreadyOwned, HoldCapReached, ItemError, NotForSale, NotHeld, OnCooldown, PriceChanged, UseDisabled
-from llmcord_core import i18n
+from llmcord_core import i18n, items
 from llmcord_core.i18n import N_
 from llmcord_core.i18n.discord_locale import C_, channel_t, invoker_t
 
@@ -70,34 +71,62 @@ def item_description(key: str, *, t=None) -> str:
     return t('A toy from the shop.')
 
 
+def shown_name(entry: dict, t) -> str:
+    """The item's name for the audience; the entry's own (English) name when the recipe is unknown."""
+    try:
+        return items.display_name(items.get_item(entry['key']), t.locale)
+    except KeyError:
+        return entry['name']
+
+
+def error_name(error, name: str, t) -> str:
+    """`name` unless the error names a recipe (params['item']); then that recipe's name for the audience."""
+    key = (getattr(error, 'params', None) or {}).get('item')
+    try:
+        return items.display_name(items.get_item(key), t.locale) if key else name
+    except (KeyError, TypeError):
+        return name
+
+
+def error_text(error, t) -> str:
+    """t.error(error) with params['name'] replaced by the audience's item name."""
+    params = getattr(error, 'params', None)
+    if isinstance(params, dict) and params.get('item') and 'name' in params:
+        error = copy.copy(error)
+        error.params = {**params, 'name': error_name(error, params['name'], t)}
+    return t.error(error)
+
+
 def buy_error(error: ItemError, name: str, *, t=None) -> str:
     t = t or i18n.english()
+    name = error_name(error, name, t)
     if isinstance(error, NotForSale):
         return t('{name} is not for sale right now.', name=name)
     if isinstance(error, AlreadyOwned):
         return t('You already own {name}.', name=name)
     if isinstance(error, PriceChanged):
-        return t.error(error)
+        return error_text(error, t)
     if isinstance(error, HoldCapReached):
         return t('You can hold at most {cap} of {name}.', cap=error.cap, name=name)
-    return t.error(error)
+    return error_text(error, t)
 
 
 def use_error(error: ItemError, name: str, *, t=None) -> str:
     t = t or i18n.english()
+    name = error_name(error, name, t)
     if isinstance(error, NotHeld):
         return t('You do not have {name}. Buy one with /shop.', name=name)
     if isinstance(error, UseDisabled):
         return t('{name} cannot be used on this server right now.', name=name)
     if isinstance(error, OnCooldown):
         return t('{name} is recharging. Try again in {remaining} s.', name=name, remaining=error.remaining)
-    return t.error(error)
+    return error_text(error, t)
 
 
 def result_embed(user, entry: dict, outcome: dict, *, t=None) -> discord.Embed:
     t = t or i18n.english()
     result = outcome['result']
-    embed = discord.Embed(title=f"{entry['emoji']} {entry['name']}", description=result.text, color=color_for(entry['key']))
+    embed = discord.Embed(title=f"{entry['emoji']} {shown_name(entry, t)}", description=result.text, color=color_for(entry['key']))
     for name, value in result.fields:
         embed.add_field(name=name, value=value, inline=True)
     parts = [t('Toy shop')]
@@ -122,7 +151,7 @@ def register_items_commands(bot, ctx: SimpleNamespace) -> None:
             return t.p('button.shop', 'At the limit ({cap})', cap=cap), True
         if balance < entry['price']:
             return clip(t.p('button.shop', 'Need {short:,} {currency} more', short=entry['price'] - balance, currency=currency)), True
-        return clip(t.p('button.shop', 'Buy {emoji} {name} · {price:,}', emoji=entry['emoji'], name=entry['name'], price=entry['price'])), False
+        return clip(t.p('button.shop', 'Buy {emoji} {name} · {price:,}', emoji=entry['emoji'], name=shown_name(entry, t), price=entry['price'])), False
 
     def shop_embed(guild_id: int, user_id: int, t):
         currency, balance, cap = store.currency_name(guild_id), store.balance(guild_id, user_id), store.item_hold_cap(guild_id)
@@ -137,7 +166,7 @@ def register_items_commands(bot, ctx: SimpleNamespace) -> None:
             qty = store.item_qty(guild_id, user_id, entry['key'])
             held = t('You hold {qty}', qty=qty) if qty else t('You hold none')
             description = item_description(entry['key'], t=t)
-            embed.add_field(name=f"{entry['emoji']} {entry['name']} · {entry['price']:,} {currency}",
+            embed.add_field(name=f"{entry['emoji']} {shown_name(entry, t)} · {entry['price']:,} {currency}",
                             value=f"{description}\n{kind_word(entry['consumable'], t=t)} · {held}", inline=False)
             rows.append((entry, *sale_state(entry, qty, cap, balance, currency, t)))
         return embed, rows[:fit_embed(embed, len(rows), t=t)]
@@ -158,7 +187,7 @@ def register_items_commands(bot, ctx: SimpleNamespace) -> None:
                 state.append(t('recharging, ready {when}', when=f'<t:{int(ready) + 1}:R>') if now < ready else t('ready'))
             elif not item['consumable']:
                 state.append(t('ready'))
-            embed.add_field(name=f"{item['emoji']} {item['name']} × {item['qty']}", value=' · '.join(state), inline=False)
+            embed.add_field(name=f"{item['emoji']} {shown_name(item, t)} × {item['qty']}", value=' · '.join(state), inline=False)
             rows.append((item, entry))
         return embed, rows[:fit_embed(embed, len(rows), t=t)]
 
@@ -173,6 +202,7 @@ def register_items_commands(bot, ctx: SimpleNamespace) -> None:
         Refusals and send failures are shown only to the member. True when the item was used."""
         t = invoker_t(interaction)
         channel = channel_t(interaction.guild)
+        name = shown_name({'key': key, 'name': name}, t)
         try:
             outcome = store.use_item(guild_id, interaction.user.id, interaction.channel.id if interaction.channel else 0, key, locale=channel.locale)
         except ItemError as error:
@@ -226,16 +256,16 @@ def register_items_commands(bot, ctx: SimpleNamespace) -> None:
                 try:
                     done = store.buy_item(view.guild_id, view.user_id, entry['key'], expected_price=entry['price'])
                     bought = True
-                    line = t('Bought {emoji} {name} for {price:,} {currency}.', emoji=entry['emoji'], name=entry['name'], price=done['price'], currency=store.currency_name(view.guild_id))
+                    line = t('Bought {emoji} {name} for {price:,} {currency}.', emoji=entry['emoji'], name=shown_name(entry, t), price=done['price'], currency=store.currency_name(view.guild_id))
                 except ItemError as error:
-                    line = buy_error(error, entry['name'], t=t)
+                    line = buy_error(error, shown_name(entry, t), t=t)
                 embed, new_view = build_shop(view.origin, view.guild_id, t)
                 await interaction.response.edit_message(content=line, embed=embed, view=new_view)
                 view.stop()
             except Exception as error:
                 logging.warning('Shop menu failed after %s (bought=%s): %s', entry['key'], bought, error_detail(error))
                 try:
-                    await send_private(interaction, f'{line} {t(BOUGHT_STALE)}' if bought else t(SOMETHING_WRONG, name=entry['name']))
+                    await send_private(interaction, f'{line} {t(BOUGHT_STALE)}' if bought else t(SOMETHING_WRONG, name=shown_name(entry, t)))
                 except Exception as again:
                     logging.warning('Could not tell the member about the failed shop menu either: %s', error_detail(again))
 
@@ -251,13 +281,13 @@ def register_items_commands(bot, ctx: SimpleNamespace) -> None:
 
     class UseButton(discord.ui.Button):
         def __init__(self, item: dict, row: int, t):
-            super().__init__(label=clip(t.p('button.inventory', 'Use {emoji} {name}', emoji=item['emoji'], name=item['name'])), style=discord.ButtonStyle.primary, row=row)
+            super().__init__(label=clip(t.p('button.inventory', 'Use {emoji} {name}', emoji=item['emoji'], name=shown_name(item, t))), style=discord.ButtonStyle.primary, row=row)
             self.item = item
 
         async def callback(self, interaction: discord.Interaction):
             view: InventoryView = self.view
             t = invoker_t(interaction)
-            name = self.item['name']
+            name = shown_name(self.item, t)
             try:
                 await interaction.response.defer(ephemeral=True)
                 await use_and_post(interaction, view.guild_id, self.item['key'], name, via_channel=True)
@@ -303,10 +333,10 @@ def register_items_commands(bot, ctx: SimpleNamespace) -> None:
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True, allowed_mentions=NO_MENTIONS)
 
     def held_choices(interaction: discord.Interaction, current: str):
-        needle = current.strip().casefold()
+        needle, t = current.strip().casefold(), invoker_t(interaction)
         held = store.inventory(interaction.guild_id, interaction.user.id)
-        return [app_commands.Choice(name=f"{i['emoji']} {i['name']}"[:100], value=i['name'])
-                for i in held if needle in i['name'].casefold()][:25]
+        return [app_commands.Choice(name=f"{i['emoji']} {shown_name(i, t)}"[:100], value=i['name'])
+                for i in held if needle in i['name'].casefold() or needle in shown_name(i, t).casefold()][:25]
 
     @bot.tree.command(name='use', description=C_('Use an item you hold'))
     @app_commands.describe(item=C_('The item to use'))
@@ -316,7 +346,7 @@ def register_items_commands(bot, ctx: SimpleNamespace) -> None:
         t = invoker_t(interaction)
         wanted = item.strip().casefold()
         held = store.inventory(interaction.guild_id, interaction.user.id)
-        match = next((i for i in held if i['name'].casefold() == wanted or i['key'] == wanted), None)
+        match = next((i for i in held if wanted in (i['name'].casefold(), shown_name(i, t).casefold(), i['key'])), None)
         if match is None:
             return await send_private(interaction, t('You do not have {name}. Buy one with /shop.', name=item.strip() or t('that item')))
         await use_and_post(interaction, interaction.guild_id, match['key'], match['name'])

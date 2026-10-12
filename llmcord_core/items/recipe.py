@@ -2,8 +2,11 @@
 import json
 import re
 from dataclasses import dataclass, field
+from collections.abc import Mapping
+from types import MappingProxyType
 
 from ..i18n import UserError, codes
+from ..i18n.negotiate import candidates
 
 KEY_RE = re.compile(r'^[a-z0-9_]{1,32}$')
 LOCALE_RE = re.compile(r'^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$')
@@ -36,6 +39,10 @@ class Recipe:
     tables: dict = field(default_factory=dict)
     template: dict = field(default_factory=dict)
     audience: str = 'none'
+    names: Mapping = None  # locale -> name; {'en': name} when the recipe gave a plain string
+
+    def __post_init__(self):
+        object.__setattr__(self, 'names', MappingProxyType(dict(self.names) if self.names else {DEFAULT_LOCALE: self.name}))
 
     @property
     def reusable(self):
@@ -48,8 +55,17 @@ class Recipe:
 
 
 def lookup(by_locale, locale):
-    """The value stored for `locale`, else the 'en' one."""
-    return by_locale.get(locale, by_locale.get(DEFAULT_LOCALE))
+    """The value stored for `locale` (tag normalized, then its base language), else the 'en' one."""
+    for tag in candidates(locale):
+        for key in (tag, tag.replace('_', '-')):
+            if key in by_locale:
+                return by_locale[key]
+    return by_locale.get(DEFAULT_LOCALE)
+
+
+def display_name(recipe, locale):
+    """The recipe's name for `locale`; the English name when there is none."""
+    return lookup(recipe.names, locale)
 
 
 def check_text(value, where, limit=MAX_TEXT):
@@ -119,7 +135,12 @@ def parse_common(data):
     for name in ('params', 'tables', 'template'):
         if not isinstance(data.get(name, {}), dict):
             raise RecipeError(codes.RECIPE_SECTION_OBJECT, name=name)
-    return Recipe(key=key, kind=kind, name=check_text(data['name'], 'name', MAX_NAME), emoji=emoji, consumable=consumable,
+    raw_name = data['name']
+    if isinstance(raw_name, dict):
+        names = {loc: check_text(value, f'name.{loc}', MAX_NAME) for loc, value in check_locale_keyed(raw_name, 'name').items()}
+    else:
+        names = {DEFAULT_LOCALE: check_text(raw_name, 'name', MAX_NAME)}
+    return Recipe(key=key, kind=kind, name=names[DEFAULT_LOCALE], names=names, emoji=emoji, consumable=consumable,
                   default_price=check_int(data['default_price'], 'default_price', 0, MAX_PRICE), default_cooldown_seconds=cooldown,
                   params=dict(data.get('params', {})), tables=dict(data.get('tables', {})), template=dict(data.get('template', {})),
                   audience=audience)
