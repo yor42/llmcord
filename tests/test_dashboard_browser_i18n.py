@@ -190,6 +190,40 @@ class DashboardLanguageBrowserTests(unittest.TestCase):
         wait_for(lambda: state()['guild_language'] == '')
         expect(self.page.get_by_label('Bot language', exact=True)).to_be_visible()
 
+    def use_korean(self):
+        self.context.add_cookies([{'name': 'llmcord_lang', 'value': 'ko', 'url': self.url, 'secure': True, 'httpOnly': True, 'sameSite': 'Lax'}])
+        self.addCleanup(self.context.clear_cookies, name='llmcord_lang')
+
+    def test_korean_cookie_shows_korean_tab_labels(self):
+        """FEAT-46: with llmcord_lang=ko the nine server tabs carry the Korean catalog strings and none keeps its English label."""
+        from playwright.sync_api import expect
+        ko = i18n.Translator('ko')
+        names = ('Server setup', 'Characters', 'Lore', 'Imports', 'Prompt presets', 'Monitoring', 'Currency', 'Games', 'Shop')
+        labels = [ko.p('tab', name) for name in names]
+        self.assertEqual(len(set(labels)), 9)
+        self.use_korean()
+        self.load('/admin/guild/1')
+        for name, label in zip(names, labels):
+            self.assertNotEqual(label, name)
+            expect(self.page.get_by_role('tab', name=label, exact=True)).to_have_count(1)
+            expect(self.page.get_by_role('tab', name=name, exact=True)).to_have_count(0)
+
+    def test_korean_cookie_sets_html_lang(self):
+        """FEAT-46: with llmcord_lang=ko the page is lang ko-KR."""
+        self.use_korean()
+        self.load('/admin/guild/1')
+        self.assertEqual(self.page.evaluate('document.documentElement.lang'), 'ko-KR')
+
+    def test_korean_is_marked_current_in_the_account_menu(self):
+        """FEAT-46: with llmcord_lang=ko the account menu names the language in Korean and marks only it as current."""
+        from playwright.sync_api import expect
+        self.use_korean()
+        self.load('/admin/guild/1')
+        self.page.locator('button.ll-account').click()
+        menu = self.page.locator('.ll-menu')
+        expect(menu.locator('[aria-current="true"]')).to_have_count(1)
+        expect(menu.locator('[aria-current="true"]')).to_have_text(re.compile('한국어'))
+        self.assertEqual(i18n.display_name('ko'), '한국어')
 
     def pseudo_texts(self, tab):
         self.load(f'/admin/guild/1?tab={tab}')
