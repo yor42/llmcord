@@ -1264,7 +1264,7 @@ def _register_catchup_command(bot: SkitBot) -> None:
             except discord.Forbidden:
                 return await reply(t("I can't read this channel's message history."))
             if not lines:
-                return await reply(catchup.nothing_new(hours))
+                return await reply(t.render(catchup.nothing_new_phrase(hours)))
             facts = ([row["content"] for row in bot.store.personal(guild_id, user.id)[-catchup.MAX_FACTS:]]
                      if bot.store.has_consent(guild_id, user.id) else [])
             message = catchup.user_message(user.display_name, catchup.transcript(lines), focus, facts, hours)

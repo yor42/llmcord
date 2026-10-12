@@ -428,12 +428,12 @@ def _preset_preview(ctx, purpose, collect):
         with ui.element('div').classes('ll-form-row'):
             character = ui.select(chars, label=t('Sample character'))
             channel = ui.select({row['channel_id']: ctx.channel_names.get(row['channel_id'], str(row['channel_id'])) for row in ctx.snapshot.channels}, label=t('Sample channel (optional)'))
-        sample = ui.textarea(t('Sample input'), value='Hello!').classes('w-full')
+        sample = ui.textarea(t('Sample input'), value=t.p('sample input', 'Hello!')).classes('w-full')
         history = ui.textarea(t('Sample history (one message per line)')).classes('w-full')
         diagnostics = ui.column().classes('w-full')
         def preview():
             bundle = collect()
-            request = ctx.service.preview_prompt(ctx.guild_id, bundle, purpose.value, character.value, sample.value or '', history.value or '', channel.value)
+            request = ctx.service.preview_prompt(ctx.guild_id, bundle, purpose.value, character.value, sample.value or '', history.value or '', channel.value, t=t)
             diagnostics.clear()
             with diagnostics:
                 ui.label(t('Estimated input tokens: {count}', count=request.estimated_tokens))
