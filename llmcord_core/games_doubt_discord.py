@@ -22,28 +22,50 @@ from discord import app_commands
 from . import game_chooser
 from .admin_store import ConflictError, GameError
 from .games import blackjack, doubt
-from .games_discord import MAX_BET, NO_CHARACTER_SEATS, NO_MENTIONS, NOT_SEATED, NOT_YOUR_TURN, OFF_HERE, STALE, GameTables, _sign
+from .games_discord import MAX_BET, NO_CHARACTER_SEATS, NO_MENTIONS, NOT_SEATED, NOT_YOUR_TURN, OFF_HERE, STALE, GameTables, _sign, words
 from .games_holdem_discord import BET_NOTE
 from .game_talk import TalkBudget
 from .table_runtime import TableRuntime
+from llmcord_core import i18n
+from llmcord_core.i18n import N_, NP_, Phrase, discord_locale, terms
 from llmcord_core.i18n.discord_locale import C_
 
 PREFIX = "llmcord:doubt"
-DOUBT_OFF = "I Doubt It is off on this server."
-ANTE_NOTE = "I Doubt It uses the server's ante; no bet needed."
-BET_NEEDED = "Blackjack needs a bet: /game start game:Blackjack bet:<amount>."
-MOVED_ON = "The table moved on — open My hand again."
-DOUBTED_FIRST = "Someone doubted first."
-SPOKEN_OFF = "Move checks are off for you. The bot won't read your chat for moves at game tables, and any phrases kept from your messages were deleted."
-SPOKEN_ON = "Move checks are on for you. When this server reads moves from chat, the bot may ask you to confirm a move you typed."
-SPOKEN_SERVER_OFF = " (This server has Read moves from chat turned off right now.)"
-NO_TABLE = "Use /game hand in your table's thread."
-THREAD_FORBIDDEN = ("I couldn't open the table thread. I need the Create Public Threads and Send Messages in Threads "
-                    "permissions in this channel. The table was closed.")
-THREAD_FAILED = "Couldn't open the table thread; the table is closed."
-THREAD_NOT_READY = "The table thread isn't ready yet; try again in a moment."
+DOUBT_OFF = N_("I Doubt It is off on this server.")
+ANTE_NOTE = N_("I Doubt It uses the server's ante; no bet needed.")
+BET_NEEDED = N_("Blackjack needs a bet: /game start game:Blackjack bet:<amount>.")
+MOVED_ON = N_("The table moved on — open My hand again.")
+DOUBTED_FIRST = N_("Someone doubted first.")
+SPOKEN_OFF = N_("Move checks are off for you. The bot won't read your chat for moves at game tables, and any phrases kept from your messages were deleted.")
+SPOKEN_ON = N_("Move checks are on for you. When this server reads moves from chat, the bot may ask you to confirm a move you typed.")
+SPOKEN_SERVER_OFF = N_(" (This server has Read moves from chat turned off right now.)")
+NO_TABLE = N_("Use /game hand in your table's thread.")
+THREAD_FORBIDDEN = N_("I couldn't open the table thread. I need the Create Public Threads and Send Messages in Threads "
+                      "permissions in this channel. The table was closed.")
+THREAD_FAILED = N_("Couldn't open the table thread; the table is closed.")
+THREAD_NOT_READY = N_("The table thread isn't ready yet; try again in a moment.")
+JOINED = N_("You joined the table.")
+JOINED_ANTE = N_("You joined the table. Your ante of {ante:,} {currency} is in the pot.")
+LEFT_CLOSED = N_("You left the table. It is closed.")
+LEFT_REFUNDED = N_("You left the table. Your ante is refunded.")
+ONLY_HOST_FILL = N_("Only the host can fill seats.")
+ONLY_HOST_START = N_("Only the host can start the game.")
+NO_CAST_LEFT = N_("No one is left in the cast who can take a seat.")
+SEATED = N_("Seated: {names}.")
+SEATED_SKIPPED = N_("Seated: {names}. Not seated: {skipped}.")
+NEEDS_SEATS = N_("I Doubt It needs at least {count} seats to start.")
+NO_CLAIM = N_("There's no claim to doubt right now.")
+OWN_CLAIM = N_("You can't doubt your own claim.")
+NOT_STARTED = N_("The game hasn't started yet.")
+GAME_OVER = N_("This game is over.")
+PICK_RANGE = N_("Pick 1 to {max} cards to play.")
+NOT_HELD = N_("You don't hold {claim}.")
+YOU_PLAY = N_("You play {cards} and claim {claim}.")
+PICK_ONE_AMOUNT = N_("Pick one amount for each rank.")
+CLAIM_ONE = NP_("claim", "{count} {rank}")
+CLAIM_MANY = NP_("claim", "{count} {rank}s")
 _STALE = object()  # the table moved on while a decision was made: drop it
-WORDS = {1: "one", 2: "two", 3: "three", 4: "four"}
+WORDS = {1: NP_("claim count", "one"), 2: NP_("claim count", "two"), 3: NP_("claim count", "three"), 4: NP_("claim count", "four")}
 
 
 class DoubtButton(discord.ui.DynamicItem[discord.ui.Button], template=PREFIX + r":(?P<action>[a-z_]+):(?P<table>\d+):(?P<round>\d+):(?P<moves>\d+)"):
@@ -62,8 +84,9 @@ class DoubtButton(discord.ui.DynamicItem[discord.ui.Button], template=PREFIX + r
 
 
 class _PickSelect(discord.ui.Select):
-    def __init__(self, slot: int, options: list):
-        super().__init__(placeholder="Cards to play (1 to 4 in all)", min_values=0, max_values=min(len(options), doubt.MAX_PLAY), options=options)
+    def __init__(self, slot: int, options: list, *, t=None):
+        t = t or i18n.english()
+        super().__init__(placeholder=t.p("select.doubt", "Cards to play (1 to 4 in all)"), min_values=0, max_values=min(len(options), doubt.MAX_PLAY), options=options)
         self.slot = slot
 
     async def callback(self, interaction: discord.Interaction):
@@ -74,7 +97,8 @@ class _PickSelect(discord.ui.Select):
 class _Picker(discord.ui.View):
     """The private hand picker: the options are "n x rank" for each rank held (at most 25 per select); Play submits the choice."""
 
-    def __init__(self, table_id: int, round_id: int, moves: int, held: dict):
+    def __init__(self, table_id: int, round_id: int, moves: int, held: dict, *, t=None):
+        t = t or i18n.english()
         super().__init__(timeout=600)
         self.table_id, self.round_id, self.moves, self.picks = table_id, round_id, moves, {}
         options = [[]]
@@ -86,8 +110,8 @@ class _Picker(discord.ui.View):
                 options.append([])
             options[-1].extend(mine)
         for slot, chunk in enumerate(options):
-            self.add_item(_PickSelect(slot, chunk))
-        play = discord.ui.Button(label="Play", style=discord.ButtonStyle.primary)
+            self.add_item(_PickSelect(slot, chunk, t=t))
+        play = discord.ui.Button(label=t.p("button.doubt", "Play"), style=discord.ButtonStyle.primary)
         play.callback = self.submit
         self.add_item(play)
 
@@ -99,7 +123,7 @@ class _Picker(discord.ui.View):
                 twice = twice or rank in counts
                 counts[rank] = int(n)
         if twice:
-            await interaction.client.doubt.answer(interaction, "Pick one amount for each rank.")
+            await interaction.client.doubt.answer(interaction, PICK_ONE_AMOUNT)
             return
         await interaction.client.doubt.play_from_picker(interaction, self.table_id, self.round_id, self.moves, counts)
 
@@ -133,8 +157,12 @@ class _Out:
     closed: bool = False  # the table is over: forget it once this is delivered
 
 
-def _claim(count: int, rank: str) -> str:
-    return f"{WORDS.get(count, count)} {rank}{'s' if count != 1 else ''}"
+def _claim_phrase(count: int, rank: str) -> Phrase:
+    return Phrase(CLAIM_ONE if count == 1 else CLAIM_MANY, count=WORDS.get(count, count), rank=rank)
+
+
+def _claim(count: int, rank: str, *, t=None) -> str:
+    return (t or i18n.english()).render(_claim_phrase(count, rank))
 
 
 class DoubtTables:
@@ -257,16 +285,16 @@ class DoubtTables:
             self._release(key)
             self.tables.pop(key, None)
             return None
-        guild_id = key[0]
+        guild_id, t = key[0], self._t(key[0])
         if not self.store.game_enabled(guild_id, "doubt"):
-            reason = "I Doubt It was turned off on this server."
+            reason = t("Table closed: I Doubt It was turned off on this server.")
         elif row["channel_id"] not in self.store.game_channels(guild_id):
-            reason = "games were turned off here."
+            reason = t("Table closed: games were turned off here.")
         else:
-            reason = "the table was closed."
+            reason = t("Table closed: the table was closed.")
         self._forget(key)
         self.arm(key, "archive", self.ARCHIVE_SECONDS)
-        text = f"Table closed: {reason}" + self._refunded(key)
+        text = reason + self._refunded(key, t=t)
         return self._seal(key, _Out(lobby=(text, None), closing=text, closed=True))
 
     async def close_for_channel(self, guild_id, channel_id, table_id) -> int | None:
@@ -366,8 +394,14 @@ class DoubtTables:
             logging.exception("Could not post to I Doubt It thread %s", channel_id)
         return None
 
-    async def _say(self, interaction, text: str) -> None:
+    def _t(self, guild_id):
+        """The channel's translator for a table message: resolved at each render, never kept."""
+        get_guild = getattr(self.bot, "get_guild", None)
+        return discord_locale.channel_t(get_guild(guild_id) if get_guild else None)
+
+    async def _say(self, interaction, text) -> None:
         """An ephemeral reply: the first response, or a followup once the interaction was acknowledged."""
+        text = words(discord_locale.invoker_t(interaction), text)
         try:
             if interaction.response.is_done():
                 await interaction.followup.send(text, ephemeral=True, allowed_mentions=NO_MENTIONS)
@@ -376,8 +410,9 @@ class DoubtTables:
         except discord.HTTPException as error:
             logging.warning("I Doubt It reply failed: %s", type(error).__name__)
 
-    async def answer(self, interaction, text: str, done: bool = False) -> None:
+    async def answer(self, interaction, text, done: bool = False) -> None:
         """A reply to the picker: ``done`` replaces the picker message, anything else is a new private message (the picker stays)."""
+        text = words(discord_locale.invoker_t(interaction), text)
         if done and not interaction.response.is_done() and getattr(interaction, "message", None) is not None:
             try:
                 await interaction.response.edit_message(content=text, view=None, allowed_mentions=NO_MENTIONS)
@@ -392,13 +427,14 @@ class DoubtTables:
         except discord.HTTPException as error:
             logging.warning("I Doubt It could not acknowledge the press: %s", type(error).__name__)
 
-    def _refunded(self, key, past: bool = False) -> str:
+    def _refunded(self, key, past: bool = False, *, t=None) -> str:
         """" The antes are refunded." (``past``: "were") when the table's round had an ante, else nothing."""
+        t = t or i18n.english()
         try:
             ante = (self.store.latest_round(*key)["rules"] or {}).get("ante", 0)
         except GameError:
             ante = 0
-        return (" The antes were refunded." if past else " The antes are refunded.") if ante else ""
+        return (" " + (t("The antes were refunded.") if past else t("The antes are refunded."))) if ante else ""
 
     def _host(self, row, snap) -> int:
         """The table's host: the opener while seated, else the first seated member."""
@@ -416,109 +452,121 @@ class DoubtTables:
     # --- rendering --------------------------------------------------------------------------
 
     @staticmethod
-    def _who(snap, index) -> str:
-        return GameTables._who({**snap["seats"][index], "brought_by": None})
+    def _who(snap, index, *, t=None) -> str:
+        return GameTables._who({**snap["seats"][index], "brought_by": None}, t=t)
 
     def _stamp(self, key, kind) -> str:
         deadline = self.table(key).deadlines.get(kind)
         return f"<t:{int(deadline)}:R>" if deadline else ""
 
-    def render_lobby(self, key, snap, row) -> tuple[str, discord.ui.View]:
+    def render_lobby(self, key, snap, row, *, t=None) -> tuple[str, discord.ui.View]:
+        t = t or i18n.english()
         rules = snap["rules"] or doubt.normalize_rules(None)
         name, pot, ante = self.store.currency_name(key[0]), sum(s["stake"] for s in snap["seats"]), rules["ante"]
-        lines = [f"**I Doubt It** · table {key[1]}", f"Ante: {ante:,} {name} · Pot: {pot:,} {name}" if ante else f"No ante · Pot: {pot:,} {name}",
-                 *([f"Host: <@{self._host(row, snap)}>"] if any(s["kind"] == "member" for s in snap["seats"]) else []), ""]
+        lines = [t("**{game}** · table {number}", game=terms.GAME_DOUBT, number=key[1]),
+                 t("Ante: {ante:,} {currency} · Pot: {pot:,} {currency}", ante=ante, pot=pot, currency=name) if ante else t("No ante · Pot: {pot:,} {currency}", pot=pot, currency=name),
+                 *([t("Host: {host}", host=f"<@{self._host(row, snap)}>")] if any(s["kind"] == "member" for s in snap["seats"]) else []), ""]
         for seat in snap["seats"]:
-            tag = " (house)" if seat["kind"] == "character" and not seat["brought_by"] else ""
-            lines.append(f"{seat['index'] + 1}. {GameTables._who(seat)}{tag}")
+            tag = " " + t("(house)") if seat["kind"] == "character" and not seat["brought_by"] else ""
+            lines.append(f"{seat['index'] + 1}. {GameTables._who(seat, t=t)}{tag}")
         stamp = self._stamp(key, "lobby")
         lines.append("")
-        lines.append(f"Join with the button. The host (if the host has left, any player) starts the game with {doubt.MIN_SEATS} to {doubt.MAX_SEATS} seats"
-                     + (f"; the table closes {stamp} if it hasn't started." if stamp else "."))
-        lines.append("-# " + doubt.rules_text(rules))
+        if stamp:
+            lines.append(t("Join with the button. The host (if the host has left, any player) starts the game with {low} to {high} seats; the table closes {stamp} if it hasn't started.", low=doubt.MIN_SEATS, high=doubt.MAX_SEATS, stamp=stamp))
+        else:
+            lines.append(t("Join with the button. The host (if the host has left, any player) starts the game with {low} to {high} seats.", low=doubt.MIN_SEATS, high=doubt.MAX_SEATS))
+        lines.append("-# " + " · ".join(t.render(p) for p in doubt.rules_phrases(rules)))
         view, tid, rid = discord.ui.View(timeout=None), key[1], snap["round_id"]
-        spec = [("join", "Join", discord.ButtonStyle.primary, False), ("leave", "Leave", discord.ButtonStyle.secondary, False)]
+        spec = [("join", t.p("button.doubt", "Join"), discord.ButtonStyle.primary, False), ("leave", t.p("button.doubt", "Leave"), discord.ButtonStyle.secondary, False)]
         if self.store.binding(row["channel_id"]) is not None:
-            spec.append(("fill", "Fill seats", discord.ButtonStyle.secondary, False))
-        spec += [("start", "Start", discord.ButtonStyle.success, len(snap["seats"]) < doubt.MIN_SEATS or row["thread_id"] is None), ("help", "How to play", discord.ButtonStyle.secondary, False)]
+            spec.append(("fill", t.p("button.doubt", "Fill seats"), discord.ButtonStyle.secondary, False))
+        spec += [("start", t.p("button.doubt", "Start"), discord.ButtonStyle.success, len(snap["seats"]) < doubt.MIN_SEATS or row["thread_id"] is None), ("help", t.p("button.doubt", "How to play"), discord.ButtonStyle.secondary, False)]
         for action, label, style, disabled in spec:
             view.add_item(DoubtButton(action, tid, rid, 0, label, style, disabled))
         return "\n".join(lines), view
 
-    def _in_play_view(self, key, snap) -> discord.ui.View:
+    def _in_play_view(self, key, snap, *, t=None) -> discord.ui.View:
+        t = t or i18n.english()
         view = discord.ui.View(timeout=None)
-        view.add_item(DoubtButton("help", key[1], snap["round_id"], 0, "How to play"))
+        view.add_item(DoubtButton("help", key[1], snap["round_id"], 0, t.p("button.doubt", "How to play")))
         return view
 
-    def render_board(self, key, snap) -> str:
+    def render_board(self, key, snap, *, t=None) -> str:
+        t = t or i18n.english()
         view, rules, name = snap["view"], snap["rules"] or {}, self.store.currency_name(key[0])
         pot = sum(s["stake"] for s in snap["seats"])
-        lines = [f"**I Doubt It** · table {key[1]}" + (f" · pot {pot:,} {name} (ante {rules.get('ante', 0):,})" if pot else "")]
+        lines = [t("**{game}** · table {number}", game=terms.GAME_DOUBT, number=key[1]) + (" · " + t("pot {pot:,} {currency} (ante {ante:,})", pot=pot, currency=name, ante=rules.get('ante', 0)) if pot else "")]
         for seat in snap["seats"]:
             i = seat["index"]
             if not view["active"][i]:
-                state = "forfeited"
+                state = t.p("seat state", "forfeited")
             elif view["finished"] and view["winner"] == i:
-                state = f"{doubt.cards_text(view['counts'][i])} · winner"
+                state = t("{cards} · winner", cards=doubt.cards_phrase(view['counts'][i]))
+            elif view["turn"] == i:
+                state = t("{cards} · on turn", cards=doubt.cards_phrase(view['counts'][i]))
             else:
-                state = doubt.cards_text(view["counts"][i]) + (" · on turn" if view["turn"] == i else "")
-            lines.append(f"{i + 1}. {GameTables._who(seat)} — {state}")
+                state = t.render(doubt.cards_phrase(view["counts"][i]))
+            lines.append(f"{i + 1}. {GameTables._who(seat, t=t)} — {state}")
         if view["finished"]:
-            lines.append("Game over.")
+            lines.append(t("Game over."))
         else:
-            lines.append(f"Pile: {doubt.cards_text(view['pile'])} · Rank to claim: {view['rank']}")
-        lines.append("-# " + doubt.rules_text(snap["rules"]))
-        lines.append(f"-# Seed: {snap['seed']} (hash {snap['seed_hash'][:12]})" if snap["seed"] else f"-# Seed hash: {snap['seed_hash'][:12]}")
+            lines.append(t("Pile: {cards} · Rank to claim: {rank}", cards=doubt.cards_phrase(view['pile']), rank=view['rank']))
+        lines.append("-# " + " · ".join(t.render(p) for p in doubt.rules_phrases(snap["rules"])))
+        lines.append("-# " + t("Seed: {seed} (hash {hash})", seed=snap['seed'], hash=snap['seed_hash'][:12]) if snap["seed"] else "-# " + t("Seed hash: {hash}", hash=snap['seed_hash'][:12]))
         return "\n".join(lines)
 
-    def render_turn(self, key, snap) -> tuple[str, discord.ui.View]:
+    def render_turn(self, key, snap, *, t=None) -> tuple[str, discord.ui.View]:
+        t = t or i18n.english()
         view, seats = snap["view"], snap["seats"]
         last = view["history"][-1] if view["history"] else None
         if last is None:
-            lines = ["The game has started."]
+            lines = [t("The game has started.")]
         elif last["kind"] == "play":
-            lines = [f"{self._who(snap, last['seat'])} claims {_claim(last['count'], last['rank'])}."]
+            lines = [t("{who} claims {claim}.", who=self._who(snap, last['seat'], t=t), claim=_claim_phrase(last['count'], last['rank']))]
         else:
             taker = last["claimer"] if last["bluff"] else last["doubter"]
-            lines = [f"{self._who(snap, taker)} took the pile after a doubt."]
-        lines.append(f"Pile: {doubt.cards_text(view['pile'])}.")
+            lines = [t("{who} took the pile after a doubt.", who=self._who(snap, taker, t=t))]
+        lines.append(t("Pile: {cards}.", cards=doubt.cards_phrase(view['pile'])))
         turn = view["turn"]
         if turn is not None:
             stamp = self._stamp(key, "turn")
-            who = self._who(snap, turn)
-            lines.append(f"Next: {who}, claim {view['rank']}" + (f" — {stamp}." if stamp and seats[turn]["kind"] == "member" else "."))
+            who = self._who(snap, turn, t=t)
+            lines.append(t("Next: {who}, claim {rank} — {stamp}.", who=who, rank=view['rank'], stamp=stamp) if stamp and seats[turn]["kind"] == "member" else t("Next: {who}, claim {rank}.", who=who, rank=view['rank']))
         if view["window"]:
             window_stamp = self._stamp(key, "window")
-            lines.append("Doubt window open" + (f" {window_stamp}" if window_stamp else "") + ".")
+            lines.append(t("Doubt window open {stamp}.", stamp=window_stamp) if window_stamp else t("Doubt window open."))
         buttons = discord.ui.View(timeout=None)
-        buttons.add_item(DoubtButton("doubt", key[1], snap["round_id"], snap["moves"], "Doubt", discord.ButtonStyle.danger, view["window"] is None))
-        buttons.add_item(DoubtButton("hand", key[1], snap["round_id"], snap["moves"], "My hand", discord.ButtonStyle.primary))
+        buttons.add_item(DoubtButton("doubt", key[1], snap["round_id"], snap["moves"], t.p("button.doubt", "Doubt"), discord.ButtonStyle.danger, view["window"] is None))
+        buttons.add_item(DoubtButton("hand", key[1], snap["round_id"], snap["moves"], t.p("button.doubt", "My hand"), discord.ButtonStyle.primary))
         return "\n".join(lines), buttons
 
-    def _reveal_text(self, snap, pile_before: int, names=None) -> str:
+    def _reveal_text(self, snap, pile_before: int, names=None, *, t=None) -> str:
+        t = t or i18n.english()
         rev = snap["view"]["history"][-1]
         cards = ", ".join(f"{rank}{suit}" for rank, suit in rev["cards"])
-        who = (lambda s, i: names[i]) if names else self._who
+        who = (lambda s, i: names[i]) if names else (lambda s, i: self._who(s, i, t=t))
         claimer, doubter = who(snap, rev["claimer"]), who(snap, rev["doubter"])
-        head = f"Doubt! {doubter} doubted {claimer}'s {_claim(len(rev['cards']), rev['rank'])}. They were {cards}"
+        claim = _claim_phrase(len(rev['cards']), rev['rank'])
         if not rev["bluff"] and snap["view"]["finished"]:
-            return head + f" — the claim was true, and {claimer} played their last cards."
+            return t("Doubt! {doubter} doubted {claimer}'s {claim}. They were {cards} — the claim was true, and {claimer} played their last cards.", doubter=doubter, claimer=claimer, claim=claim, cards=cards)
         taker = who(snap, rev["claimer"] if rev["bluff"] else rev["doubter"])
-        return head + f" — {taker} takes the pile ({doubt.cards_text(pile_before)})."
+        return t("Doubt! {doubter} doubted {claimer}'s {claim}. They were {cards} — {taker} takes the pile ({pile}).", doubter=doubter, claimer=claimer, claim=claim, cards=cards, taker=taker, pile=doubt.cards_phrase(pile_before))
 
-    def _result(self, key, snap) -> tuple[str, str, str]:
+    def _result(self, key, snap, *, t=None) -> tuple[str, str, str]:
         """(thread result, one-line lobby text, final turn text) for a settled round."""
+        t = t or i18n.english()
         name, seats, win = self.store.currency_name(key[0]), snap["seats"], snap["view"]["winner"]
-        pot, who = sum(s["stake"] for s in seats), self._who(snap, win)
-        head = f"**{who} wins the game" + (f" and takes the pot of {pot:,} {name}.**" if pot else ".**")
+        pot, who = sum(s["stake"] for s in seats), self._who(snap, win, t=t)
+        head = t("**{who} wins the game and takes the pot of {pot:,} {currency}.**", who=who, pot=pot, currency=name) if pot else t("**{who} wins the game.**", who=who)
         lines = [head]
+        even = t.p("round net", "even")
         for seat in seats:
             net = (seat["payout"] or 0) - seat["stake"]
-            lines.append(f"• {GameTables._who(seat)}: {_sign(net) or 'even'}" + (" (forfeited)" if seat["outcome"] == "forfeit" else ""))
+            lines.append(f"• {GameTables._who(seat, t=t)}: {_sign(net) or even}" + (" " + t("(forfeited)") if seat["outcome"] == "forfeit" else ""))
         if snap["seed"]:
-            lines.append(f"-# Seed: {snap['seed']} (hash {snap['seed_hash'][:12]})")
-        lobby = f"{who} won I Doubt It" + (f" and took the pot of {pot:,} {name}" if pot else "") + ". Table closed."
-        return "\n".join(lines), lobby, f"Game over — {who} won."
+            lines.append("-# " + t("Seed: {seed} (hash {hash})", seed=snap['seed'], hash=snap['seed_hash'][:12]))
+        lobby = t("{who} won I Doubt It and took the pot of {pot:,} {currency}. Table closed.", who=who, pot=pot, currency=name) if pot else t("{who} won I Doubt It. Table closed.", who=who)
+        return "\n".join(lines), lobby, t("Game over — {who} won.", who=who)
 
     # --- the common step machinery ----------------------------------------------------------
 
@@ -558,16 +606,17 @@ class DoubtTables:
     def _apply(self, key, snap, seat, move, actor, note=None) -> _Out:
         """Makes one move under the table lock; raises ConflictError / GameError from the store."""
         before, new = snap, self.store.play(key[0], snap["round_id"], seat, move, actor, snap["moves"])
+        t = self._t(key[0])
         out = _Out(advanced=True)
         if note:
             out.events.append(note)
         if move == "doubt":
-            out.events.append(self._reveal_text(new, before["view"]["pile"]))
+            out.events.append(self._reveal_text(new, before["view"]["pile"], t=t))
         if move == "forfeit":
-            out.events.append(f"{self._who(before, seat)} forfeits and is out of the game.")
+            out.events.append(t("{who} forfeits and is out of the game.", who=self._who(before, seat, t=t)))
         table = self.table(key)
         if new["status"] == "settled":
-            out.final = self._result(key, new)
+            out.final = self._result(key, new, t=t)
             if self.talk_allowed(key[0]):
                 out.talk = (f"Game over — {self._talk_names(key[0], new)[new['view']['winner']]} won the game.", True)
             self.store.close_table(*key)
@@ -577,7 +626,7 @@ class DoubtTables:
             self.arm(key, "archive", self.ARCHIVE_SECONDS)
         else:
             self._after(key, new)
-            out.turn = self.render_turn(key, new)
+            out.turn = self.render_turn(key, new, t=t)
             out.board = True
             low = [i for i, n in enumerate(new["view"]["counts"]) if n == 1 and new["view"]["active"][i]]
             if (move == "doubt" or (low and not table.one_card)) and self.clock() - self.event_at.get(key, float("-inf")) >= self.EVENT_COOLDOWN_SECONDS \
@@ -624,7 +673,7 @@ class DoubtTables:
             if out.closing:
                 if out.seq > table.sent.get("turn", 0):
                     table.sent["turn"] = out.seq
-                    await self._edit(thread_id, row["turn_message_id"], content="Table closed.", view=None)
+                    await self._edit(thread_id, row["turn_message_id"], content=self._t(key[0])("Table closed."), view=None)
                 await self._post(thread_id, out.closing)
             if out.lobby and out.seq > table.sent.get("lobby", 0):
                 table.sent["lobby"] = out.seq
@@ -674,12 +723,13 @@ class DoubtTables:
         board = await self._post(thread_id, out.start)
         turn = await self._post(thread_id, *out.turn) if board is not None else None
         if board is None or turn is None:
+            t = self._t(key[0])
             async with self.runtime.lock(key):
-                refunded = self._refunded(key)
+                refunded = self._refunded(key, t=t)
                 if (current := self._row(key)) is not None and current["status"] == "open":
                     self.store.close_table(*key)
                 self._forget(key)
-            await self._edit(row["channel_id"], row["message_id"], content="Table closed: I couldn't post in the table thread." + refunded, view=None)
+            await self._edit(row["channel_id"], row["message_id"], content=t("Table closed: I couldn't post in the table thread.") + refunded, view=None)
             self.arm(key, "archive", self.ARCHIVE_SECONDS)
             return False
         try:
@@ -712,7 +762,7 @@ class DoubtTables:
         except GameError:
             return
         if snap["view"] and snap["board_message_id"] is not None:
-            await self._edit(snap["thread_id"], snap["board_message_id"], content=self.render_board(key, snap))
+            await self._edit(snap["thread_id"], snap["board_message_id"], content=self.render_board(key, snap, t=self._t(key[0])))
 
     async def flush(self) -> None:
         """Sends the pending board edits now."""
@@ -725,10 +775,11 @@ class DoubtTables:
 
     async def start_command(self, interaction: discord.Interaction, favorites: bool = False) -> None:
         guild_id = interaction.guild_id
+        t = discord_locale.invoker_t(interaction)
         channel_id = getattr(interaction, "channel_id", None) or interaction.channel.id
         user = interaction.user
         if user.bot:
-            await self._say(interaction, "Bots cannot play I Doubt It.")
+            await self._say(interaction, t("Bots cannot play I Doubt It."))
             return
         if not self.store.game_enabled(guild_id, "doubt"):
             await self._say(interaction, DOUBT_OFF)
@@ -743,7 +794,7 @@ class DoubtTables:
         try:
             opened = self.store.open_table(guild_id, channel_id, "doubt", user.id)
         except GameError as error:
-            await self._say(interaction, str(error))
+            await self._say(interaction, t.error(error))
             return
         key, round_id = (guild_id, opened["table_id"]), opened["round_id"]
         self.table(key)
@@ -752,19 +803,19 @@ class DoubtTables:
             try:
                 if favorites and space_id is not None:
                     result = self.store.join_with_favorites(guild_id, round_id, user.id, 0, space_id)
-                    snap, note = result["snapshot"], self.bot.games._favorites_note(result, note)
+                    snap, note = result["snapshot"], self.bot.games._favorites_note(result, note, t=t)
                 else:
                     snap = self.store.join_round(guild_id, round_id, user.id, 0)
             except GameError as error:
                 self.store.close_table(*key)
                 self._release(key)
                 self.tables.pop(key, None)
-                refusal = str(error)
+                refusal = t.error(error)
             else:
                 refusal = None
                 self.table(key).deadlines["lobby"] = self.clock() + self.LOBBY_SECONDS
                 self.arm(key, "lobby", self.LOBBY_SECONDS, round_id)
-                content, view = self.render_lobby(key, snap, self._row(key))
+                content, view = self.render_lobby(key, snap, self._row(key), t=self._t(guild_id))
                 out = self._seal(key, _Out())
         if refusal is not None:
             await self._say(interaction, refusal)
@@ -785,11 +836,11 @@ class DoubtTables:
         fresh = None
         async with self.runtime.lock(key):
             if table.issued > out.seq and (row := self._row(key))["status"] == "open":  # someone joined before the message existed
-                fresh = self._seal(key, _Out(lobby=self.render_lobby(key, self.store.latest_round(*key), row)))
+                fresh = self._seal(key, _Out(lobby=self.render_lobby(key, self.store.latest_round(*key), row, t=self._t(guild_id))))
         await self._publish(key, fresh)
         try:
             partial = await self._channel(channel_id)
-            thread = await partial.get_partial_message(message.id).create_thread(name=f"I Doubt It · table {key[1]}", auto_archive_duration=1440)
+            thread = await partial.get_partial_message(message.id).create_thread(name=self._t(guild_id)("I Doubt It · table {number}", number=key[1]), auto_archive_duration=1440)
         except discord.HTTPException as error:
             logging.warning("Could not open the I Doubt It thread (%s)", type(error).__name__)
             await self._thread_failed(interaction, key, isinstance(error, discord.Forbidden))
@@ -800,7 +851,7 @@ class DoubtTables:
             if row["status"] == "open":
                 self.store.set_table_thread(*key, thread.id)
                 self.threads[thread.id] = key
-                ready = self._seal(key, _Out(lobby=self.render_lobby(key, self.store.latest_round(*key), row)))
+                ready = self._seal(key, _Out(lobby=self.render_lobby(key, self.store.latest_round(*key), row, t=self._t(guild_id))))
         if ready is None:  # closed while the thread was being made: nothing else to say there, just archive it
             try:
                 await thread.edit(archived=True, locked=True)
@@ -811,21 +862,23 @@ class DoubtTables:
             await self._say(interaction, note)
 
     async def _thread_failed(self, interaction, key, forbidden: bool) -> None:
+        t, ct = discord_locale.invoker_t(interaction), self._t(key[0])
         async with self.runtime.lock(key):
-            refunded = self._refunded(key)
+            refunded, refunded_say = self._refunded(key, t=ct), self._refunded(key, t=t)
             row = self._row(key)
             if row is not None and row["status"] == "open":
                 self.store.close_table(*key)
             self._forget(key)
-            out = self._seal(key, _Out(lobby=("Table closed: I couldn't open a thread here." + refunded, None), closed=True))
+            out = self._seal(key, _Out(lobby=(ct("Table closed: I couldn't open a thread here.") + refunded, None), closed=True))
         await self._publish(key, out)
         self.tables.pop(key, None)
         self.ended.discard(key)
-        await self._say(interaction, (THREAD_FORBIDDEN if forbidden else THREAD_FAILED) + refunded)
+        await self._say(interaction, (t(THREAD_FORBIDDEN) if forbidden else t(THREAD_FAILED)) + refunded_say)
 
     # --- buttons ----------------------------------------------------------------------------
 
-    def _help_text(self, guild_id, table_id, round_id) -> str:
+    def _help_text(self, guild_id, table_id, round_id, *, t=None) -> str:
+        t = t or i18n.english()
         rules = None
         if guild_id is not None:
             try:
@@ -834,11 +887,11 @@ class DoubtTables:
             except GameError:
                 pass
             rules = rules or self.store.game_rules(guild_id, "doubt")
-        return doubt.how_to_play(rules)
+        return "\n".join(t.render(p) for p in doubt.how_to_play_phrases(rules))
 
     async def press(self, interaction: discord.Interaction, action: str, table_id: int, round_id: int, moves: int) -> None:
         if action == "help":  # a guide, not a move: no state, no seat needed, works on old messages
-            await self._say(interaction, self._help_text(interaction.guild_id, table_id, round_id))
+            await self._say(interaction, self._help_text(interaction.guild_id, table_id, round_id, t=discord_locale.invoker_t(interaction)))
             return
         guild_id = interaction.guild_id
         if guild_id is None or interaction.user.bot:
@@ -870,7 +923,7 @@ class DoubtTables:
         await self._publish(key, out)
         if out.say == STALE:
             await self._reap(key)
-        return out.say
+        return words(discord_locale.invoker_t(interaction), out.say) if out.say else out.say
 
     def _press(self, user_id, key, action, round_id, moves) -> _Out:
         loaded, refusal = self._load(key, round_id)
@@ -892,7 +945,7 @@ class DoubtTables:
         except ConflictError:
             return _Out(DOUBTED_FIRST if action == "doubt" else MOVED_ON)
         except GameError as error:
-            return _Out(str(error))
+            return _Out(error)
 
     def _touch_lobby(self, key, round_id) -> None:
         """A join restarts the idle clock of the lobby."""
@@ -903,8 +956,8 @@ class DoubtTables:
         snap = self.store.join_round(key[0], snap["round_id"], user_id, 0)
         self._touch_lobby(key, snap["round_id"])
         ante, name = (snap["rules"] or {}).get("ante", 0), self.store.currency_name(key[0])
-        say = "You joined the table." + (f" Your ante of {ante:,} {name} is in the pot." if ante else "")
-        return self._seal(key, _Out(say, lobby=self.render_lobby(key, snap, row)))
+        say = Phrase(JOINED_ANTE, ante=ante, currency=name) if ante else JOINED
+        return self._seal(key, _Out(say, lobby=self.render_lobby(key, snap, row, t=self._t(key[0]))))
 
     def _leave(self, key, row, snap, user_id) -> _Out:
         snap = self.store.leave_round(key[0], snap["round_id"], user_id)
@@ -912,15 +965,15 @@ class DoubtTables:
             self.store.close_table(*key)
             self._forget(key)
             self.arm(key, "archive", self.ARCHIVE_SECONDS)
-            return self._seal(key, _Out("You left the table. It is closed.", lobby=("Table closed: everyone left.", None), closed=True))
-        return self._seal(key, _Out("You left the table. Your ante is refunded.", lobby=self.render_lobby(key, snap, row)))
+            return self._seal(key, _Out(LEFT_CLOSED, lobby=(self._t(key[0])("Table closed: everyone left."), None), closed=True))
+        return self._seal(key, _Out(LEFT_REFUNDED, lobby=self.render_lobby(key, snap, row, t=self._t(key[0]))))
 
     def _fill(self, key, row, snap, user_id) -> _Out:
         if not self._is_host(row, snap, user_id):
-            return _Out("Only the host can fill seats.")
+            return _Out(ONLY_HOST_FILL)
         guild_id, binding = key[0], self.store.binding(row["channel_id"])
         if binding is None:
-            return _Out("Characters can't sit at tables in this channel.")
+            return _Out(NO_CHARACTER_SEATS)
         taken = {s["ref_id"] for s in snap["seats"] if s["kind"] == "character"}
         eligible = {r["id"] for r in self.store.eligible_characters(guild_id, binding["space_id"])}
         pool = [c for c in self.store.get_cast(row["channel_id"], None) if c in eligible and c not in taken]
@@ -932,24 +985,24 @@ class DoubtTables:
             seated += result["seated"]
             skipped += result["skipped"]
         if not seated:
-            return _Out("No one is left in the cast who can take a seat.")
+            return _Out(NO_CAST_LEFT)
         self._touch_lobby(key, snap["round_id"])
-        say = "Seated: " + ", ".join(s["name"] for s in seated) + "."
-        if skipped:
-            say += " Not seated: " + ", ".join(s["name"] for s in skipped) + "."
-        return self._seal(key, _Out(say, lobby=self.render_lobby(key, snap, row)))
+        names = ", ".join(s["name"] for s in seated)
+        say = Phrase(SEATED_SKIPPED, names=names, skipped=", ".join(s["name"] for s in skipped)) if skipped else Phrase(SEATED, names=names)
+        return self._seal(key, _Out(say, lobby=self.render_lobby(key, snap, row, t=self._t(key[0]))))
 
     def _start(self, key, row, snap, user_id) -> _Out:
         if not self._is_host(row, snap, user_id):
-            return _Out("Only the host can start the game.")
+            return _Out(ONLY_HOST_START)
         if row["thread_id"] is None:
             return _Out(THREAD_NOT_READY)
         if len(snap["seats"]) < doubt.MIN_SEATS:
-            return _Out(f"I Doubt It needs at least {doubt.MIN_SEATS} seats to start.")
+            return _Out(Phrase(NEEDS_SEATS, count=doubt.MIN_SEATS))
         snap = self.store.deal(key[0], snap["round_id"])
         self._after(key, snap)
-        out = _Out(start=self.render_board(key, snap), turn=self.render_turn(key, snap))
-        out.lobby = ("In play — see the thread.", self._in_play_view(key, snap))
+        t = self._t(key[0])
+        out = _Out(start=self.render_board(key, snap, t=t), turn=self.render_turn(key, snap, t=t))
+        out.lobby = (t("In play — see the thread."), self._in_play_view(key, snap, t=t))
         return self._seal(key, out)
 
     def _doubt(self, key, snap, user_id, moves) -> _Out:
@@ -963,9 +1016,9 @@ class DoubtTables:
             last = view["history"][-1] if view["history"] else None
             return _Out(DOUBTED_FIRST if last and last["kind"] == "reveal" else MOVED_ON)
         if view["window"] is None:
-            return _Out("There's no claim to doubt right now.")
+            return _Out(NO_CLAIM)
         if view["window"]["claimer"] == seat:
-            return _Out("You can't doubt your own claim.")
+            return _Out(OWN_CLAIM)
         return self._apply(key, snap, seat, "doubt", "member")
 
     # --- the hand and the picker ------------------------------------------------------------
@@ -979,9 +1032,11 @@ class DoubtTables:
         await self._show_hand(interaction, (guild_id, table["id"]), None)
 
     async def _show_hand(self, interaction, key, round_id) -> None:
+        t = discord_locale.invoker_t(interaction)
         async with self.runtime.lock(key):
-            text, picker = self._hand(key, round_id, interaction.user.id)
-        kwargs = {"view": _Picker(*picker)} if picker else {}
+            text, picker = self._hand(key, round_id, interaction.user.id, t=t)
+        text = words(t, text)
+        kwargs = {"view": _Picker(*picker, t=t)} if picker else {}
         try:
             if interaction.response.is_done():
                 await interaction.followup.send(text, ephemeral=True, allowed_mentions=NO_MENTIONS, **kwargs)
@@ -990,8 +1045,9 @@ class DoubtTables:
         except discord.HTTPException as error:
             logging.warning("I Doubt It hand reply failed: %s", type(error).__name__)
 
-    def _hand(self, key, round_id, user_id):
+    def _hand(self, key, round_id, user_id, *, t=None):
         """(private text, picker arguments or None): the presser's own hand only; the picker only on their turn."""
+        t = t or i18n.english()
         guild_id = key[0]
         try:
             snap = self.store.round_snapshot(guild_id, round_id) if round_id is not None else self.store.latest_round(*key)
@@ -1003,19 +1059,19 @@ class DoubtTables:
         if seat is None:
             return NOT_SEATED, None
         if snap["status"] == "joining":
-            return "The game hasn't started yet.", None
+            return NOT_STARTED, None
         if snap["status"] != "playing":
-            return "This game is over.", None
+            return GAME_OVER, None
         view = self.store.seat_view(guild_id, snap["round_id"], seat)
         held = doubt.held_counts(view.hand)
-        lines = [f"**Your hand** ({doubt.cards_text(len(view.hand))})"]
+        lines = [t("**Your hand** ({cards})", cards=doubt.cards_phrase(len(view.hand)))]
         lines += [f"{rank}: " + " ".join(f"{r}{s}" for r, s in view.hand if r == rank) for rank in doubt.RANKS if rank in held]
         window = view.window
         playable = view.turn == seat and view.hand and not (window and view.counts[window.claimer] == 0)
         if playable:
-            lines.append(f"\nYour turn: claim {view.rank}. Choose what to play (1 to {doubt.MAX_PLAY} cards), then press Play.")
+            lines.append("\n" + t("Your turn: claim {rank}. Choose what to play (1 to {max} cards), then press Play.", rank=view.rank, max=doubt.MAX_PLAY))
         elif view.turn is not None:
-            lines.append(f"\nOn turn: {self._who(snap, view.turn)}, claiming {view.rank}.")
+            lines.append("\n" + t("On turn: {who}, claiming {rank}.", who=self._who(snap, view.turn, t=t), rank=view.rank))
         return "\n".join(lines), ((key[1], snap["round_id"], snap["moves"], held) if playable else None)
 
     async def play_from_picker(self, interaction: discord.Interaction, table_id: int, round_id: int, moves: int, counts: dict) -> None:
@@ -1045,26 +1101,26 @@ class DoubtTables:
             return _Out(NOT_YOUR_TURN)
         parts, held = [], doubt.held_counts(self.store.seat_view(key[0], round_id, seat).hand)
         if not isinstance(counts, dict) or any(not isinstance(n, int) or isinstance(n, bool) or n < 0 for n in counts.values()):
-            return _Out(f"Pick 1 to {doubt.MAX_PLAY} cards to play.")
+            return _Out(Phrase(PICK_RANGE, max=doubt.MAX_PLAY))
         for rank in doubt.RANKS:
             n = counts.get(rank, 0)
             if n > held.get(rank, 0):
-                return _Out(f"You don't hold {_claim(n, rank)}.")
+                return _Out(Phrase(NOT_HELD, claim=_claim_phrase(n, rank)))
             if n:
                 parts.append((rank, n))
         if any(rank not in doubt.RANKS for rank in counts):
-            return _Out(f"Pick 1 to {doubt.MAX_PLAY} cards to play.")
+            return _Out(Phrase(PICK_RANGE, max=doubt.MAX_PLAY))
         total = sum(n for _, n in parts)
         if not 1 <= total <= doubt.MAX_PLAY:
-            return _Out(f"Pick 1 to {doubt.MAX_PLAY} cards to play.")
+            return _Out(Phrase(PICK_RANGE, max=doubt.MAX_PLAY))
         move = "play:" + ",".join(f"{rank}x{n}" for rank, n in parts)
         try:
             out = self._apply(key, snap, seat, move, "member")
         except ConflictError:
             return _Out(MOVED_ON)
         except GameError as error:
-            return _Out(str(error))
-        out.say, out.ok = f"You play {doubt.cards_text(total)} and claim {_claim(total, snap['view']['rank'])}.", True
+            return _Out(error)
+        out.say, out.ok = Phrase(YOU_PLAY, cards=doubt.cards_phrase(total), claim=_claim_phrase(total, snap['view']['rank'])), True
         return out
 
     # --- timers' work -----------------------------------------------------------------------
@@ -1085,7 +1141,8 @@ class DoubtTables:
             self.store.close_table(*key)
             self._forget(key)
             self.arm(key, "archive", self.ARCHIVE_SECONDS)
-            out = self._seal(key, _Out(lobby=("Table closed: nobody started the game." + self._refunded(key), None), closed=True))
+            t = self._t(guild_id)
+            out = self._seal(key, _Out(lobby=(t("Table closed: nobody started the game.") + self._refunded(key, t=t), None), closed=True))
         await self._publish(key, out)
 
     async def on_window_timer(self, guild_id, table_id, round_id, moves) -> None:
@@ -1129,7 +1186,8 @@ class DoubtTables:
                     out = self._apply(key, snap, seat, "forfeit", "timeout")
                 else:
                     move = doubt.timeout_move_for_view(self.store.seat_view(guild_id, round_id, seat), self.store.policy_seed(guild_id, round_id, f"{moves}/{seat}/timeout"))
-                    out = self._apply(key, snap, seat, move, "timeout", note=f"{self._who(snap, seat)} ran out of time; a card was played for them.")
+                    t = self._t(guild_id)
+                    out = self._apply(key, snap, seat, move, "timeout", note=t("{who} ran out of time; a card was played for them.", who=self._who(snap, seat, t=t)))
             except (ConflictError, GameError) as error:
                 logging.info("I Doubt It turn timeout refused (%s)", type(error).__name__)
                 return
@@ -1450,7 +1508,7 @@ class DoubtTables:
             tables.setdefault((row["guild_id"], row["id"]), (row["channel_id"], row["message_id"], row["thread_id"]))
         # tables that closed just before the restart: their archive timer never fired (closed_at is updated_at; no schema change)
         earlier = [r["thread_id"] for r in store.all("SELECT thread_id FROM game_tables WHERE game='doubt' AND status='closed' AND thread_id IS NOT NULL AND updated_at>=?", (time.time() - self.ARCHIVE_SECONDS,))]
-        notes = {(r["guild_id"], r["table_id"]): self._refunded((r["guild_id"], r["table_id"]), past=True) for r in rounds}
+        notes = {(r["guild_id"], r["table_id"]): self._refunded((r["guild_id"], r["table_id"]), past=True, t=self._t(r["guild_id"])) for r in rounds}
         for r in rounds:
             try:
                 store.cancel_round(r["guild_id"], r["round_id"], "bot restarted")
@@ -1469,7 +1527,7 @@ class DoubtTables:
             self._release((guild_id, table_id))
             self.tables.pop((guild_id, table_id), None)
             self.banter = {thread: k for thread, k in self.banter.items() if k != (guild_id, table_id)}
-            text = "This table closed when the bot restarted." + notes.get((guild_id, table_id), "")
+            text = self._t(guild_id)("This table closed when the bot restarted.") + notes.get((guild_id, table_id), "")
             await self._edit(channel_id, message_id, content=text, view=None)
             await self._post(thread_id, text)
             await self._archive_thread(thread_id)  # the old process's archive timer died with it
@@ -1517,14 +1575,15 @@ def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
     @app_commands.choices(game=choices)
     async def game_rules(interaction: discord.Interaction, game: str):
         require_guild(interaction)
+        t = discord_locale.invoker_t(interaction)
         if game == "doubt":
             rules = bot.store.game_rules(interaction.guild_id, "doubt")
-            text = doubt.how_to_play(rules) + "\n" + doubt.rules_text(rules)
+            text = "\n".join(t.render(p) for p in doubt.how_to_play_phrases(rules)) + "\n" + " · ".join(t.render(p) for p in doubt.rules_phrases(rules))
         elif game == "holdem":
-            text = bot.holdem.rules_text(interaction.guild_id)
+            text = bot.holdem.rules_text(interaction.guild_id, t=t)
         else:
             rules = bot.store.blackjack_rules(interaction.guild_id)
-            text = bot.games.how_to_play(rules) + "\n" + blackjack.rules_text(rules)
+            text = bot.games.how_to_play(rules, t=t) + "\n" + " · ".join(t.render(p) for p in blackjack.rules_phrases(rules))
         await bot.doubt._say(interaction, text)
 
     @group.command(name="spoken_moves", description=C_("Turn move checks from your chat on or off for you"))
@@ -1534,9 +1593,10 @@ def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
         require_guild(interaction)
         on = setting == "on"
         bot.store.set_spoken_member_on(interaction.guild_id, interaction.user.id, on)
-        text = SPOKEN_ON if on else SPOKEN_OFF
+        t = discord_locale.invoker_t(interaction)
+        text = t(SPOKEN_ON) if on else t(SPOKEN_OFF)
         if not bot.store.spoken_moves_enabled(interaction.guild_id) and not bot.store.spoken_doubt_enabled(interaction.guild_id):
-            text += SPOKEN_SERVER_OFF
+            text += t(SPOKEN_SERVER_OFF)
         await bot.doubt._say(interaction, text)
 
     bot.tree.add_command(group)

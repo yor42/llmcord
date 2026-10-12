@@ -669,6 +669,1380 @@ msgid "Cleared {count} favorite."
 msgid_plural "Cleared {count} favorites."
 msgstr[0] ""
 
+#: llmcord_core/games_discord.py
+msgid "That table has moved on — use the latest buttons."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "Games are off in this channel."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "Blackjack is off on this server."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "A round is being played; join the next one with /blackjack when it ends."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "You can leave when this round ends."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "You left the table."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "You're not seated at this table."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "It's not your turn."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "Characters can't sit at tables in this channel."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "already at the table"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "table full"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "archived"
+msgstr ""
+
+#: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_holdem_discord.py
+msgid "Table closed: games were turned off here."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "Table closed: blackjack was turned off on this server."
+msgstr ""
+
+#: llmcord_core/games_discord.py llmcord_core/games_holdem_discord.py
+msgid "Table closed."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "Join with /blackjack bet:<amount>; add favorites:True to bring your favorite characters."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgctxt "blackjack result"
+msgid "refunded"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgctxt "blackjack result"
+msgid "surrendered"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgctxt "blackjack result"
+msgid "even money"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgctxt "blackjack status"
+msgid "stands"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgctxt "blackjack status"
+msgid "bust"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgctxt "blackjack status"
+msgid "blackjack"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgctxt "blackjack status"
+msgid "surrendered"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "{outcome} {amount}"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid ", insurance {amount}"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgctxt "button.blackjack"
+msgid "How to play"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "Round {number}:"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "Round {number}: dealer {total} bust —"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "Round {number}: dealer {total} —"
+msgstr ""
+
+#: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
+msgctxt "round net"
+msgid "even"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgctxt "round net"
+msgid "push"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "Net: {entries}"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "(with {member})"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "{number}. {who} bet {stake:,} {currency}"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "{hand} ({total})"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "(even money)"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "(insured {amount:,})"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "(timed out)"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "Dealer: {hand} ??"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "Dealer: {hand} ({total}) bust"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "Dealer: {hand} ({total})"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "Join with /blackjack bet:<amount> — dealing {stamp}."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "Join with /blackjack bet:<amount>."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "Bets: {low:,} to {high:,} {currency}."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "Dealer shows an ace. Insurance?"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "On turn: {who}."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "On turn: {who} — decide {stamp}."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "Round cancelled. Bets are refunded."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "Play again or leave. The table closes {stamp} if nobody plays again."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "Play again or leave."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "Dealer plays."
+msgstr ""
+
+#: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "Seed: {seed} (hash {hash})"
+msgstr ""
+
+#: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "Seed hash: {hash}"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgctxt "button.blackjack"
+msgid "Deal now"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgctxt "button.blackjack"
+msgid "Leave"
+msgstr ""
+
+#: llmcord_core/games_discord.py llmcord_core/games_spoken_discord.py
+msgctxt "button.blackjack"
+msgid "Hit"
+msgstr ""
+
+#: llmcord_core/games_discord.py llmcord_core/games_spoken_discord.py
+msgctxt "button.blackjack"
+msgid "Stand"
+msgstr ""
+
+#: llmcord_core/games_discord.py llmcord_core/games_spoken_discord.py
+msgctxt "button.blackjack"
+msgid "Double"
+msgstr ""
+
+#: llmcord_core/games_discord.py llmcord_core/games_spoken_discord.py
+msgctxt "button.blackjack"
+msgid "Surrender"
+msgstr ""
+
+#: llmcord_core/games_discord.py llmcord_core/games_spoken_discord.py
+#, python-brace-format
+msgctxt "button.blackjack"
+msgid "Insure ({cost:,})"
+msgstr ""
+
+#: llmcord_core/games_discord.py llmcord_core/games_spoken_discord.py
+msgctxt "button.blackjack"
+msgid "Even money"
+msgstr ""
+
+#: llmcord_core/games_discord.py llmcord_core/games_spoken_discord.py
+msgctxt "button.blackjack"
+msgid "No insurance"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgctxt "button.blackjack"
+msgid "Play again (same bet)"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgctxt "button.blackjack"
+msgid "Leave table"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "Bots cannot play blackjack."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "An I Doubt It table is open in this channel."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "Your favorites joined too: {names}."
+msgstr ""
+
+#: llmcord_core/games_discord.py llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "not enough {currency}"
+msgstr ""
+
+#: llmcord_core/games_discord.py llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "Not seated: {names}."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "You joined the table with {bet:,} {currency}."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "Games are now on in {where}."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "Games are now off in {where}."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "The open table was closed and bets were refunded."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "I Doubt It is off on this server."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "I Doubt It uses the server's ante; no bet needed."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Blackjack needs a bet: /game start game:Blackjack bet:<amount>."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "The table moved on — open My hand again."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Someone doubted first."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Move checks are off for you. The bot won't read your chat for moves at game tables, and any phrases kept from your messages were deleted."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Move checks are on for you. When this server reads moves from chat, the bot may ask you to confirm a move you typed."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid " (This server has Read moves from chat turned off right now.)"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+msgid "Use /game hand in your table's thread."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+msgid "I couldn't open the table thread. I need the Create Public Threads and Send Messages in Threads permissions in this channel. The table was closed."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+msgid "Couldn't open the table thread; the table is closed."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+msgid "The table thread isn't ready yet; try again in a moment."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "You joined the table."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "You joined the table. Your ante of {ante:,} {currency} is in the pot."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "You left the table. It is closed."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "You left the table. Your ante is refunded."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+msgid "Only the host can fill seats."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Only the host can start the game."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+msgid "No one is left in the cast who can take a seat."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "Seated: {names}."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "Seated: {names}. Not seated: {skipped}."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "I Doubt It needs at least {count} seats to start."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "There's no claim to doubt right now."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "You can't doubt your own claim."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "The game hasn't started yet."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "This game is over."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "Pick 1 to {max} cards to play."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "You don't hold {claim}."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "You play {cards} and claim {claim}."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Pick one amount for each rank."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgctxt "claim"
+msgid "{count} {rank}"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgctxt "claim"
+msgid "{count} {rank}s"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgctxt "claim count"
+msgid "one"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgctxt "claim count"
+msgid "two"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgctxt "claim count"
+msgid "three"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgctxt "claim count"
+msgid "four"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgctxt "select.doubt"
+msgid "Cards to play (1 to 4 in all)"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgctxt "button.doubt"
+msgid "Play"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Table closed: I Doubt It was turned off on this server."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+msgid "Table closed: the table was closed."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "The antes were refunded."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "The antes are refunded."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "**{game}** · table {number}"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "Ante: {ante:,} {currency} · Pot: {pot:,} {currency}"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "No ante · Pot: {pot:,} {currency}"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "Host: {host}"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+msgid "(house)"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "Join with the button. The host (if the host has left, any player) starts the game with {low} to {high} seats; the table closes {stamp} if it hasn't started."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "Join with the button. The host (if the host has left, any player) starts the game with {low} to {high} seats."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgctxt "button.doubt"
+msgid "Join"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgctxt "button.doubt"
+msgid "Leave"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgctxt "button.doubt"
+msgid "Fill seats"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgctxt "button.doubt"
+msgid "Start"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgctxt "button.doubt"
+msgid "How to play"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "pot {pot:,} {currency} (ante {ante:,})"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgctxt "seat state"
+msgid "forfeited"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "{cards} · winner"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "{cards} · on turn"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Game over."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "Pile: {cards} · Rank to claim: {rank}"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "The game has started."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "{who} claims {claim}."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "{who} took the pile after a doubt."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "Pile: {cards}."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "Next: {who}, claim {rank} — {stamp}."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "Next: {who}, claim {rank}."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "Doubt window open {stamp}."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Doubt window open."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgctxt "button.doubt"
+msgid "Doubt"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgctxt "button.doubt"
+msgid "My hand"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "Doubt! {doubter} doubted {claimer}'s {claim}. They were {cards} — the claim was true, and {claimer} played their last cards."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "Doubt! {doubter} doubted {claimer}'s {claim}. They were {cards} — {taker} takes the pile ({pile})."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "**{who} wins the game and takes the pot of {pot:,} {currency}.**"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "**{who} wins the game.**"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "(forfeited)"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "{who} won I Doubt It and took the pot of {pot:,} {currency}. Table closed."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "{who} won I Doubt It. Table closed."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "Game over — {who} won."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "{who} forfeits and is out of the game."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+msgid "Table closed: I couldn't post in the table thread."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Bots cannot play I Doubt It."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "In play — see the thread."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "**Your hand** ({cards})"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "Your turn: claim {rank}. Choose what to play (1 to {max} cards), then press Play."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "On turn: {who}, claiming {rank}."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+msgid "Table closed: nobody started the game."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+#, python-brace-format
+msgid "{who} ran out of time; a card was played for them."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "Texas Hold'em is off on this server."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "Texas Hold'em uses the server's blinds; you choose your buy-in when you sit."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "You do not have a seat in this round."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "Any chips were cashed out."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "No hand is being played right now."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "Something went wrong; try again."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "You can't raise now."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "Your whole stack makes a total bet of {top:,}; you can't raise to more."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "You can only go all-in, to {top:,}."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "The smallest raise is to {amount:,} in total."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "This round has already started."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "You already have a seat in this round."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "The table is full."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "You sit down with {amount:,} {currency}."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "You added {amount:,} {currency}; your stack is {stack:,}."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "You left the table and cashed out {amount:,} {currency}."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "Only the host can deal."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "Only the host can close the table."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "Assist is on."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "Assist is off."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "{game} needs at least {count} seats to deal."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "Table closed. Any chips were cashed out."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "The hand hasn't started yet."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "Only the winner can show their cards."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "The cards were already shown at the showdown."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "You already showed your cards."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "poker street"
+msgid "Preflop"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "poker street"
+msgid "Flop"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "poker street"
+msgid "Turn"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "poker street"
+msgid "River"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "poker street"
+msgid "Showdown"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "poker street"
+msgid "Done"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgctxt "button.holdem"
+msgid "All-in {amount:,}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgctxt "button.holdem"
+msgid "Raise to {amount:,}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "button.holdem"
+msgid "Exact amount"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "Table closed: {game} was turned off on this server."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "Blinds {small}/{big} · Buy-in {low:,} to {high:,} {currency} · {seconds} s per move"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "Assist: on"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "Sit with the button. The host deals when {low} to {high} seats are taken; the table closes {stamp} if no hand starts."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "Sit with the button. The host deals when {low} to {high} seats are taken."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "button.holdem"
+msgid "Sit"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "button.holdem"
+msgid "Leave"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "button.holdem"
+msgid "Rebuy"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "button.holdem"
+msgid "Fill seats"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "button.holdem"
+msgid "Assist off"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "button.holdem"
+msgid "Assist on"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "button.holdem"
+msgid "Deal"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "button.holdem"
+msgid "Close table"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "{who} folds."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "{who} checks."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "{who} calls."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "{who} raises to {amount:,}."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "**{game}** · table {number} · hand {hand}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "Blinds {small}/{big} · {seconds} s per move · Assist: on"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "Blinds {small}/{big} · {seconds} s per move"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "{street} · Board: {board} · Pot {pot:,}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "Between hands."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "seat flag"
+msgid "(dealer)"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "seat flag"
+msgid "folded"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "seat flag"
+msgid "all-in"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "seat flag"
+msgid "on turn"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "**{street}** · hand {hand} · pot {pot:,}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "Board: {board}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "Blinds are posted."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "(bet {amount:,})"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "Stacks: {entries}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "On turn: {who} — {stamp}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "On turn: {who}, thinking…"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "On turn: {who}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "button.holdem"
+msgid "Fold"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "button.holdem"
+msgid "Check"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgctxt "button.holdem"
+msgid "Call {amount:,}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "button.holdem"
+msgid "Raise"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "button.holdem"
+msgid "My cards"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "**Waiting for players.** The next hand needs {count} seats; sit to continue. The table closes {stamp} if no hand starts."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "**Waiting for players.** The next hand needs {count} seats; sit to continue."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "**Next hand starts {stamp}.** Sit, leave or top up now; the host can deal at once."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "**Next hand starts soon.** Sit, leave or top up now; the host can deal at once."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "Next seed hash: {hash}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "button.holdem"
+msgid "Deal now"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "**Hand {hand}** · table {number}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "{who} shows {cards} — {hand}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "Pot"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "Main pot"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "Side pot"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "Side pot {number}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "{winners} win with {hand}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "{winners} win"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "{winners} wins with {hand}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "{winners} wins"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "{label} {amount:,}:"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "Seed hash: {hash} (the seed is revealed when the table closes)"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "Seeds (revealed now)"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "Seeds (cont.)"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "**Table closed.** Cash-outs:"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "• {who}: bought in {bought_in:,}, cashed out {cashed_out:,} ({net:+,})"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "{who} is out of chips and can sit again to rejoin."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "{who} is out of chips and leaves the table."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "{who} leaves because {member} is out of chips, and is cashed out with {amount:,}."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "{who} ran out of time in two hands in a row and was cashed out with {amount:,}."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "{who} leaves too, cashed out with {amount:,}."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "button.holdem"
+msgid "Show"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "Table closed: fewer than {count} players still had chips."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "**{game}** · table {number} — closed after hand {hand}."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "Bots cannot play {game}."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "modal.holdem"
+msgid "Rebuy"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgctxt "modal.holdem"
+msgid "Chips to add (up to {room:,})"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgctxt "modal.holdem"
+msgid "Up to {room:,} {currency}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "modal.holdem"
+msgid "Sit at the table"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgctxt "modal.holdem"
+msgid "Buy-in, {low:,} to {high:,}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgctxt "modal.holdem"
+msgid "{low:,} to {high:,} {currency}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "The buy-in must be a whole number."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "The raise must be a whole number."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "The rebuy must be a whole number above zero."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "You raise to {amount:,}."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid ""
+"**{game}** · table {number}\n"
+"The hands are played in the thread."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "Table closed by the host."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "**Your cards:** {cards}"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgid "Choose your raise (the total bet this round)."
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "modal.holdem"
+msgid "Raise"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "modal.holdem"
+msgid "Total bet this round"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+msgctxt "modal.holdem"
+msgid "Your total bet, e.g. 35"
+msgstr ""
+
+#: llmcord_core/games_holdem_discord.py
+#, python-brace-format
+msgid "{who} shows {cards}."
+msgstr ""
+
+#: llmcord_core/games_spoken_discord.py
+msgid "This isn't your move check."
+msgstr ""
+
+#: llmcord_core/games_spoken_discord.py
+msgid "Got it — left as table talk. Tired of these? Turn them off with /game spoken_moves."
+msgstr ""
+
+#: llmcord_core/games_spoken_discord.py
+msgctxt "button.blackjack"
+msgid "Insure"
+msgstr ""
+
+#: llmcord_core/games_spoken_discord.py
+#, fuzzy, python-brace-format
+msgid "Did you mean {first} or {second}?"
+msgstr ""
+
+#: llmcord_core/games_spoken_discord.py
+#, fuzzy, python-brace-format
+msgid "Did you mean {moves}?"
+msgstr ""
+
+#: llmcord_core/games_spoken_discord.py llmcord_core/games_spoken_doubt.py
+msgctxt "button.spoken"
+msgid "Just table talk"
+msgstr ""
+
+#: llmcord_core/games_spoken_doubt.py
+msgid "✔ Doubt it!"
+msgstr ""
+
+#: llmcord_core/games_spoken_doubt.py
+msgctxt "button.doubt"
+msgid "Doubt it!"
+msgstr ""
+
+#: llmcord_core/games_spoken_doubt.py
+msgid "Did you mean **Doubt it!**?"
+msgstr ""
+
 #: llmcord_core/items_discord.py
 msgid "Nothing is for sale on this server right now."
 msgstr ""
