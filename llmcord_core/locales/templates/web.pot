@@ -3604,6 +3604,21 @@ msgid "Upload JSON entries"
 msgstr ""
 
 #: llmcord_core/shop_ui.py
+msgctxt "item kind"
+msgid "Random message"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+#, python-brace-format
+msgid "{kind} · Consumable"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+#, python-brace-format
+msgid "{kind} · Reusable"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
 msgid "Items"
 msgstr ""
 
@@ -3621,16 +3636,6 @@ msgstr ""
 
 #: llmcord_core/shop_ui.py
 msgid "Every item use on this server, newest first."
-msgstr ""
-
-#: llmcord_core/shop_ui.py
-#, python-brace-format
-msgid "{kind} · Consumable"
-msgstr ""
-
-#: llmcord_core/shop_ui.py
-#, python-brace-format
-msgid "{kind} · Reusable"
 msgstr ""
 
 #: llmcord_core/shop_ui.py

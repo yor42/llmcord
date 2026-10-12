@@ -10,10 +10,17 @@ from zoneinfo import ZoneInfo
 
 from . import i18n, items
 from .currency_ui import CurrencyPanel, member_label, table
-from .i18n import web_locale
+from .i18n import NP_, web_locale
 
 PAGE = 50
 LOCALE = items.recipe.DEFAULT_LOCALE
+ITEM_KINDS = {'random_message': NP_('item kind', 'Random message')}
+
+
+def kind_line(recipe, t):
+    """The kind and use type under an item's name; a kind without a table entry shows its code name as words."""
+    kind = t.render(ITEM_KINDS[recipe.kind]) if recipe.kind in ITEM_KINDS else recipe.kind.replace('_', ' ').capitalize()
+    return t('{kind} · Consumable', kind=kind) if recipe.consumable else t('{kind} · Reusable', kind=kind)
 
 
 def whole(value):
@@ -114,8 +121,7 @@ class ShopPanel:
         card._props['aria-label'] = name
         with card:
             ui.label(f'{recipe.emoji} {name}'.strip()).classes('ll-subtitle')
-            kind = recipe.kind.replace('_', ' ').capitalize()
-            ui.label(t('{kind} · Consumable', kind=kind) if recipe.consumable else t('{kind} · Reusable', kind=kind)).classes('ll-muted')
+            ui.label(kind_line(recipe, t)).classes('ll-muted')
             with ui.element('div').classes('ll-form-row ll-field-row'):
                 for_sale = ui.switch(t('For sale'), value=entry['for_sale'])
                 allow_use = ui.switch(t('Allow use'), value=entry['allow_use'])

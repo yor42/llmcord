@@ -3604,6 +3604,21 @@ msgid "Upload JSON entries"
 msgstr "JSON 항목 업로드"
 
 #: llmcord_core/shop_ui.py
+msgctxt "item kind"
+msgid "Random message"
+msgstr "랜덤 메시지"
+
+#: llmcord_core/shop_ui.py
+#, python-brace-format
+msgid "{kind} · Consumable"
+msgstr "{kind} · 소모품"
+
+#: llmcord_core/shop_ui.py
+#, python-brace-format
+msgid "{kind} · Reusable"
+msgstr "{kind} · 재사용 아이템"
+
+#: llmcord_core/shop_ui.py
 msgid "Items"
 msgstr "아이템"
 
@@ -3622,16 +3637,6 @@ msgstr "사용 기록"
 #: llmcord_core/shop_ui.py
 msgid "Every item use on this server, newest first."
 msgstr "이 서버의 모든 아이템 사용 기록이에요. 최신순으로 표시돼요."
-
-#: llmcord_core/shop_ui.py
-#, python-brace-format
-msgid "{kind} · Consumable"
-msgstr "{kind} · 소모품"
-
-#: llmcord_core/shop_ui.py
-#, python-brace-format
-msgid "{kind} · Reusable"
-msgstr "{kind} · 재사용 아이템"
 
 #: llmcord_core/shop_ui.py
 msgid "For sale"
