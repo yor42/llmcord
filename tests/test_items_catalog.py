@@ -125,9 +125,9 @@ class CatalogTests(unittest.TestCase):
 
     def test_locale_falls_back_to_en(self):
         ball = get_item('8ball')
-        self.assertEqual(roll(ball, 5, locale='ko'), roll(ball, 5))
+        self.assertEqual(roll(ball, 5, locale='fr'), roll(ball, 5))
         extra = {'en': ['Ask the cat.']}
-        self.assertEqual(roll(ball, 5, locale='ko', extra_entries=extra), roll(ball, 5, extra_entries=extra))
+        self.assertEqual(roll(ball, 5, locale='fr', extra_entries=extra), roll(ball, 5, extra_entries=extra))
         ko = {'en': ['x'], 'ko': ['y']}
         self.assertEqual(roll(ball, 5, locale='ko', replace_entries=ko).text, 'y')
         self.assertEqual(roll(ball, 5, locale='fr', replace_entries=ko).text, 'x')

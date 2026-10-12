@@ -1,0 +1,1007 @@
+#: llmcord_core/i18n/terms.py
+msgctxt "item setting"
+msgid "For sale"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "item setting"
+msgid "Allow use"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "lookup noun"
+msgid "character"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "lookup noun"
+msgid "world"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "lookup noun"
+msgid "hub"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "lookup noun"
+msgid "world or hub"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "lookup noun plural"
+msgid "characters"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "lookup noun plural"
+msgid "worlds"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "lookup noun plural"
+msgid "hubs"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "lookup noun plural"
+msgid "worlds or hubs"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "game name"
+msgid "Blackjack"
+msgstr ""
+
+#. i18n: Korean: 다우트 (카드게임), or 다우트(Doubt) if the glossary picks it. 다우트 alone
+#. reads as the word "doubt"; the suffix marks the card game. See i18n-plan.md
+#. section 5.
+#: llmcord_core/i18n/terms.py
+msgctxt "game name"
+msgid "I Doubt It"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "game name"
+msgid "Texas Hold'em"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "game noun"
+msgid "blackjack"
+msgstr ""
+
+#. i18n: Korean: plain 다우트, without (카드게임). It sits inside a sentence and takes
+#. particles ({game:이/가}); a closing parenthesis would break the particle
+#. choice.
+#: llmcord_core/i18n/terms.py
+msgctxt "game noun"
+msgid "I Doubt It"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "game noun"
+msgid "Texas Hold'em"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank"
+msgid "Two"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank"
+msgid "Three"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank"
+msgid "Four"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank"
+msgid "Five"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank"
+msgid "Six"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank"
+msgid "Seven"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank"
+msgid "Eight"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank"
+msgid "Nine"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank"
+msgid "Ten"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank"
+msgid "Jack"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank"
+msgid "Queen"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank"
+msgid "King"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank"
+msgid "Ace"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank plural"
+msgid "Twos"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank plural"
+msgid "Threes"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank plural"
+msgid "Fours"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank plural"
+msgid "Fives"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank plural"
+msgid "Sixes"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank plural"
+msgid "Sevens"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank plural"
+msgid "Eights"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank plural"
+msgid "Nines"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank plural"
+msgid "Tens"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank plural"
+msgid "Jacks"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank plural"
+msgid "Queens"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank plural"
+msgid "Kings"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker rank plural"
+msgid "Aces"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker category"
+msgid "High card"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker category"
+msgid "Pair"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker category"
+msgid "Two pair"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker category"
+msgid "Three of a kind"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker category"
+msgid "Straight"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker category"
+msgid "Flush"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker category"
+msgid "Full house"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker category"
+msgid "Four of a kind"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker category"
+msgid "Straight flush"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "poker hand"
+msgid "High card, {rank}"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "poker hand"
+msgid "Pair of {rank}"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "poker hand"
+msgid "Two pair, {high} and {low}"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "poker hand"
+msgid "Three of a kind, {rank}"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "poker hand"
+msgid "Straight, {rank} high"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "poker hand"
+msgid "Flush, {rank} high"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "poker hand"
+msgid "Full house, {trips} over {pair}"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "poker hand"
+msgid "Four of a kind, {rank}"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "poker hand"
+msgid "Royal flush"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "poker hand"
+msgid "Straight flush, {rank} high"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "play style"
+msgid "loose"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "play style"
+msgid "tight"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "play style"
+msgid "aggressive"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "play style"
+msgid "passive"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "play style"
+msgid "bluffs often"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "play style"
+msgid "rarely bluffs"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "play style"
+msgid "stubborn"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "play style"
+msgid "quick to fold"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "play style"
+msgid "suspicious"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "play style"
+msgid "trusting"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "play style"
+msgid "reckless"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "play style"
+msgid "cautious"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "play style"
+msgid "sharp"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "play style"
+msgid "foolish"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "play style"
+msgid "erratic"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "play style"
+msgid "steady"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "play style"
+msgid "somewhat {word}"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "play style"
+msgid "balanced"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "play style group"
+msgid "Style"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "play style group"
+msgid "Reads"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "play style group"
+msgid "Mind"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "card count"
+msgid "{count} card"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "card count"
+msgid "{count} cards"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "blackjack rules line"
+msgid "Dealer hits soft 17"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "blackjack rules line"
+msgid "Dealer stands on all 17s"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "blackjack rules line"
+msgid "Dealer stands on {total}"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "blackjack rules line"
+msgid "Blackjack pays {ratio}"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "blackjack rules line"
+msgid "Dealer wins ties"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "blackjack rules line"
+msgid "Ties push"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "blackjack rules line"
+msgid "Double on the first two cards"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "blackjack rules line"
+msgid "No doubling"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "blackjack rules line"
+msgid "Splitting allowed"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "blackjack rules line"
+msgid "No splitting"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "blackjack rules line"
+msgid "Insurance"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "blackjack rules line"
+msgid "Late surrender"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "blackjack rules line"
+msgid "{count} deck"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "blackjack rules line"
+msgid "{count} decks"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "**Blackjack in short**"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "Get closer to 21 than the dealer without going over."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• Cards: 2–10 are face value, J/Q/K are 10, an ace is 1 or 11."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• Hit takes a card. Stand keeps your hand."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• Hit takes a card. Stand keeps your hand. Double doubles your bet, takes one card and ends your turn (first two cards only)."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "• Over 21 is a bust: you lose. An ace with a ten-value card on your first two cards is blackjack and pays {ratio}."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "• The dealer plays after everyone: it draws until {stand_on} or more."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "• The dealer plays after everyone: it draws until {stand_on} or more, and also hits a soft 17."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• Win: you get your bet back plus the same again. Tie: the dealer wins."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• Win: you get your bet back plus the same again. Tie: your bet comes back."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• Insurance: when the dealer shows an ace you may put up half your bet (bets of 2 or more) that the dealer has blackjack; it pays 2 to 1. With a blackjack you may take even money (paid 1 to 1 right away) instead."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• Surrender: on your first two cards, once the dealer has checked for blackjack, you may give up the hand and get half your bet back."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "blackjack total"
+msgid "soft {total}"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "blackjack outcome"
+msgid "blackjack"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "blackjack outcome"
+msgid "win"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "blackjack outcome"
+msgid "push"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "blackjack outcome"
+msgid "lose"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "blackjack outcome"
+msgid "bust"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "blackjack outcome"
+msgid "surrender"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "blackjack outcome"
+msgid "even_money"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "blackjack summary"
+msgid "Dealer: {hand} ({total})"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "blackjack summary"
+msgid "Dealer: {hand} ({total}) bust"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "blackjack summary"
+msgid "Dealer: {hand} ({total}) blackjack"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "blackjack summary"
+msgid "Seat {seat}: {hand} ({total}) {outcome}"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "blackjack summary"
+msgid "Seat {seat}: {hand} ({total}) {outcome}, insurance paid 2:1"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "blackjack summary"
+msgid "Seat {seat}: {hand} ({total}) {outcome}, insurance lost"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "doubt rules line"
+msgid "Claims follow the sequence A to K"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "doubt rules line"
+msgid "Ante {ante}"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "doubt rules line"
+msgid "No ante"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "doubt rules line"
+msgid "{seconds} s per turn"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "**I Doubt It in short**"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "Be the first to get rid of all your cards."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• On your turn, put 1 to 4 cards face down on the pile and claim they are all the forced rank. The rank goes A, 2, 3 ... K, then A again, one step per claim."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• You can't pass. If you hold none of the rank, you bluff."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• Anyone else can doubt the claim. The cards are shown: if any is the wrong rank, the claimer takes the whole pile. If the claim was true, the doubter takes it."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• If nobody doubts and the next player plays, the claim stands."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• Empty your hand and survive the doubt window to win."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "• Empty your hand and survive the doubt window to win the pot ({ante} each)."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "• Take longer than {seconds} s and a card is played for you."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "holdem rules line"
+msgid "Blinds {small}/{big}"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "holdem rules line"
+msgid "Buy-in {low} to {high} big blinds"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "holdem rules line"
+msgid "{seconds} s per move"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "holdem rules line"
+msgid "Assist on"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "holdem rules line"
+msgid "Assist off"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "**Texas Hold'em in short**"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "Make the best five-card hand from your two private cards and the five shared cards."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "• Two seats post forced blinds ({small} and {big}) before each deal."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• Betting runs before the flop (three shared cards), then the turn, then the river. Fold, check, call or raise."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• Raise at least the size of the last raise. Going all-in for less is allowed."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• If everyone else folds, you win the pot without showing. Otherwise the best hand at showdown wins."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• A seat that is all-in can only win what it matched; the rest goes to a side pot."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "• Take longer than {seconds} s and you check, or fold if you can't."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "• Take longer than {seconds} s and you check, or fold if you can't. Assist shows your hand and odds."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{purpose}/{block}: remap unsupported marker {marker}"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{purpose}/{block}: use relative placement; this purpose has no conversation-history marker"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{purpose}/{block}: the required input payload must use the user role"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{purpose}/{block}: unsupported macros {macros}"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{purpose}/{block}: remap generation triggers"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{purpose}/{block}: remove extension dependency"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{purpose}/{block}: choose an Anthropic placement adaptation"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{purpose}/{block}: choose a Gemini placement adaptation"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "Disable or remap imported assistant prefill"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "A saved profile with an invalid name was skipped."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "Profile {name} was skipped: {reason}"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "its saved settings could not be read"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "The {role} role names profile {chosen}, which is not available; using the config.yaml setting."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "The provider refused the key (HTTP {status})."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "The provider needs an API key (HTTP {status})."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "The provider answered HTTP {status} instead of a model list."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "The provider's model list is too large to read."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "The provider did not respond in time."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "Could not reach the provider."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{env} is not set in the dashboard's environment."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "This provider doesn't list its models; type the ID."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "The provider's answer was not a model list; type the ID."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "The provider returned no models; type the ID."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{count} model found."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{count} models found."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "The model list could not be fetched; see the dashboard log."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "No price found for this model; enter it by hand."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "The price list could not be downloaded."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "The price list is too large to read."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "The price list did not respond in time."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "The price list could not be read."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "The price lookup failed; see the dashboard log."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "speaker selection"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "image description"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "dialogue generation"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "saving scene input"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "preparing character prompt"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "webhook setup"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "avatar lookup"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "webhook delivery"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "saving character reply"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "reply"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "ambient"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "summon"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "memory"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "catchup"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "game"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "playstyle"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "dialogue"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "director"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "extraction"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "summary"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "images"
+msgstr ""
+

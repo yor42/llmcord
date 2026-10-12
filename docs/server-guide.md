@@ -133,6 +133,15 @@ A poker game for 2 to 9 players, played as a **cash table**: no-limit, with hand
 - **Table talk.** The thread works like an I Doubt It thread: only seated characters answer, each knowing the public table and its own hole cards, never anyone else's, and showdowns, busts and all-ins can prompt a comment. The same talk limits apply.
 - **Permissions.** Like I Doubt It, the bot needs **Create Public Threads** and **Send Messages in Threads** in game channels.
 
+## Language
+
+The bot speaks English and Korean (한국어).
+
+- Replies only you see (errors, `/inventory`, `/shop`, move checks) use your Discord language. Change it in Discord under User Settings → Language.
+- Public messages (game tables, game updates, notices) use the server's **Bot language**, set by an admin in the dashboard. By default this is the server's Discord language in a Community server and English elsewhere.
+- Command and option names stay in English in every language; their descriptions are translated.
+- Characters answer in whatever language the conversation uses; their lines are never translated.
+
 ## Admin dashboard
 
 The dashboard is designed for the Pi's Tailscale HTTPS address. A visitor signs in with Discord. Each server page and change checks that their Discord account is an administrator of the selected server; changes are checked again on every action, and uploads and sign-out also require a CSRF token. See [deployment](deployment-raspberry-pi.md) for login setup.

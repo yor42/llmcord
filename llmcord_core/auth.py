@@ -11,7 +11,9 @@ import time
 import httpx
 from fastapi import HTTPException
 
+from . import i18n
 from .discord_api import DISCORD_API
+from .i18n import web_locale
 
 ADMINISTRATOR = 1 << 3
 GUILD_CACHE_TTL = 300  # seconds a session's guild list is reused (roadmap D1)
@@ -88,7 +90,8 @@ class AuthService:
         except (TypeError, ValueError):
             return 1.0
 
-    async def discord_get(self, path, token):
+    async def discord_get(self, path, token, *, t=None):
+        t = t or i18n.english()  # i18n: FEAT-45 request locale: callers without a request or client (membership refresh inside guards) cannot know the viewer
         key = (path, token_key(token))
         deadline = time.monotonic() + 20
         async with self.request_locks.setdefault(key, asyncio.Lock()):
@@ -96,14 +99,14 @@ class AuthService:
                 delay = max(0, self.retry_at.get(key, 0) - time.monotonic())
                 if delay:
                     if time.monotonic() + delay >= deadline:
-                        raise HTTPException(503, 'Discord permission checks are temporarily rate limited. Please try again shortly.',
+                        raise HTTPException(503, t('Discord permission checks are temporarily rate limited. Please try again shortly.'),
                                             headers={'Retry-After': str(max(1, int(delay) + 1))})
                     await asyncio.sleep(delay)
                 try:
                     response = await self.app.state.http.get(DISCORD_API + path, headers={'Authorization': token})
                 except httpx.RequestError:
                     logging.warning('Discord permission request failed: path=%s network_error', path)
-                    raise HTTPException(503, 'Cannot reach Discord to check permissions. Please try again shortly.') from None
+                    raise HTTPException(503, t('Cannot reach Discord to check permissions. Please try again shortly.')) from None
                 if response.headers.get('X-RateLimit-Remaining') == '0' or response.status_code == 429:
                     self.retry_at[key] = time.monotonic() + self.retry_delay(response)
                 if response.status_code == 429:
@@ -114,13 +117,13 @@ class AuthService:
                     for ident, session in list(self.app.state.sessions.items()):
                         if 'Bearer ' + session['access'] == token:
                             self.drop_session(ident)
-                    raise HTTPException(401, 'Discord session expired. Please sign in again.')
+                    raise HTTPException(401, t('Discord session expired. Please sign in again.'))
                 if response.status_code >= 400:
                     logging.warning('Discord permission request failed: path=%s status=%d', path, response.status_code)
-                    detail = 'Discord denied the permission check. Please sign in again.' if response.status_code == 403 else 'Discord permission checks are unavailable. Please try again shortly.'
+                    detail = t('Discord denied the permission check. Please sign in again.') if response.status_code == 403 else t('Discord permission checks are unavailable. Please try again shortly.')
                     raise HTTPException(403 if response.status_code == 403 else 502, detail)
                 return response.json()
-        raise HTTPException(503, 'Discord permission checks are temporarily rate limited. Please try again shortly.')
+        raise HTTPException(503, t('Discord permission checks are temporarily rate limited. Please try again shortly.'))
 
     def drop_session(self, ident):
         self.app.state.sessions.pop(ident, None)
@@ -146,11 +149,12 @@ class AuthService:
             self.request_locks.pop(key, None)
             self.retry_at.pop(key, None)
 
-    async def session(self, ident):
+    async def session(self, ident, *, t=None):
+        t = t or i18n.english()  # i18n: FEAT-45 request locale: callers without a request cannot know the viewer
         self.prune()
         session = self.app.state.sessions.get(ident)
         if not session or session['expires'] < time.time():
-            raise HTTPException(401, 'Sign in with Discord')
+            raise HTTPException(401, t('Sign in with Discord'))
         if session['token_expires'] < time.time() + 30:
             failed = False
             async with self.refresh_locks.setdefault(ident, asyncio.Lock()):
@@ -166,13 +170,13 @@ class AuthService:
                         session.update(access=tokens['access_token'], refresh=tokens['refresh_token'], token_expires=time.time() + int(tokens['expires_in']))
             if failed:
                 self.drop_session(ident)  # after releasing the lock, so an idle lock is dropped with the session
-                raise HTTPException(401, 'Discord session expired')
+                raise HTTPException(401, t('Discord session expired'))
         if self.app.state.sessions.get(ident) is not session or session['expires'] < time.time():
-            raise HTTPException(401, 'Discord session expired')
+            raise HTTPException(401, t('Discord session expired'))
         return session
 
     async def session_for(self, request):
-        return await self.session(request.cookies.get('llmcord_session', ''))
+        return await self.session(request.cookies.get('llmcord_session', ''), t=web_locale.request_t(request))
 
     def current(self, session):
         return session['expires'] >= time.time() and any(s is session for s in self.app.state.sessions.values())
@@ -181,45 +185,49 @@ class AuthService:
         for s in [session] if session is not None else list(self.app.state.sessions.values()):
             s.pop('guild_cache', None)
 
-    async def guilds(self, session):
+    async def guilds(self, session, *, t=None):
+        t = t or i18n.english()  # i18n: FEAT-45 request locale: callers without a request cannot know the viewer
         # Cached on the session dict, so sign-out, 401, failed refresh and expiry drop it with the session.
         async with session.setdefault('guild_lock', asyncio.Lock()):
             if not self.current(session):  # e.g. queued behind a fetch that got a Discord 401
-                raise HTTPException(401, 'Discord session expired')
+                raise HTTPException(401, t('Discord session expired'))
             cached = session.get('guild_cache')
             if cached and time.monotonic() - cached[0] < GUILD_CACHE_TTL:
                 return cached[1]
             fetched_at = time.monotonic()
-            guilds = await self.discord_get('/users/@me/guilds', 'Bearer ' + session['access'])
+            guilds = await self.discord_get('/users/@me/guilds', 'Bearer ' + session['access'], t=t)
             if self.current(session):
                 session['guild_cache'] = (fetched_at, guilds)
             return guilds
 
-    def check_origin(self, origin):
+    def check_origin(self, origin, *, t=None):
+        t = t or i18n.english()  # i18n: FEAT-45 request locale: callers without a request cannot know the viewer
         if origin and origin.rstrip('/') != self.app.state.base_url:
-            raise HTTPException(403, 'Invalid request origin')
+            raise HTTPException(403, t('Invalid request origin'))
 
-    async def guard(self, ident, guild_id, csrf=None, origin=None):
-        session = await self.session(ident)
-        self.check_origin(origin)
+    async def guard(self, ident, guild_id, csrf=None, origin=None, *, t=None):
+        t = t or i18n.english()  # i18n: FEAT-45 request locale: callers without a request cannot know the viewer
+        session = await self.session(ident, t=t)
+        self.check_origin(origin, t=t)
         if csrf is not None and not secrets.compare_digest(str(csrf), session['csrf']):
-            raise HTTPException(403, 'Invalid form token')
-        guilds = await self.guilds(session)
+            raise HTTPException(403, t('Invalid form token'))
+        guilds = await self.guilds(session, t=t)
         if self.app.state.sessions.get(ident) is not session or session['expires'] < time.time():
-            raise HTTPException(401, 'Discord session expired')
+            raise HTTPException(401, t('Discord session expired'))
         if not any(int(g['id']) == guild_id and is_server_admin(g) for g in guilds):
-            raise HTTPException(403, 'Server administrator permission required')
+            raise HTTPException(403, t('Server administrator permission required'))
         return session
 
-    async def guard_operator(self, ident, csrf=None, origin=None):
-        session = await self.session(ident)
-        self.check_origin(origin)
+    async def guard_operator(self, ident, csrf=None, origin=None, *, t=None):
+        t = t or i18n.english()  # i18n: FEAT-45 request locale: callers without a request cannot know the viewer
+        session = await self.session(ident, t=t)
+        self.check_origin(origin, t=t)
         if csrf is not None and not secrets.compare_digest(str(csrf), session['csrf']):
-            raise HTTPException(403, 'Invalid form token')
+            raise HTTPException(403, t('Invalid form token'))
         if self.app.state.sessions.get(ident) is not session or session['expires'] < time.time():
-            raise HTTPException(401, 'Discord session expired')
+            raise HTTPException(401, t('Discord session expired'))
         if not self.is_operator(session):
-            raise HTTPException(403, 'Operator permission required')
+            raise HTTPException(403, t('Operator permission required'))
         return session
 
     def is_operator(self, session):
@@ -229,4 +237,4 @@ class AuthService:
             return False
 
     async def require_admin(self, request, guild_id):
-        return await self.guard(request.cookies.get('llmcord_session', ''), guild_id, None, request.headers.get('origin'))
+        return await self.guard(request.cookies.get('llmcord_session', ''), guild_id, None, request.headers.get('origin'), t=web_locale.request_t(request))

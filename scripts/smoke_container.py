@@ -18,7 +18,8 @@ def main() -> None:
     root = Path.cwd()
     sys.path.insert(0, str(root))
     for path in ('llmcord.py', 'web_main.py', 'migrate.py', 'config-gemini.yaml',
-                 'llmcord_core/lore_drag.js', 'llmcord_core/web.py'):
+                 'llmcord_core/lore_drag.js', 'llmcord_core/web.py',
+                 'llmcord_core/locales/templates/bot.pot'):
         if not (root / path).is_file():
             raise RuntimeError(f'Application asset missing from image: {path}')
     for path in ('.env', 'config.yaml', '.git', 'data', 'secrets', '.secrets'):
@@ -33,6 +34,9 @@ def main() -> None:
     from llmcord_core.config import load_settings
 
     assert callable(llmcord.main) and callable(web_main.main)
+    from llmcord_core import i18n
+    for locale in i18n.available_locales():
+        i18n.load_catalog(locale)
     with MiniRacer() as js:
         assert js.eval('new RegExp("courier", "i").test("Courier")') is True
     image = BytesIO()

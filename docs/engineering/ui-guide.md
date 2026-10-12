@@ -52,6 +52,20 @@ Conventions for polish work on the two user surfaces: the NiceGUI dashboard unde
 - The public usage footer is a per-server setting (D2); the "no active character" hint deletes itself after about 15 s (D12).
 - Reply text is pinned by slash-command tests: changing wording is a test change too.
 
+## Languages (i18n, D39)
+
+Both surfaces are translated with gettext catalogs; the full rules are in [i18n-plan.md](i18n-plan.md) sections 6.1 and 6.2, the words in [the glossary](../glossary.md) (Korean column).
+
+- **All visible text goes through `t`.** Dashboard builders start with `t = web_locale.current()`; Discord code uses `invoker_t(interaction)` for a reply only the invoker sees and `channel_t(guild)` for one the channel sees, resolved at each render. The English text is the message id, so wrapping never changes English.
+- Short or ambiguous words get a context: `t.p('button', 'Save')`, `t.p('tab', 'Lore')`, `t.p('column', 'Name')`. Button, select and modal texts must fit Discord's limits (80, 100, 45 characters) in every language; `scripts/i18n.py check` enforces it.
+- Whole sentences only: never build a sentence from translated pieces or English possessives. Use named placeholders (`t('Linked {world} to {hub}.', …)`) and `t.n` for counts. Korean particles after a placeholder are the translator's job (`{name:이/가}`).
+- Text inside a props string moves out to `element.props['hint'] = t(...)`, so a quote in a translation cannot break it.
+- Stores, engines and model code never return translated text: they raise `UserError` codes or return structured results; the edge renders them with `t.error` / `t.render`. Audit detail, logs and stored values stay English.
+- Never translate what people typed, character lines, names, ids, command or option names.
+- Check new text with the pseudo locale: `LLMCORD_I18N_PSEUDO=1`, then choose it in the account menu (or `scripts/screenshot_dashboard.py --lang pseudo`). Untranslated text shows as plain English, and the ~30 % padding shows layout overflow. For Korean, also check `--lang ko` at desktop and phone width; Korean uses `word-break: keep-all`.
+- The language switch is a POST to `/lang` and a full reload: the one exception to the no-reload rule above.
+- After adding or changing text, run `scripts/i18n.py extract` and `update`; new English strings show up untranslated in `ko` and `check` fails until they are translated (or the pack is listed as incomplete).
+
 ## Evidence for a UI item
 
 The report for a `UI-*` item includes:

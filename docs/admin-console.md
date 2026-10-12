@@ -193,6 +193,15 @@ A **model profile** names a provider, a model and its settings; the three **role
 
 The dashboard reads `config.yaml` when it starts; restart it after editing the file so the Backend tab shows the same profiles as the bot.
 
+## Language
+
+The dashboard and the bot speak English and Korean (한국어).
+
+- **Dashboard language.** Each viewer picks their own under **Language** in the account menu (top right). The page reloads in that language and remembers it in a cookie for a year. Without a choice it follows the viewer's Discord account language, then the browser's language, then English. It changes only what that viewer sees.
+- **Bot language** (Server setup → **Server settings**, saved with the bar, audited as `settings.language`): the language of the bot's public messages in this server, such as game tables, game updates and notices. **Follow each member's Discord language** (the default) uses the server's Discord language if it is a Community server, else English. Replies only one member sees always use that member's Discord language.
+- Never translated: character lines, anything people typed (names, lore, guidelines, prompts), slash command and option names (`/admin space bind` stays English), and audit and log text.
+- Built-in item names and results (dice, 8-ball, fortune cookie, tarot) come in both languages and follow the audience of the message.
+
 ## Deployment and security
 
 Use one web worker. Keep Tailscale Serve forwarding the existing localhost port, including its live Socket.IO/WebSocket traffic. NiceGUI assets are served locally; the dashboard content-security policy uses per-response script nonces and allows the framework's local runtime evaluation. Existing non-dashboard routes retain their policy.

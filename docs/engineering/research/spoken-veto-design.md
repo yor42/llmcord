@@ -49,7 +49,7 @@ Three layers, all default off:
 2. **Server admin** switches "Decision-model check for spoken moves" on, in the Games tab or by the slash command. The label and reply must say plainly: *"When on, a message that the local reader takes for a spoken move is sent to {provider}, a third-party service, to double-check it. Only the message text and the legal moves are sent, only for members who turned on spoken moves, and only on their own turn. Off by default."*
 3. **Member**: the existing `spoken_member_on` gate (on by default), plus a per-member **opt-out of the veto** (`/game spoken_veto` for the member; owner decision: server-wide default on once the admin enables it, each member can opt out). Members get a one-line notice that their message may be double-checked by a third-party service and how to opt out.
 
-**Schema:** the per-member opt-out needs a new `member_settings` column (`spoken_veto`), i.e. migration v22 with backup-before-upgrade. `CLAUDE.md` requires the owner's go-ahead for a schema change; that go-ahead is requested in the FEAT-49b brief and is not assumed. Alternative without a schema change: none that is clean (overloading `spoken_moves` values would be a hack).
+**Schema:** the per-member opt-out needs a new `member_settings` column (`spoken_veto`), i.e. migration v23 (main took v22 for the server language) with backup-before-upgrade. `CLAUDE.md` requires the owner's go-ahead for a schema change; that go-ahead is requested in the FEAT-49b brief and is not assumed. Alternative without a schema change: none that is clean (overloading `spoken_moves` values would be a hack).
 
 Provider terms: the owner reports that the only provider for Decision-1 on OpenRouter is Azure and that its listing says: "Private: this provider does not train on prompts and does not retain prompt data." I have not independently verified this; it is the owner's reading of the OpenRouter provider page. The OpenRouter request must not opt into prompt logging, and the docs should quote the same line with the date it was checked.
 
@@ -91,4 +91,4 @@ Item 2 touches consent and an outbound data path, so it should get an Opus revie
 5. Code stays out of `ModelGateway` (`spoken/veto.py`, `spoken/veto_client.py`).
 6. Provider terms: the owner's reading of the OpenRouter provider page (Azure, "does not train on prompts and does not retain prompt data").
 
-Still open: the migration go-ahead (v22, `member_settings.spoken_veto`), and the wording and timing of the member notice (proposal: appended once to the first check message a member gets per bot start, and always in `/game spoken_veto` replies).
+Still open: the migration go-ahead (v23, `member_settings.spoken_veto`), and the wording and timing of the member notice (proposal: appended once to the first check message a member gets per bot start, and always in `/game spoken_veto` replies).

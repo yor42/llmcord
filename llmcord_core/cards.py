@@ -4,6 +4,7 @@ import base64
 import json
 from dataclasses import dataclass
 
+from .i18n import UserError, codes
 from .lorebooks import normalize_entry
 
 
@@ -20,7 +21,7 @@ class ParsedCard:
 
 def _embedded_png_card(data: bytes) -> dict:
     if not data.startswith(b"\x89PNG\r\n\x1a\n"):
-        raise ValueError("Not a PNG file. Upload a V2/V3 PNG or JSON card.")
+        raise UserError(codes.CARD_NOT_PNG)
     offset = 8
     found: dict[str, dict] = {}
     while offset + 12 <= len(data):
@@ -28,7 +29,7 @@ def _embedded_png_card(data: bytes) -> dict:
         kind = data[offset + 4:offset + 8]
         end = offset + 12 + length
         if length > MAX_CARD_BYTES or end > len(data):
-            raise ValueError("The PNG card is corrupt. Export it again and upload the new copy.")
+            raise UserError(codes.CARD_PNG_CORRUPT)
         if kind == b"tEXt":
             chunk = data[offset + 8:offset + 8 + length]
             keyword, sep, value = chunk.partition(b"\0")
@@ -41,12 +42,12 @@ def _embedded_png_card(data: bytes) -> dict:
         return found["ccv3"]
     if "chara" in found:
         return found["chara"]
-    raise ValueError("No character data found in that PNG. Upload a V2/V3 PNG or JSON card.")
+    raise UserError(codes.CARD_PNG_NO_DATA)
 
 
 def parse_card(filename: str, data: bytes) -> ParsedCard:
     if len(data) > MAX_CARD_BYTES:
-        raise ValueError("Card exceeds 8 MiB. Upload a smaller file.")
+        raise UserError(codes.CARD_TOO_BIG)
     filename = filename.lower()
     if filename.endswith(".png"):
         raw = _embedded_png_card(data)
@@ -55,18 +56,18 @@ def parse_card(filename: str, data: bytes) -> ParsedCard:
     elif filename.endswith(".json"):
         raw, avatar = json.loads(data.decode("utf-8")), None
     else:
-        raise ValueError("Upload a V2/V3 PNG or JSON card.")
+        raise UserError(codes.CARD_UPLOAD_KIND)
     if not isinstance(raw, dict):
-        raise ValueError("Card must contain a JSON object. Upload a V2/V3 PNG or JSON card.")
+        raise UserError(codes.CARD_NOT_OBJECT)
     spec = raw.get("spec")
     if spec and spec not in {"chara_card_v2", "chara_card_v3"}:
-        raise ValueError(f"Unsupported character card spec: {spec}. Upload a V2/V3 card.")
+        raise UserError(codes.CARD_SPEC, spec=spec)
     card = raw.get("data", raw)
     if not isinstance(card, dict) or not isinstance(card.get("name"), str) or not card["name"].strip():
-        raise ValueError("Card has no character name. Add one and upload it again.")
+        raise UserError(codes.CARD_NO_NAME)
     name = card["name"].strip()
     if len(name) > 80:
-        raise ValueError("Character name exceeds 80 characters. Shorten it and upload again.")
+        raise UserError(codes.CARD_NAME_TOO_LONG)
     book = card.get("character_book") or {}
     if not isinstance(book, dict):
         book = {}
@@ -81,7 +82,7 @@ def parse_card(filename: str, data: bytes) -> ParsedCard:
             keys = []
         normalized = normalize_entry(str(entry.get("id", entry.get('uid', index))), entry)
         if any(old['uid'] == normalized.uid for old in entries):
-            raise ValueError('The card repeats a lore entry ID. Remove the duplicate and upload again.')
+            raise UserError(codes.CARD_LORE_DUPLICATE)
         entries.append({
             "uid": normalized.uid,
             "content": entry["content"],

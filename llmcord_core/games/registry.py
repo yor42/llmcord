@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from types import ModuleType
 from typing import Any, Callable, Optional
 
+from ..i18n import codes, terms
 from . import blackjack, doubt, holdem
 
 
@@ -29,7 +30,7 @@ class Game:
     round_facts: Optional[Callable] = None  # (state) -> dict merged into the table summary row
     fact_keys: tuple = ()
     apply_move: Optional[Callable] = None  # (state, seat, move, can_double()) -> state
-    illegal_text: Optional[Callable] = None  # (state, seat, move) -> str
+    illegal_text: Optional[Callable] = None  # (state, seat, move) -> ErrorCode (GameError(code) shows it; str() is English)
 
 
 def _bj_legal(state, can_double, can_insure):
@@ -45,7 +46,7 @@ def _bj_settlements(state, ledger_label, label):
 
 
 def _bj_illegal(state, seat, move):
-    return "It's not your turn." if state.turn != seat else "That move isn't allowed right now."
+    return codes.ENGINE_NOT_YOUR_TURN if state.turn != seat else codes.ENGINE_MOVE_NOT_ALLOWED
 
 
 def _doubt_settlements(state, ledger_label, label):
@@ -54,12 +55,12 @@ def _doubt_settlements(state, ledger_label, label):
 
 def _doubt_illegal(state, seat, move):
     if state.finished:
-        return 'This game is over.'
+        return codes.ENGINE_GAME_OVER
     if move == 'doubt':
-        return 'There is nothing to doubt, or it is your own claim.'
+        return codes.ENGINE_NOTHING_TO_DOUBT
     if move == 'close':
-        return 'There is nothing for you to close.'
-    return "It's not your turn." if state.turn != seat else "That move isn't allowed right now."
+        return codes.ENGINE_NOTHING_TO_CLOSE
+    return codes.ENGINE_NOT_YOUR_TURN if state.turn != seat else codes.ENGINE_MOVE_NOT_ALLOWED
 
 
 def _holdem_facts(state):
@@ -70,21 +71,21 @@ def _holdem_facts(state):
 
 def _holdem_illegal(state, seat, move):
     if state.finished:
-        return 'This hand is over.'
-    return "It's not your turn." if state.turn != seat else "That move isn't allowed right now."
+        return codes.ENGINE_HAND_OVER
+    return codes.ENGINE_NOT_YOUR_TURN if state.turn != seat else codes.ENGINE_MOVE_NOT_ALLOWED
 
 
 _GAMES = {
-    "blackjack": Game("blackjack", "Blackjack", blackjack, blackjack.normalize_rules, blackjack.MAX_SEATS, True, "Blackjack", noun="blackjack",
+    "blackjack": Game("blackjack", terms.GAME_BLACKJACK, blackjack, blackjack.normalize_rules, blackjack.MAX_SEATS, True, "Blackjack", noun=terms.NOUN_BLACKJACK,
                       public_legal=_bj_legal, summary=lambda state: blackjack.result(state).summary, settlements=_bj_settlements,
                       round_facts=lambda state: {'dealer_total': blackjack.hand_total(state.dealer)[0]}, fact_keys=('dealer_total',),
                       apply_move=lambda state, seat, move, can_double: blackjack.apply(state, seat, move, can_double()), illegal_text=_bj_illegal),
-    "doubt": Game("doubt", "I Doubt It", doubt, doubt.normalize_rules, doubt.MAX_SEATS, True, "I Doubt It", noun="I Doubt It",
+    "doubt": Game("doubt", terms.GAME_DOUBT, doubt, doubt.normalize_rules, doubt.MAX_SEATS, True, "I Doubt It", noun=terms.NOUN_DOUBT,
                   min_seats=doubt.MIN_SEATS, ante=True,
                   public_legal=lambda state, can_double, can_insure: {}, summary=lambda state: None, settlements=_doubt_settlements,
                   round_facts=lambda state: {'winner': state.winner, 'pot': sum(s.stake for s in state.seats)}, fact_keys=('winner', 'pot'),
                   apply_move=lambda state, seat, move, can_double: doubt.apply(state, seat, move), illegal_text=_doubt_illegal),
-    "holdem": Game("holdem", "Texas Hold'em", holdem, holdem.normalize_rules, holdem.MAX_SEATS, True, "Texas Hold'em", noun="Texas Hold'em",
+    "holdem": Game("holdem", terms.GAME_HOLDEM, holdem, holdem.normalize_rules, holdem.MAX_SEATS, True, "Texas Hold'em", noun=terms.NOUN_HOLDEM,
                    min_seats=holdem.MIN_SEATS, cash=True,
                    public_legal=lambda state, can_double, can_insure: {state.turn: holdem.legal_moves(state, state.turn)} if state.turn is not None else {},
                    summary=lambda state: None, round_facts=_holdem_facts, fact_keys=('pot', 'winners', 'hand'),

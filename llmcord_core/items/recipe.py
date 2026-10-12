@@ -2,6 +2,11 @@
 import json
 import re
 from dataclasses import dataclass, field
+from collections.abc import Mapping
+from types import MappingProxyType
+
+from ..i18n import UserError, codes
+from ..i18n.negotiate import candidates
 
 KEY_RE = re.compile(r'^[a-z0-9_]{1,32}$')
 LOCALE_RE = re.compile(r'^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$')
@@ -17,7 +22,7 @@ AUDIENCES = ('none', 'member', 'any', 'npc')
 _FIELDS = {'key', 'kind', 'name', 'emoji', 'consumable', 'default_price', 'default_cooldown_seconds', 'params', 'tables', 'template', 'audience'}
 
 
-class RecipeError(ValueError):
+class RecipeError(UserError):
     """A recipe (or admin-added entries) failed validation; the message says what and where."""
 
 
@@ -34,6 +39,10 @@ class Recipe:
     tables: dict = field(default_factory=dict)
     template: dict = field(default_factory=dict)
     audience: str = 'none'
+    names: Mapping = None  # locale -> name; {'en': name} when the recipe gave a plain string
+
+    def __post_init__(self):
+        object.__setattr__(self, 'names', MappingProxyType(dict(self.names) if self.names else {DEFAULT_LOCALE: self.name}))
 
     @property
     def reusable(self):
@@ -46,78 +55,92 @@ class Recipe:
 
 
 def lookup(by_locale, locale):
-    """The value stored for `locale`, else the 'en' one."""
-    return by_locale.get(locale, by_locale.get(DEFAULT_LOCALE))
+    """The value stored for `locale` (tag normalized, then its base language), else the 'en' one."""
+    for tag in candidates(locale):
+        for key in (tag, tag.replace('_', '-')):
+            if key in by_locale:
+                return by_locale[key]
+    return by_locale.get(DEFAULT_LOCALE)
+
+
+def display_name(recipe, locale):
+    """The recipe's name for `locale`; the English name when there is none."""
+    return lookup(recipe.names, locale)
 
 
 def check_text(value, where, limit=MAX_TEXT):
     if not isinstance(value, str) or not value.strip():
-        raise RecipeError(f'{where}: expected non-empty text')
+        raise RecipeError(codes.RECIPE_TEXT_EMPTY, where=where)
     if len(value) > limit:
-        raise RecipeError(f'{where}: longer than {limit} characters')
+        raise RecipeError(codes.RECIPE_TEXT_LONG, where=where, limit=limit)
     return value
 
 
 def check_int(value, where, lo, hi):
     if isinstance(value, bool) or not isinstance(value, int) or not lo <= value <= hi:
-        raise RecipeError(f'{where}: expected a whole number from {lo} to {hi}')
+        raise RecipeError(codes.RECIPE_INT_RANGE, where=where, lo=lo, hi=hi)
     return value
 
 
 def check_locale_keyed(value, where):
     """{"en": X, ...} with an 'en' entry; returns it unchanged."""
     if not isinstance(value, dict) or DEFAULT_LOCALE not in value:
-        raise RecipeError(f'{where}: expected a locale-keyed object with an "{DEFAULT_LOCALE}" entry')
+        raise RecipeError(codes.RECIPE_LOCALE_OBJECT, where=where, locale=DEFAULT_LOCALE)
     for loc in value:
         if not isinstance(loc, str) or not LOCALE_RE.match(loc):
-            raise RecipeError(f'{where}: bad locale key {loc!r}')
+            raise RecipeError(codes.RECIPE_LOCALE_KEY, where=where, key=repr(loc))
     return value
 
 
 def check_entries(value, where):
     if not isinstance(value, list) or not 1 <= len(value) <= MAX_ENTRIES:
-        raise RecipeError(f'{where}: expected a list of 1 to {MAX_ENTRIES} entries')
+        raise RecipeError(codes.RECIPE_ENTRY_COUNT, where=where, limit=MAX_ENTRIES)
     return value
 
 
 def parse_common(data):
     """Kind-independent checks. Returns a Recipe; the registry then applies the kind's own validation."""
     if not isinstance(data, dict):
-        raise RecipeError('recipe must be an object')
+        raise RecipeError(codes.RECIPE_NOT_OBJECT)
     try:
         size = len(json.dumps(data, ensure_ascii=False).encode('utf-8'))
     except (TypeError, ValueError, RecursionError) as exc:
-        raise RecipeError(f'recipe is not plain data: {exc}') from None
+        raise RecipeError(codes.RECIPE_NOT_PLAIN, detail=str(exc)) from None
     if size > MAX_BYTES:
-        raise RecipeError(f'recipe is larger than {MAX_BYTES} bytes')
+        raise RecipeError(codes.RECIPE_TOO_LARGE, limit=MAX_BYTES)
     unknown = set(data) - _FIELDS
     if unknown:
-        raise RecipeError(f'unknown recipe field(s): {", ".join(sorted(map(str, unknown)))}')
+        raise RecipeError(codes.RECIPE_UNKNOWN_FIELDS, fields=', '.join(sorted(map(str, unknown))))
     missing = {'key', 'kind', 'name', 'consumable', 'default_price'} - set(data)
     if missing:
-        raise RecipeError(f'missing recipe field(s): {", ".join(sorted(missing))}')
+        raise RecipeError(codes.RECIPE_MISSING_FIELDS, fields=', '.join(sorted(missing)))
     key = data['key']
     if not isinstance(key, str) or not KEY_RE.match(key):
-        raise RecipeError('key: use 1-32 characters from a-z, 0-9 and _')
+        raise RecipeError(codes.RECIPE_KEY_FORM)
     kind = data['kind']
     if not isinstance(kind, str):
-        raise RecipeError('kind: expected text')
+        raise RecipeError(codes.RECIPE_KIND_TEXT)
     consumable = data['consumable']
     if not isinstance(consumable, bool):
-        raise RecipeError('consumable: expected true or false')
+        raise RecipeError(codes.RECIPE_CONSUMABLE_BOOL)
     cooldown = check_int(data.get('default_cooldown_seconds', 0), 'default_cooldown_seconds', 0, MAX_COOLDOWN)
     if consumable:
         cooldown = 0
     emoji = data.get('emoji', '')
     if not isinstance(emoji, str) or len(emoji) > MAX_EMOJI:
-        raise RecipeError(f'emoji: expected text up to {MAX_EMOJI} characters')
+        raise RecipeError(codes.RECIPE_EMOJI, limit=MAX_EMOJI)
     audience = data.get('audience', 'none')
     if audience not in AUDIENCES:
-        raise RecipeError(f'audience: must be one of {", ".join(AUDIENCES)}')
+        raise RecipeError(codes.RECIPE_AUDIENCE_ONE_OF, audiences=', '.join(AUDIENCES))
     for name in ('params', 'tables', 'template'):
         if not isinstance(data.get(name, {}), dict):
-            raise RecipeError(f'{name}: expected an object')
-    return Recipe(key=key, kind=kind, name=check_text(data['name'], 'name', MAX_NAME), emoji=emoji, consumable=consumable,
+            raise RecipeError(codes.RECIPE_SECTION_OBJECT, name=name)
+    raw_name = data['name']
+    if isinstance(raw_name, dict):
+        names = {loc: check_text(value, f'name.{loc}', MAX_NAME) for loc, value in check_locale_keyed(raw_name, 'name').items()}
+    else:
+        names = {DEFAULT_LOCALE: check_text(raw_name, 'name', MAX_NAME)}
+    return Recipe(key=key, kind=kind, name=names[DEFAULT_LOCALE], names=names, emoji=emoji, consumable=consumable,
                   default_price=check_int(data['default_price'], 'default_price', 0, MAX_PRICE), default_cooldown_seconds=cooldown,
                   params=dict(data.get('params', {})), tables=dict(data.get('tables', {})), template=dict(data.get('template', {})),
                   audience=audience)

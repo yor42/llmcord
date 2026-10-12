@@ -8,12 +8,19 @@ import math
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from . import items
+from . import i18n, items
 from .currency_ui import CurrencyPanel, member_label, table
+from .i18n import NP_, web_locale
 
 PAGE = 50
 LOCALE = items.recipe.DEFAULT_LOCALE
-_PLAIN_NOTE = 'One per line. '
+ITEM_KINDS = {'random_message': NP_('item kind', 'Random message')}
+
+
+def kind_line(recipe, t):
+    """The kind and use type under an item's name; a kind without a table entry shows its code name as words."""
+    kind = t.render(ITEM_KINDS[recipe.kind]) if recipe.kind in ITEM_KINDS else recipe.kind.replace('_', ' ').capitalize()
+    return t('{kind} · Consumable', kind=kind) if recipe.consumable else t('{kind} · Reusable', kind=kind)
 
 
 def whole(value):
@@ -59,8 +66,9 @@ def item_detail(result):
             'extra_lines': count(result['extra_entries']), 'replace_lines': count(result['replace_entries']), 'revision': result['revision']}
 
 
-def use_rows(uses, names, zone_name):
+def use_rows(uses, names, zone_name, *, t=None):
     """Display rows for item_uses entries (newest first)."""
+    t = t or i18n.english()
     try:
         zone = ZoneInfo(zone_name or 'UTC')
     except Exception:
@@ -69,12 +77,12 @@ def use_rows(uses, names, zone_name):
     for use in uses:
         try:
             recipe = items.get_item(use['item_key'])
-            item = f'{recipe.emoji} {recipe.name}'.strip()
+            item = f'{recipe.emoji} {items.display_name(recipe, t.locale)}'.strip()
         except (KeyError, TypeError):
             item = use['item_key']
         text = ' '.join(str((use['result'] or {}).get('text', '')).replace('**', '').split())
         rows.append({'id': use['id'], 'time': datetime.fromtimestamp(use['used_at'], zone).strftime('%Y-%m-%d %H:%M'),
-                     'member': member_label(names, use['user_id']), 'item': item, 'result': text if len(text) <= 200 else text[:199] + '…'})
+                     'member': member_label(names, use['user_id'], t=t), 'item': item, 'result': text if len(text) <= 200 else text[:199] + '…'})
     return rows
 
 
@@ -90,47 +98,50 @@ class ShopPanel:
     def build(self):
         from nicegui import ui
         from .dashboard import section
-        with section('Items'):
-            ui.label('The built-in items. Members buy them with /shop and use them with /use. A price left blank uses the built-in price. Changes apply at once.').classes('ll-muted')
+        t = web_locale.current()
+        with section(t('Items')):
+            ui.label(t('The built-in items. Members buy them with /shop and use them with /use. A price left blank uses the built-in price. Changes apply at once.')).classes('ll-muted')
             name = self.store.currency_name(self.gid)
             for entry in self.store.shop_catalog(self.gid):
                 self.item_card(entry, name)
-        with section('Settings'):
+        with section(t('Settings')):
             self.settings()
-        with section('Use log'):
-            ui.label('Every item use on this server, newest first.').classes('ll-muted')
+        with section(t('Use log')):
+            ui.label(t('Every item use on this server, newest first.')).classes('ll-muted')
             self.log_body = ui.column().classes('w-full gap-2')
 
     def item_card(self, entry, currency):
         from nicegui import ui
+        t = web_locale.current()
         ctx, store, gid = self.ctx, self.store, self.gid
         recipe = items.get_item(entry['key'])
+        name = items.display_name(recipe, t.locale)
         state = {'entry': entry}
         card = ui.element('div').classes('ll-stack ll-result w-full').props('role=group')
-        card._props['aria-label'] = recipe.name
+        card._props['aria-label'] = name
         with card:
-            ui.label(f'{recipe.emoji} {recipe.name}'.strip()).classes('ll-subtitle')
-            ui.label(f"{recipe.kind.replace('_', ' ').capitalize()} · {'Consumable' if recipe.consumable else 'Reusable'}").classes('ll-muted')
+            ui.label(f'{recipe.emoji} {name}'.strip()).classes('ll-subtitle')
+            ui.label(kind_line(recipe, t)).classes('ll-muted')
             with ui.element('div').classes('ll-form-row ll-field-row'):
-                for_sale = ui.switch('For sale', value=entry['for_sale'])
-                allow_use = ui.switch('Allow use', value=entry['allow_use'])
+                for_sale = ui.switch(t('For sale'), value=entry['for_sale'])
+                allow_use = ui.switch(t('Allow use'), value=entry['allow_use'])
             with ui.element('div').classes('ll-form-row ll-field-row'):
-                price = ui.number('Price', value=entry['price_override'], min=1, precision=0, format='%d')
-                price._props.update(clearable=True, hint=f"Blank = built-in price ({recipe.default_price:,} {currency})")
+                price = ui.number(t.p('field', 'Price'), value=entry['price_override'], min=1, precision=0, format='%d')
+                price._props.update(clearable=True, hint=t('Blank = built-in price ({price:,} {currency})', price=recipe.default_price, currency=currency))
                 cooldown = sides = None
                 if recipe.reusable:
-                    cooldown = ui.number('Cooldown (seconds)', value=entry['cooldown_override'], min=0, precision=0, format='%d')
-                    cooldown._props.update(clearable=True, hint=f'Blank = built-in ({recipe.default_cooldown_seconds:,} s)')
+                    cooldown = ui.number(t('Cooldown (seconds)'), value=entry['cooldown_override'], min=0, precision=0, format='%d')
+                    cooldown._props.update(clearable=True, hint=t('Blank = built-in ({seconds:,} s)', seconds=recipe.default_cooldown_seconds))
                 if 'sides' in recipe.params:
-                    sides = ui.number('Sides', value=entry['effective_params']['sides'], min=2, precision=0, format='%d')
+                    sides = ui.number(t.p('field', 'Sides'), value=entry['effective_params']['sides'], min=2, precision=0, format='%d')
             extra = swap = None
             if has_plain_table(recipe):
-                with ui.expansion('Custom lines').classes('w-full ll-subpanel'):
+                with ui.expansion(t('Custom lines')).classes('w-full ll-subpanel'):
                     with ui.element('div').classes('ll-stack w-full'):
-                        extra = ui.textarea('Extra lines', value='\n'.join(entry['extra_entries'].get(LOCALE, []))).props('autogrow').classes('w-full')
-                        extra._props['hint'] = _PLAIN_NOTE + 'Added to the built-in lines.'
-                        swap = ui.textarea('Replace built-in lines', value='\n'.join(entry['replace_entries'].get(LOCALE, []))).props('autogrow').classes('w-full')
-                        swap._props['hint'] = _PLAIN_NOTE + 'If any are given, only these are used. Leave empty to keep the built-in lines.'
+                        extra = ui.textarea(t('Extra lines'), value='\n'.join(entry['extra_entries'].get(LOCALE, []))).props('autogrow').classes('w-full')
+                        extra._props['hint'] = t('One per line. Added to the built-in lines.')
+                        swap = ui.textarea(t('Replace built-in lines'), value='\n'.join(entry['replace_entries'].get(LOCALE, []))).props('autogrow').classes('w-full')
+                        swap._props['hint'] = t('One per line. If any are given, only these are used. Leave empty to keep the built-in lines.')
             value = lambda field: field.value if field is not None else None
 
             def operation():
@@ -139,25 +150,27 @@ class ShopPanel:
                 state['entry'] = saved
                 return saved
             with ui.element('div').classes('ll-form-row'):
-                button = ctx.button('Save', operation, 'shop.item', item_detail, success=f'{recipe.name} saved')
-                button._props['aria-label'] = f'Save {recipe.name}'
+                button = ctx.button(t.p('button', 'Save'), operation, 'shop.item', item_detail, success=t('{name} saved', name=name))
+                button._props['aria-label'] = t('Save {name}', name=name)
 
     def settings(self):
         from nicegui import ui
+        t = web_locale.current()
         ctx, store, gid = self.ctx, self.store, self.gid
         cap = {'value': store.item_hold_cap(gid)}
         with ui.element('div').classes('ll-form-row ll-field-row'):
-            field = ui.number('Most of a consumable one member can hold', value=cap['value'], min=1, max=99, precision=0, format='%d').classes('ll-wide')
-        ui.label('A member cannot buy another of a consumable item at this number. A reusable item can be owned once.').classes('ll-muted')
+            field = ui.number(t('Most of a consumable one member can hold'), value=cap['value'], min=1, max=99, precision=0, format='%d').classes('ll-wide')
+        ui.label(t('A member cannot buy another of a consumable item at this number. A reusable item can be owned once.')).classes('ll-muted')
 
         def operation():
             cap['value'] = store.set_item_hold_cap(gid, whole(field.value), cap['value'])
             return cap['value']
         with ui.element('div').classes('ll-form-row'):
-            ctx.button('Save', operation, 'shop.hold_cap', lambda result: {'cap': result}, success='Hold cap saved')
+            ctx.button(t.p('button', 'Save'), operation, 'shop.hold_cap', lambda result: {'cap': result}, success=t('Hold cap saved'))
 
     async def render_log(self, reset=False):
         from nicegui import ui
+        t = web_locale.current()
         before = None if reset or not self.uses else self.uses[-1]['id']
         fetched = self.store.item_use_log(self.gid, PAGE + 1, before)
         self.more, fetched = len(fetched) > PAGE, fetched[:PAGE]
@@ -168,12 +181,12 @@ class ShopPanel:
         self.log_body.clear()
         with self.log_body:
             if not self.uses:
-                ui.label('No items have been used yet.').classes('ll-muted')
+                ui.label(t('No items have been used yet.')).classes('ll-muted')
                 return
-            table([('time', 'Time'), ('member', 'Member'), ('item', 'Item'), ('result', 'Result')],
-                  use_rows(self.uses, self.names, self.store.guild_timezone(self.gid)), 'id', 'll-shop-table')
+            table([('time', t.p('column', 'Time')), ('member', t.p('column', 'Member')), ('item', t.p('column', 'Item')), ('result', t.p('column', 'Result'))],
+                  use_rows(self.uses, self.names, self.store.guild_timezone(self.gid), t=t), 'id', 'll-shop-table')
             if self.more:
-                ui.button('Load more', on_click=lambda: self.render_log()).props('outline')
+                ui.button(t.p('button', 'Load more'), on_click=lambda: self.render_log()).props('outline')
 
 
 async def shop_panel(ctx):

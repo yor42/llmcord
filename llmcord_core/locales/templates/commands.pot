@@ -1,0 +1,436 @@
+#: llmcord_core/discord_bot.py
+msgid "List the server's worlds and hubs"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Create a world or hub"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Bind a text channel to a world or hub"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Link a world to a hub so its characters can appear there"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Unlink a world from a hub and drop its characters from that hub's channel casts"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Set how characters behave in a hub"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "In character"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Off duty"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Inspect characters available here"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Import a V2/V3 JSON or PNG character card"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "List characters available here"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Show a character's home world"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Manage this channel or thread's active cast"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Set the active cast with comma-separated names"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Add an eligible character to the active cast"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Remove a character from the active cast"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Show this channel or thread's active cast"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Set the channel's default cast"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Show this channel's ambient setting"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Enable ambient participation in this channel"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Disable ambient participation in this channel"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Invite an eligible character for one turn"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Privately summarize what you missed in this channel"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "What to emphasize, such as what concerns you"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Look back this many hours instead"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Control your personal character memories"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Allow characters to remember facts you explicitly state"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Disable and erase your personal memories"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "List what characters remember about you"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Remove one of your personal memories"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Set the timezone characters use for you"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Choose your timezone in this server"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "IANA timezone name, such as Asia/Seoul"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Show the timezone characters use for you"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Remove your timezone in this server"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Show your balance, or another member's"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Whose balance to show (default: yours)"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "A character whose balance to show"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Claim your daily check-in bonus"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Set the daily check-in bonus (amount 0 turns it off)"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Currency paid for each check-in (0 turns check-ins off)"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Extra per consecutive day (default: keep the current value)"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "How many streak days earn the bonus, up to 365 (default: keep the current value)"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Give a member currency"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Who receives it"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "How much to give"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Why (kept in the ledger)"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Take currency from a member"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Who loses it"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "How much to take"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Set what this server calls its currency"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "For example coins or gold (1 to 32 characters)"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Show the lore available here"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Add lore to this channel (or thread) or to its world or hub"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Show the lore available in this location"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Pin a lore entry"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Correct the text of a lore entry"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Copy lore into a channel or world/hub"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Delete a lore entry"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Start a fresh scene"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Start a fresh scene from your next invitation"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Delete a stored message and everything after it in its branch"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Any stored message in this channel's scene"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Inspect what informed the last character line"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Server administrator commands"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Manage worlds, hubs and channel bindings"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Import characters"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Set a channel's default cast"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Turn ambient participation on or off"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Add and manage lore"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Delete stored scenes"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Give, take and name the server currency"
+msgstr ""
+
+#: llmcord_core/discord_bot.py
+msgid "Turn games on in channels and set bet limits"
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+msgid "Keep favorite characters who are more likely to answer you"
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+msgid "Add a character to your favorites"
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+msgid "The character to add"
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+msgid "Remove a character from your favorites"
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+msgid "The favorite to remove"
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+msgid "Show your favorites and your favorites mode"
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+msgid "Choose how far your favorites may go"
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+msgid "Lean: favorites in the cast answer more. Step in: favorites outside the cast can answer too"
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+msgid "Lean"
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+msgid "Step in"
+msgstr ""
+
+#: llmcord_core/favorites_discord.py
+msgid "Remove all your favorites"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "Join or open a blackjack table in this channel"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "How much to bet"
+msgstr ""
+
+#: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
+msgid "Bring your favorite characters to the table"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "Turn games on or off in a channel"
+msgstr ""
+
+#: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
+msgid "On or off"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "The channel (default: this one)"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "Set the smallest and largest bet"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "Smallest bet"
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "Largest bet"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Open a table and play"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Blackjack"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "I Doubt It"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Texas Hold'em"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Open a table in this channel"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Which game"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Blackjack only: how much to bet"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "See your cards at this table (only you can see them)"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "How a game is played and the rules this server uses"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Turn move checks from your chat on or off for you"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "On"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Off"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "See what is for sale and buy items"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "See the items you hold and use them"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "Use an item you hold"
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "The item to use"
+msgstr ""
+

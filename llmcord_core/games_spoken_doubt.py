@@ -18,9 +18,10 @@ from .admin_store import GameError
 from .games_discord import NO_MENTIONS
 from .games_spoken_discord import MAX_CHARS, NOT_YOURS, TALK_KEPT
 from .spoken.doubt import read_doubt
+from llmcord_core.i18n import N_, discord_locale
 
 PREFIX = "llmcord:dts"
-DOUBTED = "✔ Doubt it!"
+DOUBTED = N_("✔ Doubt it!")
 
 
 @dataclass
@@ -134,11 +135,12 @@ class SpokenDoubts:
         old = self.pending.pop(slot, None)
         if old is not None:
             self._spawn(self._delete(old.message))  # a newer phrase replaces the member's check
+        t = discord_locale.channel_t(message.guild)  # the check is posted in the thread
         view = discord.ui.View(timeout=None)
-        view.add_item(SpokenDoubtButton("doubt", key[1], round_id, moves, user, "Doubt it!", discord.ButtonStyle.danger))
-        view.add_item(SpokenDoubtButton("talk", key[1], round_id, moves, user, "Just table talk", discord.ButtonStyle.secondary))
+        view.add_item(SpokenDoubtButton("doubt", key[1], round_id, moves, user, t.p("button.doubt", "Doubt it!"), discord.ButtonStyle.danger))
+        view.add_item(SpokenDoubtButton("talk", key[1], round_id, moves, user, t.p("button.spoken", "Just table talk"), discord.ButtonStyle.secondary))
         try:
-            posted = await message.reply("Did you mean **Doubt it!**?", view=view, mention_author=False, allowed_mentions=NO_MENTIONS)
+            posted = await message.reply(t("Did you mean **Doubt it!**?"), view=view, mention_author=False, allowed_mentions=NO_MENTIONS)
         except discord.HTTPException as error:
             logging.warning("Could not post a spoken-doubt check: %s", type(error).__name__)
             return
@@ -163,6 +165,7 @@ class SpokenDoubts:
 
     @staticmethod
     async def _say(interaction, text) -> None:
+        text = discord_locale.invoker_t(interaction).render(text)
         try:
             if interaction.response.is_done():
                 await interaction.followup.send(text, ephemeral=True, allowed_mentions=NO_MENTIONS)
@@ -196,7 +199,7 @@ class SpokenDoubts:
             return
         try:
             if refused is None:
-                await interaction.edit_original_response(content=DOUBTED, view=None)
+                await interaction.edit_original_response(content=discord_locale.channel_t(interaction.guild)(DOUBTED), view=None)
             else:
                 await self._say(interaction, refused)
                 await interaction.delete_original_response()  # the check is the member's own: a refused one has nothing left to offer

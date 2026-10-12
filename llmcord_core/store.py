@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 from .admin_store import AdminStore, ConflictError, entry_match, run_script
 from .games import playstyle
+from .i18n import UserError, codes
 from .holdem_store import HoldemStore
 from .items_store import ItemsStore
 
@@ -199,16 +200,16 @@ class Store(ItemsStore, HoldemStore, AdminStore):
 
     def _upgrade(self, path: str | Path, existing: bool) -> None:
         """The whole schema upgrade, backup included, in one write-locked transaction: a failure leaves the old file as it was,
-        and a second process opening the same file waits, then finds version 21 and does nothing. executescript commits, so scripts run per statement."""
+        and a second process opening the same file waits, then finds version 22 and does nothing. executescript commits, so scripts run per statement."""
         self.db.execute("BEGIN IMMEDIATE")
         try:
             old_version = self.db.execute("PRAGMA user_version").fetchone()[0]
-            if old_version > 21:
+            if old_version > 22:
                 raise ValueError('The database is newer than this application. Update the application.')
             node_columns = {row[1] for row in self.db.execute('PRAGMA table_info(nodes)')}
             needs_identities = bool(node_columns) and not {'author_label', 'mentions_json'} <= node_columns
-            if existing and (old_version < 21 or needs_identities):
-                upgrade = 'v3' if old_version < 3 else 'identities' if needs_identities else 'v4' if old_version == 3 else 'v5' if old_version == 4 else 'v6' if old_version == 5 else 'v7' if old_version == 6 else 'v8' if old_version == 7 else 'v9' if old_version == 8 else 'v10' if old_version == 9 else 'v11' if old_version == 10 else 'v12' if old_version == 11 else 'v13' if old_version == 12 else 'v14' if old_version == 13 else 'v15' if old_version == 14 else 'v16' if old_version == 15 else 'v17' if old_version == 16 else 'v18' if old_version == 17 else 'v19' if old_version == 18 else 'v20' if old_version == 19 else 'v21'
+            if existing and (old_version < 22 or needs_identities):
+                upgrade = 'v3' if old_version < 3 else 'identities' if needs_identities else 'v4' if old_version == 3 else 'v5' if old_version == 4 else 'v6' if old_version == 5 else 'v7' if old_version == 6 else 'v8' if old_version == 7 else 'v9' if old_version == 8 else 'v10' if old_version == 9 else 'v11' if old_version == 10 else 'v12' if old_version == 11 else 'v13' if old_version == 12 else 'v14' if old_version == 13 else 'v15' if old_version == 14 else 'v16' if old_version == 15 else 'v17' if old_version == 16 else 'v18' if old_version == 17 else 'v19' if old_version == 18 else 'v20' if old_version == 19 else 'v21' if old_version == 20 else 'v22'
                 backup = Path(str(path) + f".pre-{upgrade}-{time.time_ns()}.sqlite3")
                 # Connection.backup from the connection holding the write lock never finishes; a second reader sees the committed file (the lock excludes other writers).
                 with closing(sqlite3.connect(path, timeout=30)) as reader, closing(sqlite3.connect(backup)) as target:
@@ -243,7 +244,7 @@ class Store(ItemsStore, HoldemStore, AdminStore):
                 self.db.execute('ALTER TABLE avatar_slots ADD COLUMN image_hash TEXT')
             if added or old_version < 11:
                 self._backfill_avatar_hashes()
-            self.db.execute("PRAGMA user_version=21")
+            self.db.execute("PRAGMA user_version=22")
             self.db.commit()
         except BaseException:
             self.db.rollback()
@@ -290,7 +291,7 @@ class Store(ItemsStore, HoldemStore, AdminStore):
 
     def create_space(self, guild_id: int, name: str, kind: str) -> int:
         if kind not in {"world", "hub"} or not name.strip():
-            raise ValueError("Give the world or hub a name.")
+            raise UserError(codes.WORLD_NAME_REQUIRED)
         with self.write_admin():
             ident = self.next_owner_id('space', 'spaces')
             self.db.execute('INSERT INTO spaces(id,guild_id,name,kind) VALUES(?,?,?,?)', (ident, guild_id, name.strip(), kind))
@@ -311,19 +312,19 @@ class Store(ItemsStore, HoldemStore, AdminStore):
 
     def set_hub_tone(self, guild_id: int, space_id: int, tone: str, expected: str | None = None) -> str:
         if tone not in {"in_character", "off_duty"}:
-            raise ValueError("The tone must be in character or off duty.")
+            raise UserError(codes.HUB_TONE_INVALID)
         with self.write_admin():
             if not self.one("SELECT 1 FROM spaces WHERE id=? AND guild_id=? AND kind='hub'", (space_id, guild_id)):
-                raise ValueError("Only hubs have a tone. Choose a hub.")
+                raise UserError(codes.HUB_TONE_HUB_ONLY)
             if expected is not None and self.hub_tone(guild_id, space_id) != expected:
-                raise ConflictError("The hub tone was changed elsewhere. Reload the page and try again.")
+                raise ConflictError(codes.HUB_TONE_CHANGED)
             self.db.execute("UPDATE spaces SET hub_tone=? WHERE id=? AND guild_id=?", (tone, space_id, guild_id))
         return tone
 
     def link_world(self, guild_id: int, hub_id: int, world_id: int) -> None:
         hub, world = self.space_by_id(hub_id), self.space_by_id(world_id)
         if not hub or not world or hub["guild_id"] != guild_id or world["guild_id"] != guild_id or hub["kind"] != "hub" or world["kind"] != "world":
-            raise ValueError("Choose a hub and world in this server.")
+            raise UserError(codes.WORLD_LINK_PICK)
         self.execute("INSERT OR IGNORE INTO hub_worlds VALUES(?,?)", (hub_id, world_id))
 
     def unlink_world(self, guild_id: int, hub_id: int, world_id: int) -> int:
@@ -331,7 +332,7 @@ class Store(ItemsStore, HoldemStore, AdminStore):
         channel-cast entries removed (thread casts with no recorded parent, from before v10, are not found)."""
         hub, world = self.space_by_id(hub_id), self.space_by_id(world_id)
         if not hub or not world or hub["guild_id"] != guild_id or world["guild_id"] != guild_id or hub["kind"] != "hub":
-            raise ValueError("Choose a hub and world in this server.")
+            raise UserError(codes.WORLD_LINK_PICK)
         pruned = 0
         with self.db:
             self.db.execute("DELETE FROM hub_worlds WHERE hub_id=? AND world_id=?", (hub_id, world_id))
@@ -371,11 +372,11 @@ class Store(ItemsStore, HoldemStore, AdminStore):
         """Bind, or rebind keeping ambient and pruning both casts to the new space; returns dropped character ids."""
         space = self.space_by_id(space_id)
         if not space or space["guild_id"] != guild_id:
-            raise ValueError("That world or hub is not in this server.")
+            raise UserError(codes.WORLD_NOT_IN_SERVER)
         with self.db:
             existing = self.channel(channel_id)
             if existing and existing['guild_id'] != guild_id:
-                raise ValueError("That channel belongs to another server.")
+                raise UserError(codes.CHANNEL_OTHER_SERVER)
             if not existing:
                 self.db.execute("INSERT INTO channels(channel_id,guild_id,space_id) VALUES(?,?,?)", (channel_id, guild_id, space_id))
                 return []
@@ -443,13 +444,13 @@ class Store(ItemsStore, HoldemStore, AdminStore):
         cast = list(dict.fromkeys(cast))
         binding = self.binding(channel_id, parent_id)
         if not binding:
-            raise ValueError("This channel is not bound to a world or hub.")
+            raise UserError(codes.CHANNEL_UNBOUND)
         limit = self.cast_limits(binding["guild_id"])["max_cast"]
         if len(cast) > limit and len(cast) > len(json.loads(binding["default_cast"]) if default else self.get_cast(channel_id, parent_id)):
-            raise ValueError(f"A cast can have at most {limit} characters.")
+            raise UserError(codes.CAST_LIMIT_REACHED, limit=limit)
         eligible = {row["id"] for row in self.eligible_characters(binding["guild_id"], binding["space_id"])}
         if not set(cast) <= eligible:
-            raise ValueError("That character is not available in this world or hub.")
+            raise UserError(codes.CAST_CHARACTER_UNAVAILABLE)
         if parent_id and not default:
             self.execute("INSERT INTO thread_casts(thread_id,cast,guild_id,parent_id) VALUES(?,?,?,?) ON CONFLICT(thread_id) DO UPDATE SET cast=excluded.cast,guild_id=excluded.guild_id,parent_id=excluded.parent_id", (channel_id, json.dumps(cast), binding["guild_id"], parent_id))
         else:
@@ -460,7 +461,7 @@ class Store(ItemsStore, HoldemStore, AdminStore):
 
     def add_lore(self, guild_id: int, scope_kind: str, scope_id: int, content: str, keys: list[str] | None = None, constant: bool = False, order: int = 100, source_id: int | None = None, promoted_from: int | None = None, pinned: bool = False) -> int:
         if scope_kind not in {"character", "space", "channel", "thread"} or not content.strip():
-            raise ValueError("Lore needs text and a valid character, channel, thread, world or hub.")
+            raise UserError(codes.LORE_TARGET_INVALID)
         with self.write_admin():
             ident = self.db.execute("INSERT INTO lore(guild_id,scope_kind,scope_id,content,keys_json,constant,insertion_order,source_message_id,promoted_from,pinned) VALUES(?,?,?,?,?,?,?,?,?,?)", (guild_id, scope_kind, scope_id, content.strip(), json.dumps(keys or []), int(constant), order, source_id, promoted_from, int(pinned))).lastrowid
             self.bump_owner(guild_id, scope_kind, scope_id)
@@ -490,7 +491,7 @@ class Store(ItemsStore, HoldemStore, AdminStore):
     def promote_lore(self, guild_id: int, lore_id: int, scope_kind: str, scope_id: int) -> int:
         source = self.lore_row(guild_id, lore_id)
         if not source:
-            raise ValueError("Lore entry not found.")
+            raise UserError(codes.LORE_ENTRY_NOT_FOUND)
         row = self.admin_entry(guild_id, f'lore:{lore_id}')
         ref = self.transfer_entry(guild_id, row['ref'], scope_kind, scope_id, row['revision'], copy=True)
         ident = int(ref.split(':')[1])
@@ -661,11 +662,11 @@ class Store(ItemsStore, HoldemStore, AdminStore):
     def create_lorebook(self, guild_id: int, name: str, target_kind: str,
                         target_id: int = 0) -> int:
         if target_kind not in {"guild", "channel"} or not name.strip():
-            raise ValueError("Choose a server or channel lorebook and give it a name.")
+            raise UserError(codes.LORE_LOREBOOK_PICK)
         if target_kind == "channel":
             channel = self.channel(target_id)
             if not channel or channel["guild_id"] != guild_id:
-                raise ValueError("Bind that channel to a world or hub in this server first.")
+                raise UserError(codes.CHANNEL_BIND_FIRST)
         else:
             target_id = 0
         with self.write_admin():
@@ -685,7 +686,7 @@ class Store(ItemsStore, HoldemStore, AdminStore):
     def set_lorebook_space(self, guild_id: int, book_id: int, space_id: int, enabled: bool) -> None:
         book, space = self.lorebook(guild_id, book_id), self.space_by_id(space_id)
         if not book or book["target_kind"] != "guild" or not space or space["guild_id"] != guild_id:
-            raise ValueError("Choose a server lorebook and a world or hub in this server.")
+            raise UserError(codes.LORE_LOREBOOK_WORLD_PICK)
         with self.write_admin():
             if enabled:
                 self.db.execute("INSERT OR IGNORE INTO lorebook_space_links VALUES(?,?)", (book_id, space_id))
@@ -740,9 +741,9 @@ class Store(ItemsStore, HoldemStore, AdminStore):
         with self.write_admin():
             character = self.character_by_id(character_id)
             if not character or character["guild_id"] != guild_id:
-                raise ValueError("Character not found in this server.")
+                raise UserError(codes.CHARACTER_NOT_FOUND)
             if expected_revision is not None and self.owner_revision(guild_id, 'character', character_id) != expected_revision:
-                raise ConflictError(f"Character changed; reload before {'archiving' if archived else 'restoring'}")
+                raise ConflictError(codes.CHARACTER_CHANGED_ARCHIVE if archived else codes.CHARACTER_CHANGED_RESTORE)
             self.db.execute("UPDATE characters SET archived=? WHERE guild_id=? AND id=?",
                 (int(archived), guild_id, character_id))
             if archived:
@@ -796,14 +797,14 @@ class Store(ItemsStore, HoldemStore, AdminStore):
         with self.write_admin():
             world = self.space_by_id(world_id)
             if not world or world["guild_id"] != guild_id or world["kind"] != "world":
-                raise ValueError("Choose a home world in this server.")
+                raise UserError(codes.CHARACTER_HOME_WORLD_PICK)
             if not name.strip():
-                raise ValueError("Character name cannot be empty. Enter a name.")
+                raise UserError(codes.CHARACTER_NAME_EMPTY)
             previous = self.character_by_id(character_id)
             if not previous or previous["guild_id"] != guild_id:
-                raise ValueError("Character not found in this server.")
+                raise UserError(codes.CHARACTER_NOT_FOUND)
             if expected_revision is not None and expected_revision != self.owner_revision(guild_id, 'character', character_id):
-                raise ConflictError('Character changed; reload before saving')
+                raise ConflictError(codes.CHARACTER_CHANGED_SAVE)
             moved = previous["world_id"] != world_id
             self.db.execute("UPDATE characters SET world_id=?,name=?,card=? WHERE guild_id=? AND id=?",
                 (world_id, name.strip(), json.dumps(card), guild_id, character_id))
@@ -827,9 +828,9 @@ class Store(ItemsStore, HoldemStore, AdminStore):
             style = playstyle.parse(dataclasses.asdict(style))
         with self.write_admin():
             if not self.one("SELECT 1 FROM characters WHERE guild_id=? AND id=?", (guild_id, character_id)):
-                raise ValueError("Character not found in this server.")
+                raise UserError(codes.CHARACTER_NOT_FOUND)
             if expected_revision != self.owner_revision(guild_id, 'character', character_id):
-                raise ConflictError('Character changed; reload before saving')
+                raise ConflictError(codes.CHARACTER_CHANGED_SAVE)
             self.db.execute("UPDATE characters SET play_style=? WHERE guild_id=? AND id=?",
                 ("" if style is None else playstyle.dumps(style), guild_id, character_id))
             self.bump_owner(guild_id, 'character', character_id)

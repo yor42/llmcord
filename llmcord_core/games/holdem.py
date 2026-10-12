@@ -13,6 +13,7 @@ from functools import lru_cache
 from itertools import combinations
 from typing import Optional
 
+from ..i18n import Phrase, UserError, codes, terms
 from . import playstyle
 from .base import IllegalMove, shuffled
 
@@ -26,11 +27,9 @@ TIMEOUT_RANGE = (15, 300)
 STREETS = ("preflop", "flop", "turn", "river")
 BOARD_LEN = {"preflop": 0, "flop": 3, "turn": 4, "river": 5}
 _VAL = {**{i: i for i in range(2, 11)}, "J": 11, "Q": 12, "K": 13, "A": 14}
-_NAME = {2: "Two", 3: "Three", 4: "Four", 5: "Five", 6: "Six", 7: "Seven", 8: "Eight", 9: "Nine", 10: "Ten",
-         11: "Jack", 12: "Queen", 13: "King", 14: "Ace"}
-_PLURAL = {**{v: n + "s" for v, n in _NAME.items()}, 6: "Sixes"}
-CATEGORIES = ("High card", "Pair", "Two pair", "Three of a kind", "Straight", "Flush", "Full house",
-              "Four of a kind", "Straight flush")
+_NAME = terms.POKER_RANK
+_PLURAL = terms.POKER_RANK_PLURAL
+CATEGORIES = terms.POKER_CATEGORIES
 _RAISE = re.compile(r"raise:([1-9][0-9]{0,11})")
 
 
@@ -41,49 +40,60 @@ def normalize_rules(value=None):
     if value is None:
         value = {}
     if not isinstance(value, dict):
-        raise ValueError("The Hold'em rules must be a set of options.")
+        raise UserError(codes.RULES_HOLDEM_OPTIONS)
     r = {**DEFAULT_RULES, **{k: v for k, v in value.items() if k in DEFAULT_RULES}}
 
     def whole(name):
         if type(r[name]) is not int:
-            raise ValueError(f"{name} must be a whole number.")
+            raise UserError(codes.RULES_HOLDEM_WHOLE, name=name)
         return r[name]
 
     if not 1 <= whole("small_blind") <= 10 ** 6:
-        raise ValueError("The small blind must be a whole number from 1 to 1000000.")
+        raise UserError(codes.RULES_HOLDEM_SMALL_BLIND)
     lo, hi = whole("min_buy_in_bb"), whole("max_buy_in_bb")
     if lo < 20 or hi > 1000 or lo > hi:
-        raise ValueError("The buy-in must be 20 to 1000 big blinds, with the minimum not above the maximum.")
+        raise UserError(codes.RULES_HOLDEM_BUY_IN)
     lo, hi = TIMEOUT_RANGE
     if not lo <= whole("action_timeout") <= hi:
-        raise ValueError(f"The action timeout must be a whole number of seconds from {lo} to {hi}.")
+        raise UserError(codes.RULES_HOLDEM_TIMEOUT, low=lo, high=hi)
     if type(r["assist"]) is not bool:
-        raise ValueError("Assist must be on or off.")
+        raise UserError(codes.RULES_HOLDEM_ASSIST_FLAG)
     return {k: r[k] for k in DEFAULT_RULES}
+
+
+def rules_phrases(rules=None):
+    """The table's rules in plain words, one Phrase per part (display only); join with " · "."""
+    r = normalize_rules(rules)
+    sb = r["small_blind"]
+    return [Phrase(terms.HOLDEM_RULE_BLINDS, small=sb, big=2 * sb),
+            Phrase(terms.HOLDEM_RULE_BUY_IN, low=r["min_buy_in_bb"], high=r["max_buy_in_bb"]),
+            Phrase(terms.HOLDEM_RULE_TIMEOUT, seconds=r["action_timeout"]),
+            Phrase(terms.HOLDEM_RULE_ASSIST_ON if r["assist"] else terms.HOLDEM_RULE_ASSIST_OFF)]
 
 
 def rules_text(rules=None):
     """The table's rules in plain words (display only), one line."""
+    return " · ".join(str(p) for p in rules_phrases(rules))
+
+
+def how_to_play_phrases(rules=None):
+    """The how-to-play lines, one Phrase per line (display only); join with a newline."""
     r = normalize_rules(rules)
     sb = r["small_blind"]
-    return (f"Blinds {sb}/{2 * sb} · Buy-in {r['min_buy_in_bb']} to {r['max_buy_in_bb']} big blinds · "
-            f"{r['action_timeout']} s per move · Assist {'on' if r['assist'] else 'off'}")
+    return [
+        Phrase(terms.HOLDEM_HOW_TITLE),
+        Phrase(terms.HOLDEM_HOW_GOAL),
+        Phrase(terms.HOLDEM_HOW_BLINDS, small=sb, big=2 * sb),
+        Phrase(terms.HOLDEM_HOW_STREETS),
+        Phrase(terms.HOLDEM_HOW_RAISE),
+        Phrase(terms.HOLDEM_HOW_SHOWDOWN),
+        Phrase(terms.HOLDEM_HOW_SIDE_POT),
+        Phrase(terms.HOLDEM_HOW_TIMEOUT_ASSIST if r["assist"] else terms.HOLDEM_HOW_TIMEOUT, seconds=r["action_timeout"]),
+    ]
 
 
 def how_to_play(rules=None):
-    r = normalize_rules(rules)
-    sb = r["small_blind"]
-    return "\n".join([
-        "**Texas Hold'em in short**",
-        "Make the best five-card hand from your two private cards and the five shared cards.",
-        f"• Two seats post forced blinds ({sb} and {2 * sb}) before each deal.",
-        "• Betting runs before the flop (three shared cards), then the turn, then the river. Fold, check, call or raise.",
-        "• Raise at least the size of the last raise. Going all-in for less is allowed.",
-        "• If everyone else folds, you win the pot without showing. Otherwise the best hand at showdown wins.",
-        "• A seat that is all-in can only win what it matched; the rest goes to a side pot.",
-        f"• Take longer than {r['action_timeout']} s and you check, or fold if you can't." + (
-            " Assist shows your hand and odds." if r["assist"] else ""),
-    ])
+    return "\n".join(str(p) for p in how_to_play_phrases(rules))
 
 
 @dataclass(frozen=True)
@@ -163,9 +173,10 @@ class Result:
 
 @dataclass(frozen=True)
 class Assist:
-    current: str
-    chances: tuple
+    current: str  # English; current_phrase is the same words for the edge to render
+    chances: tuple  # (category, probability): the category is a Msg term, a str
     win: float
+    current_phrase: Optional[Phrase] = None
 
 
 # ---- hand evaluation -------------------------------------------------------------------------------------------
@@ -224,25 +235,30 @@ def best_hand(cards):
     return next(c for c in combinations(cards, 5) if evaluate(c) == rank)
 
 
-def hand_name(rank):
+def hand_phrase(rank):
+    """The hand's name as words for the edge: a Phrase whose rank params are Msg terms."""
     cat = rank[0]
     if cat == 0:
-        return f"High card, {_NAME[rank[1]]}"
+        return Phrase(terms.HAND_HIGH_CARD, rank=_NAME[rank[1]])
     if cat == 1:
-        return f"Pair of {_PLURAL[rank[1]]}"
+        return Phrase(terms.HAND_PAIR, rank=_PLURAL[rank[1]])
     if cat == 2:
-        return f"Two pair, {_PLURAL[rank[1]]} and {_PLURAL[rank[2]]}"
+        return Phrase(terms.HAND_TWO_PAIR, high=_PLURAL[rank[1]], low=_PLURAL[rank[2]])
     if cat == 3:
-        return f"Three of a kind, {_PLURAL[rank[1]]}"
+        return Phrase(terms.HAND_THREE_OF_A_KIND, rank=_PLURAL[rank[1]])
     if cat == 4:
-        return f"Straight, {_NAME[rank[1]]} high"
+        return Phrase(terms.HAND_STRAIGHT, rank=_NAME[rank[1]])
     if cat == 5:
-        return f"Flush, {_NAME[rank[1]]} high"
+        return Phrase(terms.HAND_FLUSH, rank=_NAME[rank[1]])
     if cat == 6:
-        return f"Full house, {_PLURAL[rank[1]]} over {_PLURAL[rank[2]]}"
+        return Phrase(terms.HAND_FULL_HOUSE, trips=_PLURAL[rank[1]], pair=_PLURAL[rank[2]])
     if cat == 7:
-        return f"Four of a kind, {_PLURAL[rank[1]]}"
-    return "Royal flush" if rank[1] == 14 else f"Straight flush, {_NAME[rank[1]]} high"
+        return Phrase(terms.HAND_FOUR_OF_A_KIND, rank=_PLURAL[rank[1]])
+    return Phrase(terms.HAND_ROYAL_FLUSH) if rank[1] == 14 else Phrase(terms.HAND_STRAIGHT_FLUSH, rank=_NAME[rank[1]])
+
+
+def hand_name(rank):
+    return str(hand_phrase(rank))
 
 
 # ---- betting ---------------------------------------------------------------------------------------------------
@@ -496,11 +512,13 @@ def result(state):
 
 # ---- assist ----------------------------------------------------------------------------------------------------
 
-def _made_name(cards):
+def _made_phrase(cards):
     if len(cards) >= 5:
-        return hand_name(evaluate(cards))
+        return hand_phrase(evaluate(cards))
     vals = sorted((_VAL[r] for r, _ in cards), reverse=True)
-    return f"Pair of {_PLURAL[vals[0]]}" if len(vals) == 2 and vals[0] == vals[1] else f"High card, {_NAME[vals[0]]}"
+    if len(vals) == 2 and vals[0] == vals[1]:
+        return Phrase(terms.HAND_PAIR, rank=_PLURAL[vals[0]])
+    return Phrase(terms.HAND_HIGH_CARD, rank=_NAME[vals[0]])
 
 
 def assist(hole, board, opponents, seed, samples=2000):
@@ -543,7 +561,8 @@ def assist(hole, board, opponents, seed, samples=2000):
             score += 1
         elif mine == best:
             score += 1 / (1 + theirs.count(best))
-    return Assist(_made_name(hole + board), chances, round(score / samples, 3))
+    made = _made_phrase(hole + board)
+    return Assist(str(made), chances, round(score / samples, 3), made)
 
 
 # ---- fallback policy -------------------------------------------------------------------------------------------

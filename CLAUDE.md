@@ -14,7 +14,7 @@ Use Sonnet for routine coordination, implementation, tests, and review; Haiku fo
 ## Processes (no IPC — they share one SQLite file)
 - `llmcord.py` → `discord_bot.SkitBot`: events, slash commands (`register_commands`), webhooks, daily cleanup task.
 - `web_main.py` → `web.create_app`: OAuth, avatar images, mounts NiceGUI (`dashboard.mount_dashboard`).
-- `migrate.py` → `Store(path)`: creates/upgrades schema (`PRAGMA user_version`, currently 21; backs up before upgrading).
+- `migrate.py` → `Store(path)`: creates/upgrades schema (`PRAGMA user_version`, currently 22; backs up before upgrading).
 The bot reads DB state fresh each turn, so dashboard edits apply on the next turn.
 
 ## Module map (`llmcord_core/`)
@@ -29,10 +29,11 @@ The bot reads DB state fresh each turn, so dashboard edits apply on the next tur
 | Items and shop (FEAT-22) | `items/` (pure registry of item kinds, recipes, seeded rolls, built-in catalog in `items/recipes/*.json`), `items_store.py` (shop, inventory, use log, purchase/use transactions, ledger reversal hook), `items_discord.py` (`/shop`, `/inventory`, `/use`), `shop_ui.py` (dashboard Shop tab) |
 | Spoken moves (D32/D34/D35/D36, Experimental, blackjack + I Doubt It doubts) | `spoken/` (pure: interpreter `interpret.py` + head `head.py`/`data/head-e5-blackjack.json`, blackjack moves `blackjack.py`, lazy ONNX e5 runtime `onnx_embedder.py`; EN/KO word matcher `words.py` + amount parser, doubt reader `doubt.py` + `lexicon/doubt.json`; Hold'em adapter, not wired), `games_spoken_discord.py` (`on_message` reading, move check buttons, kept-phrase capture, server example phrases), `games_spoken_doubt.py` (I Doubt It doubt checks during the doubt window); store API (switches, `spoken_phrases`, `spoken_examples`) in `admin_store.py`; Games tab in `games_ui.py`; model fetched and quantized in the Docker build (`scripts/fetch_spoken_model.py`) |
 | Minigames (FEAT-19, FEAT-21, FEAT-33) | `games/` (pure seeded rules engines: blackjack, I Doubt It `doubt.py`, Texas Hold'em `holdem.py`; `registry.py` lists the games), `games_discord.py` (`/blackjack`, buttons, per-table locks and timers), `games_doubt_discord.py` (`/game` group, I Doubt It tables), `games_holdem_discord.py` (Hold'em tables); store API in `admin_store.py` and `holdem_store.py`; dashboard settings in `games_ui.py` (Games tab) |
+| i18n (FEAT-43..45, D39; wired into Discord and the dashboard, Korean pack pending FEAT-46) | `i18n/` (`Translator`, markers `N_`/`NP_`/`C_`/`E_`, `UserError`; `catalog.py` loads `.po` with Babel, `format.py` safe formatter + Korean josa, `negotiate.py`, `discord_locale.py`, `web_locale.py`, `codes.py`, `terms.py`), `locales/` (`templates/*.pot`, `<lang>/LC_MESSAGES/*.po`); tooling `scripts/i18n.py` + `scripts/i18n_check.py` + string ratchet baseline `scripts/i18n_ratchet.json`. Rules for Phase 1: `docs/engineering/i18n-plan.md` section 6.1 |
 
 ## Commands
 - Setup: `python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt` (browser tests also need `.venv/bin/python -m playwright install chromium`).
-- **Verify before declaring a change done:** choose the level in the `verify` skill. Application/script/test changes require `scripts/verify.sh` — ruff, repo hygiene, compileall, offline unittest suite. Docs and Claude config changes require metadata/diff checks instead.
+- **Verify before declaring a change done:** choose the level in the `verify` skill. Application/script/test changes require `scripts/verify.sh` — ruff, repo hygiene, i18n catalog check and string ratchet (`scripts/i18n.py check`), compileall, offline unittest suite. Docs and Claude config changes require metadata/diff checks instead.
   - `scripts/verify.sh --browser` adds the Playwright dashboard suite (~2 min) — required when touching `web.py`, `auth.py`, `dashboard.py`, `scene_ui.py`, `lore_*`.
   - `scripts/verify.sh --bench` adds `scripts/bench_dashboard.py` — required when claiming a dashboard perf change.
   - Every level also runs a Gitleaks secret scan when `$GITLEAKS` or `gitleaks` on PATH exists (CI always does); otherwise the summary shows SKIP.
@@ -48,6 +49,9 @@ The bot reads DB state fresh each turn, so dashboard edits apply on the next tur
 - **Model snapshot and key pins:** a turn resolves model profiles once (`BackendResolver.pin`), and the memory work it starts uses the same snapshot. A dashboard profile's `${NAME}_API_KEY` is sent only to a host pinned for that key (`check_key_pin`, at save and again before every call); key values are never stored, shown, audited or logged.
 - **Admin writes:** use `store.write_admin()` + revision checks (`ConflictError`), never blind overwrite.
 - **Schema:** bump `user_version` with a backup-before-upgrade migration; never edit existing migrations destructively.
+- **Translate at the edge (i18n, D39):** stores, game engines and model code never produce translated text. They raise `UserError` codes (`i18n/codes.py`) or return structured results. Only code that sends a Discord message or builds a dashboard element turns them into words, through an explicitly obtained `Translator`, never a context variable.
+- **The audience decides the language:** a Discord message only the invoker sees uses the invoker's locale (`invoker_t(interaction)`). A message the channel sees uses the channel's (`channel_t(guild)`), resolved at each render and never captured in a timer or closure. Dashboard text uses the viewer's (`web_locale.current()`). Character lines and anything people typed are never translated.
+- **English text is the message id; tests run in `en`:** wrapping a string must never change English output. A Phase 1 change that needs an existing test edited has changed English, so it stops and is reported. Rules: `docs/engineering/i18n-plan.md` sections 6.1 and 6.2.
 
 ## Care areas
 - `dashboard.py` monkey-patches NiceGUI socket handlers for auth — changes there affect every live event.

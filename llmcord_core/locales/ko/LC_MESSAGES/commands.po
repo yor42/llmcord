@@ -1,0 +1,444 @@
+msgid ""
+msgstr ""
+"Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+#: llmcord_core/discord_bot.py
+msgid "List the server's worlds and hubs"
+msgstr "서버의 월드와 허브 목록 보기"
+
+#: llmcord_core/discord_bot.py
+msgid "Create a world or hub"
+msgstr "월드 또는 허브 만들기"
+
+#: llmcord_core/discord_bot.py
+msgid "Bind a text channel to a world or hub"
+msgstr "텍스트 채널을 월드 또는 허브에 지정하기"
+
+#: llmcord_core/discord_bot.py
+msgid "Link a world to a hub so its characters can appear there"
+msgstr "월드를 허브에 연결해 그 월드의 캐릭터가 허브에 나올 수 있게 하기"
+
+#: llmcord_core/discord_bot.py
+msgid "Unlink a world from a hub and drop its characters from that hub's channel casts"
+msgstr "월드를 허브에서 연결 해제하고 그 월드의 캐릭터를 허브 채널 출연진에서 빼기"
+
+#: llmcord_core/discord_bot.py
+msgid "Set how characters behave in a hub"
+msgstr "허브에서 캐릭터가 행동하는 방식 설정"
+
+#: llmcord_core/discord_bot.py
+msgid "In character"
+msgstr "캐릭터 유지"
+
+#: llmcord_core/discord_bot.py
+msgid "Off duty"
+msgstr "휴식 모드"
+
+#: llmcord_core/discord_bot.py
+msgid "Inspect characters available here"
+msgstr "여기서 쓸 수 있는 캐릭터 살펴보기"
+
+#: llmcord_core/discord_bot.py
+msgid "Import a V2/V3 JSON or PNG character card"
+msgstr "V2/V3 JSON 또는 PNG 캐릭터 카드 가져오기"
+
+#: llmcord_core/discord_bot.py
+msgid "List characters available here"
+msgstr "여기서 쓸 수 있는 캐릭터 목록 보기"
+
+#: llmcord_core/discord_bot.py
+msgid "Show a character's home world"
+msgstr "캐릭터의 홈 월드 보기"
+
+#: llmcord_core/discord_bot.py
+msgid "Manage this channel or thread's active cast"
+msgstr "이 채널이나 스레드의 현재 출연진 관리"
+
+#: llmcord_core/discord_bot.py
+msgid "Set the active cast with comma-separated names"
+msgstr "쉼표로 구분한 이름으로 현재 출연진 설정"
+
+#: llmcord_core/discord_bot.py
+msgid "Add an eligible character to the active cast"
+msgstr "출연할 수 있는 캐릭터를 현재 출연진에 추가"
+
+#: llmcord_core/discord_bot.py
+msgid "Remove a character from the active cast"
+msgstr "현재 출연진에서 캐릭터 빼기"
+
+#: llmcord_core/discord_bot.py
+msgid "Show this channel or thread's active cast"
+msgstr "이 채널이나 스레드의 현재 출연진 보기"
+
+#: llmcord_core/discord_bot.py
+msgid "Set the channel's default cast"
+msgstr "채널의 기본 출연진 설정"
+
+#: llmcord_core/discord_bot.py
+msgid "Show this channel's ambient setting"
+msgstr "이 채널의 자율 참여 설정 보기"
+
+#: llmcord_core/discord_bot.py
+msgid "Enable ambient participation in this channel"
+msgstr "이 채널에서 자율 참여 켜기"
+
+#: llmcord_core/discord_bot.py
+msgid "Disable ambient participation in this channel"
+msgstr "이 채널에서 자율 참여 끄기"
+
+#: llmcord_core/discord_bot.py
+msgid "Invite an eligible character for one turn"
+msgstr "출연할 수 있는 캐릭터를 한 턴 동안 초대하기"
+
+#: llmcord_core/discord_bot.py
+msgid "Privately summarize what you missed in this channel"
+msgstr "이 채널에서 놓친 대화를 나만 보게 요약하기"
+
+#: llmcord_core/discord_bot.py
+msgid "What to emphasize, such as what concerns you"
+msgstr "강조할 내용 (예: 신경 쓰이는 부분)"
+
+#: llmcord_core/discord_bot.py
+msgid "Look back this many hours instead"
+msgstr "대신 이 시간만큼 거슬러 보기"
+
+#: llmcord_core/discord_bot.py
+msgid "Control your personal character memories"
+msgstr "캐릭터가 기억하는 내 개인 기억 관리"
+
+#: llmcord_core/discord_bot.py
+msgid "Allow characters to remember facts you explicitly state"
+msgstr "내가 직접 말한 사실을 캐릭터가 기억하도록 허용"
+
+#: llmcord_core/discord_bot.py
+msgid "Disable and erase your personal memories"
+msgstr "개인 기억을 끄고 모두 지우기"
+
+#: llmcord_core/discord_bot.py
+msgid "List what characters remember about you"
+msgstr "캐릭터가 나에 대해 기억하는 내용 보기"
+
+#: llmcord_core/discord_bot.py
+msgid "Remove one of your personal memories"
+msgstr "개인 기억 하나 삭제"
+
+#: llmcord_core/discord_bot.py
+msgid "Set the timezone characters use for you"
+msgstr "캐릭터가 나에게 쓰는 시간대 설정"
+
+#: llmcord_core/discord_bot.py
+msgid "Choose your timezone in this server"
+msgstr "이 서버에서 쓸 내 시간대 선택"
+
+#: llmcord_core/discord_bot.py
+msgid "IANA timezone name, such as Asia/Seoul"
+msgstr "IANA 시간대 이름 (예: Asia/Seoul)"
+
+#: llmcord_core/discord_bot.py
+msgid "Show the timezone characters use for you"
+msgstr "캐릭터가 나에게 쓰는 시간대 보기"
+
+#: llmcord_core/discord_bot.py
+msgid "Remove your timezone in this server"
+msgstr "이 서버에서 내 시간대 삭제"
+
+#: llmcord_core/discord_bot.py
+msgid "Show your balance, or another member's"
+msgstr "내 잔액 또는 다른 멤버의 잔액 보기"
+
+#: llmcord_core/discord_bot.py
+msgid "Whose balance to show (default: yours)"
+msgstr "잔액을 볼 사람 (기본: 나)"
+
+#: llmcord_core/discord_bot.py
+msgid "A character whose balance to show"
+msgstr "잔액을 볼 캐릭터"
+
+#: llmcord_core/discord_bot.py
+msgid "Claim your daily check-in bonus"
+msgstr "일일 출석 보너스 받기"
+
+#: llmcord_core/discord_bot.py
+msgid "Set the daily check-in bonus (amount 0 turns it off)"
+msgstr "일일 출석 보너스 설정 (금액이 0이면 꺼짐)"
+
+#: llmcord_core/discord_bot.py
+msgid "Currency paid for each check-in (0 turns check-ins off)"
+msgstr "출석할 때마다 지급할 화폐 (0이면 출석 꺼짐)"
+
+#: llmcord_core/discord_bot.py
+msgid "Extra per consecutive day (default: keep the current value)"
+msgstr "연속 출석 하루마다 추가 지급액 (기본: 현재 값 유지)"
+
+#: llmcord_core/discord_bot.py
+msgid "How many streak days earn the bonus, up to 365 (default: keep the current value)"
+msgstr "보너스를 받는 연속 출석 일수, 최대 365일 (기본: 현재 값 유지)"
+
+#: llmcord_core/discord_bot.py
+msgid "Give a member currency"
+msgstr "멤버에게 화폐 지급"
+
+#: llmcord_core/discord_bot.py
+msgid "Who receives it"
+msgstr "받을 사람"
+
+#: llmcord_core/discord_bot.py
+msgid "How much to give"
+msgstr "지급할 금액"
+
+#: llmcord_core/discord_bot.py
+msgid "Why (kept in the ledger)"
+msgstr "사유 (거래 내역에 남아요)"
+
+#: llmcord_core/discord_bot.py
+msgid "Take currency from a member"
+msgstr "멤버에게서 화폐 회수"
+
+#: llmcord_core/discord_bot.py
+msgid "Who loses it"
+msgstr "회수 대상"
+
+#: llmcord_core/discord_bot.py
+msgid "How much to take"
+msgstr "회수할 금액"
+
+#: llmcord_core/discord_bot.py
+msgid "Set what this server calls its currency"
+msgstr "이 서버의 화폐 이름 설정"
+
+#: llmcord_core/discord_bot.py
+msgid "For example coins or gold (1 to 32 characters)"
+msgstr "예: 코인, 골드 (1~32자)"
+
+#: llmcord_core/discord_bot.py
+msgid "Show the lore available here"
+msgstr "여기서 쓸 수 있는 로어 보기"
+
+#: llmcord_core/discord_bot.py
+msgid "Add lore to this channel (or thread) or to its world or hub"
+msgstr "이 채널(또는 스레드)이나 그 월드 또는 허브에 로어 추가"
+
+#: llmcord_core/discord_bot.py
+msgid "Show the lore available in this location"
+msgstr "이 위치에서 쓸 수 있는 로어 보기"
+
+#: llmcord_core/discord_bot.py
+msgid "Pin a lore entry"
+msgstr "로어 항목 고정"
+
+#: llmcord_core/discord_bot.py
+msgid "Correct the text of a lore entry"
+msgstr "로어 항목의 내용 수정"
+
+#: llmcord_core/discord_bot.py
+msgid "Copy lore into a channel or world/hub"
+msgstr "로어를 채널이나 월드/허브로 복사"
+
+#: llmcord_core/discord_bot.py
+msgid "Delete a lore entry"
+msgstr "로어 항목 삭제"
+
+#: llmcord_core/discord_bot.py
+msgid "Start a fresh scene"
+msgstr "새 장면 시작"
+
+#: llmcord_core/discord_bot.py
+msgid "Start a fresh scene from your next invitation"
+msgstr "다음 초대부터 새 장면 시작"
+
+#: llmcord_core/discord_bot.py
+msgid "Delete a stored message and everything after it in its branch"
+msgstr "저장된 메시지와 그 분기에서 그 뒤의 모든 내용 삭제"
+
+#: llmcord_core/discord_bot.py
+msgid "Any stored message in this channel's scene"
+msgstr "이 채널 장면에 저장된 아무 메시지"
+
+#: llmcord_core/discord_bot.py
+msgid "Inspect what informed the last character line"
+msgstr "마지막 캐릭터 대사에 쓰인 정보 살펴보기"
+
+#: llmcord_core/discord_bot.py
+msgid "Server administrator commands"
+msgstr "서버 관리자 명령어"
+
+#: llmcord_core/discord_bot.py
+msgid "Manage worlds, hubs and channel bindings"
+msgstr "월드, 허브, 채널 지정 관리"
+
+#: llmcord_core/discord_bot.py
+msgid "Import characters"
+msgstr "캐릭터 가져오기"
+
+#: llmcord_core/discord_bot.py
+msgid "Set a channel's default cast"
+msgstr "채널의 기본 출연진 설정"
+
+#: llmcord_core/discord_bot.py
+msgid "Turn ambient participation on or off"
+msgstr "자율 참여 켜기/끄기"
+
+#: llmcord_core/discord_bot.py
+msgid "Add and manage lore"
+msgstr "로어 추가 및 관리"
+
+#: llmcord_core/discord_bot.py
+msgid "Delete stored scenes"
+msgstr "저장된 장면 삭제"
+
+#: llmcord_core/discord_bot.py
+msgid "Give, take and name the server currency"
+msgstr "서버 화폐 지급, 회수, 이름 설정"
+
+#: llmcord_core/discord_bot.py
+msgid "Turn games on in channels and set bet limits"
+msgstr "채널에서 게임 켜기와 베팅 한도 설정"
+
+#: llmcord_core/favorites_discord.py
+msgid "Keep favorite characters who are more likely to answer you"
+msgstr "나에게 더 잘 응답하는 즐겨찾기 캐릭터 관리"
+
+#: llmcord_core/favorites_discord.py
+msgid "Add a character to your favorites"
+msgstr "즐겨찾기에 캐릭터 추가"
+
+#: llmcord_core/favorites_discord.py
+msgid "The character to add"
+msgstr "추가할 캐릭터"
+
+#: llmcord_core/favorites_discord.py
+msgid "Remove a character from your favorites"
+msgstr "즐겨찾기에서 캐릭터 삭제"
+
+#: llmcord_core/favorites_discord.py
+msgid "The favorite to remove"
+msgstr "삭제할 즐겨찾기"
+
+#: llmcord_core/favorites_discord.py
+msgid "Show your favorites and your favorites mode"
+msgstr "내 즐겨찾기와 즐겨찾기 모드 보기"
+
+#: llmcord_core/favorites_discord.py
+msgid "Choose how far your favorites may go"
+msgstr "즐겨찾기가 어디까지 응답할지 선택"
+
+#: llmcord_core/favorites_discord.py
+msgid "Lean: favorites in the cast answer more. Step in: favorites outside the cast can answer too"
+msgstr "우선 응답: 출연진 안의 즐겨찾기가 더 자주 응답해요. 끼어들기: 출연진 밖의 즐겨찾기도 응답할 수 있어요"
+
+#: llmcord_core/favorites_discord.py
+msgid "Lean"
+msgstr "우선 응답"
+
+#: llmcord_core/favorites_discord.py
+msgid "Step in"
+msgstr "끼어들기"
+
+#: llmcord_core/favorites_discord.py
+msgid "Remove all your favorites"
+msgstr "즐겨찾기 모두 삭제"
+
+#: llmcord_core/games_discord.py
+msgid "Join or open a blackjack table in this channel"
+msgstr "이 채널에서 블랙잭 테이블 참가 또는 열기"
+
+#: llmcord_core/games_discord.py
+msgid "How much to bet"
+msgstr "베팅할 금액"
+
+#: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
+msgid "Bring your favorite characters to the table"
+msgstr "즐겨찾기 캐릭터를 테이블에 데려오기"
+
+#: llmcord_core/games_discord.py
+msgid "Turn games on or off in a channel"
+msgstr "채널에서 게임 켜기/끄기"
+
+#: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
+msgid "On or off"
+msgstr "켜기 또는 끄기"
+
+#: llmcord_core/games_discord.py
+msgid "The channel (default: this one)"
+msgstr "채널 (기본: 이 채널)"
+
+#: llmcord_core/games_discord.py
+msgid "Set the smallest and largest bet"
+msgstr "최소 베팅과 최대 베팅 설정"
+
+#: llmcord_core/games_discord.py
+msgid "Smallest bet"
+msgstr "최소 베팅"
+
+#: llmcord_core/games_discord.py
+msgid "Largest bet"
+msgstr "최대 베팅"
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Open a table and play"
+msgstr "테이블을 열고 플레이하기"
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Blackjack"
+msgstr "블랙잭"
+
+#: llmcord_core/games_doubt_discord.py
+msgid "I Doubt It"
+msgstr "다우트 (카드게임)"
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Texas Hold'em"
+msgstr "텍사스 홀덤"
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Open a table in this channel"
+msgstr "이 채널에 테이블 열기"
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Which game"
+msgstr "게임 종류"
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Blackjack only: how much to bet"
+msgstr "블랙잭 전용: 베팅할 금액"
+
+#: llmcord_core/games_doubt_discord.py
+msgid "See your cards at this table (only you can see them)"
+msgstr "이 테이블의 내 카드 보기 (나만 볼 수 있어요)"
+
+#: llmcord_core/games_doubt_discord.py
+msgid "How a game is played and the rules this server uses"
+msgstr "게임 방법과 이 서버의 규칙 보기"
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Turn move checks from your chat on or off for you"
+msgstr "내 채팅에 대한 행동 확인 켜기/끄기"
+
+#: llmcord_core/games_doubt_discord.py
+msgid "On"
+msgstr "켜기"
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Off"
+msgstr "끄기"
+
+#: llmcord_core/items_discord.py
+msgid "See what is for sale and buy items"
+msgstr "판매 중인 아이템을 보고 구매하기"
+
+#: llmcord_core/items_discord.py
+msgid "See the items you hold and use them"
+msgstr "가진 아이템을 보고 사용하기"
+
+#: llmcord_core/items_discord.py
+msgid "Use an item you hold"
+msgstr "가진 아이템 사용"
+
+#: llmcord_core/items_discord.py
+msgid "The item to use"
+msgstr "사용할 아이템"
+

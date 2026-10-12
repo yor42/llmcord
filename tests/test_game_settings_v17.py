@@ -43,7 +43,7 @@ class V16UpgradeTests(unittest.TestCase):
             path = self.v16_file(folder)
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 21)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 22)
                 self.assertEqual(len(list(Path(folder).glob("v16.sqlite3.pre-v17-*.sqlite3"))), 1)
                 self.assertFalse(store.blackjack_enabled(1))
                 self.assertTrue(store.blackjack_enabled(2))
