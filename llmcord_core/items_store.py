@@ -242,7 +242,7 @@ class ItemsStore:
             self.db.execute('INSERT INTO inventory(guild_id,user_id,item_key,qty) VALUES(?,?,?,1) ON CONFLICT(guild_id,user_id,item_key) DO UPDATE SET qty=qty+1', (guild_id, user_id, item_key))
         return {'item': entry, 'qty': qty + 1, 'balance': ledger['balance_after'], 'price': entry['price'], 'ledger_id': ledger['id']}
 
-    def use_item(self, guild_id, user_id, channel_id, item_key, *, seed=None, now=None):
+    def use_item(self, guild_id, user_id, channel_id, item_key, *, seed=None, now=None, locale=DEFAULT_LOCALE):
         """One transaction: held, use allowed, cooldown over, then the seeded roll, the count or last-used update and the use log row.
         Returns {'result': Result, 'qty': remaining, 'use_id', 'seed', 'item'}; a roll that fails to run writes nothing."""
         now = time.time() if now is None else now
@@ -259,7 +259,7 @@ class ItemsStore:
                 remaining = math.ceil(held['last_used_at'] + cooldown - now)
                 raise OnCooldown(codes.ITEM_ON_COOLDOWN, remaining, name=recipe.name, remaining=remaining)
             seed = new_seed() if seed is None else str(seed)
-            result = items.roll(recipe, seed, DEFAULT_LOCALE, entry['extra_entries'], entry['replace_entries'], entry['params'])
+            result = items.roll(recipe, seed, locale, entry['extra_entries'], entry['replace_entries'], entry['params'])
             qty = held['qty'] - 1 if recipe.consumable else held['qty']
             self.db.execute('UPDATE inventory SET qty=?,last_used_at=? WHERE guild_id=? AND user_id=? AND item_key=?', (qty, now, guild_id, user_id, item_key))
             use_id = self.db.execute('INSERT INTO item_uses(guild_id,user_id,channel_id,item_key,seed,result,used_at) VALUES(?,?,?,?,?,?,?)',

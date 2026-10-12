@@ -172,12 +172,13 @@ def register_items_commands(bot, ctx: SimpleNamespace) -> None:
         """Uses the item and posts the result publicly: through the slash response, or (from a menu button) with a channel message.
         Refusals and send failures are shown only to the member. True when the item was used."""
         t = invoker_t(interaction)
+        channel = channel_t(interaction.guild)
         try:
-            outcome = store.use_item(guild_id, interaction.user.id, interaction.channel.id if interaction.channel else 0, key)
+            outcome = store.use_item(guild_id, interaction.user.id, interaction.channel.id if interaction.channel else 0, key, locale=channel.locale)
         except ItemError as error:
             await send_private(interaction, use_error(error, name, t=t))
             return False
-        embed = result_embed(interaction.user, outcome['item'], outcome, t=channel_t(interaction.guild))
+        embed = result_embed(interaction.user, outcome['item'], outcome, t=channel)
         try:
             if via_channel:
                 await interaction.channel.send(embed=embed, allowed_mentions=NO_MENTIONS)

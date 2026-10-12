@@ -430,3 +430,6 @@ DASH_PREVIEW_EXPIRED = E_('dash.preview_expired', 'Preview expired; upload again
 SCENE_OWNER_CHOOSE = E_('scene.owner_choose', 'Choose an owner in this server.')
 CURRENCY_UI_MEMBER_INVALID = E_('currency_ui.member_invalid', 'Enter a member ID (digits only) or paste a mention.')
 PRESETS_UI_ORDER_REQUIRED = E_('presets_ui.order_required', 'Choose a prompt order profile.')
+
+# --- FEAT-44 (2a): server language
+SERVER_LANGUAGE_UNKNOWN = E_('server_language.unknown', 'Unknown language: {language}')

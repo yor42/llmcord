@@ -45,6 +45,7 @@ from .games_holdem_discord import HoldemButton, HoldemTables
 from .items_discord import register_items_commands
 from llmcord_core import i18n
 from llmcord_core.i18n import N_, UserError, codes
+from llmcord_core.i18n import discord_locale
 from llmcord_core.i18n.discord_locale import C_, LlmcordTranslator, channel_t, invoker_t
 
 AVATAR_ASSET_CHECK_TTL = 600
@@ -185,6 +186,7 @@ class SkitBot(commands.Bot):
 
     async def setup_hook(self):
         await self.tree.set_translator(LlmcordTranslator())
+        discord_locale.set_server_language_source(self.store.server_language)
         if self.base_settings.development_guild_id:
             guild = discord.Object(id=self.base_settings.development_guild_id)
             self.tree.copy_global_to(guild=guild)
