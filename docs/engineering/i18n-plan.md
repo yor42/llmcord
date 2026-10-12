@@ -108,7 +108,7 @@ The scan **undercounts** single-word labels kept in data tuples, such as `("sit"
 ```
 llmcord_core/
   i18n/
-    __init__.py      # public API: Translator, N_, C_, UserError, resolve helpers
+    __init__.py      # public API: Translator, N_, NP_, E_, UserError, resolve helpers
     catalog.py       # discover locales/*/LC_MESSAGES/*.po, load with Babel, merge per locale, cache
     negotiate.py     # Discord / Accept-Language / BCP 47 tags -> supported locale; fallback chain
     format.py        # safe named-placeholder formatter, Korean particle spec, numbers and lists
@@ -122,7 +122,9 @@ llmcord_core/
     ko/LC_MESSAGES/
       bot.po  commands.po  web.po  errors.po  common.po
     ja/LC_MESSAGES/  # a future language pack: add the folder, no code change
-scripts/i18n.py      # extract | update | init <lang> | check | stats | pseudo
+scripts/i18n.py      # extract | update | init <lang> | check | stats | ratchet [--update [--allow-increase]]
+scripts/i18n_check.py  # the checks behind `check` and the string ratchet
+scripts/i18n_ratchet.json  # ratchet baseline: bare UI and raise literals per module
 ```
 
 English needs no catalog: it is the source. `en` is always available and is the final fallback.
@@ -137,7 +139,7 @@ English needs no catalog: it is the source. `en` is always available and is the 
 | `errors` | Shared `UserError` codes shown on both surfaces (validation, conflicts, permissions) | `i18n/codes.py` only |
 | `common` | Vocabulary shown on both surfaces | `i18n/terms.py` only |
 
-`check` fails when a `.py` file outside the mapped globs contains a marker call. A new module therefore cannot leak strings that no domain extracts.
+`check` fails when a `.py` file outside the mapped globs contains a marker call (`C_` is exempt: command metadata may be built in any module). A new module therefore cannot leak strings that no domain extracts.
 
 **`.po` conventions**
 
@@ -197,7 +199,7 @@ The channel locale is the first of these that is set: the server bot language, t
 | Buttons on a public message | Channel locale. The ephemeral reply to a click uses the **clicker's** locale. | `HoldemButton`, `DoubtButton`, `GameButton` |
 | Character lines (webhooks) | Never translated | Model output follows the conversation's language |
 
-**Command metadata.** `C_()` wraps every description and choice name. `LlmcordTranslator.translate()` returns the catalog string for supported locales and `None` for the rest, so Discord shows the default. The tree already syncs at every start (`discord_bot.py:176-182`), so a catalog change applies after a restart. Discord limits are checked for every locale: descriptions and choice names 1–100 characters, button labels 80, select options 100, modal titles and text-input labels 45, message content 2,000 (code cuts at 1,900).
+**Command metadata.** `C_()` wraps every description and choice name. `LlmcordTranslator.translate()` returns the catalog string for supported locales and `None` for the rest, so Discord shows the default. The tree already syncs at every start (`discord_bot.py:176-182`), so a catalog change applies after a restart. Discord limits: descriptions and choice names 1–100 characters, button labels 80, select options 100, modal titles and text-input labels 45, message content 2,000 (code cuts at 1,900). `LlmcordTranslator` enforces the 100-character limit at runtime for command metadata. `check` enforces the component limits only by `msgctxt` prefix (section 6.1), so every button label, select option and modal text needs a `button…`, `select…` or `modal…` context.
 
 **Components.** Every `custom_id` is already language-neutral (`games_discord.py:98`, `games_doubt_discord.py:48`, `games_holdem_discord.py:55`, `games_spoken_discord.py:54`, `games_spoken_doubt.py:34`). Keep it that way: a custom ID must never contain text. A message that was already posted keeps its old labels until the bot next edits it, and that is acceptable.
 
@@ -214,7 +216,7 @@ The channel locale is the first of these that is set: the server bot language, t
 - **The cookie:** `llmcord_lang`, one year, `Secure`, `HttpOnly`, `SameSite=Lax`, kept separate from the session so it survives sign-out. Phase 5 can add a per-user preference stored in the database to follow an admin across devices (a schema change).
 - **The switcher:** the account menu (`account_menu`, `dashboard.py:1318`) gets a **Language** item that lists the discovered locales by their own names. Each entry is a plain POST form to a new `/lang` route that checks the CSRF token and origin exactly like `/logout` (`web.py:144`), with no JS. `next` must be a same-site path that starts with `/` and not `//`, to block open redirects. The route answers with a 303 back to the same page.
 - **The full reload is deliberate.** It rebuilds the header, the tabs, Quasar's language pack and `<html lang>` in one step. It is a navigation, like sign-out, not a panel refresh, so it is a documented exception to the ui-guide's "no full-page reloads" rule (decision E). While an editor has unsaved changes, the save bar's `beforeunload` warning protects them, or the menu item can be disabled while dirty, matching how the save bar refuses other actions.
-- **Binding:** the three page handlers (`dashboard.py:1132`, `:1167`, `:1213`) set `client.llmcord_locale` next to the existing `client.llmcord_binding`. `LiveContext` exposes `ctx.t`, and helpers without `ctx` call `i18n.web_locale.current()`, which reads `ui.context.client`. NiceGUI runs event handlers and `ui.timer` callbacks in the client's context, so toasts after a click come out in the right language. `_attempt` (`dashboard.py:56`, `:752`) renders `UserError` with `t.error`.
+- **Binding:** the three page handlers (`dashboard.py:1132`, `:1167`, `:1213`) set `client.llmcord_locale` next to the existing `client.llmcord_binding`. `LiveContext` exposes `ctx.t`, and helpers without `ctx` call `i18n.web_locale.current()`, which reads the client from NiceGUI's slot stack and returns `en` outside a client. NiceGUI runs event handlers and `ui.timer` callbacks in the client's context, so toasts after a click come out in the right language. `_attempt` (`dashboard.py:56`, `:752`) renders `UserError` with `t.error`.
 - **Quasar and `<html lang>`:** the page handler swaps in a shallow copy of `client.page` with `language` mapped from our locale (`ko` to `ko-KR`). The mapping is derived from NiceGUI's `Language` literal, so a new pack needs no table edit. `lang="ko"` also lets screen readers pronounce Korean correctly.
 - **Routes:** no locale prefix in URLs. `?tab=` keys stay code names, so a link one admin sends opens in the other admin's own language. There is no SEO concern, because the dashboard is private behind Tailscale. An optional `?lang=` sets the cookie, for testing and `scripts/screenshot_dashboard.py`.
 - **JS:** `lore_drag.js` gets its two messages as props. The ECharts formatter gets the page locale and the translated unit.
@@ -263,11 +265,11 @@ The channel locale is the first of these that is set: the server bot language, t
 
 ## 6. Migration plan
 
-Every step goes through the `orchestrate-change` workflow (brief, `test-writer` if needed, `implementer`, `verify-runner`, `change-reviewer`). The backlog IDs below are **proposed** and will be added only after approval.
+Every step goes through the `orchestrate-change` workflow (brief, `test-writer` if needed, `implementer`, `verify-runner`, `change-reviewer`). The backlog IDs below were added with D39.
 
 | Phase | Items (proposed) | What changes | Exit criteria |
 | --- | --- | --- | --- |
-| **0 Foundations** | FEAT-43 | `llmcord_core/i18n/` (negotiation, catalog loader, safe formatter with josa, `Translator`, `UserError`, `N_`/`C_`/`E_`); Babel added to requirements; `scripts/i18n.py`; ruff `INT` config; the ratchet check with a baseline allowlist; empty `ko` catalogs; unit tests. Two spikes, each pinned by a test: NiceGUI per-client `language`, and Translator plus sync on the development guild. Measure catalog load time on the Pi. | Nothing visible changes. `scripts/verify.sh` is green. |
+| **0 Foundations** (done, section 6.1) | FEAT-43 | `llmcord_core/i18n/` (negotiation, catalog loader, safe formatter with josa, `Translator`, `UserError`, `N_`/`C_`/`E_`); Babel added to requirements; `scripts/i18n.py`; ruff `INT` config; the ratchet check with a baseline allowlist; empty `ko` catalogs; unit tests. Spikes pinned by tests: NiceGUI per-client `language` and the command-metadata Translator. The live sync on the development guild and the catalog load time on the Pi moved to FEAT-44. | Nothing visible changes. `scripts/verify.sh` is green. |
 | **1 Extraction** (English byte-identical) | MNT-66 … MNT-74, one per batch below | Wrap strings, rewrite fragments and plurals as whole messages, move engines to structured results and stores to `UserError`. The ratchet allowlist shrinks with each batch. | **Existing tests pass unchanged.** A test that needs editing is a stop signal: English output changed. |
 | **2 Locale plumbing** | FEAT-44 (bot), FEAT-45 (dashboard) | Audience resolvers and explicit `t` through every Discord renderer and handler; `set_translator`; schema **v22** `guild_settings.language` with a backup-before-upgrade migration; the Server settings field; cookie, `/lang` route and account-menu switcher; per-client Quasar language; `<html lang>`; fonts and `keep-all`; the item roll locale. Run everything end to end with the **pseudo-locale** before any Korean exists. | Pseudo-locale screenshots and a Discord walkthrough show no unwrapped string. The browser suite passes in `en`. |
 | **3 Korean pack** | FEAT-46 | Approve the glossary and register; translate every domain; add `ko` to the built-in item recipes; native review by the user; dashboard screenshots at desktop and phone width; a Discord development-guild pass with a `ko` client; the lexicon-alignment test. | `check` passes at 100% `ko` coverage and Discord limits hold. User sign-off. |
@@ -290,16 +292,74 @@ Every step goes through the `orchestrate-change` workflow (brief, `test-writer` 
 
 **Agent routing** (following `orchestrate-change`): Sonnet `implementer` for each batch, since fragment rewrites need judgment; `test-writer` for the i18n package and the pseudo-locale checks; `verify-runner` with `scripts/verify.sh`, plus `--browser` for the dashboard batches; Sonnet `change-reviewer`. Opus reviews Phase 0's formatter (untrusted format strings) and Phase 2's `/lang` route and schema migration (CSRF, open redirect, migration).
 
-**Parallelism:** CLAUDE.md asks for one small item at a time, so batches run **one after another by default**. Batches on separate files (for example 1a and 1i) could run in parallel worktrees, but only if the user says so (decision F). `dashboard.py` stays sequential because it is 2,405 lines and a conflict hotspot.
+**Parallelism:** CLAUDE.md asks for one small item at a time, but the user chose parallel batches (decision F, D39): batches that own separate files (for example 1a and 1i) may run in parallel worktrees. `dashboard.py` stays sequential because it is 2,405 lines and a conflict hotspot.
+
+### 6.1 Phase 0 as built (FEAT-43)
+
+Phase 0 landed on 2026-10-12. It went through a multi-lens review (security, contract, Korean, tests, tooling), adversarial checks of every finding, and fixes. Nothing outside `tests/` and `scripts/` imports the package yet. Phase 1 batches must follow these rules.
+
+**Runtime**
+
+- **Missing translation:** the English text is used.
+- **A translation that fails to format** (an unknown field or a bad spec) falls back to English. It logs one warning per locale, msgctxt and msgid, with no parameter values.
+- **English source that fails to format** raises `MessageFormatError`. That is a code bug.
+- **`t.error(err)` never raises.** If a `UserError`'s parameters do not fit its message, it logs the error code only and returns the English msgid.
+- **`load_catalog(locale)`** accepts a locale only if it is `en`, `pseudo`, or an already-normalized tag that has a `locales/<tag>/LC_MESSAGES` folder. Anything else gets an empty catalog, which is not cached and reads no file. Callers still negotiate first: this is a backstop, not a resolver.
+- **Formatter:**
+  - A format spec with four or more consecutive digits is refused (`{x:>9999}`), so a translation cannot request a huge allocation.
+  - Field names must be bare, as section 4.1 says.
+- **`web_locale.current_locale()`** reads the client from NiceGUI's slot stack. It returns `en` when there is no client, and also when the slot's element has been deleted.
+- **Not yet done:** the Discord development-guild sync spike and the catalog load time on the Pi. Both need the real bot and hardware, so they move to FEAT-44. The NiceGUI per-client `language` spike is pinned by a test (`tests/test_i18n_web.py`).
+
+**Korean particles (josa)**
+
+- **Stripped before the last sound is read:** trailing spaces, closing brackets and quotes (ASCII and fullwidth), and the Discord markdown markers `* _ ~ |` and backtick. `**루나**` reads as 루나.
+- **The combined form (`이(가)`) is used** when the reading is unknown:
+  - Latin words.
+  - Emoji.
+  - Discord mentions, channels, roles, custom emoji and timestamps, including wrapped ones such as `**<@id>**`.
+  - ASCII letters followed by digits (`GPT-3`, `v1.0`).
+  - Numbers ending in 16 or more zeros (the reading of 경 and above is not covered).
+  - Decomposed (NFD) Hangul. This is a known limitation: it is safe but could be exact.
+- **A josa spec replaces any numeric spec.** `{n:,:을/를}` is refused. For a number that takes a particle, pass a formatted string: `t('You paid {amount}.', amount=t.number(n))` with msgstr `{amount:을/를} 냈어요.`. In English, `t.number` gives the same `1,500` as `{n:,}`.
+
+**Catalog conventions `check` relies on**
+
+- **Component labels need a context.** A Discord button label, select option or modal text must have a `msgctxt` that starts with `button`, `select` or `modal` (for example `NP_('button.holdem', 'Call')`). Only those contexts are length-checked.
+- **Command metadata is never formatted.** `C_()` strings go to Discord as written, so they must not contain `{` or `}`. `check` does not enforce this yet.
+- **Message ids must be literals.** A marker call takes a string literal. `t('A' if x else 'B')`, `t(a or b)` and `t(names[i])` are `[non-literal]` errors: wrap each branch in its own `t(...)`.
+- **`check` output:**
+  - Errors are prefixed with an ID: `[stale-template]`, `[stale-catalog]`, `[po-parse]`, `[plural-forms]`, `[obsolete]`, `[placeholder]`, `[field-syntax]`, `[josa]`, `[limit]`, `[conflict]`, `[unmapped]`, `[non-literal]`, `[name-collision]`, `[ratchet]`.
+  - `[fuzzy]` is a warning only.
+  - A Korean spec that is not a known pair, such as `{name:이가}`, is a `[josa]` error.
+
+**String ratchet (`scripts/i18n_ratchet.json`)**
+
+- **`ui` count:** bare text literals passed positionally, or through a text keyword (`label=`, `text=`, `placeholder=`, `title=` and so on), to a UI or Discord call (`UI_CALLS` in `scripts/i18n_check.py`); `describe` counts every keyword. A literal counts only if it contains a letter or Hangul and does not look like an identifier (lowercase letters, digits and `_.:/#-` only, such as `'save'` or `'tab:lore'`), so a one-word lowercase label is not counted either. Every module outside `i18n/` is counted.
+- **`raise` count:** `raise X('text')` for any exception class except `NotImplementedError`, `AssertionError`, `StopIteration`, `SystemExit`, `KeyboardInterrupt` and `UserError`. Only the first positional argument is read; for `HTTPException`, the second argument or `detail=`.
+- **Phase 0 baseline:** 693 `ui` and 529 `raise` literals in 46 modules. The review raised the baseline from 655 and 373 because it closed counting gaps.
+- **Not counted** (Phase 1 reviewers grep for these by hand):
+  - Text inside `.props('aria-label="…"')`.
+  - `ctx.run(..., success='…')`.
+  - Labels kept in data tuples, such as `("sit", "Sit", …)`.
+- **Updating the baseline after a batch:** run `python scripts/i18n.py ratchet --update`. It refuses to raise any count unless you pass `--allow-increase`, which needs a stated reason in the batch report. It also refuses an unreadable baseline, which `--allow-increase` rebuilds.
+- **Parallel batches:** when two batches conflict on the baseline file, take either side and rerun `ratchet --update` on the merged tree. Counts only go down, so the guard passes.
+
+**Known gaps, deferred to MNT-75**
+
+- `check` does not detect duplicate msgid blocks in a `.po` file.
+- `check` does not enforce the no-braces rule for `C_` strings.
+- The tooling follows symlinks under `locales/`.
+- A baseline that is valid JSON of the wrong shape (for example `{"files": []}`) makes `check` and `ratchet --update` stop with a traceback instead of the "unreadable" message. They still exit non-zero and leave the file unchanged.
 
 ## 7. Quality gates and automation
 
 | Check | Where | Catches |
 | --- | --- | --- |
-| ruff `INT001`–`INT003` for `t` and `N_` | `ruff check` (verify and CI) | f-strings, `.format` and `%` inside a marker |
-| `scripts/i18n.py check` | new verify stage and CI | Templates out of date with the source (extract and diff); `.po` files that do not parse; placeholder names in `msgstr` that differ from `msgid`; unknown josa specs; disallowed field syntax; fuzzy or obsolete entries; Discord length limits per locale; the same `msgid` translated two ways without `msgctxt`; marker calls in unmapped files; f-strings in `t.n` and `t.p` (the case ruff misses) |
-| Ratchet check | `check` | Any **new** bare string passed to a UI or Discord call (`ui.label`, `ui.notify`, `send_message`, `Button(label=)`, and so on) in surface modules. A baseline allowlist shrinks with each Phase 1 batch and must be empty at the end of Phase 1. |
-| Pseudo-locale | tests and `screenshot_dashboard.py --lang pseudo` | Every message rendered as `[!! Śéŕvéŕ śéţûƥ ~~~ !!]` with about 40% expansion. A string left as plain English was not extracted, a broken bracket shows a fragment, and the expansion exposes layout overflow. It is generated, never committed, and enabled only with `LLMCORD_I18N_PSEUDO=1`. |
+| ruff `INT001`–`INT003` for `t`, `N_` and `C_` | `ruff check` (verify and CI) | f-strings, `.format` and `%` inside a marker |
+| `scripts/i18n.py check` | verify stage "i18n catalogs and string ratchet" and CI (since Phase 0) | Templates out of date with the source (extract and diff); `.po` files that do not parse; placeholder names in `msgstr` that differ from `msgid`; unknown josa specs; disallowed field syntax; obsolete entries; fuzzy entries (a warning only: they are never shipped); a `Plural-Forms` header that differs from CLDR; Discord length limits for `button…`/`select…`/`modal…` contexts in every locale; the same `msgid` translated two ways without `msgctxt`; marker calls in unmapped files; f-strings in `t.n` and `t.p` (the case ruff misses) |
+| Ratchet check | `check` | Any **new** bare string passed to a UI or Discord call (`ui.label`, `ui.notify`, `send_message`, `Button(label=)`, and so on) in any module, and any new `raise` with a bare English message. Section 6.1 has the counting rules and gaps. A baseline allowlist shrinks with each Phase 1 batch and must be empty at the end of Phase 1. |
+| Pseudo-locale | tests and `screenshot_dashboard.py --lang pseudo` | Every message rendered as `[!! Šéŕṽéŕ šéṫüṗ ~~~ !!]` with about 30% padding. A string left as plain English was not extracted, a broken bracket shows a fragment, and the expansion exposes layout overflow. It is generated, never committed, and enabled only with `LLMCORD_I18N_PSEUDO=1`. |
 | Korean smoke tests | unit tests and one browser test file | A slash reply in `ko`, a public table in a `ko` server, the dashboard tab labels with the `ko` cookie, josa rendering |
 | English tests | unchanged | Pin current behaviour. Tests run in `en` by default. |
 

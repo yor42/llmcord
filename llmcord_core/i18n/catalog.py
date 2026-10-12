@@ -89,8 +89,17 @@ def _plural_rule(header, locale):
     return gettext.c2py(expr), num
 
 
-@functools.lru_cache(maxsize=None)
 def load_catalog(locale, root=None) -> Catalog:
+    if locale != PSEUDO_LOCALE and (not isinstance(locale, str) or normalize(locale) != locale):
+        return Catalog(DEFAULT_LOCALE)
+    base = Path(root) if root is not None else LOCALES_DIR
+    if locale not in (DEFAULT_LOCALE, PSEUDO_LOCALE) and not (base / locale / 'LC_MESSAGES').is_dir():
+        return Catalog(DEFAULT_LOCALE)
+    return _load_catalog(locale, root)
+
+
+@functools.lru_cache(maxsize=None)
+def _load_catalog(locale, root=None) -> Catalog:
     base = Path(root) if root is not None else LOCALES_DIR
     directory = base / locale / 'LC_MESSAGES'
     if locale in (DEFAULT_LOCALE, PSEUDO_LOCALE) or not directory.is_dir():
@@ -135,4 +144,4 @@ def load_catalog(locale, root=None) -> Catalog:
 
 
 def clear_cache() -> None:
-    load_catalog.cache_clear()
+    _load_catalog.cache_clear()

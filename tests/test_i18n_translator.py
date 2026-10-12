@@ -1,6 +1,8 @@
 """FEAT-43: the public i18n API (Translator, Msg, UserError, pseudo-locale, lazy Babel import)."""
 from __future__ import annotations
 
+import copy
+import pickle
 import subprocess
 import sys
 import tempfile
@@ -9,6 +11,7 @@ from pathlib import Path
 
 from test_i18n_catalog import write_domain
 
+from llmcord_core import i18n
 from llmcord_core.i18n import (
     E_,
     NP_,
@@ -41,8 +44,11 @@ class TranslatorCase(unittest.TestCase):
             (('{name:이/가} won',), {'string': '{name:이/가} 이겼어요'}),
             (('Show {total}',), {'string': '표시 {totl}'}),
             (('Braces {{x}}',), {'string': '중괄호 {{x}}'}),
+            ((('One box', '{count} boxes'),), {'string': ('상자 {cnt}개',)}),
         ])
         clear_cache()
+        i18n._warned.clear()
+        self.addCleanup(i18n._warned.clear)
         self.addCleanup(clear_cache)
         self.ko = Translator('ko', root=self.root)
         self.en = Translator('en', root=self.root)
@@ -116,6 +122,25 @@ class KoreanTests(TranslatorCase):
         self.assertIn('Show {total}', logs.output[0])
         self.assertIn('ko', logs.output[0])
 
+    def test_distinct_bad_keys_each_warn_once(self):
+        with self.assertLogs(LOGGER, 'WARNING') as logs:
+            self.ko('Show {total}', total=1)
+            self.ko.n('One box', '{count} boxes', 3)
+            self.ko('Show {total}', total=2)
+        self.assertEqual(len(logs.records), 2)
+
+    def test_missing_param_still_raises_in_translated_locale(self):
+        with self.assertLogs(LOGGER, 'WARNING'), self.assertRaises(MessageFormatError):
+            self.ko('Hello {name}')
+
+    def test_bad_plural_translation_falls_back_to_english_and_warns_once(self):
+        with self.assertLogs(LOGGER, 'WARNING') as logs:
+            self.assertEqual(self.ko.n('One box', '{count} boxes', 3), '3 boxes')
+        self.assertEqual(len(logs.records), 1)
+        self.assertNotIn('3', logs.output[0])
+        with self.assertNoLogs(LOGGER, 'WARNING'):
+            self.assertEqual(self.ko.n('One box', '{count} boxes', 4), '4 boxes')
+
     def test_doubled_braces(self):
         self.assertEqual(self.ko('Braces {{x}}'), '중괄호 {x}')
 
@@ -179,6 +204,25 @@ class ErrorTests(TranslatorCase):
         self.assertEqual(self.en.error(err), 'Hello Luna')
         self.assertEqual(self.ko.error(KeyError('boom')), "'boom'")
         self.assertEqual(self.ko.error(ValueError('plain')), 'plain')
+
+    def test_error_with_unusable_params_returns_bare_msgid(self):
+        """FEAT-43: an error UserError tolerated at raise time must not raise again while it is rendered."""
+        bad_spec = UserError(E_('test.coins', 'You have {n:,} coins'), n='lots')
+        for tr in (self.en, self.ko):
+            with self.subTest(locale=tr.locale):
+                with self.assertLogs(LOGGER, 'WARNING') as logs:
+                    self.assertEqual(tr.error(UserError(self.GREETING)), 'Hello {name}')
+                self.assertIn('test.greeting', logs.output[-1])
+                with self.assertLogs(LOGGER, 'WARNING') as logs:
+                    self.assertEqual(tr.error(bad_spec), 'You have {n:,} coins')
+                self.assertNotIn('lots', '\n'.join(logs.output))
+
+    def test_user_error_survives_copy_and_pickle(self):
+        """FEAT-43: UserError rebuilds from code and params, not from its English text."""
+        err = UserError(self.GREETING, name='Luna')
+        for clone in (copy.copy(err), copy.deepcopy(err), pickle.loads(pickle.dumps(err))):
+            self.assertIsInstance(clone, UserError)
+            self.assertEqual((clone.code, clone.params, str(clone)), (err.code, err.params, 'Hello Luna'))
 
     def test_error_code_validation(self):
         self.assertEqual(E_('a.b_c.d1', 'x'), ErrorCode('a.b_c.d1', 'x'))

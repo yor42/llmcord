@@ -1,5 +1,6 @@
 import contextlib
 import io
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -7,6 +8,7 @@ import unittest
 from babel.messages.pofile import read_po
 
 from scripts import i18n as tool
+from scripts import i18n_check
 
 SOURCES = {
     'llmcord_core/x_discord.py': '''\
@@ -298,8 +300,133 @@ class MainTests(unittest.TestCase):
         self.assertNotEqual(ctx.exception.code, 0)
 
     def test_real_repository_is_consistent(self):
+        """FEAT-43: deliberately mirrors the verify.sh/CI i18n stage, ratchet included.
+
+        When UI literal counts change, refresh the baseline with `python scripts/i18n.py ratchet --update`.
+        """
         code, out, _ = run_main(['check'], None)
         self.assertEqual(code, 0, out)
+
+
+class CheckCliTests(TempTree):
+    """FEAT-43: exit codes and output of the check and ratchet subcommands on a temp tree."""
+
+    UI = 'async def show(i):\n    await i.response.send_message("Hello there")\n'
+
+    def setUp(self):
+        super().setUp()
+        path = self.root / 'llmcord_core/x_discord.py'
+        path.write_text(path.read_text(encoding='utf-8').replace('    t(f"Skipped {name}")\n', ''), encoding='utf-8')
+        tool.write_templates(self.root)
+        tool.init_locale(self.root, 'ko')
+        i18n_check.write_ratchet(self.root)
+
+    def add_source(self, rel, text):
+        (self.root / rel).write_text(text, encoding='utf-8')
+
+    def test_clean_tree(self):
+        code, out, _ = run_main(['check'], self.root)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(run_main(['ratchet'], self.root)[0], 0)
+
+    def test_stale_template_fails_check_but_not_ratchet(self):
+        self.add_source('llmcord_core/y_ui.py', 'def page(t):\n    t("Web only")\n    t("Brand new")\n')
+        code, out, _ = run_main(['check'], self.root)
+        self.assertEqual(code, 1)
+        self.assertTrue(any(line.startswith('[stale-template]') for line in out.splitlines()), out)
+        code, out, _ = run_main(['ratchet'], self.root)
+        self.assertEqual(code, 0, out)
+
+    def test_ratchet_increase_fails_both(self):
+        self.add_source('llmcord_core/z_discord.py', self.UI)
+        for argv in (['check'], ['ratchet']):
+            code, out, _ = run_main(argv, self.root)
+            self.assertEqual(code, 1, argv)
+            self.assertTrue(any(line.startswith('[ratchet]') for line in out.splitlines()), out)
+
+    def test_missing_baseline_fails_ratchet(self):
+        (self.root / 'scripts/i18n_ratchet.json').unlink()
+        code, out, _ = run_main(['ratchet'], self.root)
+        self.assertEqual(code, 1)
+        self.assertIn('is missing', out)
+
+    def test_ratchet_update_refuses_to_raise_baseline(self):
+        self.add_source('llmcord_core/z_discord.py', self.UI)
+        path = self.root / 'scripts/i18n_ratchet.json'
+        before = path.read_text(encoding='utf-8')
+        code, out, err = run_main(['ratchet', '--update'], self.root)
+        self.assertEqual(code, 1)
+        self.assertIn('z_discord.py', out)
+        self.assertIn('refusing', err)
+        self.assertEqual(path.read_text(encoding='utf-8'), before)
+        self.assertEqual(run_main(['ratchet'], self.root)[0], 1)
+
+    def test_ratchet_update_allow_increase_writes_baseline(self):
+        self.add_source('llmcord_core/z_discord.py', self.UI)
+        code, out, _ = run_main(['ratchet', '--update', '--allow-increase'], self.root)
+        self.assertEqual(code, 0, out)
+        self.assertIn('z_discord.py', (self.root / 'scripts/i18n_ratchet.json').read_text(encoding='utf-8'))
+        self.assertEqual(run_main(['ratchet'], self.root)[0], 0)
+
+    def test_ratchet_update_accepts_a_decrease(self):
+        self.add_source('llmcord_core/z_discord.py', self.UI)
+        i18n_check.write_ratchet(self.root)
+        self.add_source('llmcord_core/z_discord.py', 'async def show(i):\n    pass\n')
+        self.assertEqual(run_main(['ratchet'], self.root)[0], 1)
+        code, out, _ = run_main(['ratchet', '--update'], self.root)
+        self.assertEqual(code, 0, out)
+        self.assertEqual(run_main(['ratchet'], self.root)[0], 0)
+
+    def test_ratchet_update_creates_missing_baseline(self):
+        (self.root / 'scripts/i18n_ratchet.json').unlink()
+        code, out, _ = run_main(['ratchet', '--update'], self.root)
+        self.assertEqual(code, 0, out)
+        self.assertTrue((self.root / 'scripts/i18n_ratchet.json').is_file())
+
+    def corrupt_baseline(self, text='<<<<<<< HEAD\n{\n=======\n{}\n>>>>>>> branch\n'):
+        path = self.root / 'scripts/i18n_ratchet.json'
+        path.write_text(text, encoding='utf-8')
+        return path
+
+    def test_ratchet_update_refuses_corrupt_baseline(self):
+        """FEAT-43: an unreadable baseline is not treated as missing, so --update cannot silently raise it."""
+        for text in ('{', '<<<<<<< HEAD\n{}\n=======\n{}\n>>>>>>> branch\n'):
+            with self.subTest(text=text):
+                path = self.corrupt_baseline(text)
+                self.add_source('llmcord_core/z_discord.py', self.UI)
+                code, out, err = run_main(['ratchet', '--update'], self.root)
+                self.assertEqual(code, 1, (out, err))
+                self.assertIn('unreadable', out + err)
+                self.assertIn('ratchet.json', out + err)
+                self.assertEqual(path.read_text(encoding='utf-8'), text)
+
+    def test_ratchet_update_allow_increase_repairs_corrupt_baseline(self):
+        self.corrupt_baseline('{')
+        self.add_source('llmcord_core/z_discord.py', self.UI)
+        code, out, err = run_main(['ratchet', '--update', '--allow-increase'], self.root)
+        self.assertEqual(code, 0, (out, err))
+        path = self.root / 'scripts/i18n_ratchet.json'
+        self.assertIn('z_discord.py', path.read_text(encoding='utf-8'))
+        json.loads(path.read_text(encoding='utf-8'))
+        self.assertEqual(run_main(['ratchet'], self.root)[0], 0)
+
+    def test_check_corrupt_baseline_says_unreadable_without_plain_update_advice(self):
+        self.corrupt_baseline('{')
+        code, out, _ = run_main(['check'], self.root)
+        self.assertEqual(code, 1, out)
+        lines = [line for line in out.splitlines() if line.startswith('[ratchet]')]
+        self.assertTrue(lines, out)
+        self.assertIn('unreadable', lines[0])
+        self.assertNotIn('run python scripts/i18n.py ratchet --update', lines[0])
+
+    def test_check_missing_baseline_says_missing_and_recommends_update(self):
+        (self.root / 'scripts/i18n_ratchet.json').unlink()
+        code, out, _ = run_main(['check'], self.root)
+        self.assertEqual(code, 1, out)
+        lines = [line for line in out.splitlines() if line.startswith('[ratchet]')]
+        self.assertTrue(lines, out)
+        self.assertIn('missing', lines[0])
+        self.assertIn('ratchet --update', lines[0])
 
 
 if __name__ == '__main__':

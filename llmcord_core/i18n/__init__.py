@@ -67,6 +67,13 @@ class UserError(ValueError):
         self.code = code
         self.params = params
 
+    def __reduce__(self):
+        return (_rebuild_user_error, (type(self), self.code, self.params))
+
+
+def _rebuild_user_error(cls, code, params):
+    return cls(code, **params)
+
 
 def pseudo(text: str) -> str:
     out, pos = [], 0
@@ -122,7 +129,11 @@ class Translator:
 
     def error(self, err) -> str:
         if isinstance(err, UserError):
-            return self(err.code.msgid, **err.params)
+            try:
+                return self(err.code.msgid, **err.params)
+            except MessageFormatError:
+                log.warning('bad error params: code=%s', err.code.code)
+                return str(err)
         return str(err)
 
     def number(self, value) -> str:

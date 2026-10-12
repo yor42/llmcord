@@ -4,16 +4,16 @@
       "raise": 5
     },
     "llmcord_core/admin_store.py": {
-      "raise": 97
+      "raise": 156
     },
     "llmcord_core/auth.py": {
-      "raise": 1
+      "raise": 16
     },
     "llmcord_core/avatars.py": {
       "raise": 14
     },
     "llmcord_core/backend.py": {
-      "raise": 2
+      "raise": 7
     },
     "llmcord_core/cards.py": {
       "raise": 10
@@ -23,11 +23,11 @@
     },
     "llmcord_core/currency_ui.py": {
       "raise": 1,
-      "ui": 38
+      "ui": 44
     },
     "llmcord_core/dashboard.py": {
-      "raise": 22,
-      "ui": 262
+      "raise": 23,
+      "ui": 265
     },
     "llmcord_core/discord_bot.py": {
       "raise": 15,
@@ -43,16 +43,16 @@
       "raise": 1
     },
     "llmcord_core/games/base.py": {
-      "raise": 2
+      "raise": 3
     },
     "llmcord_core/games/blackjack.py": {
-      "raise": 10
+      "raise": 15
     },
     "llmcord_core/games/doubt.py": {
-      "raise": 7
+      "raise": 20
     },
     "llmcord_core/games/holdem.py": {
-      "raise": 14
+      "raise": 21
     },
     "llmcord_core/games/playstyle.py": {
       "raise": 3
@@ -70,7 +70,10 @@
       "ui": 1
     },
     "llmcord_core/games_ui.py": {
-      "ui": 62
+      "ui": 91
+    },
+    "llmcord_core/holdem_store.py": {
+      "raise": 11
     },
     "llmcord_core/icons.py": {
       "raise": 1,
@@ -92,7 +95,7 @@
       "ui": 6
     },
     "llmcord_core/items_store.py": {
-      "raise": 8
+      "raise": 16
     },
     "llmcord_core/lore_workspace.py": {
       "ui": 33
@@ -104,7 +107,7 @@
       "raise": 7
     },
     "llmcord_core/names.py": {
-      "raise": 3
+      "raise": 4
     },
     "llmcord_core/playstyle_generate.py": {
       "raise": 3
@@ -112,6 +115,9 @@
     "llmcord_core/presets_ui.py": {
       "raise": 1,
       "ui": 49
+    },
+    "llmcord_core/prices.py": {
+      "raise": 7
     },
     "llmcord_core/prompts.py": {
       "raise": 24
@@ -127,11 +133,17 @@
     "llmcord_core/shop_ui.py": {
       "ui": 21
     },
+    "llmcord_core/spoken/head.py": {
+      "raise": 12
+    },
+    "llmcord_core/spoken/onnx_embedder.py": {
+      "raise": 5
+    },
     "llmcord_core/store.py": {
       "raise": 26
     },
     "llmcord_core/web.py": {
-      "raise": 3
+      "raise": 9
     }
   },
   "version": 1

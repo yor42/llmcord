@@ -43,9 +43,12 @@ def bind_client(client, locale) -> None:
 
 
 def current_locale() -> str:
-    from nicegui import ui
+    from nicegui.slot import Slot
+    stack = Slot.get_stack()
+    if not stack:
+        return 'en'
     try:
-        return getattr(ui.context.client, 'llmcord_locale', 'en')
+        return getattr(stack[-1].parent.client, 'llmcord_locale', 'en')
     except RuntimeError:
         return 'en'
 

@@ -1,3 +1,5 @@
+import time
+import unicodedata
 import unittest
 
 from llmcord_core.i18n import format as fmt
@@ -204,6 +206,95 @@ class FinalSoundTests(unittest.TestCase):
     def test_josa_unknown_gives_combined(self):
         self.assertEqual(fmt.josa('Luna', '이/가'), '이(가)')
         self.assertEqual(fmt.josa('Luna', '으로/로'), '(으)로')
+
+
+class RiskyJosaInputTests(unittest.TestCase):
+    """FEAT-43: pins final_sound/josa on inputs where a confident wrong particle would be easy."""
+
+    def test_euro_after_sino_digits(self):
+        """Characterization (FEAT-43): 일, 칠, 팔 end in ㄹ so they take 로; 10 (십) takes 으로."""
+        for digit in '178':
+            self.assertEqual(fmt.josa(digit, '으로/로'), '로', digit)
+        self.assertEqual(fmt.josa('10', '으로/로'), '으로')
+
+    def test_numeric_param_through_format_message(self):
+        """Characterization (FEAT-43): 10^12 (조) ends in a vowel, 10^11 (천억) in a consonant."""
+        self.assertEqual(fmt.format_message('{n:을/를}', {'n': 10**12}), '1000000000000를')
+        self.assertEqual(fmt.format_message('{n:을/를}', {'n': 10**11}), '100000000000을')
+
+    def test_nfd_hangul_falls_back_to_combined_form(self):
+        """Characterization (FEAT-43): decomposed Hangul is unknown, so the combined form is used."""
+        nfd = unicodedata.normalize('NFD', '나무')
+        self.assertIsNone(fmt.final_sound(nfd))
+        self.assertEqual(fmt.josa(nfd, '이/가'), '이(가)')
+
+    def test_markdown_and_fullwidth_wrappers_are_stripped(self):
+        """FEAT-43: values pre-wrapped in Discord markdown or fullwidth brackets keep their real final sound."""
+        self.assertEqual(fmt.final_sound('**하늘**'), (True, True))
+        self.assertEqual(fmt.final_sound('**루나**'), (False, False))
+        self.assertEqual(fmt.final_sound('`나무`'), (False, False))
+        self.assertEqual(fmt.final_sound('_하늘_'), (True, True))
+        self.assertEqual(fmt.final_sound('||하늘||'), (True, True))
+        self.assertEqual(fmt.final_sound('하늘）'), (True, True))
+        self.assertEqual(fmt.final_sound('하늘\\_'), (True, True))
+        self.assertIsNone(fmt.final_sound('**Luna**'))
+        self.assertEqual(fmt.format_message('{w:이/가}', {'w': '**하늘**'}), '**하늘**이')
+
+    def test_discord_tags_use_combined_form(self):
+        """FEAT-43: a Discord tag is displayed as a name, so its snowflake digit says nothing about the particle."""
+        for tag in ('<@123>', '<@!123>', '<@&789>', '<#456>', '<:name:123>', '<a:x:1>',
+                    '</shop buy:123456789012345678>', '<t:1700000000:R>'):
+            with self.subTest(tag=tag):
+                self.assertIsNone(fmt.final_sound(tag))
+                self.assertEqual(fmt.josa(tag, '이/가'), '이(가)')
+        self.assertEqual(fmt.format_message('{w:을/를}', {'w': '<@123456789012345678>'}), '<@123456789012345678>을(를)')
+        self.assertEqual(fmt.final_sound('<서울>'), (True, True))
+
+    def test_wrapped_discord_tags_use_combined_form(self):
+        """FEAT-43: a tag inside markdown or brackets is still a name, so the particle is unknown."""
+        for tag in ('**<@123456789012345678>**', '(<@123>)', '`<#456>`', '||<@&9>||'):
+            with self.subTest(tag=tag):
+                self.assertIsNone(fmt.final_sound(tag))
+                self.assertEqual(fmt.josa(tag, '이/가'), '이(가)')
+        self.assertEqual(fmt.format_message('{who:이/가}', {'who': '**<@123456789012345678>**'}), '**<@123456789012345678>**이(가)')
+
+    def test_latin_word_with_digits_uses_combined_form(self):
+        """FEAT-43 (fixed): digits attached to a Latin word are read by sound, not as Sino-Korean numerals, so use the combined form."""
+        for word in ('GPT-3', 'v3', 'v1.0', 'a1', 'CO2', 'x1,000'):
+            with self.subTest(word=word):
+                self.assertIsNone(fmt.final_sound(word))
+                self.assertEqual(fmt.josa(word, '이/가'), '이(가)')
+
+    def test_standalone_and_hangul_attached_numbers_keep_sino_korean_reading(self):
+        """Characterization (FEAT-43): numbers not attached to Latin letters are still read as Sino-Korean numerals."""
+        for word, want in (('10', (True, False)), ('3.5', (False, False)), ('Room 3', (True, False)),
+                           ('캐릭터3', (True, False)), ('#12', (False, False)), ('+5', (False, False)),
+                           ('-5', (False, False)), ('007', (True, True))):
+            with self.subTest(word=word):
+                self.assertEqual(fmt.final_sound(word), want)
+
+    def test_final_sound_is_linear_on_long_digit_runs(self):
+        """FEAT-43: a long digit run followed by a non-digit must not cost quadratic time."""
+        start = time.perf_counter()
+        self.assertEqual(fmt.format_message('{n:이/가}', {'n': '1' * 20000 + '가1'}), '1' * 20000 + '가1이')
+        self.assertEqual(fmt.final_sound(',' * 20000 + '가1'), (True, True))
+        self.assertLess(time.perf_counter() - start, 1.0)
+
+
+class SpecWidthTests(unittest.TestCase):
+    """FEAT-43: catalog text is untrusted, so format specs cannot request huge widths."""
+
+    def test_wide_spec_is_rejected(self):
+        for template in ('{x:>1000}', '{x:.999999999f}', '{x:>1999999999}'):
+            with self.subTest(template=template):
+                with self.assertRaises(MessageFormatError):
+                    fmt.format_message(template, {'x': 1})
+                with self.assertRaises(MessageFormatError):
+                    fmt.fields(template)
+
+    def test_ordinary_specs_still_work(self):
+        self.assertEqual(fmt.format_message('{x:>999}', {'x': 'a'}), ' ' * 998 + 'a')
+        self.assertEqual(fmt.format_message('{x:.2f} {n:,}', {'x': 1.0, 'n': 1000}), '1.00 1,000')
 
 
 class NumberAndListTests(unittest.TestCase):

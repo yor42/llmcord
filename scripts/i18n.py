@@ -1,6 +1,6 @@
 """Extract, merge and inspect gettext catalogs (FEAT-43, D39).
 
-    python scripts/i18n.py extract | update | init LANG | check | stats | ratchet [--update]
+    python scripts/i18n.py extract | update | init LANG | check | stats | ratchet [--update [--allow-increase]]
 """
 from __future__ import annotations
 
@@ -202,7 +202,9 @@ def main(argv=None, root=None) -> int:
     for name in ('extract', 'update', 'check', 'stats'):
         sub.add_parser(name)
     sub.add_parser('init').add_argument('lang')
-    sub.add_parser('ratchet').add_argument('--update', action='store_true')
+    ratchet = sub.add_parser('ratchet')
+    ratchet.add_argument('--update', action='store_true')
+    ratchet.add_argument('--allow-increase', action='store_true')
     args = parser.parse_args(argv)
     if args.command == 'extract':
         changed = write_templates(root)
@@ -223,6 +225,11 @@ def main(argv=None, root=None) -> int:
                   'fuzzy={fuzzy} untranslated={untranslated}'.format(**row))
     elif args.command == 'ratchet' and args.update:
         from scripts import i18n_check
+        raised = [] if args.allow_increase else i18n_check.ratchet_increases(root)
+        if raised:
+            print(*raised, sep='\n')
+            print('refusing to raise the baseline; wrap the new strings, or pass --allow-increase', file=sys.stderr)
+            return 1
         print(f'wrote {i18n_check.write_ratchet(root)}')
     else:
         from scripts import i18n_check

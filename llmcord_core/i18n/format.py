@@ -5,7 +5,8 @@ import re
 import string
 
 _NAME = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
-_CLOSERS = ')]}>"\'”’」』》〉'
+_CLOSERS = ')]}>"\'”’」』》〉*_~|`\\）］｝】〕'
+_TAG_END = re.compile(r'<(?:@[!&]?\d+|#\d+|a?:\w+:\d+|/[^<>:]+:\d+|t:\d+(?::[A-Za-z])?|id:\w+)>$')
 
 # spec -> (form after a final consonant, form after a vowel, combined)
 JOSA: dict[str, tuple[str, str, str]] = {}
@@ -42,6 +43,8 @@ def _parse(template: str) -> list[tuple[str, str, str]]:
         spec = spec or ''
         if '{' in spec or '}' in spec:
             raise MessageFormatError(f'nested format spec in field {name!r}')
+        if re.search(r'\d{4,}', spec):
+            raise MessageFormatError(f'format spec too wide in field {name!r}')
         out.append((name, spec, conv))
     return out
 
@@ -56,6 +59,8 @@ def is_josa_spec(spec: str) -> bool:
 
 def final_sound(word: str) -> tuple[bool, bool] | None:
     word = word.rstrip()
+    if _TAG_END.search(word.rstrip(_CLOSERS.replace('>', '')).rstrip()):
+        return None
     word = word.rstrip(_CLOSERS).rstrip()
     if not word:
         return None
@@ -70,9 +75,14 @@ def final_sound(word: str) -> tuple[bool, bool] | None:
         return False, False
     if ch not in _DIGITS:
         return None
-    match = re.search(r'[0-9,]+$', word)
-    run = match.group()
-    if match.start() > 0 and word[match.start() - 1] == '.':
+    head = word.rstrip('0123456789,.')
+    if head[-1:] in ('-', '_'):
+        head = head[:-1]
+    if head[-1:].isascii() and head[-1:].isalpha():
+        return None
+    stem = word.rstrip('0123456789,')
+    run = word[len(stem):]
+    if stem.endswith('.'):
         return _DIGITS[ch]
     digits = run.replace(',', '').lstrip('0')
     if not digits:

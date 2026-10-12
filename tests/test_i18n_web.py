@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+from nicegui import Client
+from nicegui import core as nicegui_core
 from nicegui.page import page as NiceGUIPage
 
 from llmcord_core.i18n import web_locale
@@ -90,8 +92,47 @@ class BindClientTests(unittest.TestCase):
         self.assertEqual(client.llmcord_locale, "ko")
 
     def test_current_locale_outside_client_is_en(self):
+        """FEAT-43: reading the locale outside a client must not flip NiceGUI into script mode."""
+        clients = dict(Client.instances)
         self.assertEqual(web_locale.current_locale(), "en")
         self.assertEqual(web_locale.current().locale, "en")
+        self.assertFalse(nicegui_core.script_mode)
+        self.assertEqual(Client.instances, clients)
+
+
+class CurrentLocaleStubTests(unittest.TestCase):
+    """FEAT-43: current_locale reads the innermost slot's client and never raises."""
+
+    def push(self, slot):
+        from nicegui.slot import Slot
+        stack = Slot.get_stack()
+        before = list(stack)
+        stack.append(slot)
+
+        def restore():
+            popped = Slot.get_stack().pop()
+            self.assertIs(popped, slot)
+            self.assertEqual(Slot.get_stack(), before)
+        self.addCleanup(restore)
+
+    def test_bound_client_locale(self):
+        self.push(SimpleNamespace(parent=SimpleNamespace(client=SimpleNamespace(llmcord_locale='ko'))))
+        self.assertEqual(web_locale.current_locale(), 'ko')
+        self.assertEqual(web_locale.current().locale, 'ko')
+
+    def test_deleted_parent_gives_en(self):
+        """FEAT-43: a slot whose parent element was deleted must not raise."""
+        class Dead:
+            @property
+            def parent(self):
+                raise RuntimeError('The parent element this slot belongs to has been deleted.')
+        self.push(Dead())
+        self.assertEqual(web_locale.current_locale(), 'en')
+        self.assertEqual(web_locale.current().locale, 'en')
+
+    def test_client_without_locale_gives_en(self):
+        self.push(SimpleNamespace(parent=SimpleNamespace(client=SimpleNamespace())))
+        self.assertEqual(web_locale.current_locale(), 'en')
 
 
 class RenderSpikeTests(unittest.TestCase):

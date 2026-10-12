@@ -1,6 +1,7 @@
 """FEAT-43: catalog discovery and loading for llmcord_core.i18n (fixture catalogs in a temp dir)."""
 from __future__ import annotations
 
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +11,7 @@ from babel.messages.catalog import Catalog as PoCatalog
 from babel.messages.catalog import Message
 from babel.messages.pofile import write_po
 
+from llmcord_core.i18n import catalog as catalog_module
 from llmcord_core.i18n import available_locales, clear_cache, load_catalog
 
 LOGGER = 'llmcord_core.i18n'
@@ -168,6 +170,46 @@ class LoadCatalogTests(EnvCase):
         second = load_catalog('ko', self.root)
         self.assertIsNot(second, first)
         self.assertEqual(second.get(None, 'Hello'), '안녕')
+
+    def test_untrusted_locale_names_load_nothing(self):
+        """FEAT-43: path-like or non-normalized tags never reach the filesystem or the cache."""
+        outside = Path(self._tmp.name).parent / 'outside-llmcord-i18n'
+        self.addCleanup(shutil.rmtree, outside, True)
+        write_domain(outside, 'ko', 'bot', [(('Hello',), {'string': '밖'})])
+        write_domain(self.root, 'ko-KR', 'bot', [(('Hello',), {'string': '지역'})], locale_arg='ko')
+        hostile = ('../outside-llmcord-i18n/ko', str(outside / 'ko'), 'ko-KR', 'KO', '', 'a/b')
+        cached = getattr(catalog_module, '_load_catalog', load_catalog)
+        before = cached.cache_info().currsize
+        with mock.patch('babel.messages.pofile.read_po') as read_po:
+            for locale in hostile:
+                with self.subTest(locale=locale):
+                    cat = load_catalog(locale, self.root)
+                    self.assertEqual(len(cat), 0)
+                    self.assertIsNone(cat.get(None, 'Hello'))
+        read_po.assert_not_called()
+        self.assertEqual(cached.cache_info().currsize, before)
+        self.assertEqual(load_catalog('ko', self.root).get(None, 'Hello'), '안녕')
+
+    def test_well_formed_tag_without_directory_loads_nothing_and_is_not_cached(self):
+        """FEAT-43: a valid tag with no catalog directory neither reads files nor grows the cache."""
+        cached = getattr(catalog_module, '_load_catalog', load_catalog)
+        before = cached.cache_info().currsize
+        with mock.patch('babel.messages.pofile.read_po') as read_po:
+            for locale in ('zz', 'qq_419'):
+                with self.subTest(locale=locale):
+                    cat = load_catalog(locale, self.root)
+                    self.assertEqual(len(cat), 0)
+                    self.assertIsNone(cat.get(None, 'Hello'))
+        read_po.assert_not_called()
+        self.assertEqual(cached.cache_info().currsize, before)
+
+    def test_real_locale_directory_still_loads_and_is_cached_once(self):
+        cached = getattr(catalog_module, '_load_catalog', load_catalog)
+        before = cached.cache_info().currsize
+        first = load_catalog('ko', self.root)
+        self.assertEqual(first.get(None, 'Hello'), '안녕')
+        self.assertIs(load_catalog('ko', self.root), first)
+        self.assertEqual(cached.cache_info().currsize, before + 1)
 
     def test_cache_is_per_root(self):
         with tempfile.TemporaryDirectory() as other:

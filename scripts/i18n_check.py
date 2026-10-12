@@ -23,11 +23,10 @@ UI_CALLS = frozenset((
     'label button notify tab input select textarea number switch checkbox tooltip menu_item expansion link markdown '
     'upload radio toggle section lucide_button confirm_dialog more_menu input_chips chip badge send_message send '
     'edit_message edit_original_response reply Embed add_field set_footer set_author Button SelectOption TextInput '
-    'Modal Group command describe Choice').split())
+    'Modal Group command describe Choice track').split())
 UI_KEYWORDS = frozenset(('text label placeholder hint title message success content description name value caption '
                          'tooltip footer prefix suffix header').split())
-RAISE_TYPES = frozenset(('ValueError RuntimeError HTTPException PermissionError LookupError KeyError TypeError '
-                         'ConflictError RecipeError ModelConfigError AppCommandError CheckFailure Exception').split())
+RAISE_SKIP = frozenset('NotImplementedError AssertionError StopIteration SystemExit KeyboardInterrupt UserError'.split())
 IDENTIFIER_LIKE = re.compile(r'^[a-z0-9_.:/#-]+$')
 TEXTY = re.compile(r'[A-Za-z가-힣ㄱ-ㅣ]')
 
@@ -74,7 +73,7 @@ def _check_text(where: str, msgid: str, text: str, is_id: bool, errors: list[str
     """Syntax and josa checks for one string; returns whether its fields could be read."""
     from llmcord_core.i18n.format import MessageFormatError, fields, is_josa_spec
     for spec in _specs(text):
-        if '/' in spec and not is_josa_spec(spec):
+        if not is_josa_spec(spec) and ('/' in spec or any(ord(c) > 127 for c in spec)):
             errors.append(f'[josa] {where}: format spec {spec!r} is not a josa spec in {_short(msgid)}')
         elif is_id and is_josa_spec(spec):
             errors.append(f'[josa] {where}: josa spec {spec!r} in an English msgid {_short(msgid)}')
@@ -140,6 +139,10 @@ def _check_catalogs(root: Path, tool, errors: list[str], warnings: list[str]) ->
                 expected = None
             if expected is None or catalog.num_plurals != expected:
                 errors.append(f'[plural-forms] {where}: nplurals {catalog.num_plurals}, expected {expected}')
+            else:
+                want = ''.join(tool._plural_forms(locale).split())
+                if ''.join((catalog.plural_forms or '').split()) != want:
+                    errors.append(f'[plural-forms] {where}: Plural-Forms differs from {want}')
             language = catalog.mime_headers and dict(catalog.mime_headers).get('Language')
             if language != locale:
                 errors.append(f'[plural-forms] {where}: Language header {language!r} differs from the directory')
@@ -196,17 +199,20 @@ def _is_literal(node) -> bool:
 
 def _non_literal(node) -> bool:
     return (isinstance(node, ast.JoinedStr)
+            or isinstance(node, (ast.IfExp, ast.BoolOp, ast.Subscript))
             or (isinstance(node, ast.BinOp) and isinstance(node.op, (ast.Add, ast.Mod)))
             or (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == 'format'))
 
 
 def _python_files(root: Path) -> list[Path]:
-    return sorted(p for p in (root / PACKAGE).rglob('*.py') if '__pycache__' not in p.parts and 'locales' not in p.parts)
+    base = root / PACKAGE
+    return sorted(p for p in base.rglob('*.py')
+                  if '__pycache__' not in p.relative_to(base).parts and 'locales' not in p.relative_to(base).parts)
 
 
 def _parse(path: Path):
     try:
-        return ast.parse(path.read_text(encoding='utf-8'))
+        return ast.parse(path.read_bytes())
     except (SyntaxError, UnicodeDecodeError, OSError):
         return None
 
@@ -226,7 +232,7 @@ def _check_markers(root: Path, tool, errors: list[str]) -> None:
             continue
         domains = mapped.get(rel, set())
         allowed = set().union(*(ALLOWED[d] for d in domains)) if domains else set()
-        in_i18n = rel.startswith(f'{PACKAGE}/i18n/')
+        in_i18n = rel.startswith(f'{PACKAGE}/i18n/') and not domains
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in MARKERS and not in_i18n:
                 errors.append(f'[name-collision] {rel}:{node.lineno}: {node.name} is a reserved marker name')
@@ -240,7 +246,7 @@ def _check_markers(root: Path, tool, errors: list[str]) -> None:
                     continue
                 arg = node.args[position]
                 if _non_literal(arg):
-                    errors.append(f'[non-literal] {rel}:{node.lineno}: {name}() msgid must be a plain string literal')
+                    errors.append(f'[non-literal] {rel}:{node.lineno}: {name}() msgid must be a plain string literal; wrap each branch of a conditional in its own t(...)')
                 elif _is_literal(arg) and name != 'C_' and name not in allowed and not in_i18n:
                     errors.append(f'[unmapped] {rel}:{node.lineno}: {name}() is not allowed in this file\'s domain')
 
@@ -277,17 +283,17 @@ def _raise_count(tree) -> int:
         if not isinstance(node, ast.Raise) or not isinstance(node.exc, ast.Call):
             continue
         call = node.exc
-        if _call_name(call) not in RAISE_TYPES:
+        name = _call_name(call)
+        if not name or name in RAISE_SKIP:
             continue
-        arg = call.args[0] if call.args else next((k.value for k in call.keywords if k.arg == 'detail'), None)
+        pos = 1 if name == 'HTTPException' else 0
+        arg = call.args[pos] if len(call.args) > pos else next((k.value for k in call.keywords if k.arg == 'detail'), None)
         total += bool(arg is not None and _bare(arg))
     return total
 
 
 def ratchet_counts(root: Path | None = None) -> dict[str, dict[str, int]]:
     root = Path(root or ROOT)
-    tool = _tool()
-    ui_files = {p for d in ('bot', 'web') for p in tool.domain_files(root, d)}
     counts: dict[str, dict[str, int]] = {}
     for path in _python_files(root):
         rel = path.relative_to(root).as_posix()
@@ -295,7 +301,7 @@ def ratchet_counts(root: Path | None = None) -> dict[str, dict[str, int]]:
         if tree is None:
             continue
         entry = {}
-        if path in ui_files and (n := _ui_count(tree)):
+        if not rel.startswith(f'{PACKAGE}/i18n/') and (n := _ui_count(tree)):
             entry['ui'] = n
         if not rel.startswith(f'{PACKAGE}/i18n/') and (n := _raise_count(tree)):
             entry['raise'] = n
@@ -313,13 +319,32 @@ def write_ratchet(root: Path | None = None) -> Path:
     return path
 
 
+def ratchet_increases(root: Path | None = None) -> list[str]:
+    root = Path(root or ROOT)
+    try:
+        payload = json.loads((root / RATCHET).read_text(encoding='utf-8'))
+    except FileNotFoundError:
+        return []
+    except (OSError, ValueError):
+        return [f'{RATCHET} is unreadable']
+    if not isinstance(payload, dict) or not isinstance(payload.get('files', {}), dict):
+        return [f'{RATCHET} is unreadable']
+    baseline = payload.get('files', {})
+    current = ratchet_counts(root)
+    return [f'{rel}: {kind} literals {baseline.get(rel, {}).get(kind, 0)} -> {current[rel][kind]}'
+            for rel in sorted(current) for kind in current[rel] if current[rel][kind] > baseline.get(rel, {}).get(kind, 0)]
+
+
 def check_ratchet(root: Path | None = None) -> list[str]:
     root = Path(root or ROOT)
     path = root / RATCHET
     try:
         baseline = json.loads(path.read_text(encoding='utf-8')).get('files', {})
+    except FileNotFoundError:
+        return [f'[ratchet] {RATCHET} is missing; run python scripts/i18n.py ratchet --update']
     except (OSError, ValueError, AttributeError):
-        return [f'[ratchet] {RATCHET} is missing or unreadable; run python scripts/i18n.py ratchet --update']
+        return [f'[ratchet] {RATCHET} is unreadable; restore it from git '
+                '(or rebuild with ratchet --update --allow-increase after review)']
     current = ratchet_counts(root)
     errors = []
     for rel in sorted(set(baseline) | set(current)):

@@ -39,6 +39,12 @@ class TreeCase(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
 
+    def fresh(self):
+        """Switch to a new empty tree, for tests that build several variants."""
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+
     def write(self, rel, text, header=None):
         path = self.root / rel
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -141,6 +147,18 @@ class CatalogCheckTests(TreeCase):
         self.build({'llmcord_core/x_discord.py': 'def run(t):\n    t("Hello {0}")\n'})
         self.errors_with('field-syntax')
 
+    def test_field_syntax_wide_spec_in_msgstr(self):
+        """FEAT-43: a translation cannot ask for a gigantic width or precision."""
+        self.build()
+        self.set_po('bot', entry('Hello {name}', '{name:>1999999999} 안녕') + CARD)
+        self.errors_with('field-syntax')
+
+    def test_plural_forms_expression_mismatch(self):
+        self.build()
+        header = HEADER.replace('plural=0;', 'plural=(n != 1);')
+        self.set_po('bot', HELLO + CARD, header=header)
+        self.errors_with('plural-forms')
+
     def test_placeholder_mismatch(self):
         self.build()
         self.set_po('bot', entry('Hello {name}', '안녕 {other}') + CARD)
@@ -165,6 +183,14 @@ class CatalogCheckTests(TreeCase):
         self.build()
         self.set_po('bot', entry('Hello {name}', '{name:x/y} 안녕') + CARD)
         self.errors_with('josa')
+
+    def test_josa_typo_without_slash(self):
+        for spec in ('을를', '이가'):
+            self.fresh()
+            self.build()
+            with self.subTest(spec=spec):
+                self.set_po('bot', entry('Hello {name}', '{name:' + spec + '} 안녕') + CARD)
+                self.errors_with('josa')
 
     def test_josa_spec_in_english_msgid(self):
         self.build({'llmcord_core/x_discord.py': 'def run(t, n):\n    t("{name:이/가} won", name=n)\n'})
@@ -266,6 +292,37 @@ class MarkerCheckTests(TreeCase):
         self.build({'llmcord_core/x_discord.py': 'def run(t, x):\n    t("a %s" % x)\n'})
         self.errors_with('non-literal')
 
+    def test_non_literal_conditional_boolean_and_subscript(self):
+        cases = {
+            'conditional': 't("a" if x else "b")',
+            'and-or': 't(x and "a" or "b")',
+            'singular': 't.n("a" if x else "b", "c", k)',
+            'plural': 't.n("a", "b" if x else "c", k)',
+            'context': 't.p("ctx", "a" if x else "b")',
+            'subscript': 't(LABELS["key"])',
+        }
+        for label, call in cases.items():
+            with self.subTest(label):
+                self.fresh()
+                self.build({'llmcord_core/x_discord.py': f'def run(t, x, k, LABELS):\n    {call}\n'})
+                self.errors_with('non-literal')
+
+    def test_wrong_marker_in_mapped_i18n_files_is_unmapped(self):
+        cases = {
+            'N_ in codes': ('llmcord_core/i18n/codes.py', 'X = N_("x")\n'),
+            'E_ in terms': ('llmcord_core/i18n/terms.py', 'X = E_("a.b", "x")\n'),
+            't in terms': ('llmcord_core/i18n/terms.py', 'def run(t):\n    t("x")\n'),
+        }
+        for label, (rel, source) in cases.items():
+            with self.subTest(label):
+                self.fresh()
+                self.build({rel: source})
+                self.errors_with('unmapped')
+
+    def test_right_marker_in_terms_is_allowed(self):
+        self.build({'llmcord_core/i18n/terms.py': 'X = NP_("food", "Pot")\n'})
+        self.assertEqual(self.run_check(), ([], []))
+
     def test_constant_argument_is_allowed(self):
         self.build({'llmcord_core/x_discord.py': 'MSG = N_("Const text")\n\n\ndef run(t, kind):\n    t(MSG)\n    t(kind)\n'})
         self.assertEqual(self.run_check(), ([], []))
@@ -349,9 +406,16 @@ class RatchetCountTests(TreeCase):
             '    ui.notify("saved_ok")\n')
         self.assertEqual(self.counts({'llmcord_core/y_ui.py': source}), {'llmcord_core/y_ui.py': {'ui': 4}})
 
-    def test_ui_ignored_outside_bot_and_web(self):
+    def test_ui_counted_in_unmapped_module(self):
+        """FEAT-43: a surface module outside the domain globs is still ratcheted."""
         source = 'async def run(i):\n    await i.send_message("Hello there")\n'
-        self.assertEqual(self.counts({'llmcord_core/other.py': source}), {})
+        self.assertEqual(self.counts({'llmcord_core/other.py': source}), {'llmcord_core/other.py': {'ui': 1}})
+        self.write('llmcord_core/lore_picker.py', 'def f(ui):\n    ui.label("Pick a lorebook entry")\n')
+        self.assertTag('ratchet', i18n_check.check(self.root)[0])
+
+    def test_savebar_track_literals_are_counted(self):
+        source = 'def f(ctx):\n    ctx.savebar.track("Bet limits", {}, success="Bet limits saved")\n'
+        self.assertEqual(self.counts({'llmcord_core/games_ui.py': source}), {'llmcord_core/games_ui.py': {'ui': 2}})
 
     def test_literals_inside_markers_are_not_counted(self):
         source = 'async def run(i, t):\n    await i.send_message(t("Hello there"))\n    i.send_message(N_("Hi"))\n'
@@ -365,11 +429,15 @@ class RatchetCountTests(TreeCase):
             '    raise RuntimeError(f"Failed {x}")\n'
             '    raise ValueError("bad_code")\n'
             '    raise ValueError(t("Wrapped"))\n'
-            '    raise OSError("Not a counted type")\n'
+            '    raise OSError("Any class is counted")\n'
+            '    raise NotImplementedError("Skipped type")\n'
+            '    raise HTTPException(401, "Sign in")\n'
+            '    raise HTTPException(404)\n'
+            '    raise HTTPException(status_code=403, detail="Forbidden here")\n'
             '    raise ValueError\n'
             '    raise errors.ConflictError("Changed elsewhere")\n'
             '    raise ValueError(x)\n')
-        self.assertEqual(self.counts({'llmcord_core/foo.py': source}), {'llmcord_core/foo.py': {'raise': 4}})
+        self.assertEqual(self.counts({'llmcord_core/foo.py': source}), {'llmcord_core/foo.py': {'raise': 7}})
 
     def test_raise_ignored_in_i18n_package(self):
         source = 'def f():\n    raise ValueError("Bad thing")\n'
@@ -379,6 +447,22 @@ class RatchetCountTests(TreeCase):
         source = 'def f(i):\n    i.reply("Hello there")\n    raise ValueError("Bad thing")\n'
         self.assertEqual(self.counts({'llmcord_core/x_discord.py': source}),
                          {'llmcord_core/x_discord.py': {'ui': 1, 'raise': 1}})
+
+    def test_raise_of_project_defined_class_is_counted(self):
+        source = 'class GameError(ValueError):\n    pass\n\n\ndef f():\n    raise GameError("Not your turn")\n'
+        self.assertEqual(self.counts({'llmcord_core/foo.py': source}), {'llmcord_core/foo.py': {'raise': 1}})
+
+    def test_bom_source_is_counted(self):
+        path = self.root / 'llmcord_core/bom_ui.py'
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b'\xef\xbb\xbf' + b'def f(ui):\n    ui.label("Hello there")\n')
+        self.assertEqual(i18n_check.ratchet_counts(self.root), {'llmcord_core/bom_ui.py': {'ui': 1}})
+
+    def test_checkout_path_named_locales_is_not_excluded(self):
+        nested = self.root / 'locales' / 'proj'
+        (nested / 'llmcord_core').mkdir(parents=True)
+        (nested / 'llmcord_core/y_ui.py').write_text('def f(ui):\n    ui.label("Hello there")\n', encoding='utf-8')
+        self.assertEqual(i18n_check.ratchet_counts(nested), {'llmcord_core/y_ui.py': {'ui': 1}})
 
     def test_write_ratchet_is_sorted_indented_with_trailing_newline(self):
         self.write('llmcord_core/z_ui.py', 'def f(ui):\n    ui.label("Zed")\n')
