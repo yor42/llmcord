@@ -1497,19 +1497,21 @@ def turn_log_row(entry, zone_name, channel_label, *, t=None):
 
 async def turn_log_section(ctx, channel_label, live=lambda: True):
     from nicegui import ui
+    t = web_locale.current()
     store, gid = ctx.store, ctx.guild_id
     days = store.turn_log_settings(gid)['days']
     zone_name = store.guild_timezone(gid)
-    with section('Log'):
-        ui.label('Personal facts are hidden and API keys removed. Entries are kept for ' + ('the current month' if days == 0 else f'{days} days') + ' (Server settings).').classes('ll-muted')
+    with section(t('Log')):
+        ui.label(t('Personal facts are hidden and API keys removed. Entries are kept for the current month (Server settings).') if days == 0
+                 else t('Personal facts are hidden and API keys removed. Entries are kept for {days} days (Server settings).', days=days)).classes('ll-muted')
         with ui.element('div').classes('ll-form-row ll-field-row'):
-            channel = ui.select({None: 'All channels'}, value=None, label='Channel')
-            errors_only = ui.switch('Errors only')
-            reference = ui.input('Reference ID')
-        off_note = ui.label('Logging is off; showing earlier entries.').classes('ll-muted')
+            channel = ui.select({None: t('All channels')}, value=None, label=t.p('field', 'Channel'))
+            errors_only = ui.switch(t('Errors only'))
+            reference = ui.input(t('Reference ID'))
+        off_note = ui.label(t('Logging is off; showing earlier entries.')).classes('ll-muted')
         off_note.set_visibility(False)
         body = ui.column().classes('w-full gap-2')
-        more = ui.button('Load more', on_click=lambda: load(False)).props('outline')
+        more = ui.button(t.p('button', 'Load more'), on_click=lambda: load(False)).props('outline')
         more.set_visibility(False)
         state = {'last': None, 'applied': None, 'gen': 0, 'busy': False, 'shown': None, 'shown_last': None}
 
@@ -1524,27 +1526,28 @@ async def turn_log_section(ctx, channel_label, live=lambda: True):
             full = result[0]
             with holder:
                 if full is None:
-                    ui.label('This entry is no longer available.').classes('ll-muted')
+                    ui.label(t('This entry is no longer available.')).classes('ll-muted')
                     return True
-                for title, text in (('Request', full['request_text']), ('Response', full['response_text']), ('Error', full['error_detail'])):
-                    if text or title != 'Error':
+                for title, text, optional in ((t.p('turn log', 'Request'), full['request_text'], False), (t.p('turn log', 'Response'), full['response_text'], False),
+                                              (t.p('turn log', 'Error'), full['error_detail'], True)):
+                    if text or not optional:
                         ui.label(title).classes('ll-subtitle')
-                        ui.label(text or '(empty)').classes('ll-log-block')
+                        ui.label(text or t('(empty)')).classes('ll-log-block')
             return True
 
         def add_row(entry):
-            row = turn_log_row(entry, zone_name, channel_label)
+            row = turn_log_row(entry, zone_name, channel_label, t=t)
             with ui.expansion().classes('ll-log-row w-full' + (' ll-log-error' if row['error'] else '')).props('dense') as expansion:
                 with expansion.add_slot('header'):
                     with ui.column().classes('ll-log-head'):
                         ui.label(f"{row['time']} · {row['channel']} · {row['stage']}").classes('text-sm')
                         ui.label(f"{row['model']} · {row['tokens']}").classes('ll-muted text-sm')
                         if row['error']:
-                            ui.label('Error' + (f" · Ref {row['reference']}" if row['reference'] else '')).classes('text-negative text-sm')
+                            ui.label(t('Error · Ref {reference}', reference=row['reference']) if row['reference'] else t.p('status', 'Error')).classes('text-negative text-sm')
                         elif row['reference']:
-                            ui.label(f"OK · Ref {row['reference']}").classes('ll-muted text-sm')
+                            ui.label(t('OK · Ref {reference}', reference=row['reference'])).classes('ll-muted text-sm')
                         else:
-                            ui.label('OK').classes('ll-muted text-sm')
+                            ui.label(t.p('status', 'OK')).classes('ll-muted text-sm')
                         if row['preview']:
                             ui.label(row['preview']).classes('ll-muted text-sm')
                 holder = ui.column().classes('w-full gap-2 q-pa-sm')
@@ -1581,7 +1584,7 @@ async def turn_log_section(ctx, channel_label, live=lambda: True):
                 entries, enabled, known = page
                 if reset:
                     keep = [channel.value] if channel.value is not None and channel.value not in known else []
-                    channel.set_options({None: 'All channels', **{c: channel_label(c) for c in [*known, *keep]}}, value=channel.value)
+                    channel.set_options({None: t('All channels'), **{c: channel_label(c) for c in [*known, *keep]}}, value=channel.value)
                     state['shown'] = chosen
                     body.clear()
                     off_note.set_visibility(not enabled and bool(entries))
@@ -1590,8 +1593,8 @@ async def turn_log_section(ctx, channel_label, live=lambda: True):
                         add_row(entry)
                     if reset and not entries:
                         filtered = chosen['channel_id'] is not None or chosen['errors_only'] or chosen['reference_id']
-                        ui.label('No entries match these filters.' if filtered else 'No log entries yet.' if enabled
-                                 else 'The turn log is off. Turn it on in Server settings to record model calls.').classes('ll-muted')
+                        ui.label(t('No entries match these filters.') if filtered else t('No log entries yet.') if enabled
+                                 else t('The turn log is off. Turn it on in Server settings to record model calls.')).classes('ll-muted')
                 if entries:
                     state['last'] = entries[-1]['id']
                 if reset:
@@ -1624,6 +1627,7 @@ def usage_role_labels(backend_roles):
 
 async def monitoring_panel(ctx):
     from nicegui import ui
+    t = web_locale.current()
     store, gid = ctx.store, ctx.guild_id
     live = ctx.live('monitoring')
     days = store.turn_log_settings(gid)['days']
@@ -1632,14 +1636,14 @@ async def monitoring_panel(ctx):
     thread_names = ctx.thread_names or {}
     def channel_label(cid):
         if cid is None:
-            return USAGE_UNKNOWN
+            return t(USAGE_UNKNOWN)
         name = ctx.channel_names.get(cid) or thread_names.get(cid)
         if name:
             return name
         digits = str(cid)
-        return f"Deleted channel (ID …{digits[-4:]})"
+        return t('Deleted channel (ID …{digits})', digits=digits[-4:])
     def money(row):
-        return format_usd(row['cost_usd'])
+        return format_usd(row['cost_usd'], t=t)
     if ctx.is_operator:  # re-checked per build; the number is bot-wide, so it is read through the operator guard
         from . import budget
         try:
@@ -1650,13 +1654,13 @@ async def monitoring_panel(ctx):
             return
         if state:
             with ui.element('div').classes('ll-form-row'):
-                ui.label(f'Bot-wide spending: {format_usd(state.spent_usd)} of {format_usd(state.hard_cap_usd)} hard cap this period' if state.hard_cap_usd is not None
-                         else f'Bot-wide spending: {format_usd(state.spent_usd)} this period; no hard cap set').classes('ll-muted')
-                ui.link('Open Bot settings', '/operator')  # ui.link adds the /admin mount prefix
-    with section('Usage'):
-        select = ui.select({k: USAGE_RANGES[k][0] for k in keys}, value='7', label='Period')
+                ui.label(t('Bot-wide spending: {spent} of {cap} hard cap this period', spent=format_usd(state.spent_usd, t=t), cap=format_usd(state.hard_cap_usd, t=t)) if state.hard_cap_usd is not None
+                         else t('Bot-wide spending: {spent} this period; no hard cap set', spent=format_usd(state.spent_usd, t=t))).classes('ll-muted')
+                ui.link(t('Open Bot settings'), '/operator')  # ui.link adds the /admin mount prefix
+    with section(t('Usage')):
+        select = ui.select({k: t.render(USAGE_RANGES[k][0]) for k in keys}, value='7', label=t.p('field', 'Period'))
         if len(keys) < len(USAGE_RANGES):
-            ui.label('Usage is kept for ' + ('the current month' if days == 0 else f'{days} days') + ' (Server settings).').classes('ll-muted')
+            ui.label(t('Usage is kept for the current month (Server settings).') if days == 0 else t('Usage is kept for {days} days (Server settings).', days=days)).classes('ll-muted')
         body = ui.column().classes('w-full gap-4')
         def render():
             body.clear()
@@ -1665,24 +1669,26 @@ async def monitoring_panel(ctx):
             report = store.usage_report(gid, since, now)
             with body:
                 if not report['totals']['requests']:
-                    ui.label('No model calls in this period.')
+                    ui.label(t('No model calls in this period.'))
                     return
-                ui.echart(usage_chart_options(report, report['since'], now)).classes('w-full h-80')
-                ui.label('By model').classes('ll-subtitle')
-                usage_table([('model', 'Model'), ('roles', 'Used for'), ('requests', 'Requests'), ('input', 'Input tokens'), ('output', 'Output tokens'), ('cost', 'Estimated USD'), ('unpriced', 'Without cost estimate')],
+                ui.echart(usage_chart_options(report, report['since'], now, t=t)).classes('w-full h-80')
+                tail = [('requests', t.p('column', 'Requests')), ('input', t.p('column', 'Input tokens')), ('output', t.p('column', 'Output tokens')),
+                        ('cost', t.p('column', 'Estimated USD')), ('unpriced', t.p('column', 'Without cost estimate'))]
+                ui.label(t('By model')).classes('ll-subtitle')
+                usage_table([('model', t.p('column', 'Model')), ('roles', t.p('column', 'Used for')), *tail],
                             [{'key': f"{r['profile']}/{r['model']}", 'model': r['model'], 'roles': ', '.join(roles.get(r['profile'], [])), 'requests': f"{r['requests']:,}", 'input': f"{r['input_tokens']:,}",
                               'output': f"{r['output_tokens']:,}", 'cost': money(r), 'unpriced': r['unpriced']} for r in report['by_model']], 'key')
-                ui.label('By channel').classes('ll-subtitle')
-                usage_table([('channel', 'Channel'), ('requests', 'Requests'), ('input', 'Input tokens'), ('output', 'Output tokens'), ('cost', 'Estimated USD'), ('unpriced', 'Without cost estimate')],
+                ui.label(t('By channel')).classes('ll-subtitle')
+                usage_table([('channel', t.p('column', 'Channel')), *tail],
                             [{'key': str(r['channel_id']), 'channel': channel_label(r['channel_id']), 'requests': f"{r['requests']:,}", 'input': f"{r['input_tokens']:,}",
                               'output': f"{r['output_tokens']:,}", 'cost': money(r), 'unpriced': r['unpriced']} for r in report['by_channel']], 'key')
-                ui.label('By feature').classes('ll-subtitle')
-                usage_table([('feature', 'Feature'), ('requests', 'Requests'), ('input', 'Input tokens'), ('output', 'Output tokens'), ('cost', 'Estimated USD'), ('unpriced', 'Without cost estimate')],
+                ui.label(t('By feature')).classes('ll-subtitle')
+                usage_table([('feature', t.p('column', 'Feature')), *tail],
                             [{'key': r['feature'], 'feature': r['feature'], 'requests': f"{r['requests']:,}", 'input': f"{r['input_tokens']:,}",
-                              'output': f"{r['output_tokens']:,}", 'cost': money(r), 'unpriced': r['unpriced']} for r in usage_feature_rows(report['by_feature'])], 'key')
+                              'output': f"{r['output_tokens']:,}", 'cost': money(r), 'unpriced': r['unpriced']} for r in usage_feature_rows(report['by_feature'], t=t)], 'key')
                 if report['totals']['unreported']:
-                    ui.label(f"{report['totals']['unreported']:,} calls did not report token counts, so their tokens are not included.").classes('ll-muted')
-                ui.label('Tracked for this server, including internal model calls. Cost uses list rates or your configured rates; it is not a billing statement.').classes('ll-muted')
+                    ui.label(t('{count:,} calls did not report token counts, so their tokens are not included.', count=report['totals']['unreported'])).classes('ll-muted')
+                ui.label(t('Tracked for this server, including internal model calls. Cost uses list rates or your configured rates; it is not a billing statement.')).classes('ll-muted')
         select.on_value_change(lambda _: render())
         render()
     await turn_log_section(ctx, channel_label, live)
@@ -2224,33 +2230,37 @@ def lore_panel(ctx, on_import=None):
 
 
 RULE_LABELS = {
-    'selective': 'Selective', 'selective_logic': 'Secondary key logic', 'case_sensitive': 'Case sensitive',
-    'whole_words': 'Whole words only', 'depth': 'Depth', 'scan_depth': 'Scan depth (JSON, null for default)',
-    'probability': 'Probability (%)', 'use_probability': 'Use probability', 'group': 'Groups (JSON list)',
-    'group_weight': 'Group weight', 'group_override': 'Group override', 'use_group_scoring': 'Use group scoring',
-    'exclude_recursion': 'Exclude from recursion', 'prevent_recursion': 'Prevent recursion',
-    'delay_until_recursion': 'Delay until recursion', 'recursion_level': 'Recursion level',
-    'sticky': 'Sticky turns', 'cooldown': 'Cooldown turns', 'delay': 'Delay turns',
-    'character_filter_names': 'Character filter names (JSON list)', 'character_filter_tags': 'Character filter tags (JSON list)',
-    'character_filter_exclude': 'Exclude filtered characters', 'match_character_description': 'Match character description',
-    'match_character_personality': 'Match character personality', 'match_scenario': 'Match scenario',
+    'selective': N_('Selective'), 'selective_logic': N_('Secondary key logic'), 'case_sensitive': N_('Case sensitive'),
+    'whole_words': N_('Whole words only'), 'depth': N_('Depth'), 'scan_depth': N_('Scan depth (JSON, null for default)'),
+    'probability': N_('Probability (%)'), 'use_probability': N_('Use probability'), 'group': N_('Groups (JSON list)'),
+    'group_weight': N_('Group weight'), 'group_override': N_('Group override'), 'use_group_scoring': N_('Use group scoring'),
+    'exclude_recursion': N_('Exclude from recursion'), 'prevent_recursion': N_('Prevent recursion'),
+    'delay_until_recursion': N_('Delay until recursion'), 'recursion_level': N_('Recursion level'),
+    'sticky': N_('Sticky turns'), 'cooldown': N_('Cooldown turns'), 'delay': N_('Delay turns'),
+    'character_filter_names': N_('Character filter names (JSON list)'), 'character_filter_tags': N_('Character filter tags (JSON list)'),
+    'character_filter_exclude': N_('Exclude filtered characters'), 'match_character_description': N_('Match character description'),
+    'match_character_personality': N_('Match character personality'), 'match_scenario': N_('Match scenario'),
 }
 
 
-def rule_label(key):
-    return RULE_LABELS.get(key) or key.replace('_', ' ').capitalize()
+def rule_label(key, *, t=None):
+    t = t or i18n.english()
+    label = RULE_LABELS.get(key)
+    return t.render(label) if label else key.replace('_', ' ').capitalize()
 
 
 def entry_editor(ctx, entry, owners, refresh):
     from nicegui import ui
+    t = web_locale.current()
     with ui.card().classes('w-full ll-stack').style('padding: 16px') as panel:
-        ui.label('Edit lore' if entry.get('ref') else 'Create lore').classes('ll-subtitle')
-        text = ui.textarea('Content', value=entry['content']).classes('w-full ll-macro')
+        ui.label(t('Edit lore') if entry.get('ref') else t('Create lore')).classes('ll-subtitle')
+        text = ui.textarea(t.p('field', 'Content'), value=entry['content']).classes('w-full ll-macro')
         rule = copy.deepcopy(entry['rule'])
         controls = {}
-        for key, label in (('keys', 'Keys'), ('secondary_keys', 'Secondary keys')):
+        for key, label in (('keys', t.p('field', 'Keys')), ('secondary_keys', t('Secondary keys'))):
             controls[key] = ui.input_chips(label, value=[str(item) for item in rule.get(key) or []], new_value_mode='add-unique') \
-                .props('outlined dense hint="Press Enter after each key"').classes('w-full')
+                .props('outlined dense').classes('w-full')
+            controls[key].props['hint'] = t('Press Enter after each key')
             # Typed text that was never confirmed with Enter becomes a chip when the field loses focus.
             # Quasar clears its input before it emits blur, so the pending text is tracked from input-value.
             element_id = controls[key].id
@@ -2263,31 +2273,32 @@ def entry_editor(ctx, entry, owners, refresh):
                 if (window.llPendingKeys) window.llPendingKeys[{element_id}] = '';
                 if (text) getElement({element_id}).add(text, true);
             }}""")
-        controls['order'] = ui.number('Order', value=rule['order'], precision=0).props('hint="Higher values appear later"')
+        controls['order'] = ui.number(t.p('field', 'Order'), value=rule['order'], precision=0)
+        controls['order'].props['hint'] = t('Higher values appear later')
         with ui.row().classes('gap-x-3 gap-y-0'):
-            controls['enabled'] = ui.checkbox('Enabled', value=rule['enabled']).classes('whitespace-nowrap')
-            controls['constant'] = ui.checkbox('Always active', value=rule['constant']).classes('whitespace-nowrap')
-            pinned = ui.checkbox('Pinned', value=entry['pinned']).classes('whitespace-nowrap')
-        with ui.expansion('Advanced activation and placement rules').classes('w-full ll-subpanel'), ui.element('div').classes('ll-stack px-4'):
+            controls['enabled'] = ui.checkbox(t.p('field', 'Enabled'), value=rule['enabled']).classes('whitespace-nowrap')
+            controls['constant'] = ui.checkbox(t('Always active'), value=rule['constant']).classes('whitespace-nowrap')
+            pinned = ui.checkbox(t.p('field', 'Pinned'), value=entry['pinned']).classes('whitespace-nowrap')
+        with ui.expansion(t('Advanced activation and placement rules')).classes('w-full ll-subpanel'), ui.element('div').classes('ll-stack px-4'):
             for key, value in rule.items():
                 if key in controls or key == 'unsupported':
                     continue
                 if key == 'original':
-                    with ui.expansion('Preserved import fields / unsupported feature remapping').classes('w-full ll-subpanel'):
-                        controls[key] = ui.textarea('Original fields (JSON)', value=pretty(value)).classes('w-full')
+                    with ui.expansion(t('Preserved import fields / unsupported feature remapping')).classes('w-full ll-subpanel'):
+                        controls[key] = ui.textarea(t('Original fields (JSON)'), value=pretty(value)).classes('w-full')
                 elif key == 'regex_enabled':
-                    controls[key] = ui.select({'auto': 'Detect /pattern/flags automatically', 'regex': 'Regex patterns', 'literal': 'Literal keywords'},
-                        value='auto' if value is None else 'regex' if value else 'literal', label='Keyword matching')
+                    controls[key] = ui.select({'auto': t('Detect /pattern/flags automatically'), 'regex': t('Regex patterns'), 'literal': t('Literal keywords')},
+                        value='auto' if value is None else 'regex' if value else 'literal', label=t('Keyword matching'))
                 elif type(value) is bool:
-                    controls[key] = ui.checkbox(rule_label(key), value=value)
+                    controls[key] = ui.checkbox(rule_label(key, t=t), value=value)
                 elif type(value) is int:
-                    controls[key] = ui.number(rule_label(key), value=value, precision=0)
+                    controls[key] = ui.number(rule_label(key, t=t), value=value, precision=0)
                 elif key == 'role':
-                    controls[key] = ui.select(_prompt_options(PROMPT_ROLE_LABELS, value), value=value, label='Message role')
+                    controls[key] = ui.select(_prompt_options(PROMPT_ROLE_LABELS, value, t=t), value=value, label=t('Message role'))
                 elif key == 'position':
-                    controls[key] = ui.select(_prompt_options(LORE_PLACEMENT_LABELS, value), value=value, label='Placement')
+                    controls[key] = ui.select(_prompt_options(LORE_PLACEMENT_LABELS, value, t=t), value=value, label=t.p('field', 'Placement'))
                 elif key == 'scan_depth' or isinstance(value, list):
-                    controls[key] = ui.input(rule_label(key), value=pretty(value))
+                    controls[key] = ui.input(rule_label(key, t=t), value=pretty(value))
             for warning in rule.get('unsupported', []):
                 ui.label(warning).classes('text-amber-300')
         def collect():
@@ -2326,47 +2337,49 @@ def entry_editor(ctx, entry, owners, refresh):
             panel.delete()
             refresh()
         if entry.get('ref'):
-            destination = ui.select(owners, label='Destination', with_input=True).classes('w-full')
+            destination = ui.select(owners, label=t.p('field', 'Destination'), with_input=True).classes('w-full')
             def transfer(copy):
                 if not destination.value:
-                    raise ValueError('Choose where to move or copy the entry.')
+                    raise UserError(codes.DASH_LORE_DESTINATION_CHOOSE)
                 kind, ident = destination.value.split(':', 1)
                 return ctx.store.transfer_entry(ctx.guild_id, entry['ref'], kind, int(ident), entry['revision'], copy=copy)
             def delete():
                 ctx.store.delete_entry(ctx.guild_id, entry['ref'], entry['revision'])
                 return True
         with ui.element('div').classes('ll-form-row'):
-            ctx.button('Save lore', save, 'lore.edit', then=saved, prepare=flush_pending_keys)
+            ctx.button(t('Save lore'), save, 'lore.edit', then=saved, prepare=flush_pending_keys)
             if entry.get('ref'):
-                ctx.button('Move', lambda: transfer(False), 'lore.move', then=saved).props('outline')
-                ctx.button('Copy', lambda: transfer(True), 'lore.copy', then=saved).props('outline')
-                ui.button('Delete', color='negative', on_click=lambda: confirm_dialog(
-                    ctx, 'Delete this lore entry?', ['This also keeps your deletion choice for future reimports.'],
-                    'Delete entry', delete, 'lore.delete', then=saved))
+                ctx.button(t.p('button', 'Move'), lambda: transfer(False), 'lore.move', then=saved).props('outline')
+                ctx.button(t.p('button', 'Copy'), lambda: transfer(True), 'lore.copy', then=saved).props('outline')
+                ui.button(t.p('button', 'Delete'), color='negative', on_click=lambda: confirm_dialog(
+                    ctx, t('Delete this lore entry?'), [t('This also keeps your deletion choice for future reimports.')],
+                    t('Delete entry'), delete, 'lore.delete', then=saved))
 
 
-def import_changes(changes):
+def import_changes(changes, *, t=None):
     from nicegui import ui
+    t = t or i18n.english()
     resolutions = {}
     for change in changes:
         with ui.expansion(f"{change['uid']} · {change['status']} · {change.get('disposition', '')}").classes('w-full ll-subpanel'):
             with ui.element('div').classes('ll-stack'):
-                ui.label('Current: ' + (change.get('before') or '(none)')).classes('whitespace-pre-wrap ll-muted')
-                ui.label('Incoming: ' + change.get('after', '')).classes('whitespace-pre-wrap ll-muted')
+                ui.label(t('Current: {text}', text=change.get('before') or t('(none)'))).classes('whitespace-pre-wrap ll-muted')
+                ui.label(t('Incoming: {text}', text=change.get('after', ''))).classes('whitespace-pre-wrap ll-muted')
                 for warning in change.get('warnings', []):
                     ui.label(warning).classes('text-amber-300')
                 if change['status'] == 'conflict':
                     with ui.element('div').classes('ll-form-row'):
-                        resolutions[change['uid']] = ui.select({'keep': 'Keep current entry', 'import': 'Use imported entry'}, label='Resolve conflict')
+                        resolutions[change['uid']] = ui.select({'keep': t('Keep current entry'), 'import': t('Use imported entry')}, label=t('Resolve conflict'))
     return resolutions
 
 
 def imports_panel(ctx):
     from nicegui import ui
+    t = web_locale.current()
     store, gid = ctx.store, ctx.guild_id
-    with section('Character cards'):
+    with section(t('Character cards')):
         worlds = ctx.snapshot.worlds
-        world = ui.select(worlds, label='Home world')
+        world = ui.select(worlds, label=t('Home world'))
         preview_area = ui.column().classes('w-full')
         async def card_uploaded(event):
             card = parse_card(event.file.name, await event.file.read())
@@ -2374,53 +2387,54 @@ def imports_panel(ctx):
             preview = store.preview_card(gid, selected_world, card)
             preview_area.clear()
             with preview_area, ui.card().classes('w-full ll-stack ll-result'):
-                ui.label('Preview: ' + card.name).classes('ll-subtitle')
+                ui.label(t('Preview: {name}', name=card.name)).classes('ll-subtitle')
                 ui.label(card.data.get('description', '')).classes('whitespace-pre-wrap ll-muted')
                 if card.avatar:
                     import base64
                     ui.image('data:image/png;base64,' + base64.b64encode(card.avatar).decode()).classes('w-24 h-24 rounded-lg')
                 with ui.element('div').classes('ll-form-row'):
-                    decisions = {key: ui.select({'keep': 'Keep current ' + key, 'import': 'Use imported ' + key}, label=f'Resolve {key} conflict') for key in preview['conflicts']}
-                decisions.update(import_changes(preview['changes']))
-                confirm = ui.checkbox('Confirm updating the existing character and home world') if preview['character_id'] else None
+                    decisions = {key: ui.select({'keep': t('Keep current {field}', field=key), 'import': t('Use imported {field}', field=key)},
+                                                label=t('Resolve {field} conflict', field=key)) for key in preview['conflicts']}
+                decisions.update(import_changes(preview['changes'], t=t))
+                confirm = ui.checkbox(t('Confirm updating the existing character and home world')) if preview['character_id'] else None
                 expires = __import__('time').time() + 900
                 def apply():
                     if __import__('time').time() > expires:
-                        raise ValueError('Preview expired; upload again')
+                        raise UserError(codes.DASH_PREVIEW_EXPIRED)
                     if confirm and not confirm.value:
-                        raise ValueError('Confirm updating the existing character')
+                        raise UserError(codes.DASH_CARD_CONFIRM_UPDATE)
                     return store.apply_card(gid, selected_world, card, {key: c.value for key, c in decisions.items()}, preview['revision'])
                 with ui.element('div').classes('ll-form-row'):
-                    ctx.button('Apply card import', apply, 'character.import', then=lambda _: ctx.refresh())
+                    ctx.button(t('Apply card import'), apply, 'character.import', then=lambda _: ctx.refresh())
         with ui.element('div').classes('ll-stack'):
-            ctx.upload(card_uploaded, 'Upload V2/V3 JSON or PNG card')
-    with section('Direct lore entry import'):
+            ctx.upload(card_uploaded, t('Upload V2/V3 JSON or PNG card'))
+    with section(t('Direct lore entry import')):
         owners = {f"{owner['kind']}:{owner['id']}": owner['label'] for owner in ctx.snapshot.owners}
         with ui.element('div').classes('ll-form-row'):
-            destination = ui.select(owners, label='Destination owner')
+            destination = ui.select(owners, label=t('Destination owner'))
             def import_into_owner():
                 if destination.value not in owners:
-                    raise ValueError('Choose a destination owner.')
+                    raise UserError(codes.DASH_OWNER_CHOOSE)
                 kind, ident = destination.value.split(':', 1)
                 direct_import_dialog(ctx, kind, int(ident))
-            lucide_button('Import entries into selected owner', 'upload', on_click=import_into_owner)
-    with section('Named lorebooks'):
+            lucide_button(t('Import entries into selected owner'), 'upload', on_click=import_into_owner)
+    with section(t('Named lorebooks')):
         with ui.element('div').classes('ll-form-row'):
-            book_name = ui.input('Lorebook name')
-            target = ui.select({'guild': 'Server lorebook', 'channel': 'Channel lorebook'}, value='guild', label='Kind')
+            book_name = ui.input(t('Lorebook name'))
+            target = ui.select({'guild': t('Server lorebook'), 'channel': t('Channel lorebook')}, value='guild', label=t.p('field', 'Kind'))
             channels = {r['channel_id']: ctx.channel_names.get(r['channel_id'], str(r['channel_id'])) for r in ctx.snapshot.channels}
-            channel = ui.select(channels, label='Channel').classes('ll-wide')
+            channel = ui.select(channels, label=t.p('field', 'Channel')).classes('ll-wide')
             channel.bind_visibility_from(target, 'value', backward=lambda kind: kind == 'channel')
-            ctx.button('Create lorebook', lambda: store.create_lorebook(gid, book_name.value or '', target.value, channel.value or 0), 'book.create', then=lambda _: ctx.refresh())
+            ctx.button(t('Create lorebook'), lambda: store.create_lorebook(gid, book_name.value or '', target.value, channel.value or 0), 'book.create', then=lambda _: ctx.refresh())
         for book in ctx.snapshot.lorebooks:
-            title = book['name'] + ' · ' + ('Server lorebook' if book['target_kind'] == 'guild' else 'Channel lorebook')
+            title = t('{name} · Server lorebook', name=book['name']) if book['target_kind'] == 'guild' else t('{name} · Channel lorebook', name=book['name'])
             if book['target_kind'] == 'channel' and ctx.channel_names.get(book['target_id']):
                 title += ' · ' + ctx.channel_names[book['target_id']]
             with ui.expansion(title).classes('w-full'):
                 with ui.element('div').classes('ll-stack'):
                     with ui.element('div').classes('ll-form-row'):
-                        lucide_button('Edit entries in Lore', 'pencil', on_click=lambda book=book: ctx.refresh('lore', owner=f"book:{book['id']}")).props('outline')
-                        lucide_button('Delete lorebook', 'trash-2', color='negative', on_click=lambda book=book: delete_book_dialog(ctx, book))
+                        lucide_button(t('Edit entries in Lore'), 'pencil', on_click=lambda book=book: ctx.refresh('lore', owner=f"book:{book['id']}")).props('outline')
+                        lucide_button(t('Delete lorebook'), 'trash-2', color='negative', on_click=lambda book=book: delete_book_dialog(ctx, book))
                     if book['target_kind'] == 'guild':
                         linked_spaces = store.lorebook_links(book['id'])
                         with ui.element('div').classes('ll-form-row'):
@@ -2429,7 +2443,7 @@ def imports_panel(ctx):
                                 def assign(book=book, space=space, enabled=enabled):
                                     store.set_lorebook_space(gid, book['id'], space['id'], not enabled)
                                     return True
-                                ctx.button(('Disable in ' if enabled else 'Enable in ') + space['name'], assign, 'book.assign', then=lambda _: ctx.refresh()).props('outline')
+                                ctx.button(t('Disable in {space}', space=space['name']) if enabled else t('Enable in {space}', space=space['name']), assign, 'book.assign', then=lambda _: ctx.refresh()).props('outline')
                     area = ui.column().classes('w-full')
                     async def book_uploaded(event, book=book, area=area):
                         imported = parse_lorebook(await event.file.read())
@@ -2438,16 +2452,16 @@ def imports_panel(ctx):
                         area.clear()
                         with area, ui.element('div').classes('ll-stack'):
                             label = 'RisuAI' if imported.source_format == 'risu' else 'SillyTavern'
-                            ui.label(f'{label} lorebook detected · {len(imported.entries)} entries').classes('ll-subtitle')
-                            decisions = import_changes(changes)
+                            ui.label(t('{format} lorebook detected · {count} entries', format=label, count=len(imported.entries))).classes('ll-subtitle')
+                            decisions = import_changes(changes, t=t)
                             expires = __import__('time').time() + 900
                             def apply():
                                 if __import__('time').time() > expires:
-                                    raise ValueError('Preview expired; upload again')
+                                    raise UserError(codes.DASH_PREVIEW_EXPIRED)
                                 return store.sync_lorebook(gid, book['id'], imported, {key: c.value for key, c in decisions.items()}, revision)
                             with ui.element('div').classes('ll-form-row'):
-                                ctx.button('Apply lorebook sync', apply, 'book.sync', {'id': book['id']}, then=lambda _: ctx.refresh())
-                    ctx.upload(book_uploaded, 'Upload JSON lorebook for preview')
+                                ctx.button(t('Apply lorebook sync'), apply, 'book.sync', {'id': book['id']}, then=lambda _: ctx.refresh())
+                    ctx.upload(book_uploaded, t('Upload JSON lorebook for preview'))
 
 
 def _span(text=''):
@@ -2456,20 +2470,22 @@ def _span(text=''):
     return TextElement(tag='span', text=text)
 
 
-PROMPT_ROLE_LABELS = {'system': 'System', 'user': 'User', 'assistant': 'Assistant'}
-PROMPT_PLACEMENT_LABELS = {'relative': 'Relative to the prompt', 'in_chat': 'In chat at depth'}
-LORE_PLACEMENT_LABELS = {'before_char': 'Before character', 'after_char': 'After character', 'before_examples': 'Before examples',
-                         'after_examples': 'After examples', 'in_chat': 'In chat at depth'}
-PROMPT_PLACEMENT_SHORT = {'relative': 'Relative', 'in_chat': 'In chat'}
+PROMPT_ROLE_LABELS = {'system': NP_('prompt role', 'System'), 'user': NP_('prompt role', 'User'), 'assistant': NP_('prompt role', 'Assistant')}
+PROMPT_PLACEMENT_LABELS = {'relative': N_('Relative to the prompt'), 'in_chat': N_('In chat at depth')}
+LORE_PLACEMENT_LABELS = {'before_char': N_('Before character'), 'after_char': N_('After character'), 'before_examples': N_('Before examples'),
+                         'after_examples': N_('After examples'), 'in_chat': N_('In chat at depth')}
+PROMPT_PLACEMENT_SHORT = {'relative': NP_('prompt placement', 'Relative'), 'in_chat': NP_('prompt placement', 'In chat')}
 PROMPT_SOURCE_LABELS = {
-    'text': 'Custom text', 'history': 'Chat history', 'payload': 'Request payload', 'location': 'Location', 'description': 'Character description',
-    'personality': 'Character personality', 'scenario': 'Scenario', 'opening': 'Opening message', 'examples': 'Example dialogue',
-    'card_instructions': 'Card instructions', 'card_post_history': 'Card post-history instructions',
-    'lore_before_char': 'Lore before character', 'lore_after_char': 'Lore after character', 'lore_before_examples': 'Lore before examples',
-    'lore_after_examples': 'Lore after examples', 'lore_in_chat': 'Lore in chat', 'personal': 'Personal facts', 'encounters': 'Encounters',
-    'summary': 'Scene summary', 'preceding': 'Preceding messages', 'recent': 'Recent messages'}
+    'text': N_('Custom text'), 'history': N_('Chat history'), 'payload': N_('Request payload'), 'location': NP_('prompt source', 'Location'),
+    'description': N_('Character description'),
+    'personality': N_('Character personality'), 'scenario': NP_('prompt source', 'Scenario'), 'opening': N_('Opening message'), 'examples': N_('Example dialogue'),
+    'card_instructions': N_('Card instructions'), 'card_post_history': N_('Card post-history instructions'),
+    'lore_before_char': N_('Lore before character'), 'lore_after_char': N_('Lore after character'), 'lore_before_examples': N_('Lore before examples'),
+    'lore_after_examples': N_('Lore after examples'), 'lore_in_chat': N_('Lore in chat'), 'personal': N_('Personal facts'), 'encounters': NP_('prompt source', 'Encounters'),
+    'summary': N_('Scene summary'), 'preceding': N_('Preceding messages'), 'recent': N_('Recent messages')}
 
 
-def _prompt_options(labels, *current):
+def _prompt_options(labels, *current, t=None):
     """``{code: label}`` for a select; codes not in ``labels`` (imported presets) stay selectable under their raw code."""
-    return {**labels, **{c: c for c in current if c not in labels}}
+    t = t or i18n.english()
+    return {**{code: t.render(label) for code, label in labels.items()}, **{c: c for c in current if c not in labels}}
