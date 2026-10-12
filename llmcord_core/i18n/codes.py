@@ -331,6 +331,14 @@ PROFILE_MAX_RETRIES = E_('profile.max_retries', 'max_retries in {name} must be a
 PROFILE_PROVIDER = E_('profile.provider', 'Unsupported provider in {name}')
 PROFILE_BASE_URL_REQUIRED = E_('profile.base_url_required', 'base_url is required for {name}')
 PROFILE_REASONING_EFFORT = E_('profile.reasoning_effort', 'Invalid compatible reasoning_effort in {name}')
+# part 2: auth.py, web.py, admin.py
+WEB_BASE_URL = E_('web.base_url', 'WEB_BASE_URL must be a private HTTPS URL')
+WEB_CREDENTIALS = E_('web.credentials', 'Discord OAuth and bot credentials are required')
+ADMIN_CHARACTER_NOT_FOUND = E_('admin.character_not_found', 'That character was not found. Reload the page.')
+ADMIN_HARD_CAP = E_('admin.hard_cap', 'The spending hard cap is reached, so no model calls are made until it resets.')
+ADMIN_UNREADABLE_ANSWER = E_('admin.unreadable_answer', 'The model returned an answer that could not be read. Try again.')
+ADMIN_MODEL_TIMEOUT = E_('admin.model_timeout', 'The model did not respond in time. Try again.')
+ADMIN_MODEL_CALL_FAILED = E_('admin.model_call_failed', 'The model call failed: {detail}')
 
 
 
