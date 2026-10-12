@@ -193,8 +193,22 @@ CREATE TABLE IF NOT EXISTS user_timezones (
 );
 CREATE TABLE IF NOT EXISTS member_settings (
  guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, favorites_mode TEXT NOT NULL DEFAULT 'lean', updated_at REAL NOT NULL,
+ spoken_moves INTEGER NOT NULL DEFAULT 1 CHECK(spoken_moves IN (0,1)),
  PRIMARY KEY(guild_id,user_id)
 );
+CREATE TABLE IF NOT EXISTS spoken_phrases (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, game TEXT NOT NULL, text TEXT NOT NULL,
+ offered TEXT NOT NULL DEFAULT '[]', band TEXT NOT NULL CHECK(band IN ('sure','unsure','silent')), scores TEXT NOT NULL DEFAULT '{}',
+ kind TEXT NOT NULL CHECK(kind IN ('false_positive','false_negative')), label TEXT NOT NULL, created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS spoken_phrases_guild_time ON spoken_phrases(guild_id, created_at);
+CREATE INDEX IF NOT EXISTS spoken_phrases_member ON spoken_phrases(guild_id, user_id);
+CREATE TABLE IF NOT EXISTS spoken_examples (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, game TEXT NOT NULL, text TEXT NOT NULL, label TEXT NOT NULL,
+ created_by INTEGER, created_at REAL NOT NULL,
+ UNIQUE(guild_id,game,text)
+);
+CREATE INDEX IF NOT EXISTS spoken_examples_game ON spoken_examples(guild_id, game);
 CREATE TABLE IF NOT EXISTS member_favorites (
  guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
  character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
@@ -570,6 +584,7 @@ class AdminStore:
             'game_tables': {'thread_id': 'INTEGER', 'board_message_id': 'INTEGER', 'turn_message_id': 'INTEGER'},
             'game_seats': {'brought_by': 'INTEGER', 'insurance': 'INTEGER NOT NULL DEFAULT 0', 'stack': 'INTEGER NOT NULL DEFAULT 0 CHECK(stack>=0)'},
             'currency_ledger': {'holder_kind': "TEXT NOT NULL DEFAULT 'member' CHECK(holder_kind IN ('member','character'))"},
+            'member_settings': {'spoken_moves': 'INTEGER NOT NULL DEFAULT 1 CHECK(spoken_moves IN (0,1))'},
             'model_usage': {'channel_id': 'INTEGER', 'feature': "TEXT NOT NULL DEFAULT ''"},
         }.items():
             columns = {row[1] for row in self.db.execute(f'PRAGMA table_info({table})')}
@@ -1442,7 +1457,7 @@ class AdminStore:
         row = self.one('SELECT enabled FROM game_settings WHERE guild_id=? AND game=?', (guild_id, key))
         return bool(row and row['enabled'])
 
-    def _set_pseudo_flag(self, guild_id, key, on, expected, label):
+    def _set_pseudo_flag(self, guild_id, key, on, expected, label, after=None):
         if not isinstance(on, bool):
             raise ValueError('The setting must be on or off.')
         with self.write_admin():
@@ -1450,6 +1465,8 @@ class AdminStore:
                 raise ConflictError(f'The {label} setting was changed elsewhere. Reload the page and try again.')
             self.db.execute('INSERT INTO game_settings(guild_id,game,enabled,updated_at) VALUES(?,?,?,?) ON CONFLICT(guild_id,game) DO UPDATE SET enabled=excluded.enabled,updated_at=excluded.updated_at',
                 (guild_id, key, int(on), time.time()))
+            if after:
+                after()
         return on
 
     def spoken_moves_enabled(self, guild_id):
@@ -1464,7 +1481,112 @@ class AdminStore:
         return self.spoken_moves_enabled(guild_id) and self._pseudo_flag(guild_id, self._SPOKEN_KEEP_KEY)
 
     def set_spoken_keep_phrases(self, guild_id, on, expected=None):
-        return self._set_pseudo_flag(guild_id, self._SPOKEN_KEEP_KEY, on, expected, 'keep phrases')
+        purge = lambda: self.db.execute('DELETE FROM spoken_phrases WHERE guild_id=?', (guild_id,)) if not on else None  # noqa: E731
+        return self._set_pseudo_flag(guild_id, self._SPOKEN_KEEP_KEY, on, expected, 'keep phrases', purge)
+
+    SPOKEN_PHRASES_MAX, SPOKEN_EXAMPLES_MAX, SPOKEN_TEXT_MAX = 500, 200, 200
+    _SPOKEN_REV_KEY = 'spoken_examples_rev'  # pseudo game_settings row: rules_json holds the examples list revision
+
+    def spoken_member_on(self, guild_id, user_id):
+        row = self.one('SELECT spoken_moves FROM member_settings WHERE guild_id=? AND user_id=?', (guild_id, user_id))
+        return bool(row['spoken_moves']) if row else True
+
+    def set_spoken_member_on(self, guild_id, user_id, on):
+        if not isinstance(on, bool):
+            raise ValueError('The setting must be on or off.')
+        with self.write_admin():
+            self.db.execute('INSERT INTO member_settings(guild_id,user_id,updated_at,spoken_moves) VALUES(?,?,?,?) ON CONFLICT(guild_id,user_id) DO UPDATE SET spoken_moves=excluded.spoken_moves,updated_at=excluded.updated_at', (guild_id, user_id, time.time(), int(on)))
+            if not on:
+                self.db.execute('DELETE FROM spoken_phrases WHERE guild_id=? AND user_id=?', (guild_id, user_id))
+        return on
+
+    @staticmethod
+    def _spoken_game(game):
+        from .spoken.blackjack import MOVES
+        if game != 'blackjack':
+            raise ValueError('Spoken moves are only available for blackjack.')
+        return MOVES
+
+    def _spoken_text(self, text):
+        text = str(text or '').strip()
+        if not text or len(text) > self.SPOKEN_TEXT_MAX:
+            raise ValueError(f'A phrase must be 1 to {self.SPOKEN_TEXT_MAX} characters.')
+        return text
+
+    def _spoken_label(self, game, label):
+        moves = self._spoken_game(game)
+        if label != 'talk' and label not in moves:
+            raise ValueError('Choose one of the moves for this game, or talk.')
+        return label
+
+    def keep_spoken_phrase(self, guild_id, user_id, game, text, offered, band, scores, kind, label):
+        """Bot-side log (no admin revision). None when keeping is off for the server or the member; the switches are re-read under the write lock so a purge in between wins."""
+        if not self.spoken_keep_phrases(guild_id) or not self.spoken_member_on(guild_id, user_id):
+            return None
+        text, label = self._spoken_text(text), self._spoken_label(game, label)
+        if band not in ('sure', 'unsure', 'silent') or kind not in ('false_positive', 'false_negative'):
+            raise ValueError('Unknown band or kind.')
+        scores = scores or {}
+        rounded = {k: round(float(scores.get(k, 0.0)), 4) for k in ('p1', 'margin', 'talk_gap')}
+        with self.write_admin():
+            if not self.spoken_keep_phrases(guild_id) or not self.spoken_member_on(guild_id, user_id):
+                return None
+            ident = self.db.execute('INSERT INTO spoken_phrases(guild_id,user_id,game,text,offered,band,scores,kind,label,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',
+                (guild_id, user_id, game, text, json.dumps([str(m) for m in offered or []]), band, json.dumps(rounded), kind, label, time.time())).lastrowid
+            self.db.execute('DELETE FROM spoken_phrases WHERE guild_id=? AND id NOT IN (SELECT id FROM spoken_phrases WHERE guild_id=? ORDER BY id DESC LIMIT ?)',
+                (guild_id, guild_id, self.SPOKEN_PHRASES_MAX))
+        return ident
+
+    def spoken_phrases(self, guild_id, game=None, limit=200):
+        """Newest first; never says who spoke."""
+        where, args = ['guild_id=?'], [guild_id]
+        if game is not None:
+            where.append('game=?'); args.append(game)
+        rows = self.all(f"SELECT id,game,text,offered,band,scores,kind,label,created_at FROM spoken_phrases WHERE {' AND '.join(where)} ORDER BY id DESC LIMIT ?", (*args, max(1, int(limit))))
+        return [{**dict(r), 'offered': json.loads(r['offered']), 'scores': json.loads(r['scores'])} for r in rows]
+
+    def delete_spoken_phrase(self, guild_id, phrase_id):
+        with self.write_admin():
+            return bool(self.db.execute('DELETE FROM spoken_phrases WHERE guild_id=? AND id=?', (guild_id, phrase_id)).rowcount)
+
+    def spoken_examples(self, guild_id, game):
+        return [dict(r) for r in self.all('SELECT id,text,label,created_at FROM spoken_examples WHERE guild_id=? AND game=? ORDER BY id', (guild_id, game))]
+
+    def spoken_examples_revision(self, guild_id):
+        row = self.one('SELECT rules_json FROM game_settings WHERE guild_id=? AND game=?', (guild_id, self._SPOKEN_REV_KEY))
+        return int(row['rules_json'] or 0) if row else 0
+
+    def _bump_spoken_examples(self, guild_id, expected):
+        current = self.spoken_examples_revision(guild_id)
+        if expected is not None and current != expected:
+            raise ConflictError('The example phrases were changed elsewhere. Reload the page and try again.')
+        self.db.execute('INSERT INTO game_settings(guild_id,game,enabled,rules_json,updated_at) VALUES(?,?,0,?,?) ON CONFLICT(guild_id,game) DO UPDATE SET rules_json=excluded.rules_json,updated_at=excluded.updated_at',
+            (guild_id, self._SPOKEN_REV_KEY, str(current + 1), time.time()))
+
+    def promote_spoken_phrase(self, guild_id, phrase_id, label, by_user, expected=None):
+        """Turns a kept phrase into a server example (with the admin's label) and forgets the phrase. Returns the example id."""
+        with self.write_admin():
+            phrase = self.one('SELECT game,text FROM spoken_phrases WHERE guild_id=? AND id=?', (guild_id, phrase_id))
+            if phrase is None:
+                raise ValueError('That phrase is no longer there.')
+            label = self._spoken_label(phrase['game'], label)
+            self._bump_spoken_examples(guild_id, expected)
+            existing = self.one('SELECT id FROM spoken_examples WHERE guild_id=? AND game=? AND text=?', (guild_id, phrase['game'], phrase['text']))
+            if existing:
+                self.db.execute('UPDATE spoken_examples SET label=? WHERE id=?', (label, existing['id']))
+                ident = existing['id']
+            else:
+                if self.one('SELECT COUNT(*) AS n FROM spoken_examples WHERE guild_id=? AND game=?', (guild_id, phrase['game']))['n'] >= self.SPOKEN_EXAMPLES_MAX:
+                    raise ValueError(f'This server already has {self.SPOKEN_EXAMPLES_MAX} example phrases. Remove one first.')
+                ident = self.db.execute('INSERT INTO spoken_examples(guild_id,game,text,label,created_by,created_at) VALUES(?,?,?,?,?,?)',
+                    (guild_id, phrase['game'], phrase['text'], label, by_user, time.time())).lastrowid
+            self.db.execute('DELETE FROM spoken_phrases WHERE guild_id=? AND id=?', (guild_id, phrase_id))
+        return ident
+
+    def delete_spoken_example(self, guild_id, example_id, expected=None):
+        with self.write_admin():
+            self._bump_spoken_examples(guild_id, expected)
+            return bool(self.db.execute('DELETE FROM spoken_examples WHERE guild_id=? AND id=?', (guild_id, example_id)).rowcount)
 
     GAME_SUMMARY_MAX = 20
 

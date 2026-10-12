@@ -60,7 +60,7 @@ class V19UpgradeTests(unittest.TestCase):
             self.assertNotIn("stack", columns(path, "game_seats"))
             Store(path).close()
             with closing(sqlite3.connect(path)) as db:
-                self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 20)
+                self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 21)
             stack = columns(path, "game_seats")["stack"]
             self.assertEqual((stack[2], stack[3], stack[4]), ("INTEGER", 1, "0"))  # type, NOT NULL, default 0
             button = columns(path, "game_rounds")["button"]
@@ -118,14 +118,14 @@ class V19UpgradeTests(unittest.TestCase):
             self.assertEqual({t: rows(path, t) for t in first}, first)
             self.assertEqual(len(list(Path(folder).glob("*.pre-v20-*.sqlite3"))), 1)
             with closing(sqlite3.connect(path)) as db:
-                self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 20)
+                self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 21)
 
     def test_a_newer_database_is_refused(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "new.sqlite3"
             Store(path).close()
             with closing(sqlite3.connect(path)) as db, db:
-                db.execute("PRAGMA user_version=21")
+                db.execute("PRAGMA user_version=22")
             with self.assertRaisesRegex(ValueError, "newer than this application"):
                 Store(path)
 
@@ -139,7 +139,7 @@ class FreshDatabaseTests(unittest.TestCase):
             Store(upgraded).close()
             for path in (fresh, upgraded):
                 with closing(sqlite3.connect(path)) as db:
-                    self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 20)
+                    self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 21)
             for table in ("game_seats", "game_rounds", "game_cashouts"):
                 shape = lambda path: {n: c[2:5] for n, c in columns(path, table).items()}  # noqa: E731 (column order may differ: ALTER appends)
                 self.assertEqual(shape(fresh), shape(upgraded), table)
@@ -148,7 +148,7 @@ class FreshDatabaseTests(unittest.TestCase):
     def test_in_memory_store_is_v20_and_stack_cannot_go_negative(self):
         store = Store()
         try:
-            self.assertEqual(store.one("PRAGMA user_version")[0], 20)
+            self.assertEqual(store.one("PRAGMA user_version")[0], 21)
             store.db.execute("INSERT INTO game_tables(guild_id,channel_id,game,status,opened_by,created_at,updated_at) VALUES(1,100,'holdem','open',1,0,0)")
             store.db.execute("INSERT INTO game_rounds(guild_id,table_id,number,seed,seed_hash,status,created_at) VALUES(1,1,1,'s','h','joining',0)")
             store.db.execute("INSERT INTO game_seats(guild_id,round_id,seat_index,kind,ref_id,stake) VALUES(1,1,0,'member',5,100)")
