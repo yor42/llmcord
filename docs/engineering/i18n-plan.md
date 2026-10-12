@@ -449,6 +449,8 @@ Written when Phase 1 started (2026-10-12, decision G). Every batch follows these
 
 **Phase 1 finished on 2026-10-12** (MNT-66..74, merged through 8e2d785; English output unchanged, no existing test edited). Ratchet `ui` counts left: `dashboard.py` 1 (the `${OPENAI_API_KEY}` placeholder) and `presets_ui.py` 2 (the preset name defaults "Default copy" and "Imported preset", which become stored names). The remaining `raise` counts are internal diagnostics and engine invariant guards (games, spoken head and embedder, models, prices, backend), each listed in its batch report in [backlog.md](backlog.md). Follow-ups that Phase 2 needs before Korean ships everywhere: MNT-76 (returned text with structured values) and MNT-77 (`ModelConfigError` codes).
 
+**Phase 2 finished in code on 2026-10-12** (FEAT-44/45, batches 2a-2c). Schema v22 adds the server bot language; the Discord and dashboard resolvers now return the audience's locale; the dashboard has the `/lang` switch and the Server settings **Bot language** select. A pseudo-locale sweep (every dashboard tab and dialog, and the Discord-facing tests with the resolvers forced to pseudo) found eight unwrapped strings, fixed in 2c, and four open questions for the Korean pack, MNT-81; the turn-log stage text is stored English, MNT-80. The browser suite passes in `en` (apart from the sign-in test that needs discord.com, which CI runs). Still open from the exit criteria: the Discord walkthrough on the development guild and the catalog load time on the Pi, which need the real bot and hardware.
+
 ## 7. Quality gates and automation
 
 | Check | Where | Catches |
