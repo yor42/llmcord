@@ -133,6 +133,10 @@ def main():
     app.state.sessions['browser-account-session'] = {'user': {'id': '4', 'username': 'Test admin'}, 'expires': time.time() + 3600,
         'token_expires': time.time() + 3600, 'csrf': 'browser-account-csrf', 'access': 'test', 'refresh': 'test'}
 
+    # FEAT-45: its own session for the language switch browser test (tests/test_dashboard_browser_i18n.py).
+    app.state.sessions['browser-lang-session'] = {'user': {'id': '4', 'username': 'Test admin'}, 'expires': time.time() + 3600,
+        'token_expires': time.time() + 3600, 'csrf': 'browser-lang-csrf', 'access': 'test', 'refresh': 'test'}
+
     # UI-37: a session with global_name and an avatar hash (fake data; the CDN URL is never fetched).
     app.state.sessions['browser-profile-session'] = {'user': {'id': '5', 'username': 'moonuser', 'global_name': 'Moon Display', 'avatar': 'a' * 32},
         'expires': time.time() + 3600, 'token_expires': time.time() + 3600, 'csrf': 'browser-profile-csrf', 'access': 'test', 'refresh': 'test'}

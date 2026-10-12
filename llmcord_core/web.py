@@ -17,7 +17,7 @@ from starlette.datastructures import MutableHeaders
 from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES, GZipMiddleware
 
 from . import i18n
-from .i18n import UserError, codes
+from .i18n import UserError, codes, web_locale
 from .store import Store
 from .auth import AuthService
 from .discord_api import DISCORD_API
@@ -117,7 +117,7 @@ def _register_auth_routes(app: FastAPI, base_url: str, client_id: str, client_se
 
     @app.get("/auth/callback")
     async def callback(request: Request, code: str, state: str):
-        t = i18n.english()  # i18n: FEAT-45 request locale
+        t = web_locale.request_t(request)
         if not secrets.compare_digest(request.cookies.get("llmcord_oauth_state", ""), state):
             raise HTTPException(403, t("Invalid OAuth state"))
         expiry = app.state.states.pop(state, 0)
@@ -130,7 +130,7 @@ def _register_auth_routes(app: FastAPI, base_url: str, client_id: str, client_se
         if response.status_code >= 400:
             raise HTTPException(401, t("Discord sign-in failed"))
         tokens = response.json()
-        user = await discord_get("/users/@me", "Bearer " + tokens["access_token"])
+        user = await discord_get("/users/@me", "Bearer " + tokens["access_token"], t=t)
         ident = secrets.token_urlsafe(40)
         app.state.auth.prune()
         app.state.sessions[ident] = {"user": user, "access": tokens["access_token"],
@@ -146,9 +146,9 @@ def _register_auth_routes(app: FastAPI, base_url: str, client_id: str, client_se
 
     @app.post("/logout")
     async def logout(request: Request):
-        t = i18n.english()  # i18n: FEAT-45 request locale
+        t = web_locale.request_t(request)
         session = await session_for(request)
-        app.state.auth.check_origin(request.headers.get("origin"))
+        app.state.auth.check_origin(request.headers.get("origin"), t=t)
         form = await request.form()
         if not secrets.compare_digest(str(form.get("csrf", "")), session["csrf"]):
             raise HTTPException(403, t("Invalid form token"))
@@ -157,13 +157,28 @@ def _register_auth_routes(app: FastAPI, base_url: str, client_id: str, client_se
         result.delete_cookie("llmcord_session")
         return result
 
+    @app.post("/lang")
+    async def switch_language(request: Request):
+        t = web_locale.request_t(request)
+        session = await session_for(request)
+        app.state.auth.check_origin(request.headers.get("origin"), t=t)
+        form = await request.form()
+        if not secrets.compare_digest(str(form.get("csrf", "")), session["csrf"]):
+            raise HTTPException(403, t("Invalid form token"))
+        locale = form.get("locale")
+        if not isinstance(locale, str) or locale not in i18n.available_locales():
+            raise HTTPException(400, t("Unknown language"))
+        result = RedirectResponse(web_locale.safe_next(form.get("next")), status_code=303)
+        result.set_cookie(web_locale.COOKIE, locale, max_age=web_locale.COOKIE_MAX_AGE, secure=True, httponly=True, samesite="lax")
+        return result
+
 
 def _register_avatar_routes(app: FastAPI) -> set:
     require_admin = app.state.auth.require_admin
 
     @app.get("/guild/{guild_id}/characters/{character_id}/avatar")
     async def character_avatar(request: Request, guild_id: int, character_id: int):
-        t = i18n.english()  # i18n: FEAT-45 request locale
+        t = web_locale.request_t(request)
         await require_admin(request, guild_id)
         row = app.state.store.one("SELECT avatar FROM characters WHERE guild_id=? AND id=?",
             (guild_id, character_id))
@@ -173,7 +188,7 @@ def _register_avatar_routes(app: FastAPI) -> set:
 
     @app.get('/guild/{guild_id}/characters/{character_id}/avatars/{slot_key}')
     async def emotion_avatar(request: Request, guild_id: int, character_id: int, slot_key: str):
-        t = i18n.english()  # i18n: FEAT-45 request locale
+        t = web_locale.request_t(request)
         await require_admin(request, guild_id)
         row = app.state.store.avatar_slot(guild_id, character_id, slot_key)
         if not row['image']:
@@ -214,13 +229,13 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
 
     # ConflictError is a ValueError; no parent-app route writes, so none reaches here (NiceGUI actions handle it).
     @app.exception_handler(ValueError)
-    async def invalid_value(_request: Request, error: ValueError):
-        t = i18n.english()  # i18n: FEAT-45 request locale
+    async def invalid_value(request: Request, error: ValueError):
+        t = web_locale.request_t(request)
         return PlainTextResponse(t('Invalid input: {error}', error=t.error(error)), status_code=400)
 
     @app.exception_handler(sqlite3.IntegrityError)
-    async def duplicate_value(_request: Request, _error: sqlite3.IntegrityError):
-        t = i18n.english()  # i18n: FEAT-45 request locale
+    async def duplicate_value(request: Request, _error: sqlite3.IntegrityError):
+        t = web_locale.request_t(request)
         return PlainTextResponse(t("This name or entry already exists"), status_code=409)
 
     _load_config(app, config_path)
