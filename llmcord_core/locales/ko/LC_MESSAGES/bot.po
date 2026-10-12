@@ -227,7 +227,7 @@ msgstr "이 테이블에 앉은 캐릭터만 이 스레드에서 말할 수 있�
 
 #: llmcord_core/discord_bot.py
 msgid "The table's characters aren't talking right now (table talk is off or today's limit is reached)."
-msgstr "지금은 테이블의 캐릭터들이 대화하지 않아요 (테이블 잡담이 꺼져 있거나 오늘 한도에 도달했어요)."
+msgstr "지금은 테이블의 캐릭터들이 대화하지 않아요 (잡담이 꺼져 있거나 오늘 한도에 도달했어요)."
 
 #: llmcord_core/discord_bot.py
 msgid "You can't read this channel's message history, so I can't summarize it."

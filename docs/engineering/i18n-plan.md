@@ -263,7 +263,7 @@ The channel locale is the first of these that is set: the server bot language, t
 | Character wallet | 캐릭터 지갑 | Item / Inventory / Shop | 아이템 / 인벤토리 / 상점 |
 | Operator / Server admin | 운영자 / 서버 관리자 | Spending cap | 지출 한도 |
 | Turn log | 턴 로그 | Catch-up | 놓친 대화 요약 |
-| Ambient participation | 자율 참여 | Table talk | 테이블 잡담 |
+| Ambient participation | 자율 참여 | Table talk | 잡담 |
 | Spoken move / Move check | 채팅 무브 / 무브 확인 *(to confirm)* | Claim / Doubt / Pile | 선언 / 다우트 / 더미 |
 | I Doubt It (game name, standalone) | 다우트 (카드게임) *(or 다우트(Doubt))* | I Doubt It (in a sentence) | 다우트 |
 
