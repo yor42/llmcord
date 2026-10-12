@@ -14,6 +14,7 @@ from contextlib import contextmanager
 from .backend import ROLES as MODEL_ROLES
 from .config import PROFILE_KEYS, check_key_pin, key_hosts_from_env, profile_from_mapping, validate_profile_name
 from .errors import mask_facts, redact
+from .i18n import UserError, codes
 from .games import IllegalMove, Seat, blackjack, new_seed, registry, seed_hash
 from .lorebooks import normalize_entry, parse_lorebook
 
@@ -281,22 +282,22 @@ def valid_timezone(name):
             raise ValueError
         ZoneInfo(name)
     except Exception:
-        raise ValueError(f'Unknown timezone {name!r}. Use an IANA name such as "Asia/Seoul".') from None
+        raise UserError(codes.SETTINGS_TIMEZONE_UNKNOWN, name_repr=repr(name)) from None
     return name
 
 
-class CurrencyError(ValueError):
+class CurrencyError(UserError):
     """A currency change refused; the message is meant for the member or admin who asked."""
 
 
-class GameError(ValueError):
+class GameError(UserError):
     """A game action refused; the message is meant for the member or admin who asked."""
 
 
 DEFAULT_CAST_LIMITS = {'max_cast': 5, 'max_favorites': 5}
 
 
-class ConflictError(ValueError):
+class ConflictError(UserError):
     """An optimistic revision or unresolved import conflict rejected a write."""
 
 
@@ -331,13 +332,13 @@ class AdminStore:
             row = self.db.execute('SELECT revision FROM model_profiles WHERE name=?', (name,)).fetchone()
             if expected_revision is None:
                 if row:
-                    raise ConflictError(f'Profile {name} already exists.')
+                    raise ConflictError(codes.MODEL_PROFILE_EXISTS, name=name)
                 self.db.execute('UPDATE model_roles SET version=version+1 WHERE id=1')
                 revision = self.model_backend_version()
                 self.db.execute('INSERT INTO model_profiles(name, data_json, revision, updated_at) VALUES(?,?,?,?)', (name, stored, revision, now))
             else:
                 if not row or row['revision'] != expected_revision:
-                    raise ConflictError(f'Profile {name} changed or was removed. Reload and try again.')
+                    raise ConflictError(codes.MODEL_PROFILE_CHANGED, name=name)
                 self.db.execute('UPDATE model_roles SET version=version+1 WHERE id=1')
                 revision = self.model_backend_version()
                 self.db.execute('UPDATE model_profiles SET data_json=?, revision=?, updated_at=? WHERE name=?', (stored, revision, now, name))
@@ -348,12 +349,12 @@ class AdminStore:
         with self.write_admin():
             row = self.db.execute('SELECT revision FROM model_profiles WHERE name=?', (name,)).fetchone()
             if not row or row['revision'] != expected_revision:
-                raise ConflictError(f'Profile {name} changed or was removed. Reload and try again.')
+                raise ConflictError(codes.MODEL_PROFILE_CHANGED, name=name)
             roles = self.db.execute('SELECT dialogue, director, memory FROM model_roles WHERE id=1').fetchone()
             if name not in config_names:
                 for role in MODEL_ROLES:
                     if roles[role] == name:
-                        raise ValueError(f'{name} is assigned to the {role} role; assign another profile first.')
+                        raise UserError(codes.MODEL_PROFILE_ASSIGNED, name=name, role=role)
             self.db.execute('DELETE FROM model_profiles WHERE name=?', (name,))
             self.db.execute('UPDATE model_roles SET version=version+1 WHERE id=1')
 
@@ -365,10 +366,10 @@ class AdminStore:
             for role in MODEL_ROLES:
                 value = roles.get(role)
                 if value is not None and value not in config_names and not self.db.execute('SELECT 1 FROM model_profiles WHERE name=?', (value,)).fetchone():
-                    raise ValueError(f'Profile {value} for the {role} role does not exist.')
+                    raise UserError(codes.MODEL_ROLE_PROFILE_MISSING, value=value, role=role)
             row = self.db.execute('SELECT revision FROM model_roles WHERE id=1').fetchone()
             if row['revision'] != expected_revision:
-                raise ConflictError('Model roles changed. Reload and try again.')
+                raise ConflictError(codes.MODEL_ROLES_CHANGED)
             self.db.execute('UPDATE model_roles SET dialogue=?, director=?, memory=?, revision=revision+1, version=version+1 WHERE id=1',
                             (roles.get('dialogue'), roles.get('director'), roles.get('memory')))
 
@@ -384,18 +385,18 @@ class AdminStore:
         return dict(self.one('SELECT soft_cap_usd,hard_cap_usd,reset_day,channel_notice,revision FROM bot_settings WHERE id=1'))
 
     def save_budget(self, soft_cap_usd, hard_cap_usd, reset_day, channel_notice, expected_revision):
-        for name, cap in (('Soft', soft_cap_usd), ('Hard', hard_cap_usd)):
+        for code, cap in ((codes.USAGE_SOFT_CAP_INVALID, soft_cap_usd), (codes.USAGE_HARD_CAP_INVALID, hard_cap_usd)):
             if cap is not None and (isinstance(cap, bool) or not isinstance(cap, (int, float)) or not math.isfinite(cap) or cap < 0):
-                raise ValueError(f'{name} cap must be blank or a number of dollars, zero or more.')
+                raise UserError(code)
         if soft_cap_usd is not None and hard_cap_usd is not None and soft_cap_usd > hard_cap_usd:
-            raise ValueError('The soft cap cannot be higher than the hard cap.')
+            raise UserError(codes.USAGE_CAPS_ORDER)
         if isinstance(reset_day, bool) or not isinstance(reset_day, int) or not 1 <= reset_day <= 28:
-            raise ValueError('Reset day must be a whole number from 1 to 28.')
+            raise UserError(codes.USAGE_RESET_DAY)
         if not isinstance(channel_notice, bool):
-            raise ValueError('Channel notice must be on or off.')
+            raise UserError(codes.USAGE_NOTICE_FLAG)
         with self.write_admin():
             if self.budget_settings()['revision'] != expected_revision:
-                raise ConflictError('Bot settings changed; reload before saving')
+                raise ConflictError(codes.USAGE_SETTINGS_CHANGED)
             self.db.execute('UPDATE bot_settings SET soft_cap_usd=?,hard_cap_usd=?,reset_day=?,channel_notice=?,revision=? WHERE id=1',
                             (None if soft_cap_usd is None else float(soft_cap_usd), None if hard_cap_usd is None else float(hard_cap_usd), reset_day, int(channel_notice), expected_revision + 1))
         return True
@@ -456,12 +457,12 @@ class AdminStore:
 
     def next_owner_id(self, kind, table):
         if (kind, table) not in {('space', 'spaces'), ('book', 'lorebooks')}:
-            raise ValueError('Owner type must be a world, hub or lorebook. Reload the page and try again.')
+            raise UserError(codes.LORE_OWNER_TYPE)
         return self.one(f'SELECT COALESCE(MAX(id),0)+1 AS next_id FROM (SELECT id FROM {table} UNION ALL SELECT owner_id FROM owner_revisions WHERE kind=?)', (kind,))['next_id']
 
     def guidelines(self, guild_id, kind, owner_id):
         if kind not in {'space', 'channel'}:
-            raise ValueError('Choose a world, hub or channel.')
+            raise UserError(codes.LORE_OWNER_PICK)
         self.validate_owner(guild_id, kind, owner_id)
         row = self.one('SELECT * FROM scene_guidelines WHERE guild_id=? AND kind=? AND owner_id=?', (guild_id, kind, owner_id))
         return dict(row) if row else {'guild_id': guild_id, 'kind': kind, 'owner_id': owner_id, 'content': '', 'revision': 0}
@@ -469,11 +470,11 @@ class AdminStore:
     def save_guidelines(self, guild_id, kind, owner_id, content, expected_revision):
         content = content.strip()
         if len(content.encode()) > 6000:
-            raise ValueError('Guidelines exceed 6,000 bytes. Shorten them before saving.')
+            raise UserError(codes.GUIDELINES_TOO_LONG)
         with self.write_admin():
             current = self.guidelines(guild_id, kind, owner_id)
             if current['revision'] != expected_revision:
-                raise ConflictError('Guidelines changed; reload before saving')
+                raise ConflictError(codes.GUIDELINES_CHANGED)
             self.db.execute('INSERT INTO scene_guidelines VALUES(?,?,?,?,?) ON CONFLICT(guild_id,kind,owner_id) DO UPDATE SET content=excluded.content,revision=excluded.revision', (guild_id, kind, owner_id, content, expected_revision + 1))
             self.bump_owner(guild_id, kind, owner_id)
         return True
@@ -499,9 +500,9 @@ class AdminStore:
         with self.write_admin():
             impact = self.space_delete_impact(guild_id, space_id)
             if impact['revision'] != expected_revision:
-                raise ConflictError('World or hub changed; reload before deleting')
+                raise ConflictError(codes.WORLD_CHANGED_DELETE)
             if impact['characters'] or impact['channels']:
-                raise ValueError('Move or delete its home characters and rebind its channels before deleting this world or hub.')
+                raise UserError(codes.WORLD_DELETE_BLOCKED)
             for entry in self.admin_entries(guild_id, 'space', space_id):
                 self._delete_entry_locked(guild_id, entry)
             self.db.execute("DELETE FROM candidates WHERE guild_id=? AND scope_kind='space' AND scope_id=?", (guild_id, space_id))
@@ -516,7 +517,7 @@ class AdminStore:
         with self.write_admin():
             self.validate_owner(guild_id, 'book', book_id)
             if self.owner_revision(guild_id, 'book', book_id) != expected_revision:
-                raise ConflictError('Lorebook changed; reload before deleting')
+                raise ConflictError(codes.LORE_LOREBOOK_CHANGED_DELETE)
             for entry in self.admin_entries(guild_id, 'book', book_id):
                 self._delete_entry_locked(guild_id, entry)
             revision = self.owner_revision(guild_id, 'book', book_id) + 1
@@ -541,7 +542,7 @@ class AdminStore:
         with self.write_admin():
             self.validate_owner(guild_id, kind, owner_id)
             if self.owner_revision(guild_id, kind, owner_id) != expected_revision:
-                raise ConflictError('Destination lore changed; preview the import again')
+                raise ConflictError(codes.IMPORT_DESTINATION_CHANGED)
             changes = self.preview_entry_import(guild_id, kind, owner_id, imported)
             refs = []
             for change in changes:
@@ -677,7 +678,7 @@ class AdminStore:
         else:
             row = None
         if not row or row['guild_id'] != guild_id:
-            raise ValueError('Choose an owner in this server.')
+            raise UserError(codes.LORE_OWNER_PICK_SERVER)
 
     def owner_revision(self, guild_id, kind, owner_id):
         if kind == 'book':
@@ -697,7 +698,7 @@ class AdminStore:
             kind, raw_id = ref.split(':', 1)
             ident = int(raw_id)
         except (AttributeError, ValueError):
-            raise ValueError('Invalid entry reference.') from None
+            raise UserError(codes.LORE_ENTRY_REF_INVALID) from None
         if kind == 'lore':
             row = self.one('SELECT * FROM lore WHERE guild_id=? AND id=?', (guild_id, ident))
         elif kind == 'guild-lore':
@@ -707,7 +708,7 @@ class AdminStore:
         else:
             row = None
         if not row:
-            raise ValueError('Lore entry not found.')
+            raise UserError(codes.LORE_ENTRY_NOT_FOUND)
         return self._entry_dict(kind, ref, ident, row)
 
     def _entry_dict(self, kind, ref, ident, row):
@@ -776,14 +777,14 @@ class AdminStore:
         self.validate_owner(guild_id, kind, owner_id)
         rule = validate_rule(rule, content)
         if not content.strip():
-            raise ValueError('Lore content cannot be empty.')
+            raise UserError(codes.LORE_CONTENT_EMPTY)
         with self.write_admin():
             if ref:
                 old = self.admin_entry(guild_id, ref)
                 if (old['owner_kind'], old['owner_id']) != (kind, owner_id):
-                    raise ConflictError('Entry moved; reload the editor')
+                    raise ConflictError(codes.LORE_ENTRY_MOVED)
                 if expected_revision is None or old['revision'] != expected_revision:
-                    raise ConflictError('Entry changed; reload the editor')
+                    raise ConflictError(codes.LORE_ENTRY_CHANGED)
                 self.db.execute(f"UPDATE {old['table']} SET content=?,rule_json=?,pinned=?,revision=revision+1 WHERE id=?", (content.strip(), json.dumps(rule), int(pinned), old['id']))
                 if old['table'] != 'lorebook_entries':
                     self.db.execute(f"UPDATE {old['table']} SET keys_json=?,constant=?,insertion_order=?,enabled=? WHERE id=?", (json.dumps(rule['keys']), int(rule['constant']), rule['order'], int(rule['enabled']), old['id']))
@@ -796,7 +797,7 @@ class AdminStore:
         with self.write_admin():
             row = self.admin_entry(guild_id, ref)
             if row['revision'] != expected_revision:
-                raise ConflictError('Entry changed; reload before deleting')
+                raise ConflictError(codes.LORE_ENTRY_CHANGED_DELETE)
             self._delete_entry_locked(guild_id, row)
 
     def _delete_entry_locked(self, guild_id, row):
@@ -806,12 +807,12 @@ class AdminStore:
 
     def _selected_entries_locked(self, guild_id, entries):
         if not entries or len(entries) > 2000:
-            raise ValueError('Select between 1 and 2000 lore entries.')
+            raise UserError(codes.LORE_SELECT_COUNT)
         rows, seen = [], set()
         for entry in entries:
             row = self.entry_by_key(guild_id, entry['entry_key'])
             if not row or row['entry_key'] in seen or row['revision'] != entry['revision'] or (row['owner_kind'], row['owner_id']) != (entry['owner_kind'], entry['owner_id']):
-                raise ConflictError('A selected lore entry changed; select it again before continuing')
+                raise ConflictError(codes.LORE_SELECTED_CHANGED)
             seen.add(row['entry_key'])
             rows.append(row)
         return rows
@@ -836,7 +837,7 @@ class AdminStore:
         with self.write_admin():
             row = self.admin_entry(guild_id, ref)
             if row['revision'] != expected_revision or (target_revision is not None and self.owner_revision(guild_id, kind, owner_id) != target_revision):
-                raise ConflictError('Lore changed; reload before transferring')
+                raise ConflictError(codes.LORE_CHANGED_TRANSFER)
             return self._transfer_entry_locked(guild_id, row, kind, owner_id, copy)
 
     def _transfer_entry_locked(self, guild_id, row, kind, owner_id, copy):
@@ -887,7 +888,7 @@ class AdminStore:
         for change in changes:
             uid, status = change['uid'], change['status']
             if status == 'conflict' and resolutions.get(uid) not in {'keep', 'import'}:
-                raise ConflictError(f'Resolve conflict for entry {uid}')
+                raise ConflictError(codes.IMPORT_RESOLVE_ENTRY, uid=uid)
         for change in changes:
             uid, status = change['uid'], change['status']
             if status == 'unchanged':
@@ -930,7 +931,7 @@ class AdminStore:
     def sync_admin_book(self, guild_id, book_id, imported, resolutions, expected_revision):
         with self.write_admin():
             if self.owner_revision(guild_id, 'book', book_id) != expected_revision:
-                raise ConflictError('Lorebook changed since preview; preview again')
+                raise ConflictError(codes.IMPORT_LOREBOOK_PREVIEW_CHANGED)
             changes = self.apply_import_locked(guild_id, 'book', book_id, imported, resolutions)
             self.db.execute('UPDATE lorebooks SET original_json=? WHERE id=?', (imported.raw_json, book_id))
         return changes
@@ -960,7 +961,7 @@ class AdminStore:
     def preview_card(self, guild_id, world_id, card):
         world = self.space_by_id(world_id)
         if not world or world['guild_id'] != guild_id or world['kind'] != 'world':
-            raise ValueError('Choose a home world in this server.')
+            raise UserError(codes.CHARACTER_HOME_WORLD_PICK)
         existing = self.character(guild_id, card.name)
         if not existing:
             return {'character_id': None, 'revision': 0, 'conflicts': [], 'changes': []}
@@ -990,13 +991,13 @@ class AdminStore:
     def create_character(self, guild_id, world_id, name):
         name = name.strip()
         if not name:
-            raise ValueError('Character name cannot be empty. Enter a name.')
+            raise UserError(codes.CHARACTER_NAME_EMPTY)
         with self.write_admin():
             world = self.space_by_id(world_id)
             if not world or world['guild_id'] != guild_id or world['kind'] != 'world':
-                raise ValueError('Choose a home world in this server.')
+                raise UserError(codes.CHARACTER_HOME_WORLD_PICK)
             if self.character(guild_id, name):
-                raise ValueError('This character name already exists. Choose another name.')
+                raise UserError(codes.CHARACTER_NAME_TAKEN)
             card = {'name': name, **{field: '' for field in ('description', 'personality', 'scenario', 'first_mes', 'mes_example', 'system_prompt', 'post_history_instructions')}}
             ident = self._create_character_locked(guild_id, world_id, name, card)
             self.bump_owner(guild_id, 'character', ident)
@@ -1006,10 +1007,10 @@ class AdminStore:
         with self.write_admin():
             self.validate_owner(guild_id, 'character', character_id)
             if self.owner_revision(guild_id, 'character', character_id) != expected_revision:
-                raise ConflictError('Character changed; reload before deleting')
+                raise ConflictError(codes.CHARACTER_CHANGED_DELETE)
             seated = self.one("SELECT t.game FROM game_seats s JOIN game_rounds r ON r.id=s.round_id AND r.guild_id=s.guild_id JOIN game_tables t ON t.id=r.table_id AND t.guild_id=r.guild_id WHERE s.guild_id=? AND s.kind='character' AND s.ref_id=? AND (r.status IN ('joining','playing') OR (t.status='open' AND t.game IN ('holdem') AND r.number=(SELECT MAX(number) FROM game_rounds WHERE table_id=r.table_id))) LIMIT 1", (guild_id, character_id))
             if seated:
-                raise ValueError(f'That character is at a {registry.get(seated["game"]).noun} table. Try again when the round is over.')
+                raise UserError(codes.CHARACTER_AT_TABLE, noun=registry.get(seated["game"]).noun)
             for entry in self.admin_entries(guild_id, 'character', character_id):
                 self._delete_entry_locked(guild_id, entry)
             self.db.execute("DELETE FROM candidates WHERE guild_id=? AND scope_kind='character' AND scope_id=?", (guild_id, character_id))
@@ -1029,10 +1030,10 @@ class AdminStore:
             preview = self.preview_card(guild_id, world_id, card)
             existing = self.character(guild_id, card.name)
             if existing and expected_revision is not None and preview['revision'] != expected_revision:
-                raise ConflictError('Character changed since preview; upload again')
+                raise ConflictError(codes.IMPORT_CHARACTER_PREVIEW_CHANGED)
             for conflict in preview['conflicts']:
                 if resolutions.get(conflict) not in {'keep', 'import'}:
-                    raise ConflictError(f'Resolve {conflict} conflict in the dashboard')
+                    raise ConflictError(codes.IMPORT_RESOLVE_CONFLICT, conflict=conflict)
             data = json.loads(existing['card']) if existing and resolutions.get('card') == 'keep' else card.data
             avatar = existing['avatar'] if existing else None
             manual = existing['avatar_manual'] if existing else 0
@@ -1060,22 +1061,22 @@ class AdminStore:
             return default_bundle()
         row = self.one('SELECT r.* FROM prompt_revisions r JOIN prompt_presets p ON p.id=r.preset_id WHERE p.guild_id=? AND p.id=? AND (? IS NULL OR r.revision=?) ORDER BY r.revision DESC LIMIT 1', (guild_id, preset_id, revision, revision))
         if not row:
-            raise ValueError('Preset revision not found in this server.')
+            raise UserError(codes.PRESET_REVISION_NOT_FOUND)
         return json.loads(row['bundle_json'])
 
     def save_preset(self, guild_id, name, bundle, preset_id=None, expected_revision=None):
         from .prompts import validate_bundle
         bundle = validate_bundle(bundle)
         if not name.strip() or len(name) > 80:
-            raise ValueError('Preset name must be 1–80 characters.')
+            raise UserError(codes.PRESET_NAME_LENGTH)
         with self.write_admin():
             if preset_id:
                 rows = self.list_presets(guild_id)
                 current = next((r for r in rows if r['id'] == preset_id), None)
                 if not current:
-                    raise ValueError('Preset not found in this server.')
+                    raise UserError(codes.PRESET_NOT_FOUND)
                 if expected_revision != current['revision']:
-                    raise ConflictError('Preset changed; reload before saving')
+                    raise ConflictError(codes.PRESET_CHANGED)
                 revision = current['revision'] + 1
                 self.db.execute('UPDATE prompt_presets SET name=? WHERE id=?', (name.strip(), preset_id))
             else:
@@ -1089,7 +1090,7 @@ class AdminStore:
         bundle = self.preset_bundle(guild_id, preset_id, revision)
         problems = compatibility(bundle, providers)
         if problems:
-            raise ValueError('Resolve preset compatibility: ' + '; '.join(p.rstrip('.') for p in problems) + '.')
+            raise UserError(codes.PRESET_COMPATIBILITY, problems='; '.join(p.rstrip('.') for p in problems))
         with self.write_admin():
             self.db.execute('INSERT INTO guild_settings(guild_id,preset_id,preset_revision) VALUES(?,?,?) ON CONFLICT(guild_id) DO UPDATE SET preset_id=excluded.preset_id,preset_revision=excluded.preset_revision', (guild_id, preset_id, revision))
 
@@ -1120,10 +1121,10 @@ class AdminStore:
     def set_currency_name(self, guild_id, name, expected=None):
         name = name.strip() if isinstance(name, str) else ''
         if not 1 <= len(name) <= 32 or not name.isprintable() or any(c in name for c in '<@`*_~|'):
-            raise ValueError('The currency name must be 1 to 32 characters on one line.')
+            raise UserError(codes.CURRENCY_NAME_LENGTH)
         with self.write_admin():
             if expected is not None and self.currency_name(guild_id) != expected:
-                raise ConflictError('The currency name was changed elsewhere. Reload the page and try again.')
+                raise ConflictError(codes.CURRENCY_NAME_CHANGED)
             self.db.execute('INSERT INTO guild_settings(guild_id,currency_name) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET currency_name=excluded.currency_name', (guild_id, name))
         return name
 
@@ -1133,28 +1134,28 @@ class AdminStore:
 
     def change_balance(self, guild_id, user_id, amount, reason, actor_id, source='admin'):
         if isinstance(amount, bool) or not isinstance(amount, int) or amount == 0 or abs(amount) > self.MAX_CURRENCY_CHANGE:
-            raise CurrencyError(f'The amount must be a whole number from 1 to {self.MAX_CURRENCY_CHANGE:,}.')
+            raise CurrencyError(codes.CURRENCY_AMOUNT_RANGE, limit=self.MAX_CURRENCY_CHANGE)
         reason = reason.strip() if isinstance(reason, str) else ''
         if not 1 <= len(reason) <= 200:
-            raise CurrencyError('The reason must be 1 to 200 characters.')
+            raise CurrencyError(codes.CURRENCY_REASON_LENGTH)
         with self.write_admin():
             return self._append_ledger(guild_id, user_id, amount, reason, actor_id, source, None)
 
     def reverse_entry(self, guild_id, entry_id, actor_id, reason):
         reason = reason.strip() if isinstance(reason, str) else ''
         if not 1 <= len(reason) <= 200:
-            raise CurrencyError('The reason must be 1 to 200 characters.')
+            raise CurrencyError(codes.CURRENCY_REASON_LENGTH)
         with self.write_admin():
             entry = self.one('SELECT * FROM currency_ledger WHERE id=? AND guild_id=?', (entry_id, guild_id))
             if entry is None:
-                raise CurrencyError('No such ledger entry on this server.')
+                raise CurrencyError(codes.CURRENCY_NO_ENTRY)
             if entry['reverses_id'] is not None:
-                raise CurrencyError('A reversal cannot be reversed.')
+                raise CurrencyError(codes.CURRENCY_REVERSAL_REVERSED)
             if self.one('SELECT 1 FROM currency_ledger WHERE reverses_id=?', (entry_id,)):
-                raise CurrencyError('That entry was already reversed.')
+                raise CurrencyError(codes.CURRENCY_ALREADY_REVERSED)
             if entry['holder_kind'] == 'character':
                 if self._character_row(guild_id, entry['user_id']) is None:
-                    raise CurrencyError("That character was deleted, so this entry cannot be reversed.")
+                    raise CurrencyError(codes.CURRENCY_CHARACTER_DELETED)
                 return self._append_character_ledger(guild_id, entry['user_id'], -entry['amount'], reason, actor_id, 'reversal', entry_id)
             shop = self._take_shop_item(guild_id, entry)
             if shop is not None:
@@ -1172,9 +1173,9 @@ class AdminStore:
         after = current + amount
         name = self.currency_name(guild_id)
         if after < 0:
-            raise CurrencyError(f'That would leave <@{user_id}> with a negative balance (current balance: {current:,} {name}).')
+            raise CurrencyError(codes.CURRENCY_NEGATIVE_MEMBER, user_id=user_id, current=current, name=name)
         if after > self.MAX_CURRENCY_BALANCE:
-            raise CurrencyError(f'That would take <@{user_id}> above the maximum balance of {self.MAX_CURRENCY_BALANCE:,} {name}.')
+            raise CurrencyError(codes.CURRENCY_MAX_MEMBER, user_id=user_id, limit=self.MAX_CURRENCY_BALANCE, name=name)
         now = time.time()
         self.db.execute('INSERT INTO currency_balances(guild_id,user_id,balance,updated_at) VALUES(?,?,?,?) ON CONFLICT(guild_id,user_id) DO UPDATE SET balance=excluded.balance,updated_at=excluded.updated_at',
             (guild_id, user_id, after, now))
@@ -1192,10 +1193,10 @@ class AdminStore:
         values = {'amount': amount, 'streak_bonus': streak_bonus, 'streak_days': streak_days}
         for field, value in values.items():
             if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= self.DAILY_LIMITS[field]:
-                raise ValueError(f'The daily {field.replace("_", " ")} must be a whole number from 0 to {self.DAILY_LIMITS[field]:,}.')
+                raise UserError({'amount': codes.CURRENCY_DAILY_AMOUNT_RANGE, 'streak_bonus': codes.CURRENCY_DAILY_STREAK_BONUS_RANGE, 'streak_days': codes.CURRENCY_DAILY_STREAK_DAYS_RANGE}[field], limit=self.DAILY_LIMITS[field])
         with self.write_admin():
             if expected is not None and self.daily_settings(guild_id) != expected:
-                raise ConflictError('The daily check-in settings were changed elsewhere. Reload the page and try again.')
+                raise ConflictError(codes.CURRENCY_DAILY_CHANGED)
             self.db.execute('INSERT INTO guild_settings(guild_id,daily_amount,daily_streak_bonus,daily_streak_days) VALUES(?,?,?,?) ON CONFLICT(guild_id) DO UPDATE SET daily_amount=excluded.daily_amount,daily_streak_bonus=excluded.daily_streak_bonus,daily_streak_days=excluded.daily_streak_days',
                 (guild_id, amount, streak_bonus, streak_days))
         return values
@@ -1237,10 +1238,10 @@ class AdminStore:
 
     def set_refill_cap(self, guild_id, cap, expected=None):
         if isinstance(cap, bool) or not isinstance(cap, int) or not 0 <= cap <= self.MAX_CURRENCY_BALANCE:
-            raise ValueError(f'The refill cap must be a whole number from 0 to {self.MAX_CURRENCY_BALANCE:,}.')
+            raise UserError(codes.CURRENCY_REFILL_CAP_RANGE, limit=self.MAX_CURRENCY_BALANCE)
         with self.write_admin():
             if expected is not None and self.refill_cap(guild_id) != expected:
-                raise ConflictError('The character refill cap was changed elsewhere. Reload the page and try again.')
+                raise ConflictError(codes.CURRENCY_REFILL_CHANGED)
             self.db.execute('INSERT INTO guild_settings(guild_id,character_refill_cap) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET character_refill_cap=excluded.character_refill_cap', (guild_id, cap))
         return cap
 
@@ -1254,7 +1255,7 @@ class AdminStore:
     def _require_character(self, guild_id, character_id):
         row = self._character_row(guild_id, character_id) if isinstance(character_id, int) and not isinstance(character_id, bool) else None
         if row is None:
-            raise CurrencyError('That character is not on this server.')
+            raise CurrencyError(codes.CURRENCY_CHARACTER_NOT_ON_SERVER)
         return row
 
     def character_names(self, guild_id, character_ids):
@@ -1302,10 +1303,10 @@ class AdminStore:
 
     def change_character_balance(self, guild_id, character_id, amount, reason, actor_id, source='admin', now=None):
         if isinstance(amount, bool) or not isinstance(amount, int) or amount == 0 or abs(amount) > self.MAX_CURRENCY_CHANGE:
-            raise CurrencyError(f'The amount must be a whole number from 1 to {self.MAX_CURRENCY_CHANGE:,}.')
+            raise CurrencyError(codes.CURRENCY_AMOUNT_RANGE, limit=self.MAX_CURRENCY_CHANGE)
         reason = reason.strip() if isinstance(reason, str) else ''
         if not 1 <= len(reason) <= 200:
-            raise CurrencyError('The reason must be 1 to 200 characters.')
+            raise CurrencyError(codes.CURRENCY_REASON_LENGTH)
         with self.write_admin():
             self._require_character(guild_id, character_id)
             self._refill_character_locked(guild_id, character_id, now)
@@ -1314,7 +1315,7 @@ class AdminStore:
     @staticmethod
     def _positive_amount(amount):
         if isinstance(amount, bool) or not isinstance(amount, int) or amount <= 0:
-            raise ValueError('The amount must be a positive whole number.')
+            raise UserError(codes.CURRENCY_AMOUNT_POSITIVE)
 
     def _character_debit_locked(self, guild_id, character_id, amount, reason, now=None):
         """Inside write_admin (FEAT-20): refill if due, then take `amount` (a positive int) as a 'game' entry; CurrencyError if the balance is short."""
@@ -1341,9 +1342,9 @@ class AdminStore:
         after = current + amount
         name, currency = self._character_label(guild_id, character_id), self.currency_name(guild_id)
         if after < 0:
-            raise CurrencyError(f'That would leave {name} with a negative balance (current balance: {current:,} {currency}).')
+            raise CurrencyError(codes.CURRENCY_NEGATIVE_CHARACTER, name=name, current=current, currency=currency)
         if after > self.MAX_CURRENCY_BALANCE:
-            raise CurrencyError(f'That would take {name} above the maximum balance of {self.MAX_CURRENCY_BALANCE:,} {currency}.')
+            raise CurrencyError(codes.CURRENCY_MAX_CHARACTER, name=name, limit=self.MAX_CURRENCY_BALANCE, currency=currency)
         now = time.time()
         self.db.execute("INSERT INTO character_balances(guild_id,character_id,balance,refill_day,updated_at) VALUES(?,?,?,'',?) ON CONFLICT(guild_id,character_id) DO UPDATE SET balance=excluded.balance,updated_at=excluded.updated_at",
             (guild_id, character_id, after, now))
@@ -1386,12 +1387,12 @@ class AdminStore:
         """Make `channel_ids` the guild's game channels in one transaction; each removed channel's open table is closed (rounds cancelled and refunded). Returns {'closed_tables': [table ids]}."""
         wanted = set(channel_ids)
         if any(isinstance(c, bool) or not isinstance(c, int) or not 0 < c < 2 ** 63 for c in wanted):
-            raise GameError('Game channels must be Discord channel IDs.')
+            raise GameError(codes.GAME_CHANNEL_IDS)
         closed = []
         with self.write_admin():
             current = self.game_channels(guild_id)
             if expected is not None and set(expected) != current:
-                raise ConflictError('The game channels were changed elsewhere. Reload the page and try again.')
+                raise ConflictError(codes.GAME_CHANNELS_CHANGED)
             for channel_id in sorted(wanted - current):
                 self.db.execute('INSERT OR IGNORE INTO game_channels(guild_id,channel_id,created_at) VALUES(?,?,?)', (guild_id, channel_id, time.time()))
             for channel_id in sorted(current - wanted):
@@ -1410,12 +1411,12 @@ class AdminStore:
     def set_game_settings(self, guild_id, min_bet, max_bet, expected=None):
         for value in (min_bet, max_bet):
             if isinstance(value, bool) or not isinstance(value, int):
-                raise GameError('The bet limits must be whole numbers.')
+                raise GameError(codes.GAME_BET_LIMITS_WHOLE)
         if not 1 <= min_bet <= max_bet <= self.GAME_BET_LIMIT:
-            raise GameError(f'The bet limits must satisfy 1 <= minimum <= maximum <= {self.GAME_BET_LIMIT:,}.')
+            raise GameError(codes.GAME_BET_LIMITS_RANGE, limit=self.GAME_BET_LIMIT)
         with self.write_admin():
             if expected is not None and self.game_settings(guild_id) != expected:
-                raise ConflictError('The game settings were changed elsewhere. Reload the page and try again.')
+                raise ConflictError(codes.GAME_SETTINGS_CHANGED)
             self.db.execute('INSERT INTO guild_settings(guild_id,game_min_bet,game_max_bet) VALUES(?,?,?) ON CONFLICT(guild_id) DO UPDATE SET game_min_bet=excluded.game_min_bet,game_max_bet=excluded.game_max_bet',
                 (guild_id, min_bet, max_bet))
         return {'min_bet': min_bet, 'max_bet': max_bet}
@@ -1426,10 +1427,10 @@ class AdminStore:
 
     def set_game_character_talk(self, guild_id, enabled, expected=None):
         if not isinstance(enabled, bool):
-            raise ValueError('The setting must be on or off.')
+            raise UserError(codes.SETTINGS_FLAG)
         with self.write_admin():
             if expected is not None and self.game_character_talk(guild_id) != expected:
-                raise ConflictError('The character table talk setting was changed elsewhere. Reload the page and try again.')
+                raise ConflictError(codes.GAME_TABLE_TALK_CHANGED)
             self.db.execute('INSERT INTO guild_settings(guild_id,game_character_talk) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET game_character_talk=excluded.game_character_talk', (guild_id, int(bool(enabled))))
         return bool(enabled)
 
@@ -1443,10 +1444,10 @@ class AdminStore:
 
     def set_game_character_moves(self, guild_id, mode, expected=None):
         if mode not in self.CHARACTER_MOVES:
-            raise ValueError('Character moves must be model or style only.')
+            raise UserError(codes.GAME_MOVES_INVALID)
         with self.write_admin():
             if expected is not None and self.game_character_moves(guild_id) != expected:
-                raise ConflictError('The character moves setting was changed elsewhere. Reload the page and try again.')
+                raise ConflictError(codes.GAME_MOVES_CHANGED)
             self.db.execute('INSERT INTO game_settings(guild_id,game,enabled,updated_at) VALUES(?,?,?,?) ON CONFLICT(guild_id,game) DO UPDATE SET enabled=excluded.enabled,updated_at=excluded.updated_at',
                 (guild_id, self._MOVES_KEY, int(mode == 'style'), time.time()))
         return mode
@@ -1459,12 +1460,12 @@ class AdminStore:
         row = self.one('SELECT enabled FROM game_settings WHERE guild_id=? AND game=?', (guild_id, key))
         return bool(row and row['enabled'])
 
-    def _set_pseudo_flag(self, guild_id, key, on, expected, label, after=None):
+    def _set_pseudo_flag(self, guild_id, key, on, expected, changed, after=None):
         if not isinstance(on, bool):
-            raise ValueError('The setting must be on or off.')
+            raise UserError(codes.SETTINGS_FLAG)
         with self.write_admin():
             if expected is not None and self._pseudo_flag(guild_id, key) != expected:
-                raise ConflictError(f'The {label} setting was changed elsewhere. Reload the page and try again.')
+                raise ConflictError(changed)
             self.db.execute('INSERT INTO game_settings(guild_id,game,enabled,updated_at) VALUES(?,?,?,?) ON CONFLICT(guild_id,game) DO UPDATE SET enabled=excluded.enabled,updated_at=excluded.updated_at',
                 (guild_id, key, int(on), time.time()))
             if after:
@@ -1476,14 +1477,14 @@ class AdminStore:
         return self._pseudo_flag(guild_id, self._SPOKEN_KEY)
 
     def set_spoken_moves_enabled(self, guild_id, on, expected=None):
-        return self._set_pseudo_flag(guild_id, self._SPOKEN_KEY, on, expected, 'read moves from chat')
+        return self._set_pseudo_flag(guild_id, self._SPOKEN_KEY, on, expected, codes.GAME_SPOKEN_MOVES_CHANGED)
 
     def spoken_doubt_enabled(self, guild_id):
         """Experimental "Read doubts from chat" (D36): off by default; the member switch is spoken_member_on, shared with moves."""
         return self._pseudo_flag(guild_id, self._SPOKEN_DOUBT_KEY)
 
     def set_spoken_doubt_enabled(self, guild_id, on, expected=None):
-        return self._set_pseudo_flag(guild_id, self._SPOKEN_DOUBT_KEY, on, expected, 'read doubts from chat')
+        return self._set_pseudo_flag(guild_id, self._SPOKEN_DOUBT_KEY, on, expected, codes.GAME_SPOKEN_DOUBT_CHANGED)
 
     def spoken_keep_setting(self, guild_id):
         """The stored "Keep phrases for tuning" flag only (what the dashboard switch shows and saves against)."""
@@ -1495,7 +1496,7 @@ class AdminStore:
 
     def set_spoken_keep_phrases(self, guild_id, on, expected=None):
         purge = lambda: self.db.execute('DELETE FROM spoken_phrases WHERE guild_id=?', (guild_id,)) if not on else None  # noqa: E731
-        return self._set_pseudo_flag(guild_id, self._SPOKEN_KEEP_KEY, on, expected, 'keep phrases', purge)
+        return self._set_pseudo_flag(guild_id, self._SPOKEN_KEEP_KEY, on, expected, codes.GAME_SPOKEN_KEEP_CHANGED, purge)
 
     SPOKEN_PHRASES_MAX, SPOKEN_EXAMPLES_MAX, SPOKEN_TEXT_MAX = 500, 200, 200
     _SPOKEN_REV_KEY = 'spoken_examples_rev'  # pseudo game_settings row: rules_json holds the examples list revision
@@ -1506,7 +1507,7 @@ class AdminStore:
 
     def set_spoken_member_on(self, guild_id, user_id, on):
         if not isinstance(on, bool):
-            raise ValueError('The setting must be on or off.')
+            raise UserError(codes.SETTINGS_FLAG)
         with self.write_admin():
             self.db.execute('INSERT INTO member_settings(guild_id,user_id,updated_at,spoken_moves) VALUES(?,?,?,?) ON CONFLICT(guild_id,user_id) DO UPDATE SET spoken_moves=excluded.spoken_moves,updated_at=excluded.updated_at', (guild_id, user_id, time.time(), int(on)))
             if not on:
@@ -1517,19 +1518,19 @@ class AdminStore:
     def _spoken_game(game):
         from .spoken.blackjack import MOVES
         if game != 'blackjack':
-            raise ValueError('Spoken moves are only available for blackjack.')
+            raise UserError(codes.SPOKEN_BLACKJACK_ONLY)
         return MOVES
 
     def _spoken_text(self, text):
         text = str(text or '').strip()
         if not text or len(text) > self.SPOKEN_TEXT_MAX:
-            raise ValueError(f'A phrase must be 1 to {self.SPOKEN_TEXT_MAX} characters.')
+            raise UserError(codes.SPOKEN_PHRASE_LENGTH, limit=self.SPOKEN_TEXT_MAX)
         return text
 
     def _spoken_label(self, game, label):
         moves = self._spoken_game(game)
         if label != 'talk' and label not in moves:
-            raise ValueError('Choose one of the moves for this game, or talk.')
+            raise UserError(codes.SPOKEN_MOVE_PICK)
         return label
 
     def keep_spoken_phrase(self, guild_id, user_id, game, text, offered, band, scores, kind, label):
@@ -1538,7 +1539,7 @@ class AdminStore:
             return None
         text, label = self._spoken_text(text), self._spoken_label(game, label)
         if band not in ('sure', 'unsure', 'silent') or kind not in ('false_positive', 'false_negative'):
-            raise ValueError('Unknown band or kind.')
+            raise UserError(codes.SPOKEN_BAND_UNKNOWN)
         scores = scores or {}
         rounded = {k: round(float(scores.get(k, 0.0)), 4) for k in ('p1', 'margin', 'talk_gap')}
         with self.write_admin():
@@ -1572,7 +1573,7 @@ class AdminStore:
     def _bump_spoken_examples(self, guild_id, expected):
         current = self.spoken_examples_revision(guild_id)
         if expected is not None and current != expected:
-            raise ConflictError('The example phrases were changed elsewhere. Reload the page and try again.')
+            raise ConflictError(codes.SPOKEN_EXAMPLES_CHANGED)
         self.db.execute('INSERT INTO game_settings(guild_id,game,enabled,rules_json,updated_at) VALUES(?,?,0,?,?) ON CONFLICT(guild_id,game) DO UPDATE SET rules_json=excluded.rules_json,updated_at=excluded.updated_at',
             (guild_id, self._SPOKEN_REV_KEY, str(current + 1), time.time()))
 
@@ -1581,7 +1582,7 @@ class AdminStore:
         with self.write_admin():
             phrase = self.one('SELECT game,text FROM spoken_phrases WHERE guild_id=? AND id=?', (guild_id, phrase_id))
             if phrase is None:
-                raise ValueError('That phrase is no longer there.')
+                raise UserError(codes.SPOKEN_PHRASE_GONE)
             label = self._spoken_label(phrase['game'], label)
             self._bump_spoken_examples(guild_id, expected)
             existing = self.one('SELECT id FROM spoken_examples WHERE guild_id=? AND game=? AND text=?', (guild_id, phrase['game'], phrase['text']))
@@ -1590,7 +1591,7 @@ class AdminStore:
                 ident = existing['id']
             else:
                 if self.one('SELECT COUNT(*) AS n FROM spoken_examples WHERE guild_id=? AND game=?', (guild_id, phrase['game']))['n'] >= self.SPOKEN_EXAMPLES_MAX:
-                    raise ValueError(f'This server already has {self.SPOKEN_EXAMPLES_MAX} example phrases. Remove one first.')
+                    raise UserError(codes.SPOKEN_EXAMPLES_FULL, limit=self.SPOKEN_EXAMPLES_MAX)
                 ident = self.db.execute('INSERT INTO spoken_examples(guild_id,game,text,label,created_by,created_at) VALUES(?,?,?,?,?,?)',
                     (guild_id, phrase['game'], phrase['text'], label, by_user, time.time())).lastrowid
             self.db.execute('DELETE FROM spoken_phrases WHERE guild_id=? AND id=?', (guild_id, phrase_id))
@@ -1609,10 +1610,10 @@ class AdminStore:
 
     def set_game_summary_rounds(self, guild_id, rounds, expected=None):
         if isinstance(rounds, bool) or not isinstance(rounds, int) or not 1 <= rounds <= self.GAME_SUMMARY_MAX:
-            raise ValueError('The number of summary rounds must be a whole number from 1 to 20.')
+            raise UserError(codes.GAME_SUMMARY_ROUNDS_RANGE)
         with self.write_admin():
             if expected is not None and self.game_summary_rounds(guild_id) != expected:
-                raise ConflictError('The summary rounds setting was changed elsewhere. Reload the page and try again.')
+                raise ConflictError(codes.GAME_SUMMARY_ROUNDS_CHANGED)
             self.db.execute('INSERT INTO guild_settings(guild_id,game_summary_rounds) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET game_summary_rounds=excluded.game_summary_rounds', (guild_id, rounds))
         return rounds
 
@@ -1621,7 +1622,7 @@ class AdminStore:
         try:
             return registry.get(game)
         except KeyError:
-            raise GameError('That game is not available.') from None
+            raise GameError(codes.GAME_UNAVAILABLE) from None
 
     def game_enabled(self, guild_id, game):
         row = self.one('SELECT enabled FROM game_settings WHERE guild_id=? AND game=?', (guild_id, game))
@@ -1631,11 +1632,11 @@ class AdminStore:
         """Turning it off also closes the guild's open tables of that game in the same transaction (rounds cancelled and refunded). Returns {'enabled', 'closed_tables': [table ids]}."""
         spec = self._game_def(game)
         if not isinstance(enabled, bool):
-            raise ValueError('The setting must be on or off.')
+            raise UserError(codes.SETTINGS_FLAG)
         closed = []
         with self.write_admin():
             if expected is not None and self.game_enabled(guild_id, game) != expected:
-                raise ConflictError(f'The {spec.noun} setting was changed elsewhere. Reload the page and try again.')
+                raise ConflictError(codes.GAME_SETTING_CHANGED, noun=spec.noun)
             self.db.execute('INSERT INTO game_settings(guild_id,game,enabled,updated_at) VALUES(?,?,?,?) ON CONFLICT(guild_id,game) DO UPDATE SET enabled=excluded.enabled,updated_at=excluded.updated_at',
                 (guild_id, game, int(enabled), time.time()))
             if not enabled:
@@ -1660,7 +1661,7 @@ class AdminStore:
         expected = None if expected is None else spec.normalize_rules(expected)
         with self.write_admin():
             if expected is not None and self.game_rules(guild_id, game) != expected:
-                raise ConflictError(f'The {spec.noun} rules were changed elsewhere. Reload the page and try again.')
+                raise ConflictError(codes.GAME_RULES_CHANGED, noun=spec.noun)
             self.db.execute('INSERT INTO game_settings(guild_id,game,enabled,rules_json,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(guild_id,game) DO UPDATE SET rules_json=excluded.rules_json,updated_at=excluded.updated_at',
                 (guild_id, game, int(spec.default_enabled), self._rules_json(rules, game), time.time()))
         return rules
@@ -1689,10 +1690,10 @@ class AdminStore:
 
     def set_game_talk_daily_limit(self, guild_id, limit, expected=None):
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= self.GAME_TALK_LIMIT:
-            raise ValueError('The daily limit must be a whole number from 1 to 10,000.')
+            raise UserError(codes.GAME_TALK_LIMIT_RANGE)
         with self.write_admin():
             if expected is not None and self.game_talk_daily_limit(guild_id) != expected:
-                raise ConflictError('The table talk daily limit was changed elsewhere. Reload the page and try again.')
+                raise ConflictError(codes.GAME_TALK_LIMIT_CHANGED)
             self.db.execute('INSERT INTO guild_settings(guild_id,game_talk_daily_limit) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET game_talk_daily_limit=excluded.game_talk_daily_limit', (guild_id, limit))
         return limit
 
@@ -1712,10 +1713,10 @@ class AdminStore:
     def set_cast_limits(self, guild_id, max_cast, max_favorites, expected=None):
         for value in (max_cast, max_favorites):
             if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= self.MAX_CAST_LIMIT:
-                raise ValueError(f'The limits must be whole numbers from 1 to {self.MAX_CAST_LIMIT}.')
+                raise UserError(codes.CAST_LIMITS_RANGE, limit=self.MAX_CAST_LIMIT)
         with self.write_admin():
             if expected is not None and self.cast_limits(guild_id) != expected:
-                raise ConflictError('The cast limits were changed elsewhere. Reload the page and try again.')
+                raise ConflictError(codes.CAST_LIMITS_CHANGED)
             self.db.execute('INSERT INTO guild_settings(guild_id,max_cast,max_favorites) VALUES(?,?,?) ON CONFLICT(guild_id) DO UPDATE SET max_cast=excluded.max_cast,max_favorites=excluded.max_favorites',
                 (guild_id, max_cast, max_favorites))
         return {'max_cast': max_cast, 'max_favorites': max_favorites}
@@ -1727,7 +1728,7 @@ class AdminStore:
     def set_archived_favorites(self, guild_id, enabled, expected=None):
         with self.write_admin():
             if expected is not None and self.archived_favorites(guild_id) != expected:
-                raise ConflictError('The archived favorites setting was changed elsewhere. Reload the page and try again.')
+                raise ConflictError(codes.CAST_FAVORITES_CHANGED)
             self.db.execute('INSERT INTO guild_settings(guild_id,archived_favorites) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET archived_favorites=excluded.archived_favorites', (guild_id, int(bool(enabled))))
         return bool(enabled)
 
@@ -1755,14 +1756,14 @@ class AdminStore:
         with self.write_admin():
             character = self.one('SELECT archived FROM characters WHERE guild_id=? AND id=?', (guild_id, character_id))
             if not character or (character['archived'] and not self.archived_favorites(guild_id)):
-                raise ValueError('That character is not available in this server. Choose another character.')
+                raise UserError(codes.FAVORITE_UNAVAILABLE)
             if self.one('SELECT 1 FROM member_favorites WHERE guild_id=? AND user_id=? AND character_id=?', (guild_id, user_id, character_id)):
-                raise ValueError('That character is already one of your favorites.')
+                raise UserError(codes.FAVORITE_DUPLICATE)
             last = self.db.execute('SELECT COALESCE(MAX(position),-1) FROM member_favorites WHERE guild_id=? AND user_id=?', (guild_id, user_id)).fetchone()[0]
             count = len(self.favorites(guild_id, user_id))
             limit = self.cast_limits(guild_id)['max_favorites']
             if count >= limit:
-                raise ValueError(f'You can have at most {limit} favorites. Remove one first.')
+                raise UserError(codes.FAVORITE_FULL, limit=limit)
             self.db.execute('INSERT INTO member_favorites(guild_id,user_id,character_id,position,created_at) VALUES(?,?,?,?,?)', (guild_id, user_id, character_id, last + 1, time.time()))
 
     def remove_favorite(self, guild_id, user_id, character_id):
@@ -1786,7 +1787,7 @@ class AdminStore:
 
     def set_favorites_mode(self, guild_id, user_id, mode):
         if mode not in ('lean', 'step_in'):
-            raise ValueError('Choose "lean" or "step in" for your favorites.')
+            raise UserError(codes.FAVORITE_MODE_INVALID)
         with self.write_admin():
             self.db.execute('INSERT INTO member_settings(guild_id,user_id,favorites_mode,updated_at) VALUES(?,?,?,?) ON CONFLICT(guild_id,user_id) DO UPDATE SET favorites_mode=excluded.favorites_mode,updated_at=excluded.updated_at', (guild_id, user_id, mode, time.time()))
 
@@ -1806,13 +1807,13 @@ class AdminStore:
     def _game_table(self, guild_id, table_id):
         row = self.one('SELECT * FROM game_tables WHERE id=? AND guild_id=?', (table_id, guild_id))
         if row is None:
-            raise GameError('No such game table on this server.')
+            raise GameError(codes.GAME_NO_TABLE)
         return row
 
     def _game_round(self, guild_id, round_id):
         row = self.one('SELECT r.*,t.channel_id,t.game,t.message_id,t.thread_id,t.board_message_id,t.turn_message_id FROM game_rounds r JOIN game_tables t ON t.id=r.table_id AND t.guild_id=r.guild_id WHERE r.id=? AND r.guild_id=?', (round_id, guild_id))
         if row is None:
-            raise GameError('No such game round on this server.')
+            raise GameError(codes.GAME_NO_ROUND)
         return row
 
     @staticmethod
@@ -1821,7 +1822,7 @@ class AdminStore:
         try:
             return registry.get(rnd['game'])
         except KeyError:
-            raise GameError('That game is not available.') from None
+            raise GameError(codes.GAME_UNAVAILABLE) from None
 
     @staticmethod
     def _round_rules(rnd):
@@ -1848,7 +1849,7 @@ class AdminStore:
                 return spec.engine.replay(rnd['seed'], [Seat(row['seat_index'], row['kind'], row['ref_id'], row['stack']) for row in seats], moves, rules, rnd['button'])
             return spec.engine.replay(rnd['seed'], [Seat(row['seat_index'], row['kind'], row['ref_id'], row['stake'] // 2 if row['seat_index'] in doubled else row['stake']) for row in seats], moves, rules)
         except (IllegalMove, ValueError):
-            raise GameError('This round could not be restored. Ask an admin to cancel it.') from None
+            raise GameError(codes.GAME_RESTORE_FAILED) from None
 
     def _seat_balance(self, guild_id, row):
         if row['kind'] == 'character':
@@ -1955,7 +1956,7 @@ class AdminStore:
         self._game_table(guild_id, table_id)
         row = self.one('SELECT id FROM game_rounds WHERE guild_id=? AND table_id=? ORDER BY number DESC LIMIT 1', (guild_id, table_id))
         if row is None:
-            raise GameError('That table has no rounds.')
+            raise GameError(codes.GAME_NO_ROUNDS)
         return self._game_snapshot(guild_id, row['id'])
 
     def _new_round(self, guild_id, table_id, seed, now, assist=False, pinned=None):
@@ -1973,14 +1974,14 @@ class AdminStore:
     def open_table(self, guild_id, channel_id, game, user_id, now=None, seed=None):
         now = time.time() if now is None else now
         if game not in registry.keys():
-            raise GameError('That game is not available.')
+            raise GameError(codes.GAME_UNAVAILABLE)
         with self.write_admin():
             if not self.game_enabled(guild_id, game):
-                raise GameError(f'{registry.get(game).name} is off on this server.')
+                raise GameError(codes.GAME_OFF, name=registry.get(game).name)
             if channel_id not in self.game_channels(guild_id):
-                raise GameError('Games are not turned on in this channel. Ask an admin to turn them on.')
+                raise GameError(codes.GAME_CHANNEL_OFF)
             if self.open_table_for(guild_id, channel_id):
-                raise GameError('There is already a table open in this channel.')
+                raise GameError(codes.GAME_TABLE_EXISTS)
             table_id = self.db.execute('INSERT INTO game_tables(guild_id,channel_id,game,status,opened_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?)',
                 (guild_id, channel_id, game, 'open', user_id, now, now)).lastrowid
             round_id = self._new_round(guild_id, table_id, seed or new_seed(), now)
@@ -1989,9 +1990,9 @@ class AdminStore:
     def next_round(self, guild_id, table_id):
         with self.write_admin():
             if self._game_table(guild_id, table_id)['status'] != 'open':
-                raise GameError('That table is closed.')
+                raise GameError(codes.GAME_TABLE_CLOSED)
             if self.one("SELECT 1 FROM game_rounds WHERE guild_id=? AND table_id=? AND status IN ('joining','playing')", (guild_id, table_id)):
-                raise GameError('The current round is still unfinished.')
+                raise GameError(codes.GAME_ROUND_UNFINISHED)
             if registry.get(self._game_table(guild_id, table_id)['game']).cash:
                 return self._game_snapshot(guild_id, self._next_cash_round(guild_id, table_id))
             round_id = self._new_round(guild_id, table_id, new_seed(), time.time())
@@ -2018,7 +2019,7 @@ class AdminStore:
         if column not in ('thread_id', 'board_message_id', 'turn_message_id'):
             raise ValueError('not a table column')
         if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
-            raise GameError('That is not a Discord id.')
+            raise GameError(codes.GAME_NOT_DISCORD_ID)
         with self.write_admin():
             self._game_table(guild_id, table_id)
             self.db.execute(f'UPDATE game_tables SET {column}=?,updated_at=? WHERE id=? AND guild_id=?', (value, time.time(), table_id, guild_id))
@@ -2041,10 +2042,10 @@ class AdminStore:
         """What one seat may see (its own hand included) of a round being played; the Discord layer shows it only to that seat's holder."""
         rnd = self._game_round(guild_id, round_id)
         if rnd['status'] != 'playing':
-            raise GameError('This round is not being played.')
+            raise GameError(codes.GAME_NOT_PLAYING)
         state = self._game_state(rnd, self._game_seats(guild_id, round_id), self._game_moves(guild_id, round_id))
         if isinstance(seat_index, bool) or not isinstance(seat_index, int) or not 0 <= seat_index < len(state.seats):
-            raise GameError('No such seat.')
+            raise GameError(codes.GAME_NO_SEAT)
         return self._round_game(rnd).engine.view(state, seat_index)
 
     def policy_seed(self, guild_id, round_id, tag):
@@ -2077,10 +2078,10 @@ class AdminStore:
 
     def join_round(self, guild_id, round_id, user_id, stake, kind='member'):
         if kind != 'member':
-            raise GameError('Only members can take a seat for now.')
+            raise GameError(codes.GAME_MEMBERS_ONLY)
         if isinstance(stake, bool) or not isinstance(stake, int):
             row = self.one('SELECT t.game FROM game_rounds r JOIN game_tables t ON t.id=r.table_id AND t.guild_id=r.guild_id WHERE r.guild_id=? AND r.id=?', (guild_id, round_id))
-            raise GameError('The buy-in must be a whole number.' if row and row['game'] == 'holdem' else 'The bet must be a whole number.')
+            raise GameError(codes.GAME_BUYIN_WHOLE if row and row['game'] == 'holdem' else codes.GAME_BET_WHOLE)
         with self.write_admin():
             self._join_member_locked(guild_id, round_id, user_id, stake)
             return self._game_snapshot(guild_id, round_id)
@@ -2089,27 +2090,27 @@ class AdminStore:
         """Inside write_admin: the member's seat and bet with every refusal; returns the round row."""
         rnd = self._game_round(guild_id, round_id)
         if rnd['status'] != 'joining':
-            raise GameError('This round has already started.')
+            raise GameError(codes.GAME_ROUND_STARTED)
         limits, name = self.game_settings(guild_id), self.currency_name(guild_id)
         spec = self._round_game(rnd)
         if spec.ante:  # the stake argument is ignored: the seat antes what the round's rules snapshot says
-            stake, word = self._round_ante(rnd), 'ante'
+            stake, word, short = self._round_ante(rnd), 'ante', codes.GAME_ANTE_SHORT
         elif spec.cash:
-            word, (low, high) = 'buy-in', self._buy_in_range(rnd)
+            word, short, (low, high) = 'buy-in', codes.GAME_BUYIN_SHORT, self._buy_in_range(rnd)
             if not low <= stake <= high:
-                raise GameError(f'The buy-in must be between {low:,} and {high:,} {name}.')
+                raise GameError(codes.GAME_BUYIN_RANGE, low=low, high=high, name=name)
         else:
-            word = 'bet'
+            word, short = 'bet', codes.GAME_BET_SHORT
             if stake < 1 or not limits['min_bet'] <= stake <= limits['max_bet']:  # game_seats allows stake 0 since v17 (a free ante), so a bet is checked here
-                raise GameError(f"The bet must be between {limits['min_bet']:,} and {limits['max_bet']:,} {name}.")
+                raise GameError(codes.GAME_BET_RANGE, min_bet=limits['min_bet'], max_bet=limits['max_bet'], name=name)
         seats = self._game_seats(guild_id, round_id)
         if any(row['kind'] == kind and row['ref_id'] == user_id for row in seats):
-            raise GameError('You already have a seat in this round.')
+            raise GameError(codes.GAME_ALREADY_SEATED)
         if len(seats) >= spec.max_seats:
-            raise GameError('The table is full.')
+            raise GameError(codes.GAME_TABLE_FULL)
         balance = self.balance(guild_id, user_id)
         if balance < stake:
-            raise GameError(f'You need {stake:,} {name} for that {word} but have {balance:,}.')
+            raise GameError(short, stake=stake, name=name, balance=balance)
         if stake > 0:
             self._append_ledger(guild_id, user_id, -stake, f'{spec.ledger_label} {word} ({self._game_label(rnd)})', user_id, 'game', None)
         self.db.execute('INSERT INTO game_seats(guild_id,round_id,seat_index,kind,ref_id,stake,stack) VALUES(?,?,?,?,?,?,?)', (guild_id, round_id, len(seats), kind, user_id, stake, stake if spec.cash else 0))
@@ -2118,7 +2119,7 @@ class AdminStore:
     def _round_ante(self, rnd):
         rules = self._round_rules(rnd)
         if rules is None:
-            raise GameError('This round could not be restored. Ask an admin to cancel it.')
+            raise GameError(codes.GAME_RESTORE_FAILED)
         return rules['ante']
 
     def _seat_character(self, guild_id, rnd, round_id, user_id, cid, bet_for, now, skipped, seated, label, spec):
@@ -2144,7 +2145,7 @@ class AdminStore:
         betting min(stake, the wallet after today's refill, the max bet); one transaction. A refused member join writes nothing.
         Returns {'snapshot', 'seated': [{character_id, name, stake}], 'skipped': [{character_id, name, reason}]} with reason 'broke', 'seated', 'full' or 'archived'."""
         if isinstance(stake, bool) or not isinstance(stake, int):
-            raise GameError('The bet must be a whole number.')
+            raise GameError(codes.GAME_BET_WHOLE)
         seated, skipped = [], []
         with self.write_admin():
             rnd = self._join_member_locked(guild_id, round_id, user_id, stake)
@@ -2180,17 +2181,17 @@ class AdminStore:
             rnd = self._game_round(guild_id, round_id)
             spec = self._round_game(rnd)
             if not (spec.ante or spec.cash):
-                raise GameError('House seats are only for I Doubt It and Texas Hold\'em.')
+                raise GameError(codes.GAME_HOUSE_SEATS)
             if self._game_table(guild_id, rnd['table_id'])['opened_by'] != user_id:
-                raise GameError('Only the member who opened the table can fill seats.')
+                raise GameError(codes.GAME_ONLY_OPENER)
             if rnd['status'] != 'joining':
-                raise GameError('This round has already started.')
+                raise GameError(codes.GAME_ROUND_STARTED)
             if space_id is None:
-                raise GameError('Characters can only join a table in a world or hub channel.')
+                raise GameError(codes.GAME_CHARACTERS_CHANNEL)
             eligible = {row['id'] for row in self.eligible_characters(guild_id, space_id)}
             ids = list(character_ids)
             if any(isinstance(c, bool) or not isinstance(c, int) or c not in eligible for c in ids):
-                raise GameError('One of those characters cannot sit at this table.')
+                raise GameError(codes.GAME_CHARACTER_CANNOT_SIT)
             label = self._game_label(rnd)
             if spec.cash:
                 low, high = self._buy_in_range(rnd)
@@ -2221,10 +2222,10 @@ class AdminStore:
         with self.write_admin():
             rnd = self._game_round(guild_id, round_id)
             if rnd['status'] != 'joining':
-                raise GameError('This round has already started.')
+                raise GameError(codes.GAME_ROUND_STARTED)
             seat = self.one("SELECT * FROM game_seats WHERE guild_id=? AND round_id=? AND kind='member' AND ref_id=?", (guild_id, round_id, user_id))
             if seat is None:
-                raise GameError('You do not have a seat in this round.')
+                raise GameError(codes.GAME_NOT_SEATED)
             spec = self._round_game(rnd)
             refund = f"{spec.ledger_label} {'cash-out' if spec.cash else 'refund'} ({self._game_label(rnd)})"
             gone = [seat, *self.all("SELECT * FROM game_seats WHERE guild_id=? AND round_id=? AND kind='character' AND brought_by=? ORDER BY seat_index", (guild_id, round_id, user_id))]
@@ -2243,18 +2244,18 @@ class AdminStore:
         with self.write_admin():
             rnd = self._game_round(guild_id, round_id)
             if rnd['status'] != 'joining':
-                raise GameError('This round has already started.')
+                raise GameError(codes.GAME_ROUND_STARTED)
             if not self._game_seats(guild_id, round_id):
-                raise GameError('Nobody has joined this round yet.')
+                raise GameError(codes.GAME_NOBODY_JOINED)
             spec = self._round_game(rnd)
             if len(self._game_seats(guild_id, round_id)) < spec.min_seats:
-                raise GameError(f'{spec.name} needs at least {spec.min_seats} players.')
+                raise GameError(codes.GAME_MIN_PLAYERS, name=spec.name, min_seats=spec.min_seats)
             seats = self._game_seats(guild_id, round_id)
             if spec.cash:
                 if len(seats) > spec.max_seats:
-                    raise GameError(f'{spec.name} seats at most {spec.max_seats} players.')
+                    raise GameError(codes.GAME_MAX_PLAYERS, name=spec.name, max_seats=spec.max_seats)
                 if any(row['stack'] <= 0 for row in seats):
-                    raise GameError('Every player needs chips to play a hand.')
+                    raise GameError(codes.GAME_NEEDS_CHIPS)
                 rnd = {**dict(rnd), 'button': self._next_button(guild_id, rnd, seats)}
                 self.db.execute('UPDATE game_rounds SET button=? WHERE id=? AND guild_id=?', (rnd['button'], round_id, guild_id))
             self.db.execute("UPDATE game_rounds SET status='playing',dealt_at=? WHERE id=? AND guild_id=?", (time.time(), round_id, guild_id))
@@ -2266,24 +2267,24 @@ class AdminStore:
     def play(self, guild_id, round_id, seat_index, move, actor, expected_moves):
         """Applies one move. expected_moves is the move count the caller saw; a different count raises ConflictError (a double press applies once)."""
         if actor not in ('member', 'timeout', 'character'):
-            raise GameError('That player cannot move here.')
+            raise GameError(codes.GAME_CANNOT_MOVE)
         if isinstance(seat_index, bool) or not isinstance(seat_index, int) or not isinstance(move, str):
-            raise GameError('That is not a legal move.')
+            raise GameError(codes.GAME_ILLEGAL_MOVE)
         with self.write_admin():
             rnd = self._game_round(guild_id, round_id)
             if len(self._game_moves(guild_id, round_id)) != expected_moves:
-                raise ConflictError('The table moved on. Look at the latest message and try again.')
+                raise ConflictError(codes.GAME_TABLE_MOVED)
             if rnd['status'] != 'playing':
-                raise GameError('This round is not being played.')
+                raise GameError(codes.GAME_NOT_PLAYING)
             seats = self._game_seats(guild_id, round_id)
             if actor != 'timeout' and 0 <= seat_index < len(seats) and (seats[seat_index]['kind'] == 'character') != (actor == 'character'):
-                raise GameError('That player cannot move here.')
+                raise GameError(codes.GAME_CANNOT_MOVE)
             state = self._game_state(rnd, seats, self._game_moves(guild_id, round_id))
             spec, bj = self._round_game(rnd), rnd['game'] == 'blackjack'
             if bj and move == 'insure' and 0 <= seat_index < len(seats) and 'insure' in blackjack.legal_moves(state, seat_index, True, True):
                 cost, have = state.stakes[seat_index] // 2, self._seat_balance(guild_id, seats[seat_index])
                 if cost > 0 and have < cost:
-                    raise GameError(f'You need {cost:,} {self.currency_name(guild_id)} for insurance but have {have:,}.')
+                    raise GameError(codes.GAME_INSURANCE_SHORT, cost=cost, name=self.currency_name(guild_id), have=have)
             try:
                 after = spec.apply_move(state, seat_index, move, lambda: self._can_double(guild_id, state, seats, seat_index))
             except IllegalMove:
@@ -2360,9 +2361,9 @@ class AdminStore:
 
     def set_turn_log(self, guild_id, enabled, days):
         if not isinstance(enabled, bool):
-            raise ValueError('The turn log must be on or off.')
+            raise UserError(codes.TURNLOG_FLAG)
         if isinstance(days, bool) or not isinstance(days, int) or days not in TURN_LOG_DAYS:
-            raise ValueError('Keep the turn log for 7, 14 or 30 days, or for the full month (0).')
+            raise UserError(codes.TURNLOG_DAYS)
         with self.write_admin():
             self.db.execute('INSERT INTO guild_settings(guild_id,turn_log_enabled,turn_log_days) VALUES(?,?,?) ON CONFLICT(guild_id) DO UPDATE SET turn_log_enabled=excluded.turn_log_enabled,turn_log_days=excluded.turn_log_days', (guild_id, int(enabled), days))
 
@@ -2370,7 +2371,7 @@ class AdminStore:
                      error_detail='', request_text='', response_text='', input_tokens=None, output_tokens=None,
                      masked_facts=(), secret_values=(), now=None):
         if status not in ('ok', 'error'):
-            raise ValueError("Turn log status must be 'ok' or 'error'.")
+            raise UserError(codes.TURNLOG_STATUS)
         if guild_id is None or not self.turn_log_settings(guild_id)['enabled']:
             return None
 
@@ -2465,7 +2466,7 @@ class AdminStore:
     def delete_preset(self, guild_id, preset_id):
         with self.write_admin():
             if self.one('SELECT guild_id FROM guild_settings WHERE guild_id=? AND preset_id=?', (guild_id, preset_id)):
-                raise ValueError('Select another preset before deleting the active preset.')
+                raise UserError(codes.PRESET_DELETE_ACTIVE)
             self.db.execute('DELETE FROM prompt_presets WHERE guild_id=? AND id=?', (guild_id, preset_id))
 
     def avatar_slots(self, guild_id, character_id):
@@ -2497,7 +2498,7 @@ class AdminStore:
         with self.write_admin():
             self.validate_owner(guild_id, 'character', character_id)
             if self.owner_revision(guild_id, 'character', character_id) != expected_revision:
-                raise ConflictError('Character changed; reload before saving the fallback avatar')
+                raise ConflictError(codes.CHARACTER_CHANGED_FALLBACK_AVATAR)
             self.db.execute('UPDATE characters SET avatar=?,avatar_manual=1 WHERE guild_id=? AND id=?', (image, guild_id, character_id))
             self.bump_owner(guild_id, 'character', character_id)
 
@@ -2508,7 +2509,7 @@ class AdminStore:
             return self._slot_meta(dict(row), keep_image=True)
         if key == 'neutral':
             return self._slot_meta(self._neutral_slot(character_id), keep_image=True)
-        raise ValueError('That avatar no longer exists. Reload the page.')
+        raise UserError(codes.AVATAR_GONE)
 
     def _slot_revision(self, guild_id, character_id, key):
         self.validate_owner(guild_id, 'character', character_id)
@@ -2517,17 +2518,17 @@ class AdminStore:
             return row['revision']
         if key == 'neutral':
             return 0
-        raise ValueError('That avatar no longer exists. Reload the page.')
+        raise UserError(codes.AVATAR_GONE)
 
     def save_avatar(self, guild_id, character_id, key, label, description, image=None, expected_revision=None):
         import re
         self.validate_owner(guild_id, 'character', character_id)
         if not re.fullmatch(r'[a-z0-9_-]{1,40}', key) or not label.strip() or len(label) > 80 or len(description) > 500:
-            raise ValueError('Use a stable lowercase key, a label up to 80 characters, and a description up to 500 characters.')
+            raise UserError(codes.AVATAR_FIELDS_INVALID)
         with self.write_admin():
             current = self.one('SELECT image,revision FROM avatar_slots WHERE character_id=? AND slot_key=?', (character_id, key)) or ({'image': None, 'revision': 0} if key == 'neutral' else None)
             if current and expected_revision is not None and current['revision'] != expected_revision:
-                raise ConflictError('This avatar changed in another tab. Reload the page and try again.')
+                raise ConflictError(codes.AVATAR_CHANGED)
             blob = image if image is not None else current['image'] if current else None
             self.db.execute('INSERT INTO avatar_slots(character_id,slot_key,label,description,image,image_hash,revision) VALUES(?,?,?,?,?,?,1) ON CONFLICT(character_id,slot_key) DO UPDATE SET label=excluded.label,description=excluded.description,image=excluded.image,image_hash=excluded.image_hash,revision=revision+1',
                 (character_id, key, label.strip(), description, blob, self.image_digest(blob)))
@@ -2536,16 +2537,16 @@ class AdminStore:
     def clear_avatar_image(self, guild_id, character_id, key, expected_revision):
         with self.write_admin():
             if self._slot_revision(guild_id, character_id, key) != expected_revision:
-                raise ConflictError('This avatar changed in another tab. Reload the page and try again.')
+                raise ConflictError(codes.AVATAR_CHANGED)
             self.db.execute('UPDATE avatar_slots SET image=NULL,image_hash=NULL,revision=revision+1 WHERE character_id=? AND slot_key=?', (character_id, key))
             self.bump_owner(guild_id, 'character', character_id)
 
     def delete_avatar(self, guild_id, character_id, key, expected_revision):
         if key == 'neutral':
-            raise ValueError('Every character keeps a neutral image; it cannot be removed.')
+            raise UserError(codes.AVATAR_NEUTRAL_REQUIRED)
         with self.write_admin():
             if self._slot_revision(guild_id, character_id, key) != expected_revision:
-                raise ConflictError('This avatar changed in another tab. Reload the page and try again.')
+                raise ConflictError(codes.AVATAR_CHANGED)
             self.db.execute('DELETE FROM avatar_slots WHERE character_id=? AND slot_key=?', (character_id, key))
             self.bump_owner(guild_id, 'character', character_id)
 

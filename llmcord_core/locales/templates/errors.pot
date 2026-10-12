@@ -1,0 +1,675 @@
+#: llmcord_core/i18n/codes.py
+msgid "This avatar changed in another tab. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Use a stable lowercase key, a label up to 80 characters, and a description up to 500 characters."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That avatar no longer exists. Reload the page."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Every character keeps a neutral image; it cannot be removed."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That character is not available in this world or hub."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The archived favorites setting was changed elsewhere. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "A cast can have at most {limit} characters."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The cast limits were changed elsewhere. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The limits must be whole numbers from 1 to {limit}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Bind that channel to a world or hub in this server first."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That channel belongs to another server."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "This channel is not bound to a world or hub."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "That character is at a {noun} table. Try again when the round is over."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Character changed; reload before archiving"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Character changed; reload before deleting"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Character changed; reload before saving the fallback avatar"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Character changed; reload before restoring"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Character changed; reload before saving"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Choose a home world in this server."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Character name cannot be empty. Enter a name."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "This character name already exists. Choose another name."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Character not found in this server."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That entry was already reversed."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The amount must be a positive whole number."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The amount must be a whole number from 1 to {limit:,}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That character was deleted, so this entry cannot be reversed."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That character is not on this server."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The daily check-in settings were changed elsewhere. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The daily amount must be a whole number from 0 to {limit:,}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The daily streak bonus must be a whole number from 0 to {limit:,}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The daily streak days must be a whole number from 0 to {limit:,}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "That would take {name} above the maximum balance of {limit:,} {currency}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "That would take <@{user_id}> above the maximum balance of {limit:,} {name}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The currency name was changed elsewhere. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The currency name must be 1 to 32 characters on one line."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "That would leave {name} with a negative balance (current balance: {current:,} {currency})."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "That would leave <@{user_id}> with a negative balance (current balance: {current:,} {name})."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "No such ledger entry on this server."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The reason must be 1 to 200 characters."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The refill cap must be a whole number from 0 to {limit:,}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The character refill cap was changed elsewhere. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "A reversal cannot be reversed."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That character is already one of your favorites."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "You can have at most {limit} favorites. Remove one first."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Choose \"lean\" or \"step in\" for your favorites."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That character is not available in this server. Choose another character."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "You already have a seat in this round."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The bet limits must satisfy 1 <= minimum <= maximum <= {limit:,}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The bet limits must be whole numbers."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The bet must be between {min_bet:,} and {max_bet:,} {name}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The bet must be a whole number."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The buy-in must be between {low:,} and {high:,} {name}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The buy-in must be a whole number."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That player cannot move here."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Game channels must be Discord channel IDs."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Games are not turned on in this channel. Ask an admin to turn them on."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The game channels were changed elsewhere. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "One of those characters cannot sit at this table."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Characters can only join a table in a world or hub channel."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "House seats are only for I Doubt It and Texas Hold'em."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That is not a legal move."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "You need {cost:,} {name} for insurance but have {have:,}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{name} seats at most {max_seats} players."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Only members can take a seat for now."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{name} needs at least {min_seats} players."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The character moves setting was changed elsewhere. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Character moves must be model or style only."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Every player needs chips to play a hand."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "No such game round on this server."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That table has no rounds."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "No such seat."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "No such game table on this server."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Nobody has joined this round yet."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That is not a Discord id."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "This round is not being played."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "You do not have a seat in this round."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{name} is off on this server."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Only the member who opened the table can fill seats."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "This round could not be restored. Ask an admin to cancel it."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "This round has already started."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The current round is still unfinished."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The {noun} rules were changed elsewhere. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The {noun} setting was changed elsewhere. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The read moves from chat setting was changed elsewhere. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The read doubts from chat setting was changed elsewhere. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The keep phrases setting was changed elsewhere. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The game settings were changed elsewhere. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "You need {stake:,} {name} for that ante but have {balance:,}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "You need {stake:,} {name} for that buy-in but have {balance:,}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "You need {stake:,} {name} for that bet but have {balance:,}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The summary rounds setting was changed elsewhere. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The number of summary rounds must be a whole number from 1 to 20."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That table is closed."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "There is already a table open in this channel."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The table is full."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The table moved on. Look at the latest message and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The character table talk setting was changed elsewhere. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The table talk daily limit was changed elsewhere. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The daily limit must be a whole number from 1 to 10,000."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That game is not available."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Guidelines changed; reload before saving"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Guidelines exceed 6,000 bytes. Shorten them before saving."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The hub tone was changed elsewhere. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Only hubs have a tone. Choose a hub."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The tone must be in character or off duty."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Character changed since preview; upload again"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Destination lore changed; preview the import again"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Lorebook changed since preview; preview again"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Resolve {conflict} conflict in the dashboard"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Resolve conflict for entry {uid}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Lore changed; reload before transferring"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Lore content cannot be empty."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Entry changed; reload the editor"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Entry changed; reload before deleting"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Entry moved; reload the editor"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Lore entry not found."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Invalid entry reference."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Lorebook changed; reload before deleting"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Choose a server or channel lorebook and give it a name."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Choose a server lorebook and a world or hub in this server."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Choose a world, hub or channel."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Choose an owner in this server."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Owner type must be a world, hub or lorebook. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Select between 1 and 2000 lore entries."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "A selected lore entry changed; select it again before continuing"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Lore needs text and a valid character, channel, thread, world or hub."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{name} is assigned to the {role} role; assign another profile first."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Profile {name} changed or was removed. Reload and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Profile {name} already exists."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Profile {value} for the {role} role does not exist."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Model roles changed. Reload and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Preset changed; reload before saving"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Resolve preset compatibility: {problems}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Select another preset before deleting the active preset."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Preset name must be 1–80 characters."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Preset not found in this server."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Preset revision not found in this server."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The setting must be on or off."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Unknown timezone {name_repr}. Use an IANA name such as \"Asia/Seoul\"."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Unknown band or kind."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Spoken moves are only available for blackjack."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The example phrases were changed elsewhere. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "This server already has {limit} example phrases. Remove one first."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Choose one of the moves for this game, or talk."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That phrase is no longer there."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "A phrase must be 1 to {limit} characters."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Keep the turn log for 7, 14 or 30 days, or for the full month (0)."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The turn log must be on or off."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Turn log status must be 'ok' or 'error'."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Soft cap must be blank or a number of dollars, zero or more."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Hard cap must be blank or a number of dollars, zero or more."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The soft cap cannot be higher than the hard cap."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Channel notice must be on or off."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Reset day must be a whole number from 1 to 28."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Bot settings changed; reload before saving"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "World or hub changed; reload before deleting"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Move or delete its home characters and rebind its channels before deleting this world or hub."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Choose a hub and world in this server."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Give the world or hub a name."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That world or hub is not in this server."
+msgstr ""
+

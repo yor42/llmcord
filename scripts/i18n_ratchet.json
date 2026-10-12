@@ -4,7 +4,7 @@
       "raise": 5
     },
     "llmcord_core/admin_store.py": {
-      "raise": 156
+      "raise": 2
     },
     "llmcord_core/auth.py": {
       "raise": 16
@@ -140,7 +140,7 @@
       "raise": 5
     },
     "llmcord_core/store.py": {
-      "raise": 26
+      "raise": 2
     },
     "llmcord_core/web.py": {
       "raise": 9
