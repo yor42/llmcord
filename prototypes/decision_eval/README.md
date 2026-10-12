@@ -13,6 +13,14 @@ phrases of `tests/test_spoken_doubt.py`. Doubt language: Hangul incl. compatibil
 Flags: `--candidates` (ids: oai-choice oai-predicate or-d1-choice or-d1-noul or-haiku or-flashlite), `--shuffles K` (3), `--limit N`,
 `--out DIR`, `--max-usd` (0.50), `--tau` (0.5), `--run`.
 
+## e5-first cascade replay (FEAT-44)
+`cascade.py` asks: what if the shipped local e5 reading goes first and a decision model only re-reads some messages? Offline; tests: `tests/test_decision_cascade.py`.
+    python prototypes/decision_eval/cascade.py dump-e5 --model-dir DIR --out FILE     # needs onnxruntime, numpy, tokenizers; --out outside the repo
+    python prototypes/decision_eval/cascade.py replay --e5 FILE --results results.json [--taus 0.5,0.7,0.9] [--out DIR]
+- `dump-e5` runs the production blackjack path on the 195 rows (embed, `interpret.decide` with the shipped head, legal moves from the csv, no server examples; the word matcher is not part of that path) and prints e5-alone numbers.
+- `replay` reads the k=0 records of `or-d1-noul`, `oai-predicate`, `or-haiku`; policy `cover` is `unsure` (ask only when e5 says unsure) or `sure+unsure` (ask whenever e5 is not silent; the policy also accepts `all`); a move the reader scores below `tau` is dropped. Haiku gives only an answer, read as probability 1.0 on that move and 0 on the others. Cost uses the mean recorded cost per call (if none is recorded, the harness estimate averaged over real blackjack requests). Rows over 200 characters are recorded as silent (`too_long`), as in production. The table splits `sure wrong` into move rows and chatter rows; the move-row count matches `bands.evaluate`.
+- Caveats: the e5 head trains on `examples.json`/`talk_examples.json` and `phrases.csv` is the labelled test set, but the same author wrote both (see `prototypes/spoken_moves/README.md`), so e5 numbers are optimistic; the decision models are zero-shot on the same rows. The tau grid is searched on the same 195 rows, so no tau here is validated. The cascade can only drop or reorder e5's moves: it never rescues a message e5 called silent and never raises unsure to sure, so recall can only fall.
+
 ## Safety
 - Keys come from `OPENAI_API_KEY` (`oai-*`) and `OPENROUTER_API_KEY` (the rest), environment only. A missing one stops the run before any request.
 - Keys go to the poster only; never printed, logged, written, or put in a URL. Errors are scrubbed of the key value.

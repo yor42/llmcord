@@ -134,3 +134,37 @@ Costs come from provider usage where given. OpenAI's Decisions response carries 
 ### Integration and privacy if adopted (not started)
 - It needs a new provider kind in `models.py` for the Decisions wire formats (both differ from Chat Completions), key pins for `api.openai.com` and `openrouter.ai` (`config.py:109`, `LLMCORD_KEY_HOSTS`), fake-transport tests, and an e5-only fallback when the API is down, slow (budget about 1 s) or over a per-server rate.
 - Messages from the member whose turn it is would leave the Pi. That needs an explicit per-server opt-in, separate from `/memory opt_in`, shown in the Games tab and in `/games spoken_moves`, with the chosen provider's data-retention and training terms checked first.
+
+## Cascade replay (FEAT-44, 2026-10-12)
+No new paid calls. The shipped local reader was run on the same 195 blackjack rows (`prototypes/decision_eval/cascade.py dump-e5`: int8 e5, shipped head, no server examples, as `games_spoken_discord._read` does; model hashes matched the pins), and the recorded FEAT-43 answers were replayed behind it (`cascade.py replay`). The second reader only sees rows e5 did not call silent and can only drop or reorder e5's moves.
+
+| Reader and policy | Right move | Silent on chatter | Sure wrong (moves / chatter) | Ko moves right | Asked (share of all messages) | Cost per 1,000 messages |
+| --- | --- | --- | --- | --- | --- | --- |
+| e5 alone | 93% (124/133) | 81% (50/62) | 5 / 10 | 66/71 | 0 | $0 |
+| Decision-1 `noul`, tau 0.5 | 90% (120/133) | 100% (62/62) | 0 / 0 | 63/71 | 72% | $0.005 |
+| Decision-1 `noul`, tau 0.7 | 88% (117/133) | 100% | 0 / 0 | 60/71 | 72% | $0.005 |
+| Decision-1 `noul`, tau 0.9 | 86% (114/133) | 100% | 0 / 0 | 57/71 | 72% | $0.005 |
+| OpenAI `predicate`, tau 0.5 | 89% (119/133) | 98% (61/62) | 2 / 1 | 63/71 | 72% | about $0.019 (estimate) |
+| OpenAI `predicate`, tau 0.7 | 87% (116/133) | 100% | 2 / 0 | 61/71 | 72% | about $0.019 (estimate) |
+| Haiku 5.5 (answer read as 1.0 / 0.0) | 87% (116/133) | 100% | 0 / 0 | 62/71 | 72% | $0.033 |
+
+Asking only when e5 says `unsure` changes at most one row (not shown above): e5 called just 1 of 195 rows `unsure` (140 `sure`, 54 `silent`), so there is no tiebreaker work for a second reader on this set.
+
+### What it shows
+1. **The shipped e5 alone, measured here: 93% right move and 81% silent on chatter**, with 12 chatter rows let through, every one of them in the `sure` band ("hit me up later", "that song is a hit", "what does double do?", "gg", "스탠드 조명 샀어", "insurance is a scam lol"). The recorded D34 figures (95% / 70%) were for up to two buttons and used the FEAT-36 setup, so these are not directly comparable. The two fresh numbers are the ones to use.
+2. **A second reader does what it was proposed for.** Decision-1 `noul` at tau 0.5 silences all 12 leaked chatter rows and leaves no wrong `sure` band. Every reader and tau silenced 11 of them; "wait 잠깐" is the one that OpenAI at tau 0.5 let through.
+3. **It is paid for with recall.** Decision-1 at 0.5 drops 4 real moves (bj29, 45, 60, 158) of 124 that e5 had right; higher taus drop more (7 at 0.7, 10 at 0.9). OpenAI `predicate` drops 5 at 0.5 and 8 at 0.7 (18 at 0.9, not in the table above). Haiku drops 8 at any tau. A dropped move costs the player a tap on the normal button.
+4. **Decision-1 `noul` at tau 0.5 is the best trade here**: 12 chatter rows that e5 gave a button (10 of them a wrong button) removed for 4 lost moves, at about half a cent per 1,000 messages (calls only for the 72% of messages e5 did not call silent). The tau values above were chosen on these same 195 rows, so none is validated. This also shows the earlier "unsure band" idea does not apply: the reader works as a veto on `sure`, not as a tiebreaker.
+5. **Korean move rows right** go from 66/71 (e5 alone) to 63/71 with Decision-1 at 0.5, so 3 of its 4 lost moves are Korean; the set has 71 Korean and 47 English move rows, so this is a small-number signal, not a finding.
+6. **The cascade cannot raise recall.** It never rescues a message e5 called silent (e5 called 4 move rows silent and gave 5 more the wrong move) and never turns `unsure` into `sure`.
+
+### Caveats
+- The e5 head trains on `examples.json` / `talk_examples.json` and `phrases.csv` is its labelled test set, but the same author wrote both, so the e5 numbers are optimistic (near-duplicates exist). The decision models are zero-shot on the same rows.
+- 195 synthetic rows; checking against real kept phrases (D35) was not done and cannot be done here because those live under the production data, which this work does not read. That check needs the owner to run `dump-e5`/`replay`-style scoring on their own data, or to supply an anonymised set.
+- The replay uses answers recorded once in FEAT-43; Decision-1 weights can change under a stable API shape, so thresholds must be re-checked before relying on them.
+- Haiku gives no probabilities, so its tau rows are identical.
+
+### Recommendation (updated)
+- A cheap per-move yes/no reader (Decision-1 `noul` first, OpenAI `predicate` second) behind e5 is worth a production design decision **only as a veto on `sure` and `unsure` readings**, and only if false move checks on real chat turn out to matter as much as here (about 1 in 5 chatter lines got a button from e5 alone). Expected effect on this set: 81% → 100% silent on chatter for 3 points of right-move rate.
+- It is not a replacement for e5, not a way to improve recall, and not for doubts.
+- Production use still needs your opt-in decision (player chat leaves the Pi), a new provider kind in `models.py`, key pins, a per-server switch separate from `/memory opt_in`, and an e5-only fallback. I have not started any of it.
