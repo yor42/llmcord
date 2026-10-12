@@ -1,0 +1,1 @@
+This wiki is rebuilt automatically from the [`docs/`](https://github.com/yor42/llmcord/tree/main/docs) folder of the repository whenever it changes on `main`; edits made here are overwritten. To correct a page, change the matching file there (the Home page, sidebar and this footer are in `docs/wiki/`).

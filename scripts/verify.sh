@@ -40,6 +40,7 @@ secret_scan() {
 
 stage "ruff (bug-class lint)" "$PY" -m ruff check .
 stage "repository hygiene" "$PY" scripts/check_repository.py
+stage "wiki build and docs links" "$PY" scripts/build_wiki.py --check
 stage "compile" "$PY" -m compileall -q llmcord_core scripts tests llmcord.py web_main.py migrate.py
 stage "offline unit tests" "$PY" -m unittest discover -s tests
 GL=${GITLEAKS:-$(command -v gitleaks || true)}

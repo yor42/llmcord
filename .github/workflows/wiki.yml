@@ -1,0 +1,61 @@
+# Needs Wikis enabled in the repository settings and one page created by hand first
+# (GitHub creates the wiki git repository only then).
+name: Wiki
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'scripts/build_wiki.py'
+      - '.github/workflows/wiki.yml'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: wiki
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync GitHub wiki
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - name: Build the wiki pages from docs/
+        run: python scripts/build_wiki.py --out "$RUNNER_TEMP/wiki-build"
+      - name: Push the pages to the wiki
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WIKI_URL: https://github.com/${{ github.repository }}.wiki.git
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::${auth##* }"
+          git -c http.extraheader="$auth" clone --quiet "$WIKI_URL" "$RUNNER_TEMP/wiki"
+          test -s "$RUNNER_TEMP/wiki-build/Home.md"
+          test -s "$RUNNER_TEMP/wiki-build/_Sidebar.md"
+          cd "$RUNNER_TEMP/wiki"
+          branch=$(git symbolic-ref --short HEAD)
+          git ls-files -z | xargs -0 --no-run-if-empty git rm -q -f --
+          cp -a "$RUNNER_TEMP/wiki-build/." .
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Wiki already up to date."
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit --quiet -m "Sync wiki from ${SHA:0:7}"
+          git -c http.extraheader="$auth" push origin "HEAD:$branch"
