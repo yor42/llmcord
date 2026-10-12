@@ -13,7 +13,7 @@ from .negotiate import DEFAULT_LOCALE, PSEUDO_LOCALE, display_name, negotiate, n
 __all__ = [
     'DEFAULT_LOCALE', 'PSEUDO_LOCALE', 'DOMAINS', 'LOCALES_DIR', 'normalize', 'negotiate', 'parse_accept_language',
     'display_name', 'available_locales', 'load_catalog', 'clear_cache', 'MessageFormatError',
-    'Msg', 'N_', 'NP_', 'ErrorCode', 'E_', 'UserError', 'Translator', 'pseudo', 'english',
+    'Msg', 'N_', 'NP_', 'Phrase', 'ErrorCode', 'E_', 'UserError', 'CodedError', 'Translator', 'pseudo', 'english',
 ]
 
 log = logging.getLogger('llmcord_core.i18n')
@@ -56,6 +56,85 @@ def E_(code, msgid, /) -> ErrorCode:
     return ErrorCode(code, msgid)
 
 
+class Phrase:
+    """Words for the edge to render later: a Msg (from N_/NP_) plus named params. Immutable; str() is the English text.
+
+    A param that is a Msg or a Phrase is rendered in the same locale as the phrase (Translator.render).
+    """
+
+    __slots__ = ('_msg', '_params')
+
+    def __init__(self, msg, /, **params):
+        object.__setattr__(self, '_msg', msg)
+        object.__setattr__(self, '_params', dict(params))
+
+    @property
+    def msg(self):
+        return self._msg
+
+    @property
+    def params(self) -> dict:
+        return dict(self._params)
+
+    def __setattr__(self, name, value):
+        raise AttributeError('Phrase is immutable')
+
+    def __delattr__(self, name):
+        raise AttributeError('Phrase is immutable')
+
+    def _key(self):
+        return str(self._msg), getattr(self._msg, 'context', None), self._params
+
+    def __eq__(self, other):
+        return isinstance(other, Phrase) and self._key() == other._key()
+
+    def __hash__(self):
+        text, context, params = self._key()
+        return hash((text, context, tuple(sorted(params))))
+
+    def __repr__(self):
+        context = getattr(self._msg, 'context', None)
+        head = repr(str(self._msg)) if context is None else f'NP_({context!r}, {str(self._msg)!r})'
+        return 'Phrase(' + ''.join([head, *(f', {k}={v!r}' for k, v in self._params.items())]) + ')'
+
+    def __str__(self):
+        return english().render(self)
+
+    def __reduce__(self):
+        return (_rebuild_phrase, (self._msg, self._params))
+
+
+def _rebuild_phrase(msg, params):
+    return Phrase(msg, **params)
+
+
+def _coded_text(code, params):
+    rendered = {k: english().render(v) if isinstance(v, (Msg, Phrase)) else v for k, v in params.items()}
+    try:
+        return format_message(code.msgid, rendered)
+    except MessageFormatError:
+        return code.msgid
+
+
+def _init_coded(self, code, params):
+    if isinstance(code, str):
+        if params:
+            raise TypeError('params are not allowed with a plain-text message')
+        BaseException.__init__(self, str(code))
+        self.code = None
+        self.params = {}
+        return
+    BaseException.__init__(self, _coded_text(code, params))
+    self.code = code
+    self.params = params
+
+
+def _reduce_coded(self):
+    if self.code is None:
+        return (_rebuild_user_error, (type(self), str(self.args[0]), {}))
+    return (_rebuild_user_error, (type(self), self.code, self.params))
+
+
 class UserError(ValueError):
     """An error meant for the user, raised as a code; str() is the English message.
 
@@ -64,25 +143,25 @@ class UserError(ValueError):
     """
 
     def __init__(self, code, /, **params):
-        if isinstance(code, str):
-            if params:
-                raise TypeError('params are not allowed with a plain-text message')
-            super().__init__(str(code))
-            self.code = None
-            self.params = {}
-            return
-        try:
-            text = format_message(code.msgid, params)
-        except MessageFormatError:
-            text = code.msgid
-        super().__init__(text)
-        self.code = code
-        self.params = params
+        _init_coded(self, code, params)
 
     def __reduce__(self):
-        if self.code is None:
-            return (_rebuild_user_error, (type(self), str(self.args[0]), {}))
-        return (_rebuild_user_error, (type(self), self.code, self.params))
+        return _reduce_coded(self)
+
+
+class CodedError:
+    """Mixin for a coded exception that is not a UserError (an engine's IllegalMove): class X(CodedError, Exception).
+
+    Same shape as UserError: X(code, **params) or the legacy X('text'); Translator.error renders it.
+    """
+
+    __slots__ = ()
+
+    def __init__(self, code, /, **params):
+        _init_coded(self, code, params)
+
+    def __reduce__(self):
+        return _reduce_coded(self)
 
 
 def _rebuild_user_error(cls, code, params):
@@ -117,6 +196,8 @@ class Translator:
         return self._catalog
 
     def _render(self, context, singular, plural, count, params):
+        if any(isinstance(v, (Msg, Phrase)) for v in params.values()):
+            params = {k: self.render(v) if isinstance(v, (Msg, Phrase)) else v for k, v in params.items()}
         english = singular if plural is None or count == 1 else plural
         if plural is None:
             found = self._cat().get(context, singular)
@@ -147,12 +228,22 @@ class Translator:
         params.setdefault('count', count)
         return self._render(context, str(singular), plural, count, params)
 
+    def render(self, value) -> str:
+        """Words for a Phrase (with its params), a Msg (with its context); anything else is str(value), untouched."""
+        if isinstance(value, Phrase):
+            msg = value.msg
+            return self._render(getattr(msg, 'context', None), str(msg), None, None, value.params)
+        if isinstance(value, Msg):
+            return self(value)
+        return str(value)
+
     def error(self, err) -> str:
-        if isinstance(err, UserError) and err.code is not None:
+        code, params = getattr(err, 'code', None), getattr(err, 'params', None)
+        if isinstance(code, ErrorCode) and isinstance(params, dict):
             try:
-                return self(err.code.msgid, **err.params)
+                return self(code.msgid, **params)
             except MessageFormatError:
-                log.warning('bad error params: code=%s', err.code.code)
+                log.warning('bad error params: code=%s', code.code)
                 return str(err)
         return str(err)
 

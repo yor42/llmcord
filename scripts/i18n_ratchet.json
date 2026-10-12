@@ -42,13 +42,13 @@
       "raise": 3
     },
     "llmcord_core/games/blackjack.py": {
-      "raise": 15
+      "raise": 9
     },
     "llmcord_core/games/doubt.py": {
-      "raise": 20
+      "raise": 16
     },
     "llmcord_core/games/holdem.py": {
-      "raise": 21
+      "raise": 15
     },
     "llmcord_core/games/playstyle.py": {
       "raise": 3

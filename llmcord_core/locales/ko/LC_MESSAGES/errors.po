@@ -682,6 +682,107 @@ msgid "That world or hub is not in this server."
 msgstr ""
 
 #: llmcord_core/i18n/codes.py
+msgid "It's not your turn."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That move isn't allowed right now."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "This game is over."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "This hand is over."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "There is nothing to doubt, or it is your own claim."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "There is nothing for you to close."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The blackjack rules must be a set of options."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Unknown blackjack rule: {names}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The dealer must stand on 16, 17 or 18."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Dealer on soft 17 must be on or off."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Insurance must be on or off."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Late surrender must be on or off."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Blackjack must pay 3:2 or 6:5."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Ties must push or go to the dealer."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The I Doubt It rules must be a set of options."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The claim rule must be sequence."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The ante must be a whole number from 0 to {limit}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The turn timeout must be a whole number of seconds from {low} to {high}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The Hold'em rules must be a set of options."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{name} must be a whole number."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The small blind must be a whole number from 1 to 1000000."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The buy-in must be 20 to 1000 big blinds, with the minimum not above the maximum."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The action timeout must be a whole number of seconds from {low} to {high}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Assist must be on or off."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
 msgid "An attachment exceeds the configured size limit"
 msgstr ""
 

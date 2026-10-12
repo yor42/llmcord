@@ -170,6 +170,30 @@ WORLD_NOT_IN_SERVER = E_('world.not_in_server', 'That world or hub is not in thi
 
 
 # --- MNT-68 (1c): game engines
+ENGINE_NOT_YOUR_TURN = E_('engine.not_your_turn', "It's not your turn.")
+ENGINE_MOVE_NOT_ALLOWED = E_('engine.move_not_allowed', "That move isn't allowed right now.")
+ENGINE_GAME_OVER = E_('engine.game_over', 'This game is over.')
+ENGINE_HAND_OVER = E_('engine.hand_over', 'This hand is over.')
+ENGINE_NOTHING_TO_DOUBT = E_('engine.nothing_to_doubt', 'There is nothing to doubt, or it is your own claim.')
+ENGINE_NOTHING_TO_CLOSE = E_('engine.nothing_to_close', 'There is nothing for you to close.')
+RULES_BLACKJACK_OPTIONS = E_('rules.blackjack_options', 'The blackjack rules must be a set of options.')
+RULES_BLACKJACK_UNKNOWN = E_('rules.blackjack_unknown', 'Unknown blackjack rule: {names}.')
+RULES_BLACKJACK_STAND_ON = E_('rules.blackjack_stand_on', 'The dealer must stand on 16, 17 or 18.')
+RULES_BLACKJACK_SOFT_17_FLAG = E_('rules.blackjack_soft_17_flag', 'Dealer on soft 17 must be on or off.')
+RULES_BLACKJACK_INSURANCE_FLAG = E_('rules.blackjack_insurance_flag', 'Insurance must be on or off.')
+RULES_BLACKJACK_SURRENDER_FLAG = E_('rules.blackjack_surrender_flag', 'Late surrender must be on or off.')
+RULES_BLACKJACK_PAYS = E_('rules.blackjack_pays', 'Blackjack must pay 3:2 or 6:5.')
+RULES_BLACKJACK_TIES = E_('rules.blackjack_ties', 'Ties must push or go to the dealer.')
+RULES_DOUBT_OPTIONS = E_('rules.doubt_options', 'The I Doubt It rules must be a set of options.')
+RULES_DOUBT_CLAIM = E_('rules.doubt_claim', 'The claim rule must be sequence.')
+RULES_DOUBT_ANTE = E_('rules.doubt_ante', 'The ante must be a whole number from 0 to {limit}.')
+RULES_DOUBT_TIMEOUT = E_('rules.doubt_timeout', 'The turn timeout must be a whole number of seconds from {low} to {high}.')
+RULES_HOLDEM_OPTIONS = E_('rules.holdem_options', "The Hold'em rules must be a set of options.")
+RULES_HOLDEM_WHOLE = E_('rules.holdem_whole', '{name} must be a whole number.')
+RULES_HOLDEM_SMALL_BLIND = E_('rules.holdem_small_blind', 'The small blind must be a whole number from 1 to 1000000.')
+RULES_HOLDEM_BUY_IN = E_('rules.holdem_buy_in', 'The buy-in must be 20 to 1000 big blinds, with the minimum not above the maximum.')
+RULES_HOLDEM_TIMEOUT = E_('rules.holdem_timeout', 'The action timeout must be a whole number of seconds from {low} to {high}.')
+RULES_HOLDEM_ASSIST_FLAG = E_('rules.holdem_assist_flag', 'Assist must be on or off.')
 
 
 
