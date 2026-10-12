@@ -89,4 +89,4 @@ The example keeps the manual backup outside the Git repository; use a new destin
 | An I Doubt It table closes at once naming thread permissions | Give the bot Create Public Threads and Send Messages in Threads in that game channel. |
 | Model requests cannot reach Ollama | Check `base_url` from inside the bot container and Ollama's listening address. |
 | A book entry never activates | Check that the book is enabled for this world or hub or bound to the channel, its keywords match, and its rule has no SillyTavern-only warning. |
-| Bot never speaks ambiently | Check the channel's ambient toggle, current cast, two-message threshold, cooldown, and the director's invitation decision. |
+| Bot never speaks ambiently | Check the channel's ambient toggle, current cast, two-message threshold, cooldown, and whether the message counts as an invitation (a cast name, a question to the room, or a follow-up right after a character spoke). |

@@ -1,0 +1,25 @@
+{
+  "invite": {
+    "en": ["what do you think", "what does everyone think", "what do you all think", "any thoughts", "thoughts?",
+           "join us", "join in", "come over", "come join", "your turn", "who wants", "who's in", "who is in", "what about you",
+           "how about you", "do you agree", "weigh in", "chime in"],
+    "ko": ["어떻게 생각해", "어떻게 생각하", "생각은?", "생각은 어때", "너는?", "넌?", "너는 어때", "넌 어때", "같이 하자", "같이 할래",
+           "같이 놀자", "같이 해", "누구 없어", "누구 없나", "누구 없니", "누구 없냐", "누구 없음", "와봐", "들어와"]
+  },
+  "invite_question": {
+    "en": ["anyone", "anybody"],
+    "ko": ["누가", "다들", "너희는", "의견"]
+  },
+  "exclude": ["thoughts and prayers", "my thoughts", "anyone's", "anyone else's", "not anyone", "anybody's",
+              "누가 뭐래도", "누가 뭐라", "누가 봐도", "의견 차이"],
+  "reaction": {
+    "en": ["lol", "lmao", "haha", "hah", "wow", "really", "no way", "omg", "seriously", "true", "same"],
+    "ko": ["헐", "대박", "진짜", "맞아", "ㄹㅇ", "ㅇㅈ"],
+    "pattern": "ㅋ{2,}|ㅎ{2,}|와아*"
+  },
+  "title_words": ["the", "a", "an", "sir", "lady", "lord", "mr", "mrs", "ms", "miss", "dr", "captain", "old", "little", "young",
+                  "mister", "madam", "king", "queen", "prince", "princess"],
+  "ko_particles": ["의", "와", "과", "랑", "이랑", "한테", "에게", "에서", "께", "씨", "님", "아", "야"],
+  "question_end": "있니|하니|했니|뭐니|됐니|갈래|할래|냐|나요|(?<!니)까",
+  "reaction_max_words": 3
+}

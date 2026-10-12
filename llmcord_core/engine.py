@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 
+from . import ambient
 from .backend import settings_source
 from .config import LIMIT_DEFAULTS, Settings
 from .lore import estimate_tokens, lore_scopes
@@ -128,6 +130,16 @@ class Engine:
         cast = set(self.store.get_cast(channel_id, parent_channel_id))
         return any(f['character_id'] in cast for f in favorites)
 
+    def ambient_follow_up(self, scene: SceneContext) -> bool:
+        """A character spoke in this channel within the recent window, with at most one human line since."""
+        node = self.store.latest_character_node(scene.channel_id)
+        if not node or node["created_at"] < time.time() - self.settings.limits.get("recent_window_seconds", 600):
+            return False
+        if len(scene.recent) < 2:
+            return True
+        before = scene.recent[-2].get("message_id")
+        return before is not None and node["message_id"] > before
+
     async def speakers(self, scene: SceneContext) -> list:
         eligible = {row["id"]: row for row in self.eligible(scene)}
         restricted = scene.allowed_ids is not None
@@ -149,18 +161,18 @@ class Engine:
             return []
         options_rows = list(cast) + [pool[ident] for ident in extra[:self.store.cast_limits(scene.guild_id)['max_favorites']]]
         allowed = {row['id'] for row in options_rows}
-        # A cheap deterministic gate avoids a model call for ambient messages with no invitation.
+        # D37: an ambient message gets a model call only when the EN/KO invitation rule fires.
+        ask = None
         if scene.ambient and not scene.event:
-            lower = " ".join([*(part.get("text", "") for part in scene.recent[-2:]), scene.text]).casefold()
-            if not any(row["name"].casefold() in lower for row in options_rows) and not any(
-                phrase in lower for phrase in ("what do you think", "join us", "come over", "your turn")
-            ) and not (favorite_ids & allowed):
+            ask = ambient.invite(scene.text, [part.get("text", "") for part in scene.recent[-2:]], [row["name"] for row in options_rows],
+                favorite=bool(favorite_ids & allowed), follow_up=self.ambient_follow_up(scene))
+            if not ask:
                 return []
         options = [{"id": row["id"], "name": row["name"], **({"favorite": True} if row["id"] in favorite_ids else {})} for row in options_rows]
         hint = {'favorites_hint': 'The latest author prefers the options marked favorite: prefer them when they fit, without ignoring other members.'} if favorite_ids & allowed else {}
         prompt = json.dumps({"cast": options, **hint, "recent": scene.recent[-6:], "latest": scene.text,
             'latest_author': {'author_id': scene.user_id, 'author_label': scene.user_label},
-            "ambient": scene.ambient, "forced": scene.forced_character_id}, ensure_ascii=False)
+            "ambient": scene.ambient and ask is None, "forced": scene.forced_character_id}, ensure_ascii=False)
         try:
             decision = await self.purpose_structured(scene, "director", prompt, "choose_speakers", DIRECTOR_SCHEMA)
             ids = decision.get("speakers")
@@ -169,7 +181,10 @@ class Engine:
             ids = list(dict.fromkeys(ident for ident in ids if type(ident) is int and ident in allowed))
             if scene.forced_character_id is not None:
                 ids = [scene.forced_character_id, *[ident for ident in ids if ident != scene.forced_character_id]]
-            if not ids and not scene.ambient:
+            if not ids and ask is not None:
+                favorite_rows = [row for row in options_rows if row["id"] in favorite_ids]
+                ids = [options_rows[ask.named[0]]["id"] if ask.named else (favorite_rows or options_rows)[0]["id"]]
+            elif not ids and not scene.ambient:
                 ids = [options_rows[0]["id"]]
             return [pool[ident] for ident in ids[:self.settings.limits["max_speakers"]]]
         except Exception as error:

@@ -200,16 +200,17 @@ class FavoritesDirectorTests(DirectorBase):
         self.assertEqual(self.run_speakers(models, self.scene('random weather', ambient=True)), [])
         self.assertEqual(models.payloads, [])
         self.store.add_favorite(1, 9, self.dan)
-        self.assertEqual(self.run_speakers(models, self.scene('random weather', ambient=True)), [])
+        self.assertEqual(self.run_speakers(models, self.scene('random weather?', ambient=True)), [])
         self.store.add_favorite(1, 9, self.alice)
-        chosen = self.run_speakers(models, self.scene('random weather', ambient=True))
+        chosen = self.run_speakers(models, self.scene('random weather?', ambient=True))
         self.assertEqual([row['name'] for row in chosen], ['Alice'])
+        self.assertEqual(self.run_speakers(models, self.scene('random weather', ambient=True)), [])  # D37: plain chat stays silent
 
     def test_ambient_gate_step_in_favorite_outside_cast(self):
         self.store.add_favorite(1, 9, self.dan)
         self.store.set_favorites_mode(1, 9, 'step_in')
         models = CaptureModels([self.dan])
-        chosen = self.run_speakers(models, self.scene('random weather', ambient=True))
+        chosen = self.run_speakers(models, self.scene('random weather?', ambient=True))
         self.assertEqual([row['name'] for row in chosen], ['Dan'])
 
     def test_forced_and_max_speakers_kept(self):
@@ -231,7 +232,7 @@ class FavoritesDirectorTests(DirectorBase):
         chosen = self.run_speakers(models, self.scene())
         self.assertEqual([row['name'] for row in chosen], ['Dan'])
         self.assertEqual([o['name'] for o in models.payloads[0]['cast']], ['Dan'])
-        ambient = self.run_speakers(models, self.scene('random weather', ambient=True))
+        ambient = self.run_speakers(models, self.scene('random weather?', ambient=True))
         self.assertEqual([row['name'] for row in ambient], ['Dan'])
         self.assertEqual(self.run_speakers(models, self.scene(user=10)), [])
 
@@ -385,7 +386,7 @@ class ArchivedDirectorTests(DirectorBase):
         self.store.set_cast(100, None, [])
         models = CaptureModels([self.eve])
         self.assertEqual([r['name'] for r in self.run_speakers(models, self.scene())], ['Eve'])
-        self.assertEqual([r['name'] for r in self.run_speakers(models, self.scene('random weather', ambient=True))], ['Eve'])
+        self.assertEqual([r['name'] for r in self.run_speakers(models, self.scene('random weather?', ambient=True))], ['Eve'])
         self.assertEqual(self.run_speakers(models, self.scene(user=10)), [])
 
     def test_forced_archived_character_is_refused_and_not_in_a_cast(self):

@@ -21,7 +21,7 @@ The bot reads DB state fresh each turn, so dashboard edits apply on the next tur
 | Area | Files |
 | --- | --- |
 | Discord routing, commands, delivery | `discord_bot.py`, `identity.py`, `usage.py` |
-| Turn engine (director, prompt, memory) | `engine.py`, `prompts.py`, `world_info.py`, `lore.py` |
+| Turn engine (director, prompt, memory) | `engine.py`, `prompts.py`, `world_info.py`, `lore.py`, `ambient.py` + `ambient_invite.json` (EN/KO invitation rule that decides ambient silence, D37) |
 | Model providers | `models.py`, `config.py` (profile validation, key pins), `backend.py` (dashboard profiles merged over `config.yaml`, per-turn snapshot), `errors.py` |
 | Persistence | `store.py` (scene/lore/core), `admin_store.py` (presets, lore identities, avatars, revisions) |
 | Dashboard | `web.py`, `auth.py`, `admin.py`, `dashboard.py`, `scene_ui.py`, `presets_ui.py`, `lore_workspace.py`, `lore_drag.{py,js}` |

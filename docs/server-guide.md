@@ -29,7 +29,7 @@ A default cast is an administrator's starting selection for a channel. Members c
 - The director chooses one or more speakers from the active cast. Each chosen character receives a separate sequential model call, so later speakers can react to lines already posted in the turn.
 - Character lines use webhooks with the character name and PNG avatar when present. If the bot cannot manage webhooks or a channel has reached its webhook limit, it reports the failure in the channel.
 
-Ambient mode is off until an administrator enables it in a channel. It waits for two new human messages and a 120-second channel cooldown by default. The director may remain silent; the code also applies a conservative invitation check before calling the director. Check explicit turns before enabling ambient mode.
+Ambient mode is off until an administrator enables it in a channel. It waits for two new human messages and a 120-second channel cooldown by default. Then a simple rule (English and Korean, no model call) decides whether a character joins in. It counts as an invitation when a message names a character in the cast ("Luna, …", "루나야"), asks the room ("what do you think?", "anyone?", "어떻게 생각해?", "너는?"), or reacts with a question or a laugh right after a character spoke. A member whose favorite is available is also answered when they ask a question. Plain chat stays silent and costs nothing; when the rule invites, at least one character answers. Check explicit turns before enabling ambient mode.
 
 Text attachments are read up to the configured size and added to the turn. Image attachments are bounded by count and size and need an image-capable dialogue model. Other attachment types are rejected. Long character lines are split into Discord-safe message chunks.
 

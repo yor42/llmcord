@@ -8,10 +8,11 @@ from .moves import Reading, SpokenMove
 _SUFFIX = "s|es|ing"
 _KO_CONT = "해|할|함|하|고|아|자|돼|되"
 # Hangul that may follow a Korean lexicon word in the same token: polite/verb endings and particles.
-_KO_END = ("요", "해", "할", "함", "하", "합", "했", "고", "이", "가", "은", "는", "을", "를", "로", "으로", "도", "만",
+KO_END = ("요", "해", "할", "함", "하", "합", "했", "고", "이", "가", "은", "는", "을", "를", "로", "으로", "도", "만",
            "게", "겠", "지", "자", "죠", "임", "다", "아", "돼", "되", "래", "한", "인", "입", "야", "간", "갈", "갑", "줘",
            "볼", "각")
 # Single-syllable negations match standalone or with these endings only ('말해' = say, '못생겼' = ugly).
+_KO_END = KO_END
 _KO_NEG_END = {"말": "고|아|자|라|요|래|게|지|까|았", "못": "해|하|할|함|했|한"}
 _HANGUL = "가-힣"
 _CLAUSE_BREAK = re.compile(r"[,.!?;，。！？；]")
@@ -39,10 +40,10 @@ def _ko(entry):
 
 
 def _ko_ends_ok(rest):
-    return not rest or not "가" <= rest[0] <= "힣" or rest.startswith(_KO_END)
+    return not rest or not "가" <= rest[0] <= "힣" or rest.startswith(KO_END)
 
 
-def _found(text, lex, exclude, exact=False):
+def found(text, lex, exclude, exact=False):
     """[(start, length)] of every match of a {'en': [...], 'ko': [...]} word list."""
     out = [(m.start(), m.end() - m.start()) for e in lex.get("en", ()) for m in _en(e, exact).finditer(text)]
     for e in lex.get("ko", ()):
@@ -52,6 +53,9 @@ def _found(text, lex, exclude, exact=False):
             if not any(token.startswith(x) for x in exclude) and _ko_ends_ok(rest):
                 out.append((m.start(), len(normalize(e))))
     return out
+
+
+_found = found
 
 
 def negated(text, negations):
