@@ -386,6 +386,34 @@ Written when Phase 1 started (2026-10-12, decision G). Every batch follows these
 - **Internal diagnostics stay English** and are not converted: impossible states, programming errors, and messages only logs see. The batch report lists what it left and why.
 - **Showing an error:** where a surface shows `str(err)` for a `UserError`, it switches to `t.error(err)` in the batch that owns that surface file.
 
+**Engines and phrases (added by 1c, MNT-68).**
+- **`Phrase(msg, /, **params)`** is what an engine returns when the edge should render words later. `msg` is an `N_`/`NP_` constant, so it keeps its context. A phrase is immutable, comparable and picklable, and `str(phrase)` is the English text.
+- **`t.render(value)`** renders a `Phrase` or a `Msg` in `t`'s locale and returns `str(value)` for anything else: names, numbers, card symbols, what people typed. A `Msg` with placeholders must be wrapped in a `Phrase`; rendering it bare fails.
+- **`Msg` and `Phrase` params:** `t(...)`, `t.error(...)` and `str(UserError)` render a param that is a `Msg` or a `Phrase` in the same locale before formatting, so a Korean particle such as `{game:이/가}` sees the translated word. Plain `str` params are never translated. Pass the constant (`game=spec.name`), never `t(CONST)`.
+- **Twins:** an engine function that built English gets a structured twin, and the old function stays as an English wrapper with the same name, signature and output. The twins are `rules_phrases`, `how_to_play_phrases`, `total_phrase`, `cards_phrase`, `hand_phrase`, `describe_phrases`, `Result.summary_phrases` and `Assist.current_phrase`. Edges switch to the twin and render it with the audience's `t`. Model-facing callers (`game_chooser.py`) keep the wrappers.
+- **Coded engine exceptions:** the `CodedError` mixin gives `X(code, **params)` or the legacy `X('text')`. `IllegalMove` uses it and stays a non-`ValueError`. `t.error` renders any exception with an `ErrorCode` `code` and a `dict` `params`, and returns `str(err)` for any other exception.
+- **Engine plurals:** engines have no `t.n`, so a count chooses between two whole constants by the old English rule (`'{count} card'` / `'{count} cards'`). That is enough for English and Korean. Before adding a language with more plural forms, Phase 4 needs a deferred plural phrase that carries both forms and the count.
+- **Stored and model-facing text stays English:** ledger reasons, `round_facts` (the Hold'em `hand`), `Result.summary` as stored through the `admin_store` snapshot, and `table_block`. A surface that wants a translated summary needs the store to expose the state or the phrases; 1f and 1i decide that.
+- **Translator notes for Phase 2:** the blackjack outcome terms (`NP_('blackjack outcome', 'even_money')`, `push`, `bust`, …) are the raw tokens the old summary printed. Better English wording would change English, so it is a separate item.
+
+**Edge call sites from 1c.** Line numbers are at `0f09f05`. Each site switches from the English wrapper to the twin, rendered with the right audience.
+
+| Batch | Site | Switch to |
+| --- | --- | --- |
+| 1f | `games_discord.py:443, 458` `blackjack.total_str` | `total_phrase`, as a param of a `t()` message |
+| 1f | `games_discord.py:477` `blackjack.rules_text` | `' · '.join(t.render(p) for p in blackjack.rules_phrases(rules))` |
+| 1f | `games_discord.py:716-717` `blackjack.how_to_play` | `'\n'.join(t.render(p) for p in blackjack.how_to_play_phrases(rules))` |
+| 1f | `games_holdem_discord.py:610, 614, 722` `holdem.hand_name` | `hand_phrase`; line 722 lower-cases the English, so it needs a lower-case message of its own |
+| 1f | `games_holdem_discord.py:1158` `a.current`, `a.chances` names | `a.current_phrase`; `t.render(name)` for each chance category |
+| 1f | `games_holdem_discord.py:1267-1269` `holdem.how_to_play`, `rules_text` | the `*_phrases` twins |
+| 1f | `games_doubt_discord.py:438, 470, 1522` `doubt.rules_text`; `837, 1522` `doubt.how_to_play` | the `*_phrases` twins |
+| 1f | `games_doubt_discord.py:462, 464, 469, 484, 507, 1011, 1067, 1408, 1410` `doubt.cards_text` | `cards_phrase` |
+| 1f | `games_doubt_discord.py:1527` blackjack rules and how-to via `bot.games` | the `*_phrases` twins |
+| 1f | every surface that shows a `GameError` from `admin_store.py:2291` (`spec.illegal_text(...)`, now a code) | `t.error(err)` with the audience's `t` |
+| 1g | `dashboard.py:2032` `playstyle.GROUPS` keys | `t.render(group)` |
+| 1g | `dashboard.py:2048` `playstyle.describe` | `', '.join(t.render(p) for p in playstyle.describe_phrases(style))` |
+| 1i | `games_ui.py:158` `blackjack.rules_text` | `' · '.join(t.render(p) for p in blackjack.rules_phrases(...))` |
+
 **Each batch.**
 - **Isolation:** it runs in its own git worktree under `.worktrees/` on branch `i18n/<batch>`. It edits only its own files, the generated catalogs and the ratchet baseline.
 - **No existing test is edited.** A failing test means English changed. Fix the code, or stop and report. New tests are allowed.
