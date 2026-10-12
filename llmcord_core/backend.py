@@ -16,6 +16,7 @@ import httpx
 
 from .config import LIMIT_DEFAULTS, ModelProfile, Settings, check_key_pin, key_hosts_from_env, profile_from_mapping, validate_profile_name
 from .errors import error_detail, is_timeout, redact, register_secret_names
+from .i18n import UserError, codes
 
 ROLES = ('dialogue', 'director', 'memory')
 PROBE_TIMEOUT_SECONDS = 25
@@ -326,7 +327,7 @@ def dashboard_gateway(backend: Backend, limits, store, key_hosts=None, environ=o
     from .models import ModelGateway
     name = backend.roles.get('director') or backend.roles.get('dialogue')
     if name is None or name not in backend.profiles:
-        raise ValueError('No model is set up for this bot. Choose one on the Backend tab.')
+        raise UserError(codes.BACKEND_NO_MODEL)
     settings = Settings('', None, Path(':memory:'), 0, backend.profiles, name, name, name, {**LIMIT_DEFAULTS, **limits})
     source = _ProbeSource(settings, key_hosts_from_env() if key_hosts is None else key_hosts, environ)
     return ModelGateway(source, usage_sink=store.record_model_usage, budget_gate=lambda: budget.state(store), environment='the dashboard')

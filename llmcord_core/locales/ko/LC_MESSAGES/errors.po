@@ -682,6 +682,749 @@ msgid "That world or hub is not in this server."
 msgstr ""
 
 #: llmcord_core/i18n/codes.py
+msgid "Unknown item."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{name} must be on or off."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The price must be a whole number from 1 to {limit:,}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The cooldown must be a whole number of seconds from 0 to {limit:,}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{name} has no setting {settings}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{name} was changed elsewhere. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The most of one item a member can hold must be a whole number from 1 to {limit}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The item hold limit was changed elsewhere. Reload the page and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That item is not for sale."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The price changed to {price:,}. Open /shop again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "You already own {name}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "You can hold at most {cap} of {name}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{name} costs {price:,} {currency}; you have {balance:,}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "You do not have that item."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{name} cannot be used on this server right now."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{name} is recharging: {remaining} s left."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{where}: expected non-empty text"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{where}: longer than {limit} characters"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{where}: expected a whole number from {lo} to {hi}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{where}: expected a locale-keyed object with an \"{locale}\" entry"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{where}: bad locale key {key}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{where}: expected a list of 1 to {limit} entries"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "recipe must be an object"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "recipe is not plain data: {detail}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "recipe is larger than {limit} bytes"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "unknown recipe field(s): {fields}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "missing recipe field(s): {fields}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "key: use 1-32 characters from a-z, 0-9 and _"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "kind: expected text"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "consumable: expected true or false"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "emoji: expected text up to {limit} characters"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "audience: must be one of {audiences}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{name}: expected an object"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "unknown kind {kind}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "audience {audience} does not match kind {kind} ({expected})"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{where}: names use 1-16 characters from a-z and _"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{where}[{index}]: expected a record of 1 to {limit} fields"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{where}[{index}]: fields differ from the first record"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "unknown param(s): {params}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "params.reversed_chance: expected a number from 0 to 1"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{where}: expected {{\"range\": [low, high]}}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{where}: range uses \"sides\" but params.sides is missing"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "tables.{name}: placeholder name clashes with another table or param"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{where}: placeholder {{{name}}} is not allowed"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{where}: {detail}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "template: expected text, or an object with text, fields and footer_note"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "template.fields: expected a list of at most 6"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "template.fields[{index}]: expected [name, value]"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "tables: at least one table is required"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{where}: locales mix plain and record rows or differ in fields"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{where}.{loc}: expected a list of up to {limit} entries"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{where}.{loc}: expected a list of 1 to {limit} entries"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "more than {limit} entries after additions"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That is not a Texas Hold'em table."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The rebuy must be a whole number above zero."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "A stack can hold at most {high:,} {name}; you can add {room:,}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "You need {amount:,} {name} for that rebuy but have {balance:,}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Only the member who opened the table can change Assist."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Assist is not allowed on this server."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "No model is set up for this bot. Choose one on the Backend tab."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That character cannot join this world or hub."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Give a {noun} name."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Several {plural} match {wanted}: {names}. Use the exact name."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "No {noun} named {wanted}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "No {noun} named {wanted} in this server."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "No {noun} named {wanted} available here."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "No {noun} named {wanted} available here or in the cast."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "No {noun} named {wanted}{where}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{name} is a {actual}, not a {kind}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Expected a version 1 llmcord preset. Upload a preset exported from llmcord."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Invalid preset purposes or source metadata. Fix them and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Preset exceeds 8 MiB. Upload a smaller file."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "A purpose can contain at most 200 blocks."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Invalid prompt block fields. Fix this block and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Prompt block needs an ID and name."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Prompt IDs must be nonempty and unique within a purpose. Rename the duplicates."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Invalid prompt block values. Fix this block and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Invalid role, placement or provider adaptation. Choose a listed option for each block."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Depth, order and trimming priority must be whole numbers. Fix them and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{purpose} needs exactly one enabled {required} input marker."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Prompt block is too large. Shorten its text."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Required prompt inputs exceed the model context budget. Shorten them or use a model with a larger context."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Upload a native llmcord or SillyTavern Chat Completion preset."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Invalid prompt order or too many prompt blocks. Remove unused blocks from the file."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Choose a prompt order profile."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Invalid or duplicate SillyTavern prompt identifiers. Make each identifier unique."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Invalid prompt order entries. Choose a different order profile."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Duplicate prompt in order profile. Choose a different order profile."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Omitted blocks must be a list of block IDs."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Multiple blocks map to the same SillyTavern identifier. Explicitly omit a duplicate."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "World Info wrappers differ. Use the same wrapper or explicitly omit one block for SillyTavern export."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Explicitly omit nonportable blocks before export: {blocks}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Entry {uid} has no text content. Add text or remove the entry."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Rule must be an object."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Unknown effective rule fields: {fields}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{key} must be true or false."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{key} must be an integer."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{key} must be a list of strings."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{key} cannot be negative."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Scan depth must be a nonnegative integer or null."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Regex enabled must be true, false or null."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Probability must be 0 to 100 and secondary matching logic 0 to 3. Fix these values and try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Message role must be system, user or assistant. Choose one of these."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Original import must be an object."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Lorebook exceeds 8 MiB. Upload a smaller file."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Only RisuAI version-1 lorebook exports are supported."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "RisuAI lorebook data must be an entry array."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Expected an entry array, an object with entries, or a RisuAI version-1 lorebook export."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Lorebook has too many entries. Split it into smaller books."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Invalid or duplicate lorebook entry {uid}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Not a PNG file. Upload a V2/V3 PNG or JSON card."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The PNG card is corrupt. Export it again and upload the new copy."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "No character data found in that PNG. Upload a V2/V3 PNG or JSON card."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Card exceeds 8 MiB. Upload a smaller file."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Upload a V2/V3 PNG or JSON card."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Card must contain a JSON object. Upload a V2/V3 PNG or JSON card."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Unsupported character card spec: {spec}. Upload a V2/V3 card."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Card has no character name. Add one and upload it again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Character name exceeds 80 characters. Shorten it and upload again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The card repeats a lore entry ID. Remove the duplicate and upload again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Avatar exceeds 8 MiB. Upload a smaller image."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Upload a static PNG, JPEG or WebP image."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Avatar exceeds 16 megapixels. Upload a smaller image."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That avatar image is invalid. Upload a PNG, JPEG or WebP image."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Discord channels are unavailable. Try again in a moment."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Discord threads are unavailable. Try again in a moment."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Choose an asset text channel in this server."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The asset channel must deny View Channel to @everyone. Change its permissions in Discord, then choose it again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Upload an image for this slot first."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Choose an avatar asset channel first."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Avatar publication failed. Check that the bot can send messages and attach files in the asset channel."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Discord returned an unexpected asset URL. Try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{path} must contain a mapping"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "LLMCORD_OPERATOR_IDS must be comma-separated Discord user IDs; bad entry: {shown}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "LLMCORD_KEY_HOSTS must look like NAME_API_KEY=host[:port]|https://host2,...; entry {number} is invalid"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Discord token environment variable is missing"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Each model role must name a configured profile"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "API key environment variable is missing for {name}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Limits must be positive and max_speakers cannot exceed 3"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "summary_every_messages and extraction_every_turns must be between 1 and 100"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "DISCORD_GUILD_ID must be a positive server ID"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "history_retention_days must be positive"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Profile name must be 1-64 characters: lowercase letters, digits, and . _ / -, starting with a letter or digit"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "API key must be a ${{NAME}} reference to a variable ending in _API_KEY"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "base_url must be an http or https URL with a host and a valid port"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "base_url is required for {provider} profiles"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "API key variable must end in _API_KEY and use capital letters, digits and underscores"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{name} may only be sent to its pinned hosts; {host} is not one of them. Add it to LLMCORD_KEY_HOSTS to allow it."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "source must be 'config' or 'dashboard'"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Profile {name} must be a mapping"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Unknown setting in {name}: {unknown}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "model in {name} must be a name of 1 to 200 characters"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "context_tokens in {name} must be a whole number of at least 1"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "supports_images, structured_outputs and stream_usage in {name} must be true or false"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "api_key_env in {name} must be a variable ending in _API_KEY"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "base_url is not used by anthropic profiles ({name})"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "base_url in {name} must be an http or https URL with a host and no login"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "model is required for {name}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Invalid billing_tier or stream_usage in {name}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Invalid token price in {name}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "timeout_seconds in {name} must be a finite number greater than 0"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "max_retries in {name} must be a whole number of at least 0"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Unsupported provider in {name}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "base_url is required for {name}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Invalid compatible reasoning_effort in {name}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
 msgid "It's not your turn."
 msgstr ""
 
@@ -804,10 +1547,6 @@ msgstr ""
 
 #: llmcord_core/i18n/codes.py
 msgid "This channel is not bound to a world or hub. Ask an administrator to bind it with /admin space bind."
-msgstr ""
-
-#: llmcord_core/i18n/codes.py
-msgid "Card exceeds 8 MiB. Upload a smaller file."
 msgstr ""
 
 #: llmcord_core/i18n/codes.py

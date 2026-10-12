@@ -10,6 +10,7 @@ import time
 
 from .admin_store import GameError
 from .games import new_seed, registry, seed_hash
+from .i18n import codes
 
 
 class HoldemStore:
@@ -17,7 +18,7 @@ class HoldemStore:
         """(min, max) buy-in in currency for a Hold'em round, from the rules it pinned."""
         rules = self._round_rules(rnd)
         if rules is None:
-            raise GameError('This round could not be restored. Ask an admin to cancel it.')
+            raise GameError(codes.GAME_RESTORE_FAILED)
         bb = 2 * rules['small_blind']
         return rules['min_buy_in_bb'] * bb, rules['max_buy_in_bb'] * bb
 
@@ -94,26 +95,26 @@ class HoldemStore:
         """Inside write_admin: a Hold'em round that is still a lobby (the only time anything about the table changes)."""
         rnd = self._game_round(guild_id, round_id)
         if not self._round_game(rnd).cash:
-            raise GameError("That is not a Texas Hold'em table.")
+            raise GameError(codes.HOLDEM_NOT_A_TABLE)
         if rnd['status'] != 'joining':
-            raise GameError('This round has already started.')
+            raise GameError(codes.GAME_ROUND_STARTED)
         return rnd
 
     def rebuy(self, guild_id, round_id, user_id, amount):
         """A seated member adds chips between hands, up to the max buy-in; stack and stake both grow. Returns the round snapshot."""
         if isinstance(amount, bool) or not isinstance(amount, int) or amount <= 0:
-            raise GameError('The rebuy must be a whole number above zero.')
+            raise GameError(codes.HOLDEM_REBUY_WHOLE)
         with self.write_admin():
             rnd = self._lobby_round(guild_id, round_id)
             seat = self.one("SELECT * FROM game_seats WHERE guild_id=? AND round_id=? AND kind='member' AND ref_id=?", (guild_id, round_id, user_id))
             if seat is None:
-                raise GameError('You do not have a seat in this round.')
+                raise GameError(codes.GAME_NOT_SEATED)
             high, name = self._buy_in_range(rnd)[1], self.currency_name(guild_id)
             if seat['stack'] + amount > high:
-                raise GameError(f"A stack can hold at most {high:,} {name}; you can add {max(high - seat['stack'], 0):,}.")
+                raise GameError(codes.HOLDEM_STACK_MAX, high=high, name=name, room=max(high - seat['stack'], 0))
             balance = self.balance(guild_id, user_id)
             if balance < amount:
-                raise GameError(f'You need {amount:,} {name} for that rebuy but have {balance:,}.')
+                raise GameError(codes.HOLDEM_REBUY_SHORT, amount=amount, name=name, balance=balance)
             self._append_ledger(guild_id, user_id, -amount, f"{self._round_game(rnd).ledger_label} rebuy ({self._game_label(rnd)})", user_id, 'game', None)
             self.db.execute('UPDATE game_seats SET stack=stack+?,stake=stake+? WHERE guild_id=? AND round_id=? AND seat_index=?', (amount, amount, guild_id, round_id, seat['seat_index']))
             return self._game_snapshot(guild_id, round_id)
@@ -121,16 +122,16 @@ class HoldemStore:
     def set_table_assist(self, guild_id, round_id, user_id, on):
         """The host turns Assist on or off in the lobby; on only while the server allows it. Returns the round snapshot."""
         if not isinstance(on, bool):
-            raise GameError('Assist must be on or off.')
+            raise GameError(codes.RULES_HOLDEM_ASSIST_FLAG)
         with self.write_admin():
             rnd = self._lobby_round(guild_id, round_id)
             if self._game_table(guild_id, rnd['table_id'])['opened_by'] != user_id:
-                raise GameError('Only the member who opened the table can change Assist.')
+                raise GameError(codes.HOLDEM_ASSIST_OPENER)
             if on and not self.game_rules(guild_id, 'holdem')['assist']:
-                raise GameError('Assist is not allowed on this server.')
+                raise GameError(codes.HOLDEM_ASSIST_NOT_ALLOWED)
             rules = self._round_rules(rnd)
             if rules is None:
-                raise GameError('This round could not be restored. Ask an admin to cancel it.')
+                raise GameError(codes.GAME_RESTORE_FAILED)
             self.db.execute('UPDATE game_rounds SET rules_json=? WHERE id=? AND guild_id=?', (json.dumps({**rules, 'assist': on}, sort_keys=True), round_id, guild_id))
             return self._game_snapshot(guild_id, round_id)
 

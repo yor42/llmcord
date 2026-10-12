@@ -1,4 +1,54 @@
 #: llmcord_core/i18n/terms.py
+msgctxt "item setting"
+msgid "For sale"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "item setting"
+msgid "Allow use"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "lookup noun"
+msgid "character"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "lookup noun"
+msgid "world"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "lookup noun"
+msgid "hub"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "lookup noun"
+msgid "world or hub"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "lookup noun plural"
+msgid "characters"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "lookup noun plural"
+msgid "worlds"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "lookup noun plural"
+msgid "hubs"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "lookup noun plural"
+msgid "worlds or hubs"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
 msgctxt "game name"
 msgid "Blackjack"
 msgstr ""

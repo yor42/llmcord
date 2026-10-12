@@ -9,12 +9,60 @@ from dataclasses import replace
 from . import items
 from .admin_store import ConflictError
 from .games import new_seed
+from .i18n import ErrorCode, UserError, codes, terms
 from .items.recipe import DEFAULT_LOCALE, MAX_COOLDOWN, MAX_PRICE
 
 
-class ItemError(ValueError):
+class _ItemCode(ErrorCode):
+    """The ErrorCode of a raised item error; it also equals the stable string (`insufficient`) that callers compare `error.code` with. Only ==, != and ordering accept the string; it hashes as a tuple, so do not use it as a set member or dict key."""
+
+    def __eq__(self, other):
+        return other == self.legacy if isinstance(other, str) else tuple.__eq__(self, other)
+
+    def __ne__(self, other):
+        return not self == other
+
+    def _key(self, other):
+        return other.legacy if isinstance(other, _ItemCode) else other
+
+    def __lt__(self, other):
+        return self.legacy < o if isinstance(o := self._key(other), str) else tuple.__lt__(self, other)
+
+    def __gt__(self, other):
+        return self.legacy > o if isinstance(o := self._key(other), str) else tuple.__gt__(self, other)
+
+    def __le__(self, other):
+        return self == other or self < other
+
+    def __ge__(self, other):
+        return self == other or self > other
+
+    __hash__ = tuple.__hash__
+
+
+def _rebuild_item_error(cls, message, params, state):
+    error = cls.__new__(cls)
+    ItemError.__init__(error, message, **params)
+    error.__dict__.update(state)
+    return error
+
+
+class ItemError(UserError):
     """A shop or item action refused; `code` is stable so callers can phrase it themselves."""
     code = 'item_error'
+
+    def __init__(self, message, /, **params):
+        super().__init__(message, **params)
+        self._message = message
+        if self.code is None:
+            self.code = type(self).code
+        else:
+            self.code = _ItemCode(*self.code)
+            self.code.legacy = type(self).code
+
+    def __reduce__(self):
+        state = {k: v for k, v in self.__dict__.items() if k not in {'code', 'params', '_message'}}
+        return (_rebuild_item_error, (type(self), self._message, self.params, state))
 
 
 class NotForSale(ItemError):
@@ -24,8 +72,8 @@ class NotForSale(ItemError):
 class HoldCapReached(ItemError):
     code = 'hold_cap'
 
-    def __init__(self, message, cap):
-        super().__init__(message)
+    def __init__(self, message, cap, /, **params):
+        super().__init__(message, **params)
         self.cap = cap
 
 
@@ -36,16 +84,16 @@ class AlreadyOwned(ItemError):
 class InsufficientFunds(ItemError):
     code = 'insufficient'
 
-    def __init__(self, message, balance, price):
-        super().__init__(message)
+    def __init__(self, message, balance, price, /, **params):
+        super().__init__(message, **params)
         self.balance, self.price = balance, price
 
 
 class PriceChanged(ItemError):
     code = 'price_changed'
 
-    def __init__(self, message, price):
-        super().__init__(message)
+    def __init__(self, message, price, /, **params):
+        super().__init__(message, **params)
         self.price = price
 
 
@@ -60,8 +108,8 @@ class UseDisabled(ItemError):
 class OnCooldown(ItemError):
     code = 'on_cooldown'
 
-    def __init__(self, message, remaining):
-        super().__init__(message)
+    def __init__(self, message, remaining, /, **params):
+        super().__init__(message, **params)
         self.remaining = remaining
 
 
@@ -115,24 +163,24 @@ class ItemsStore:
         Auditing is the caller's job (AdminService.run), as for the other admin writes."""
         recipe = _recipe(item_key)
         if recipe is None:
-            raise ValueError('Unknown item.')
-        for name, value in (('For sale', for_sale), ('Allow use', allow_use)):
+            raise UserError(codes.ITEM_UNKNOWN)
+        for name, value in ((terms.ITEM_SETTING_FOR_SALE, for_sale), (terms.ITEM_SETTING_ALLOW_USE, allow_use)):
             if not isinstance(value, bool):
-                raise ValueError(f'{name} must be on or off.')
+                raise UserError(codes.ITEM_FLAG, name=name)
         if price is not None and (isinstance(price, bool) or not isinstance(price, int) or not 1 <= price <= MAX_PRICE):
-            raise ValueError(f'The price must be a whole number from 1 to {MAX_PRICE:,}.')
+            raise UserError(codes.ITEM_PRICE_RANGE, limit=MAX_PRICE)
         if cooldown_seconds is not None and (isinstance(cooldown_seconds, bool) or not isinstance(cooldown_seconds, int) or not 0 <= cooldown_seconds <= MAX_COOLDOWN):
-            raise ValueError(f'The cooldown must be a whole number of seconds from 0 to {MAX_COOLDOWN:,}.')
+            raise UserError(codes.ITEM_COOLDOWN_RANGE, limit=MAX_COOLDOWN)
         params = dict(params or {})
         unknown = set(params) - set(recipe.params)
         if unknown:
-            raise ValueError(f'{recipe.name} has no setting {", ".join(sorted(map(str, unknown)))}.')
+            raise UserError(codes.ITEM_NO_SETTING, name=recipe.name, settings=', '.join(sorted(map(str, unknown))))
         items.get_kind(recipe.kind).validate(replace(recipe, params={**recipe.params, **params}))
         extra, swap = items.validate_entries(recipe, extra_entries or None, replace_entries or None)
         with self.write_admin():
             row = self._shop_row(guild_id, item_key)
             if (row['revision'] if row else 0) != expected_revision:
-                raise ConflictError(f'{recipe.name} was changed elsewhere. Reload the page and try again.')
+                raise ConflictError(codes.ITEM_CHANGED, name=recipe.name)
             values = (int(for_sale), int(allow_use), price, cooldown_seconds, json.dumps(extra, ensure_ascii=False), json.dumps(swap, ensure_ascii=False),
                       json.dumps(params, sort_keys=True))
             if row:
@@ -149,10 +197,10 @@ class ItemsStore:
 
     def set_item_hold_cap(self, guild_id, cap, expected=None):
         if isinstance(cap, bool) or not isinstance(cap, int) or not 1 <= cap <= HOLD_CAP_MAX:
-            raise ValueError(f'The most of one item a member can hold must be a whole number from 1 to {HOLD_CAP_MAX}.')
+            raise UserError(codes.ITEM_HOLD_RANGE, limit=HOLD_CAP_MAX)
         with self.write_admin():
             if expected is not None and self.item_hold_cap(guild_id) != expected:
-                raise ConflictError('The item hold limit was changed elsewhere. Reload the page and try again.')
+                raise ConflictError(codes.ITEM_HOLD_CHANGED)
             self.db.execute('INSERT INTO guild_settings(guild_id,item_hold_cap) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET item_hold_cap=excluded.item_hold_cap', (guild_id, cap))
         return cap
 
@@ -177,18 +225,18 @@ class ItemsStore:
         with self.write_admin():
             entry = self._shop_entry(recipe, self._shop_row(guild_id, item_key)) if recipe else None
             if entry is None or not entry['for_sale'] or entry['price'] < 1:
-                raise NotForSale('That item is not for sale.')
+                raise NotForSale(codes.ITEM_NOT_FOR_SALE)
             if expected_price is not None and expected_price != entry['price']:
-                raise PriceChanged(f'The price changed to {entry["price"]:,}. Open /shop again.', entry['price'])
+                raise PriceChanged(codes.ITEM_PRICE_CHANGED, entry['price'], price=entry['price'])
             qty = self.item_qty(guild_id, user_id, item_key)
             if recipe.reusable and qty >= 1:
-                raise AlreadyOwned(f'You already own {recipe.name}.')
+                raise AlreadyOwned(codes.ITEM_ALREADY_OWNED, name=recipe.name)
             cap = self.item_hold_cap(guild_id)
             if recipe.consumable and qty >= cap:
-                raise HoldCapReached(f'You can hold at most {cap} of {recipe.name}.', cap)
+                raise HoldCapReached(codes.ITEM_HOLD_CAP, cap, cap=cap, name=recipe.name)
             balance = self.balance(guild_id, user_id)
             if balance < entry['price']:
-                raise InsufficientFunds(f'{recipe.name} costs {entry["price"]:,} {self.currency_name(guild_id)}; you have {balance:,}.', balance, entry['price'])
+                raise InsufficientFunds(codes.ITEM_INSUFFICIENT, balance, entry['price'], name=recipe.name, price=entry['price'], currency=self.currency_name(guild_id), balance=balance)
             ledger = self._append_ledger(guild_id, user_id, -entry['price'], f'Bought {recipe.name}', user_id, 'shop', None)
             self.db.execute('INSERT INTO shop_purchases(ledger_id,guild_id,user_id,item_key) VALUES(?,?,?,?)', (ledger['id'], guild_id, user_id, item_key))
             self.db.execute('INSERT INTO inventory(guild_id,user_id,item_key,qty) VALUES(?,?,?,1) ON CONFLICT(guild_id,user_id,item_key) DO UPDATE SET qty=qty+1', (guild_id, user_id, item_key))
@@ -202,14 +250,14 @@ class ItemsStore:
         with self.write_admin():
             held = self.one('SELECT qty,last_used_at FROM inventory WHERE guild_id=? AND user_id=? AND item_key=?', (guild_id, user_id, item_key))
             if recipe is None or held is None or held['qty'] < 1:
-                raise NotHeld('You do not have that item.')
+                raise NotHeld(codes.ITEM_NOT_HELD)
             entry = self._shop_entry(recipe, self._shop_row(guild_id, item_key))
             if not entry['allow_use']:
-                raise UseDisabled(f'{recipe.name} cannot be used on this server right now.')
+                raise UseDisabled(codes.ITEM_USE_DISABLED, name=recipe.name)
             cooldown = entry['cooldown_seconds']
             if recipe.reusable and cooldown and held['last_used_at'] is not None and now < held['last_used_at'] + cooldown:
                 remaining = math.ceil(held['last_used_at'] + cooldown - now)
-                raise OnCooldown(f'{recipe.name} is recharging: {remaining} s left.', remaining)
+                raise OnCooldown(codes.ITEM_ON_COOLDOWN, remaining, name=recipe.name, remaining=remaining)
             seed = new_seed() if seed is None else str(seed)
             result = items.roll(recipe, seed, DEFAULT_LOCALE, entry['extra_entries'], entry['replace_entries'], entry['params'])
             qty = held['qty'] - 1 if recipe.consumable else held['qty']
