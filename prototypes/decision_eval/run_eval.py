@@ -1,4 +1,4 @@
-"""FEAT-43: run the decision-model evaluation (OpenAI Decisions, Microsoft Decision-1, Haiku, Gemini Flash-Lite) on the spoken-move sets.
+"""FEAT-47: run the decision-model evaluation (OpenAI Decisions, Microsoft Decision-1, Haiku, Gemini Flash-Lite) on the spoken-move sets.
 
 Dry run by default: prints per-candidate call counts and an estimated cost, makes no request, needs no key, writes nothing.
 --run makes the paid calls (sequentially) and writes results.json and summary.json to --out, then prints the summary.
@@ -198,7 +198,7 @@ def render(summary):
 
 
 def main(argv=None, env=None, post=None):
-    p = argparse.ArgumentParser(description="FEAT-43 decision-model evaluation (dry run unless --run)")
+    p = argparse.ArgumentParser(description="FEAT-47 decision-model evaluation (dry run unless --run)")
     p.add_argument("--candidates", default=",".join(ec.CANDIDATES))
     p.add_argument("--shuffles", type=int, default=3)
     p.add_argument("--limit", type=int, default=0, help="items in total, stratified over the combined list (0 = all 311)")

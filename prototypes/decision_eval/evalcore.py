@@ -1,4 +1,4 @@
-"""FEAT-43: pure helpers for the decision-model evaluation (items, requests, answer parsing, scoring, statistics).
+"""FEAT-47: pure helpers for the decision-model evaluation (items, requests, answer parsing, scoring, statistics).
 
 No network, no environment reads, no clock; load_items is the only file reader. Standard library only. Wire formats and the
 candidates are described in docs/engineering/research/decision-models-eval.md ("Harness design"); the prompt texts are adapted

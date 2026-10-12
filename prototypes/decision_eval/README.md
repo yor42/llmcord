@@ -1,4 +1,4 @@
-# Decision-model evaluation (FEAT-43)
+# Decision-model evaluation (FEAT-47)
 
 Research prototype, nothing in `llmcord_core/` uses it. Compares OpenAI Decisions (`gpt-6-luna`), Microsoft Decision-1 (via OpenRouter),
 Haiku 5.5 and Gemini 3.5 Flash-Lite on the spoken-move sets: 195 blackjack rows (`prototypes/spoken_moves/phrases.csv`) and the 116 doubt
@@ -13,7 +13,7 @@ phrases of `tests/test_spoken_doubt.py`. Doubt language: Hangul incl. compatibil
 Flags: `--candidates` (ids: oai-choice oai-predicate or-d1-choice or-d1-noul or-haiku or-flashlite), `--shuffles K` (3), `--limit N`,
 `--out DIR`, `--max-usd` (0.50), `--tau` (0.5), `--run`.
 
-## e5-first cascade replay (FEAT-44)
+## e5-first cascade replay (FEAT-48)
 `cascade.py` asks: what if the shipped local e5 reading goes first and a decision model only re-reads some messages? Offline; tests: `tests/test_decision_cascade.py`.
     python prototypes/decision_eval/cascade.py dump-e5 --model-dir DIR --out FILE     # needs onnxruntime, numpy, tokenizers; --out outside the repo
     python prototypes/decision_eval/cascade.py replay --e5 FILE --results results.json [--taus 0.5,0.7,0.9] [--out DIR]

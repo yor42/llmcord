@@ -1,4 +1,4 @@
-"""FEAT-44: e5-first cascade replay (prototypes/decision_eval/cascade.py). Offline, pure functions, no keys.
+"""FEAT-48: e5-first cascade replay (prototypes/decision_eval/cascade.py). Offline, pure functions, no keys.
 
 These tests DEFINE the interface; the module is written to satisfy them. Research only.
 
@@ -240,7 +240,7 @@ class CostTests(unittest.TestCase):
         self.assertEqual(cs.cost_per_1000_messages(0, 0, 0.002), 0.0)
 
 
-# --- FEAT-44 replay layer (reader_inputs, replay, render, inside_repo, cmd_replay) ------------------------------------------
+# --- FEAT-48 replay layer (reader_inputs, replay, render, inside_repo, cmd_replay) ------------------------------------------
 import argparse  # noqa: E402
 import contextlib  # noqa: E402
 import io  # noqa: E402

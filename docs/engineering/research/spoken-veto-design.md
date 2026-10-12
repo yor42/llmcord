@@ -1,6 +1,6 @@
-# Design: decision-model veto behind the local spoken-move reader (FEAT-45, proposed)
+# Design: decision-model veto behind the local spoken-move reader (FEAT-49, proposed)
 
-Status: **decided by the owner on 2026-10-13 (see [Decisions](#decisions-owner-2026-10-13)); FEAT-45a in progress, 45b waits for the schema go-ahead below.** It follows from FEAT-43/44 ([results](decision-models-eval.md)): behind e5, a per-move yes/no reader removed all 12 leaked chatter lines on the synthetic set for 4 lost moves out of 124 (Decision-1 `noul`, tau 0.5).
+Status: **decided by the owner on 2026-10-13 (see [Decisions](#decisions-owner-2026-10-13)); FEAT-49a in progress, 45b waits for the schema go-ahead below.** It follows from FEAT-47/44 ([results](decision-models-eval.md)): behind e5, a per-move yes/no reader removed all 12 leaked chatter lines on the synthetic set for 4 lost moves out of 124 (Decision-1 `noul`, tau 0.5).
 
 ## Goal and non-goals
 - Goal: fewer wrong move-check buttons on table chat. e5 alone gave a button to about 1 chatter line in 5.
@@ -49,7 +49,7 @@ Three layers, all default off:
 2. **Server admin** switches "Decision-model check for spoken moves" on, in the Games tab or by the slash command. The label and reply must say plainly: *"When on, a message that the local reader takes for a spoken move is sent to {provider}, a third-party service, to double-check it. Only the message text and the legal moves are sent, only for members who turned on spoken moves, and only on their own turn. Off by default."*
 3. **Member**: the existing `spoken_member_on` gate (on by default), plus a per-member **opt-out of the veto** (`/game spoken_veto` for the member; owner decision: server-wide default on once the admin enables it, each member can opt out). Members get a one-line notice that their message may be double-checked by a third-party service and how to opt out.
 
-**Schema:** the per-member opt-out needs a new `member_settings` column (`spoken_veto`), i.e. migration v22 with backup-before-upgrade. `CLAUDE.md` requires the owner's go-ahead for a schema change; that go-ahead is requested in the FEAT-45b brief and is not assumed. Alternative without a schema change: none that is clean (overloading `spoken_moves` values would be a hack).
+**Schema:** the per-member opt-out needs a new `member_settings` column (`spoken_veto`), i.e. migration v22 with backup-before-upgrade. `CLAUDE.md` requires the owner's go-ahead for a schema change; that go-ahead is requested in the FEAT-49b brief and is not assumed. Alternative without a schema change: none that is clean (overloading `spoken_moves` values would be a hack).
 
 Provider terms: the owner reports that the only provider for Decision-1 on OpenRouter is Azure and that its listing says: "Private: this provider does not train on prompts and does not retain prompt data." I have not independently verified this; it is the owner's reading of the OpenRouter provider page. The OpenRouter request must not opt into prompt logging, and the docs should quote the same line with the date it was checked.
 
@@ -70,9 +70,9 @@ Decision-1 weights change without notice. Add `scripts/check_spoken_veto.py` (op
 - Fake keys only (`FAKE-...-not-a-real-key`), as in `tests/test_decision_eval.py`.
 
 ## Proposed split (each one small item)
-1. **FEAT-45a** pure `veto.py` + client + tests, not wired. No behaviour change.
-2. **FEAT-45b** switch, Games tab row, slash command, disclosure text, wiring, limits, breaker; default off.
-3. **FEAT-45c** shadow-mode counters and `scripts/check_spoken_veto.py`.
+1. **FEAT-49a** pure `veto.py` + client + tests, not wired. No behaviour change.
+2. **FEAT-49b** switch, Games tab row, slash command, disclosure text, wiring, limits, breaker; default off.
+3. **FEAT-49c** shadow-mode counters and `scripts/check_spoken_veto.py`.
 4. Rollout: operator enables shadow on one server → review counts → decide live and tau.
 Item 2 touches consent and an outbound data path, so it should get an Opus review.
 
@@ -87,7 +87,7 @@ Item 2 touches consent and an outbound data path, so it should get an Opus revie
 1. Sending the text is acceptable **if opt-in**: server admin enables it (server-wide default for its members), each member can opt out.
 2. Provider: **Decision-1 via OpenRouter**; the non-release (alpha) endpoint is acceptable. OpenAI `predicate` is not built.
 3. Members get a one-line notice.
-4. The bot currently runs on a single server, a testbed. Taken as: no separate shadow period is required before going live there. The count-only shadow telemetry (FEAT-45c) stays proposed as the way to validate tau on real chat, but it no longer gates 45a/45b.
+4. The bot currently runs on a single server, a testbed. Taken as: no separate shadow period is required before going live there. The count-only shadow telemetry (FEAT-49c) stays proposed as the way to validate tau on real chat, but it no longer gates 45a/45b.
 5. Code stays out of `ModelGateway` (`spoken/veto.py`, `spoken/veto_client.py`).
 6. Provider terms: the owner's reading of the OpenRouter provider page (Azure, "does not train on prompts and does not retain prompt data").
 

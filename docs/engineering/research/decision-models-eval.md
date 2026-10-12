@@ -1,6 +1,6 @@
 # Decision models for spoken-move interpretation (research note, 2026-10-12)
 
-Status: benchmark done (FEAT-43, 2026-10-12, results and recommendation at the end). Nothing is wired into the bot. Using any result in the bot needs the user's opt-in decision (new provider wire format, and sending player chat to a third party).
+Status: benchmark done (FEAT-47, 2026-10-12, results and recommendation at the end). Nothing is wired into the bot. Using any result in the bot needs the user's opt-in decision (new provider wire format, and sending player chat to a third party).
 
 ## Question
 Could OpenAI's Decisions API (`gpt-6-luna`) or Microsoft Decision-1 replace or back up the local e5 interpreter, compared with Haiku 5.5 and Gemini Flash-Lite (D37 assumes these are better at similar cost; never measured)?
@@ -53,7 +53,7 @@ Checked against OpenRouter's own pages and Microsoft's announcement and Learn do
 4. Keys come from the environment only (`OPENAI_API_KEY`, `OPENROUTER_API_KEY`); never print them or write them to the repo.
 5. Likely role if it wins: tiebreaker behind e5 for the `unsure` band, not a replacement.
 
-## Harness design (FEAT-43)
+## Harness design (FEAT-47)
 Code: `prototypes/decision_eval/` (`evalcore.py` pure helpers, `run_eval.py` CLI). Tests: `tests/test_decision_eval.py` (offline, fake transport). Nothing under `llmcord_core/` changes.
 
 ### Items
@@ -80,7 +80,7 @@ The e5 control is the recorded D34 number. e5 per-row scores are not reproduced 
 ### Safety rules for the script
 Dry run by default (prints call count and a cost estimate, makes no request and needs no key); a paid run needs `--run`. A `--max-usd` budget aborts a run once the reported usage cost passes it. Results go to `--out` (default outside the repo), never into the repo; they hold phrases, ids and answers, no headers. Each model is smoke-tested with a few calls before the full run.
 
-## Results (FEAT-43 full run, 2026-10-12)
+## Results (FEAT-47 full run, 2026-10-12)
 3,110 calls, 0 errors, $0.080 spent (estimate was $0.166). Items: the 195 blackjack rows (133 moves, 62 table talk) and 116 doubt phrases. Raw per-call results stayed outside the repo (`~/decision-eval-out`). Reproduce: `prototypes/decision_eval/README.md`.
 
 How to read: every decision candidate gives one answer per item; shuffled `choice` candidates are asked in 3 option orders and the majority answer counts. "Right move" is the share of the 133 move rows where the answer is the label or an accepted move. "Silent" is the share of the 62 talk rows answered `talk` (strict). One answer per item is not the same as e5's "right move among up to two buttons", so the e5 row is only a rough yardstick.
@@ -135,8 +135,8 @@ Costs come from provider usage where given. OpenAI's Decisions response carries 
 - It needs a new provider kind in `models.py` for the Decisions wire formats (both differ from Chat Completions), key pins for `api.openai.com` and `openrouter.ai` (`config.py:109`, `LLMCORD_KEY_HOSTS`), fake-transport tests, and an e5-only fallback when the API is down, slow (budget about 1 s) or over a per-server rate.
 - Messages from the member whose turn it is would leave the Pi. That needs an explicit per-server opt-in, separate from `/memory opt_in`, shown in the Games tab and in `/games spoken_moves`, with the chosen provider's data-retention and training terms checked first.
 
-## Cascade replay (FEAT-44, 2026-10-12)
-No new paid calls. The shipped local reader was run on the same 195 blackjack rows (`prototypes/decision_eval/cascade.py dump-e5`: int8 e5, shipped head, no server examples, as `games_spoken_discord._read` does; model hashes matched the pins), and the recorded FEAT-43 answers were replayed behind it (`cascade.py replay`). The second reader only sees rows e5 did not call silent and can only drop or reorder e5's moves.
+## Cascade replay (FEAT-48, 2026-10-12)
+No new paid calls. The shipped local reader was run on the same 195 blackjack rows (`prototypes/decision_eval/cascade.py dump-e5`: int8 e5, shipped head, no server examples, as `games_spoken_discord._read` does; model hashes matched the pins), and the recorded FEAT-47 answers were replayed behind it (`cascade.py replay`). The second reader only sees rows e5 did not call silent and can only drop or reorder e5's moves.
 
 | Reader and policy | Right move | Silent on chatter | Sure wrong (moves / chatter) | Ko moves right | Asked (share of all messages) | Cost per 1,000 messages |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -161,7 +161,7 @@ Asking only when e5 says `unsure` changes at most one row (not shown above): e5 
 ### Caveats
 - The e5 head trains on `examples.json` / `talk_examples.json` and `phrases.csv` is its labelled test set, but the same author wrote both, so the e5 numbers are optimistic (near-duplicates exist). The decision models are zero-shot on the same rows.
 - 195 synthetic rows; checking against real kept phrases (D35) was not done and cannot be done here because those live under the production data, which this work does not read. That check needs the owner to run `dump-e5`/`replay`-style scoring on their own data, or to supply an anonymised set.
-- The replay uses answers recorded once in FEAT-43; Decision-1 weights can change under a stable API shape, so thresholds must be re-checked before relying on them.
+- The replay uses answers recorded once in FEAT-47; Decision-1 weights can change under a stable API shape, so thresholds must be re-checked before relying on them.
 - Haiku gives no probabilities, so its tau rows are identical.
 
 ### Recommendation (updated)

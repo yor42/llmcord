@@ -1,4 +1,4 @@
-"""FEAT-43: decision-model evaluation harness (prototypes/decision_eval/evalcore.py and run_eval.py). Offline, no keys.
+"""FEAT-47: decision-model evaluation harness (prototypes/decision_eval/evalcore.py and run_eval.py). Offline, no keys.
 
 These tests DEFINE the interface of the harness; the module is written to satisfy them. Research only, nothing in
 llmcord_core uses it. Interface (all pure except load_items):
@@ -560,7 +560,7 @@ class CliTests(unittest.TestCase):
         self.assertNotIn(FAKE_OR, out + err)
 
 
-"""Review round 1 additions (FEAT-43). Interfaces pinned here:
+"""Review round 1 additions (FEAT-47). Interfaces pinned here:
 
   run_eval.http_post(url, body, key, transport=None) -> (json, wall_seconds); transport is an httpx transport (MockTransport). Non-2xx
       raises; str(exc) holds the status code and at most 200 chars of body, with the key scrubbed from the FULL body before truncation

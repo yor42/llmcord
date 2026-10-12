@@ -1,6 +1,6 @@
-"""FEAT-44: e5-first cascade replay. A local e5 reading (band + moves) is optionally re-asked of a decision model; the model's
+"""FEAT-48: e5-first cascade replay. A local e5 reading (band + moves) is optionally re-asked of a decision model; the model's
 probabilities then drop or re-order the e5 moves. Nothing here calls a provider: dump-e5 runs the shipped local reader, replay
-scores recorded FEAT-43 answers against the e5 bands.
+scores recorded FEAT-47 answers against the e5 bands.
 
 Pure functions (standard library only): apply_policy, reading_of, evaluate, cost_per_1000_messages. Tests: tests/test_decision_cascade.py.
 Usage:
@@ -246,7 +246,7 @@ def cmd_replay(a):
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(description="FEAT-44 e5-first cascade replay (offline)")
+    p = argparse.ArgumentParser(description="FEAT-48 e5-first cascade replay (offline)")
     sub = p.add_subparsers(dest="cmd", required=True)
     d = sub.add_parser("dump-e5", help="shipped local reading of the 195 blackjack rows")
     d.add_argument("--model-dir", required=True)
