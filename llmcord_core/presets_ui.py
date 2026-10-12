@@ -7,7 +7,7 @@ import json
 from .i18n import N_, NP_, UserError, codes, web_locale
 from .icons import lucide, more_menu
 from .macro_highlight import MacroHighlight
-from .prompts import PURPOSES, SOURCES, block, compatibility, default_bundle, ST_MARKERS, export_preset, parse_preset, purpose_blocks
+from .prompts import PURPOSES, SOURCES, block, compatibility_phrases, default_bundle, ST_MARKERS, export_preset, parse_preset, purpose_blocks
 from .scene_ui import confirm_dialog
 
 
@@ -353,8 +353,8 @@ def _preset_editor(ctx, state, purpose, collect):
                 render_editor.refresh()
         with ui.element('div').classes('ll-form-row'):
             ui.button(t('Add prompt block'), on_click=add).props('outline')
-        for problem in compatibility(state['bundle'], ctx.service.providers):
-            ui.label(problem).classes('text-amber-300')
+        for problem in compatibility_phrases(state['bundle'], ctx.service.providers):
+            ui.label(t.render(problem)).classes('text-amber-300')
         source = state['bundle'].setdefault('source', {})
         if source.get('assistant_prefill'):
             tracked(ui.checkbox(t('Disable imported assistant prefill'))).bind_value(source, 'prefill_disabled')

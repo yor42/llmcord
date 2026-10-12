@@ -773,3 +773,147 @@ msgstr ""
 msgid "• Take longer than {seconds} s and you check, or fold if you can't. Assist shows your hand and odds."
 msgstr ""
 
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{purpose}/{block}: remap unsupported marker {marker}"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{purpose}/{block}: use relative placement; this purpose has no conversation-history marker"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{purpose}/{block}: the required input payload must use the user role"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{purpose}/{block}: unsupported macros {macros}"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{purpose}/{block}: remap generation triggers"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{purpose}/{block}: remove extension dependency"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{purpose}/{block}: choose an Anthropic placement adaptation"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{purpose}/{block}: choose a Gemini placement adaptation"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "Disable or remap imported assistant prefill"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "A saved profile with an invalid name was skipped."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "Profile {name} was skipped: {reason}"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "its saved settings could not be read"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "The {role} role names profile {chosen}, which is not available; using the config.yaml setting."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "The provider refused the key (HTTP {status})."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "The provider needs an API key (HTTP {status})."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "The provider answered HTTP {status} instead of a model list."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "The provider's model list is too large to read."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "The provider did not respond in time."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "Could not reach the provider."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{env} is not set in the dashboard's environment."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "This provider doesn't list its models; type the ID."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "The provider's answer was not a model list; type the ID."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "The provider returned no models; type the ID."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{count} model found."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "{count} models found."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "The model list could not be fetched; see the dashboard log."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "No price found for this model; enter it by hand."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "The price list could not be downloaded."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "The price list is too large to read."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "The price list did not respond in time."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "The price list could not be read."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "The price lookup failed; see the dashboard log."
+msgstr ""
+

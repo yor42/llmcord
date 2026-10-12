@@ -31,7 +31,6 @@ from .cards import parse_card
 from .currency_ui import currency_panel
 from .games import playstyle
 from .games_ui import games_panel
-from .prices import NOT_FOUND
 from .shop_ui import shop_panel
 from .presets_ui import presets_panel
 from .config import PROFILE_KEYS, format_key_ref, parse_key_ref, validate_profile_name
@@ -334,8 +333,8 @@ async def backend_panel(ctx, config):
             detail = getattr(config, 'error_value', None)
             detail = config.error if detail is None else t.render(detail) if isinstance(detail, Msg) else t.error(detail)
             ui.label(t('config.yaml could not be read, so only dashboard profiles are listed. {error}', error=detail)).classes('text-warning')
-        for problem in backend.problems:
-            ui.label(problem).classes('text-warning')
+        for problem in backend.problem_phrases or backend.problems:
+            ui.label(t.render(problem)).classes('text-warning')
         if not views:
             ui.label(t('No profiles yet.')).classes('ll-muted')
         for view in views:
@@ -508,14 +507,14 @@ async def backend_panel(ctx, config):
                 if not result.ok:
                     picker.set_visibility(False)
                     with outcome:
-                        ui.label(result.message).classes('text-negative').props('role=status')
+                        ui.label(t.render(result.phrase) if result.phrase else result.message).classes('text-negative').props('role=status')
                     return
                 fetched.clear()
                 fetched.update({info.id: info for info in result.models})
                 picker.set_options(sorted(fetched), value=None)
                 picker.set_visibility(True)
                 with outcome:
-                    ui.label(result.message).classes('text-positive').props('role=status')
+                    ui.label(t.render(result.phrase) if result.phrase else result.message).classes('text-positive').props('role=status')
 
             def stale_list(_event=None):
                 if fetch_state['listed']:
@@ -577,7 +576,7 @@ async def backend_panel(ctx, config):
                 price_status.clear()
                 with price_status:
                     if not result.found:
-                        ui.label(result.message).classes('ll-muted' if result.message.startswith('No price found') else 'text-negative').props('role=status')
+                        ui.label(t.render(result.phrase) if result.phrase else result.message).classes('ll-muted' if result.not_found else 'text-negative').props('role=status')
                         return
                     for field, value in zip(costs, (result.input, result.output, result.cached_input)):
                         costs[field].value = value
@@ -594,7 +593,7 @@ async def backend_panel(ctx, config):
                                           then=fetched_models).props('outline')
             with price_row:
                 price_button = ctx.button(t('Look up prices'), look_up_prices, 'backend.prices',
-                                          lambda result: {'name': (name.value or '').strip(), 'ok': result.found or result.message == NOT_FOUND, 'found': result.found, 'source': result.source},
+                                          lambda result: {'name': (name.value or '').strip(), 'ok': result.found or result.not_found, 'found': result.found, 'source': result.source},
                                           then=prices_found).props('outline')
             with ui.element('div').classes('ll-form-row justify-end'):
                 ui.button(t.p('button', 'Cancel'), on_click=dialog.close).props('flat')
