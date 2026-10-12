@@ -116,3 +116,32 @@ class DashboardLanguageBrowserTests(unittest.TestCase):
         expect(menu.locator('button[form="ll-lang-form"]').first).to_be_visible()
         expect(menu.locator('[aria-current="true"]')).to_have_count(1)
         expect(menu.get_by_role('button', name='Sign out')).to_be_visible()
+
+    def test_bot_language_saves_to_store_with_audit(self):
+        """FEAT-44: Server settings has a Bot language select; choosing a language and saving stores it and audits settings.language, and the follow option restores ''."""
+        from playwright.sync_api import expect
+        import json
+        state = lambda: httpx.get(self.url + '/_test/state', verify=False, timeout=5).json()
+        def wait_for(predicate):
+            for _ in range(50):
+                if predicate():
+                    return
+                self.page.wait_for_timeout(100)
+            self.fail('Expected database state was not reached')
+        def save(option):
+            select = self.page.get_by_label('Bot language', exact=True)
+            select.wait_for(timeout=5000)
+            select.click()
+            self.page.get_by_role('option', name=option, exact=True).click()
+            self.page.get_by_role('region', name='Unsaved changes').get_by_role('button', name='Save changes', exact=True).click()
+            self.page.get_by_text('Server settings saved', exact=True).wait_for(timeout=5000)
+        self.load('/admin/guild/1')
+        self.page.get_by_role('tab', name='Server setup', exact=True).click()
+        self.assertEqual(state()['guild_language'], '')
+        save(i18n.display_name('ko'))
+        wait_for(lambda: state()['guild_language'] == 'ko')
+        rows = [r for r in state()['audit'] if r['action'] == 'settings.language']
+        self.assertEqual([json.loads(r['detail_json']) for r in rows], [{'language': 'ko'}])
+        save("Follow each member's Discord language")
+        wait_for(lambda: state()['guild_language'] == '')
+        expect(self.page.get_by_label('Bot language', exact=True)).to_be_visible()

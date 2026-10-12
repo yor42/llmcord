@@ -1347,6 +1347,27 @@ def timezone_detail(result):
     return {'old': result['old'], 'new': result['new']}
 
 
+LANGUAGE_FOLLOW = 'auto'  # the select's key for "follow Discord"; the store keeps ''
+
+
+def server_language_options(current, *, t=None):
+    """Bot language select: (options, value). A stored language that is no longer installed shows as the follow option."""
+    t = t or web_locale.current()
+    options = {LANGUAGE_FOLLOW: t("Follow each member's Discord language")}
+    codes_ = i18n.available_locales()
+    options.update({code: i18n.display_name(code) for code in codes_})
+    return options, (current if current in codes_ else LANGUAGE_FOLLOW)
+
+
+def language_operation(store, guild_id, value):
+    """Store the chosen Bot language ('auto' follows Discord); returns the stored code ('' or a locale)."""
+    return store.set_server_language(guild_id, '' if value in (None, LANGUAGE_FOLLOW) else value)
+
+
+def language_detail(stored):
+    return {'language': stored}
+
+
 def header_crumb(current=None):
     """Header crumb: the llmcord link, plus the current server's icon (or initials tile) and name when given."""
     from nicegui import ui
@@ -1829,6 +1850,10 @@ def server_settings_section(ctx, channel_names):
             timezone = ui.select(timezone_options(current), value=current or None,
                                  label=t('Server timezone'), with_input=True, clearable=True)
         ui.label(t('Characters use this for members who have not chosen their own with /time set. Without it they use UTC.')).classes('ll-muted')
+        language_options, saved_language = server_language_options(store.server_language(gid), t=t)
+        with ui.element('div').classes('ll-form-row ll-field-row'):
+            language = ui.select(language_options, value=saved_language, label=t('Bot language'))
+        ui.label(t("Language of the bot's public messages: tables, game updates and notices. Replies only one member sees use that member's Discord language. Character lines are never translated.")).classes('ll-muted')
         current_asset = store.asset_channel_id(gid)
         saved_asset = current_asset if current_asset in channel_names else None
         with ui.element('div').classes('ll-form-row ll-field-row'):
@@ -1885,6 +1910,8 @@ def server_settings_section(ctx, channel_names):
              'detail': lambda _: {'enabled': bool(log_switch.value), 'days': int(log_days.value)}},
             {'controls': {timezone: current or None}, 'operation': lambda: timezone_operation(store, gid, timezone.value),
              'action': 'settings.timezone', 'detail': timezone_detail},
+            {'controls': {language: saved_language}, 'operation': lambda: language_operation(store, gid, language.value),
+             'action': 'settings.language', 'detail': language_detail},
             {'controls': {asset_channel: saved_asset}, 'operation': configure, 'action': 'avatar.channel'}],
             success=t('Server settings saved'))
 

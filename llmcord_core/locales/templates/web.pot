@@ -916,6 +916,10 @@ msgid "Drop entries here"
 msgstr ""
 
 #: llmcord_core/dashboard.py
+msgid "Follow each member's Discord language"
+msgstr ""
+
+#: llmcord_core/dashboard.py
 msgid "llmcord / Servers"
 msgstr ""
 
@@ -1378,6 +1382,14 @@ msgstr ""
 
 #: llmcord_core/dashboard.py
 msgid "Characters use this for members who have not chosen their own with /time set. Without it they use UTC."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Bot language"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Language of the bot's public messages: tables, game updates and notices. Replies only one member sees use that member's Discord language. Character lines are never translated."
 msgstr ""
 
 #: llmcord_core/dashboard.py
