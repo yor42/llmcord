@@ -121,6 +121,23 @@ class SpokenMovesSetting(TableCase):
         self.assertTrue(self.store.spoken_moves_enabled(G))
 
 
+class SpokenDoubtSetting(TableCase):
+    def test_default_off_save_round_trip_stays_in_guild(self):
+        """FEAT-38 C: Read doubts from chat is off by default, saves per server and leaves guild 2 alone."""
+        self.assertFalse(self.store.spoken_doubt_enabled(G))
+        self.assertIs(self.store.set_spoken_doubt_enabled(G, True, False), True)
+        self.assertTrue(self.store.spoken_doubt_enabled(G))
+        self.assertFalse(self.store.spoken_doubt_enabled(2))
+        self.assertIs(self.store.set_spoken_doubt_enabled(G, False, True), False)
+        self.assertFalse(self.store.spoken_doubt_enabled(G))
+
+    def test_stale_save_conflicts(self):
+        self.store.set_spoken_doubt_enabled(G, True)
+        with self.assertRaises(ConflictError):
+            self.store.set_spoken_doubt_enabled(G, False, False)
+        self.assertTrue(self.store.spoken_doubt_enabled(G))
+
+
 class KeepPhrasesSetting(TableCase):
     def test_default_off_save_round_trip_stays_in_guild(self):
         """FEAT-37 F3: Keep phrases for tuning is off by default, saves per server and leaves guild 2 alone."""

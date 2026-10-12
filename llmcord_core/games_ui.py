@@ -317,6 +317,19 @@ def doubt_section(ctx):
                           dirty=lambda: current() != rules['value'],
                           reset=lambda: [c.set_value(rules['value'][k]) for c, k in zip(controls, keys)])
 
+        spoken = {'value': store.spoken_doubt_enabled(gid)}
+        spoken_switch = ui.switch('Read doubts from chat (Experimental)', value=spoken['value'])
+        ui.label('On: during the few seconds after a claim, when a member at the table writes something like "liar!" or "구라", the bot replies with buttons to confirm it (Doubt it! / Just table talk). '
+                 'Nothing is played until they press a button, and the doubt window does not wait. English and Korean, by word list only (no language model). '
+                 'Members can turn move checks off for themselves with /game spoken_moves.').classes('ll-muted')
+        def save_spoken():
+            spoken['value'] = store.set_spoken_doubt_enabled(gid, bool(spoken_switch.value), spoken['value'])
+            return spoken['value']
+        ctx.savebar.track('Read doubts from chat', {spoken_switch: spoken['value']}, save=save_spoken, action='games.spoken_doubt',
+                          detail=lambda result: {'enabled': result}, success='Read doubts from chat saved',
+                          dirty=lambda: bool(spoken_switch.value) != spoken['value'],
+                          reset=lambda: spoken_switch.set_value(spoken['value']))
+
 
 def holdem_section(ctx):
     from nicegui import ui
