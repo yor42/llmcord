@@ -44,42 +44,6 @@ msgid "Your turn failed during {stage} (ref {ref}): {detail}"
 msgstr ""
 
 #: llmcord_core/discord_bot.py
-msgid "speaker selection"
-msgstr ""
-
-#: llmcord_core/discord_bot.py
-msgid "image description"
-msgstr ""
-
-#: llmcord_core/discord_bot.py
-msgid "dialogue generation"
-msgstr ""
-
-#: llmcord_core/discord_bot.py
-msgid "saving scene input"
-msgstr ""
-
-#: llmcord_core/discord_bot.py
-msgid "preparing character prompt"
-msgstr ""
-
-#: llmcord_core/discord_bot.py
-msgid "webhook setup"
-msgstr ""
-
-#: llmcord_core/discord_bot.py
-msgid "avatar lookup"
-msgstr ""
-
-#: llmcord_core/discord_bot.py
-msgid "webhook delivery"
-msgstr ""
-
-#: llmcord_core/discord_bot.py
-msgid "saving character reply"
-msgstr ""
-
-#: llmcord_core/discord_bot.py
 msgid "The bot's model setup needs attention. An admin can look it up with the reference ID."
 msgstr ""
 
@@ -2253,5 +2217,10 @@ msgid ""
 "\n"
 "\n"
 "-# {model} · Reply input: {inputs} · Output: {outputs} · Est. cost: {cost}"
+msgstr ""
+
+#: llmcord_core/usage.py
+#, python-brace-format
+msgid "failed at {stage}"
 msgstr ""
 

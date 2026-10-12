@@ -215,3 +215,16 @@ PRICE_TOO_LARGE = N_('The price list is too large to read.')
 PRICE_TIMEOUT = N_('The price list did not respond in time.')
 PRICE_UNREADABLE = N_('The price list could not be read.')
 PRICE_FAILED = N_('The price lookup failed; see the dashboard log.')
+
+# --- MNT-77/MNT-80: turn log stage text
+# Turn step names (shown in "Your turn failed during {stage}" and in the Monitoring log); keys are the stored English stage names.
+STAGE_WORDS = {
+    'speaker selection': N_('speaker selection'), 'image description': N_('image description'), 'dialogue generation': N_('dialogue generation'),
+    'saving scene input': N_('saving scene input'), 'preparing character prompt': N_('preparing character prompt'), 'webhook setup': N_('webhook setup'),
+    'avatar lookup': N_('avatar lookup'), 'webhook delivery': N_('webhook delivery'), 'saving character reply': N_('saving character reply')}
+# Feature, purpose and role identifiers in the stored "{feature} · {purpose or role}" text.
+LOG_WORDS = {
+    'reply': NP_('turn log part', 'reply'), 'ambient': NP_('turn log part', 'ambient'), 'summon': NP_('turn log part', 'summon'),
+    'memory': NP_('turn log part', 'memory'), 'catchup': NP_('turn log part', 'catchup'), 'game': NP_('turn log part', 'game'),
+    'playstyle': NP_('turn log part', 'playstyle'), 'dialogue': NP_('turn log part', 'dialogue'), 'director': NP_('turn log part', 'director'),
+    'extraction': NP_('turn log part', 'extraction'), 'summary': NP_('turn log part', 'summary'), 'images': NP_('turn log part', 'images')}

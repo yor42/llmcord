@@ -1690,3 +1690,23 @@ msgstr ""
 msgid "Unknown language: {language}"
 msgstr ""
 
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Profile {profile}: {error}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{env} is not set in {environment}'s environment (profile {profile})"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{env} is not set in the bot's environment (profile {profile})"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "{env} is not set in the dashboard's environment (profile {profile})"
+msgstr ""
+

@@ -107,7 +107,9 @@ class AdminService:
         except BudgetExceeded:
             raise UserError(codes.ADMIN_HARD_CAP) from None
         except ModelConfigError as error:
-            raise ValueError(str(error)[:300]) from None
+            if error.code is None or len(str(error)) > 300:
+                raise UserError(str(error)[:300]) from None
+            raise UserError(error.code, **error.params) from None
         except ValueError as error:
             log.warning('Play style generation got an unreadable answer (%s)', type(error).__name__)
             raise UserError(codes.ADMIN_UNREADABLE_ANSWER) from None
