@@ -53,18 +53,6 @@
     "llmcord_core/games/playstyle.py": {
       "raise": 3
     },
-    "llmcord_core/games_discord.py": {
-      "ui": 3
-    },
-    "llmcord_core/games_doubt_discord.py": {
-      "ui": 1
-    },
-    "llmcord_core/games_holdem_discord.py": {
-      "ui": 4
-    },
-    "llmcord_core/games_spoken_doubt.py": {
-      "ui": 1
-    },
     "llmcord_core/games_ui.py": {
       "ui": 91
     },

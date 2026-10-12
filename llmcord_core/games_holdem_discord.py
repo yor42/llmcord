@@ -22,22 +22,56 @@ from . import game_chooser
 from .admin_store import ConflictError, GameError
 from .games import holdem
 from .games.base import IllegalMove, Seat
-from .games_discord import NO_CHARACTER_SEATS, NO_MENTIONS, NOT_SEATED, NOT_YOUR_TURN, OFF_HERE, SKIPPED, STALE, GameTables
+from .games_discord import NO_CHARACTER_SEATS, NO_MENTIONS, NOT_SEATED, NOT_YOUR_TURN, OFF_HERE, SKIPPED, STALE, GameTables, words
 from .game_talk import TalkBudget
 from .table_runtime import TableRuntime
+from llmcord_core import i18n
+from llmcord_core.i18n import N_, NP_, Phrase, discord_locale, terms
 
 PREFIX = "llmcord:holdem"
 NAME = "Texas Hold'em"
-HOLDEM_OFF = f"{NAME} is off on this server."
-BET_NOTE = f"{NAME} uses the server's blinds; you choose your buy-in when you sit."
-NO_TABLE = "Use /game hand in your table's thread."
-NO_SEAT = "You do not have a seat in this round."
+HOLDEM_OFF = N_("Texas Hold'em is off on this server.")
+BET_NOTE = N_("Texas Hold'em uses the server's blinds; you choose your buy-in when you sit.")
+NO_TABLE = N_("Use /game hand in your table's thread.")
+NO_SEAT = N_("You do not have a seat in this round.")
 SEEDS_CHARS = 1800
-CASHED = " Any chips were cashed out."
-THREAD_FORBIDDEN = ("I couldn't open the table thread. I need the Create Public Threads and Send Messages in Threads "
-                    "permissions in this channel. The table was closed.")
-THREAD_FAILED = "Couldn't open the table thread; the table is closed."
-NO_HAND = "No hand is being played right now."
+CASHED = N_("Any chips were cashed out.")
+THREAD_FORBIDDEN = N_("I couldn't open the table thread. I need the Create Public Threads and Send Messages in Threads "
+                      "permissions in this channel. The table was closed.")
+THREAD_FAILED = N_("Couldn't open the table thread; the table is closed.")
+NO_HAND = N_("No hand is being played right now.")
+SOMETHING_WRONG = N_("Something went wrong; try again.")
+RAISE_NOW = N_("You can't raise now.")
+WHOLE_STACK = N_("Your whole stack makes a total bet of {top:,}; you can't raise to more.")
+ALL_IN_ONLY = N_("You can only go all-in, to {top:,}.")
+SMALLEST_RAISE = N_("The smallest raise is to {amount:,} in total.")
+ROUND_STARTED = N_("This round has already started.")
+HAVE_SEAT = N_("You already have a seat in this round.")
+TABLE_FULL = N_("The table is full.")
+SAT_DOWN = N_("You sit down with {amount:,} {currency}.")
+ADDED_CHIPS = N_("You added {amount:,} {currency}; your stack is {stack:,}.")
+LEFT_CASHED = N_("You left the table and cashed out {amount:,} {currency}.")
+ONLY_HOST_FILL = N_("Only the host can fill seats.")
+ONLY_HOST_DEAL = N_("Only the host can deal.")
+ONLY_HOST_CLOSE = N_("Only the host can close the table.")
+NO_CAST_LEFT = N_("No one is left in the cast who can take a seat.")
+ASSIST_ON = N_("Assist is on.")
+ASSIST_OFF = N_("Assist is off.")
+THREAD_NOT_READY = N_("The table thread isn't ready yet; try again in a moment.")
+NEEDS_SEATS = N_("{game} needs at least {count} seats to deal.")
+CLOSED_CASHED = N_("Table closed. Any chips were cashed out.")
+NOT_STARTED = N_("The hand hasn't started yet.")
+ONLY_WINNER = N_("Only the winner can show their cards.")
+ALREADY_SHOWN = N_("The cards were already shown at the showdown.")
+SHOWED = N_("You already showed your cards.")
+SEATED = N_("Seated: {names}.")
+NOT_SEATED_LIST = N_("Not seated: {names}.")
+STREET_NAMES = {"preflop": NP_("poker street", "Preflop"), "flop": NP_("poker street", "Flop"), "turn": NP_("poker street", "Turn"),
+                "river": NP_("poker street", "River"), "showdown": NP_("poker street", "Showdown"), "done": NP_("poker street", "Done")}
+
+
+def _street(name):
+    return STREET_NAMES.get(name, name.capitalize())
 
 
 def buy_in_range(rules) -> tuple[int, int]:
@@ -81,20 +115,22 @@ class AmountModal(discord.ui.Modal):
 
     async def on_error(self, interaction: discord.Interaction, error: Exception):
         logging.error("Texas Hold'em %s modal failed", self.kind, exc_info=error)
-        await interaction.client.holdem._say(interaction, "Something went wrong; try again.")
+        await interaction.client.holdem._say(interaction, SOMETHING_WRONG)
 
 
 class _RaisePicker(discord.ui.View):
     """The private raise picker: one button per raise of the engine's menu (each carries its total bet) and Exact amount."""
 
-    def __init__(self, guild_id: int, table_id: int, round_id: int, moves: int, amounts: list, top: int):
+    def __init__(self, guild_id: int, table_id: int, round_id: int, moves: int, amounts: list, top: int, *, t=None):
+        t = t or i18n.english()
         super().__init__(timeout=600)
         self.guild_id, self.table_id, self.round_id, self.moves = guild_id, table_id, round_id, moves
         for amount in amounts:
-            button = discord.ui.Button(label=f"All-in {amount:,}" if amount == top else f"Raise to {amount:,}", style=discord.ButtonStyle.danger if amount == top else discord.ButtonStyle.primary)
+            button = discord.ui.Button(label=t.p("button.holdem", "All-in {amount:,}", amount=amount) if amount == top else t.p("button.holdem", "Raise to {amount:,}", amount=amount),
+                                       style=discord.ButtonStyle.danger if amount == top else discord.ButtonStyle.primary)
             button.callback = functools.partial(self.pick, amount=amount)
             self.add_item(button)
-        exact = discord.ui.Button(label="Exact amount", style=discord.ButtonStyle.secondary)
+        exact = discord.ui.Button(label=t.p("button.holdem", "Exact amount"), style=discord.ButtonStyle.secondary)
         exact.callback = self.exact
         self.add_item(exact)
 
@@ -154,7 +190,7 @@ class HoldemTables:
         self.ended: set[tuple[int, int]] = set()  # tables this object closed itself: the sweeper leaves them alone
         self.dirty: set[tuple[int, int]] = set()
         self.board_tasks: dict[tuple[int, int], asyncio.Task] = {}
-        self.assists: dict[tuple, str] = {}  # (guild, round, seat, street) -> the odds text, so a street's numbers never change
+        self.assists: dict[tuple, object] = {}  # (guild, round, seat, street) -> the odds (holdem.Assist), so a street's numbers never change
         self.shown: set[tuple[int, int]] = set()  # (guild, round) whose winner already showed their cards
         self.talk = getattr(bot, 'talk_budget', None) or TalkBudget(lambda: bot.store)  # failed attempts, shared by every table game
 
@@ -261,17 +297,17 @@ class HoldemTables:
             self._release(key)
             self.tables.pop(key, None)
             return None
-        guild_id = key[0]
+        guild_id, t = key[0], self._t(key[0])
         if not self.store.game_enabled(guild_id, "holdem"):
-            reason = f"{NAME} was turned off on this server."
+            reason = t("Table closed: {game} was turned off on this server.", game=terms.GAME_HOLDEM)
         elif row["channel_id"] not in self.store.game_channels(guild_id):
-            reason = "games were turned off here."
+            reason = t("Table closed: games were turned off here.")
         else:
-            reason = "the table was closed."
+            reason = t("Table closed: the table was closed.")
         self._forget(key)
         self.arm(key, "archive", self.ARCHIVE_SECONDS)
-        text = f"Table closed: {reason}{CASHED}"
-        return self._seal(key, _Out(lobby=(text, None), closing=text, seeds=self._seeds(key), closed=True))
+        text = f"{reason} {t(CASHED)}"
+        return self._seal(key, _Out(lobby=(text, None), closing=text, seeds=self._seeds(key, t=t), closed=True))
 
     async def close_for_channel(self, guild_id, channel_id, table_id) -> int | None:
         """Turns games off in a channel whose open table is this game's: the store step under the table lock, then the closing messages.
@@ -320,8 +356,14 @@ class HoldemTables:
             logging.exception("Could not post to Texas Hold'em thread %s", channel_id)
         return None
 
-    async def _say(self, interaction, text: str) -> None:
+    def _t(self, guild_id):
+        """The channel's translator for a table message: resolved at each render, never kept."""
+        get_guild = getattr(self.bot, "get_guild", None)
+        return discord_locale.channel_t(get_guild(guild_id) if get_guild else None)
+
+    async def _say(self, interaction, text) -> None:
         """An ephemeral reply: the first response, or a followup once the interaction was acknowledged."""
+        text = words(discord_locale.invoker_t(interaction), text)
         try:
             if interaction.response.is_done():
                 await interaction.followup.send(text, ephemeral=True, allowed_mentions=NO_MENTIONS)
@@ -350,30 +392,34 @@ class HoldemTables:
 
     # --- rendering --------------------------------------------------------------------------
 
-    def render_lobby(self, key, snap, row) -> tuple[str, discord.ui.View]:
+    def render_lobby(self, key, snap, row, *, t=None) -> tuple[str, discord.ui.View]:
+        t = t or i18n.english()
         rules = snap["rules"] or holdem.normalize_rules(None)
         name, (low, high), sb = self.store.currency_name(key[0]), buy_in_range(rules), rules["small_blind"]
-        lines = [f"**{NAME}** · table {key[1]}", f"Blinds {sb}/{2 * sb} · Buy-in {low:,} to {high:,} {name} · {rules['action_timeout']} s per move",
-                 f"Host: <@{row['opened_by']}>"]
+        lines = [t("**{game}** · table {number}", game=terms.GAME_HOLDEM, number=key[1]),
+                 t("Blinds {small}/{big} · Buy-in {low:,} to {high:,} {currency} · {seconds} s per move", small=sb, big=2 * sb, low=low, high=high, currency=name, seconds=rules['action_timeout']),
+                 t("Host: {host}", host=f"<@{row['opened_by']}>")]
         if rules["assist"]:
-            lines.append("Assist: on")
+            lines.append(t("Assist: on"))
         lines.append("")
         for seat in snap["seats"]:
-            tag = " (house)" if seat["kind"] == "character" and not seat["brought_by"] else ""
-            lines.append(f"{seat['index'] + 1}. {GameTables._who(seat)}{tag} — {seat['stack']:,} {name}")
+            tag = " " + t("(house)") if seat["kind"] == "character" and not seat["brought_by"] else ""
+            lines.append(f"{seat['index'] + 1}. {GameTables._who(seat, t=t)}{tag} — {seat['stack']:,} {name}")
         stamp = f"<t:{int(d)}:R>" if (d := self.table(key).deadlines.get("lobby")) else ""
         lines.append("")
-        lines.append(f"Sit with the button. The host deals when {holdem.MIN_SEATS} to {holdem.MAX_SEATS} seats are taken"
-                     + (f"; the table closes {stamp} if no hand starts." if stamp else "."))
+        if stamp:
+            lines.append(t("Sit with the button. The host deals when {low} to {high} seats are taken; the table closes {stamp} if no hand starts.", low=holdem.MIN_SEATS, high=holdem.MAX_SEATS, stamp=stamp))
+        else:
+            lines.append(t("Sit with the button. The host deals when {low} to {high} seats are taken.", low=holdem.MIN_SEATS, high=holdem.MAX_SEATS))
         view, tid, rid = discord.ui.View(timeout=None), key[1], snap["round_id"]
-        spec = [("sit", "Sit", discord.ButtonStyle.primary, 0, False), ("leave", "Leave", discord.ButtonStyle.secondary, 0, False),
-                ("rebuy", "Rebuy", discord.ButtonStyle.secondary, 0, False)]
+        spec = [("sit", t.p("button.holdem", "Sit"), discord.ButtonStyle.primary, 0, False), ("leave", t.p("button.holdem", "Leave"), discord.ButtonStyle.secondary, 0, False),
+                ("rebuy", t.p("button.holdem", "Rebuy"), discord.ButtonStyle.secondary, 0, False)]
         if self.store.binding(row["channel_id"]) is not None:
-            spec.append(("fill", "Fill seats", discord.ButtonStyle.secondary, 0, False))
+            spec.append(("fill", t.p("button.holdem", "Fill seats"), discord.ButtonStyle.secondary, 0, False))
         if rules["assist"] or self.store.game_rules(key[0], "holdem")["assist"]:
-            spec.append(("assist", "Assist off" if rules["assist"] else "Assist on", discord.ButtonStyle.secondary, 0 if rules["assist"] else 1, False))
-        spec += [("deal", "Deal", discord.ButtonStyle.success, 0, len(snap["seats"]) < holdem.MIN_SEATS or row["thread_id"] is None),
-                 ("close", "Close table", discord.ButtonStyle.danger, 0, False)]
+            spec.append(("assist", t.p("button.holdem", "Assist off") if rules["assist"] else t.p("button.holdem", "Assist on"), discord.ButtonStyle.secondary, 0 if rules["assist"] else 1, False))
+        spec += [("deal", t.p("button.holdem", "Deal"), discord.ButtonStyle.success, 0, len(snap["seats"]) < holdem.MIN_SEATS or row["thread_id"] is None),
+                 ("close", t.p("button.holdem", "Close table"), discord.ButtonStyle.danger, 0, False)]
         for action, label, style, moves, disabled in spec:
             view.add_item(HoldemButton(action, tid, rid, moves, label, style, disabled))
         return "\n".join(lines), view
@@ -414,7 +460,7 @@ class HoldemTables:
             if out.start is not None and not await self._open_play(key, out, row):
                 return
             if out.closing:
-                await self._edit(thread_id, row["turn_message_id"], content="Table closed.", view=None)
+                await self._edit(thread_id, row["turn_message_id"], content=self._t(key[0])("Table closed."), view=None)
                 await self._post(thread_id, out.closing)
             if out.result:
                 await self._post(thread_id, *out.result)
@@ -474,11 +520,12 @@ class HoldemTables:
         board = await self._post(thread_id, out.start)
         turn = await self._post(thread_id, *out.turn) if board is not None else None
         if board is None or turn is None:
+            t = self._t(key[0])
             async with self.runtime.lock(key):
                 if (current := self._row(key)) is not None and current["status"] == "open":
                     self.store.close_table(*key)
                 self._forget(key)
-            await self._edit(row["channel_id"], row["message_id"], content="Table closed: I couldn't post in the table thread." + CASHED, view=None)
+            await self._edit(row["channel_id"], row["message_id"], content=t("Table closed: I couldn't post in the table thread.") + " " + t(CASHED), view=None)
             self.arm(key, "archive", self.ARCHIVE_SECONDS)
             return False
         try:
@@ -512,7 +559,7 @@ class HoldemTables:
             snap = self.store.latest_round(*key)
         except GameError:
             return
-        await self._edit(row["thread_id"], row["board_message_id"], content=self.render_board(key, snap))
+        await self._edit(row["thread_id"], row["board_message_id"], content=self.render_board(key, snap, t=self._t(key[0])))
 
     async def flush(self) -> None:
         """Sends the pending board edits now."""
@@ -528,93 +575,110 @@ class HoldemTables:
         return " ".join(f"{c[0]}{c[1]}" for c in cards)
 
     @staticmethod
-    def _move_text(snap, seat, move) -> str:
-        who = GameTables._who(snap["seats"][seat])
+    def _move_text(snap, seat, move, *, t=None) -> str:
+        t = t or i18n.english()
+        who = GameTables._who(snap["seats"][seat], t=t)
         if move == "fold":
-            return f"{who} folds."
+            return t("{who} folds.", who=who)
         if move == "check":
-            return f"{who} checks."
+            return t("{who} checks.", who=who)
         if move == "call":
-            return f"{who} calls."
-        return f"{who} raises to {int(move[6:]):,}."
+            return t("{who} calls.", who=who)
+        return t("{who} raises to {amount:,}.", who=who, amount=int(move[6:]))
 
-    def render_board(self, key, snap) -> str:
+    def render_board(self, key, snap, *, t=None) -> str:
+        t = t or i18n.english()
         rules, view = snap["rules"] or holdem.normalize_rules(None), snap["view"]
         sb = rules["small_blind"]
-        lines = [f"**{NAME}** · table {key[1]} · hand {snap['number']}",
-                 f"Blinds {sb}/{2 * sb} · {rules['action_timeout']} s per move" + (" · Assist: on" if rules["assist"] else "")]
+        lines = [t("**{game}** · table {number} · hand {hand}", game=terms.GAME_HOLDEM, number=key[1], hand=snap['number']),
+                 t("Blinds {small}/{big} · {seconds} s per move · Assist: on", small=sb, big=2 * sb, seconds=rules['action_timeout']) if rules["assist"]
+                 else t("Blinds {small}/{big} · {seconds} s per move", small=sb, big=2 * sb, seconds=rules['action_timeout'])]
         if view:
-            lines.append(f"{view['street'].capitalize()} · Board: {self._cards(view['board']) or '—'} · Pot {view['pot']:,}")
+            lines.append(t("{street} · Board: {board} · Pot {pot:,}", street=_street(view['street']), board=self._cards(view['board']) or '—', pot=view['pot']))
         else:
-            lines.append("Between hands.")
+            lines.append(t("Between hands."))
         name = self.store.currency_name(key[0])
         for seat in snap["seats"]:
             i, flags = seat["index"], ""
             if view:
-                flags = (" (dealer)" if view["button"] == i else "") + (" · folded" if view["folded"][i] else " · all-in" if view["all_in"][i] else "") \
-                    + (" · on turn" if view["turn"] == i and not view["finished"] else "")
+                flags = (" " + t.p("seat flag", "(dealer)") if view["button"] == i else "") \
+                    + (" · " + t.p("seat flag", "folded") if view["folded"][i] else " · " + t.p("seat flag", "all-in") if view["all_in"][i] else "") \
+                    + (" · " + t.p("seat flag", "on turn") if view["turn"] == i and not view["finished"] else "")
             stack = view["stacks"][i] if view else seat["stack"]
-            lines.append(f"{i + 1}. {GameTables._who(seat)} — {stack:,} {name}{flags}")
-        lines.append(f"-# Seed hash: {snap['seed_hash'][:12]}")
+            lines.append(f"{i + 1}. {GameTables._who(seat, t=t)} — {stack:,} {name}{flags}")
+        lines.append("-# " + t("Seed hash: {hash}", hash=snap['seed_hash'][:12]))
         return "\n".join(lines)
 
-    def render_turn(self, key, snap) -> tuple[str, discord.ui.View]:
+    def render_turn(self, key, snap, *, t=None) -> tuple[str, discord.ui.View]:
+        t = t or i18n.english()
         view, seats, table = snap["view"], snap["seats"], self.table(key)
         turn = view["turn"]
-        lines = [f"**{view['street'].capitalize()}** · hand {snap['number']} · pot {view['pot']:,}", f"Board: {self._cards(view['board']) or '—'}"]
-        lines.append(self._move_text(snap, *view["history"][-1]) if view["history"] else "Blinds are posted.")
+        lines = [t("**{street}** · hand {hand} · pot {pot:,}", street=_street(view['street']), hand=snap['number'], pot=view['pot']), t("Board: {board}", board=self._cards(view['board']) or '—')]
+        lines.append(self._move_text(snap, *view["history"][-1], t=t) if view["history"] else t("Blinds are posted."))
         parts = []
         for seat in seats:
             i = seat["index"]
-            parts.append(f"{GameTables._who(seat)} {view['stacks'][i]:,}" + (f" (bet {view['bets'][i]:,})" if view["bets"][i] else "")
-                         + (" folded" if view["folded"][i] else " all-in" if view["all_in"][i] else ""))
-        lines.append("Stacks: " + " · ".join(parts))
+            parts.append(f"{GameTables._who(seat, t=t)} {view['stacks'][i]:,}" + (" " + t("(bet {amount:,})", amount=view['bets'][i]) if view["bets"][i] else "")
+                         + (" " + t.p("seat flag", "folded") if view["folded"][i] else " " + t.p("seat flag", "all-in") if view["all_in"][i] else ""))
+        lines.append(t("Stacks: {entries}", entries=" · ".join(parts)))
         buttons = discord.ui.View(timeout=None)
         if turn is not None:
-            who, stamp = GameTables._who(seats[turn]), table.deadlines.get("turn")
-            lines.append(f"On turn: {who}" + (f" — <t:{int(stamp)}:R>" if stamp and seats[turn]["kind"] == "member" else ", thinking…" if seats[turn]["kind"] == "character" else ""))
+            who, stamp = GameTables._who(seats[turn], t=t), table.deadlines.get("turn")
+            if stamp and seats[turn]["kind"] == "member":
+                lines.append(t("On turn: {who} — {stamp}", who=who, stamp=f"<t:{int(stamp)}:R>"))
+            elif seats[turn]["kind"] == "character":
+                lines.append(t("On turn: {who}, thinking…", who=who))
+            else:
+                lines.append(t("On turn: {who}", who=who))
             legal = holdem.legal_moves_for_view(holdem.View(**{**view, "seat": turn}))
             tid, rid, moves = key[1], snap["round_id"], snap["moves"]
-            buttons.add_item(HoldemButton("fold", tid, rid, moves, "Fold", discord.ButtonStyle.danger))
-            buttons.add_item(HoldemButton("check", tid, rid, moves, "Check", discord.ButtonStyle.success) if "check" in legal
-                             else HoldemButton("call", tid, rid, moves, f"Call {view['to_call']:,}", discord.ButtonStyle.success))
-            buttons.add_item(HoldemButton("raise", tid, rid, moves, "Raise", discord.ButtonStyle.primary, not any(m.startswith("raise:") for m in legal)))
-            buttons.add_item(HoldemButton("cards", tid, rid, moves, "My cards", discord.ButtonStyle.secondary))
-        lines.append(f"-# Seed hash: {snap['seed_hash'][:12]}")
+            buttons.add_item(HoldemButton("fold", tid, rid, moves, t.p("button.holdem", "Fold"), discord.ButtonStyle.danger))
+            buttons.add_item(HoldemButton("check", tid, rid, moves, t.p("button.holdem", "Check"), discord.ButtonStyle.success) if "check" in legal
+                             else HoldemButton("call", tid, rid, moves, t.p("button.holdem", "Call {amount:,}", amount=view['to_call']), discord.ButtonStyle.success))
+            buttons.add_item(HoldemButton("raise", tid, rid, moves, t.p("button.holdem", "Raise"), discord.ButtonStyle.primary, not any(m.startswith("raise:") for m in legal)))
+            buttons.add_item(HoldemButton("cards", tid, rid, moves, t.p("button.holdem", "My cards"), discord.ButtonStyle.secondary))
+        lines.append("-# " + t("Seed hash: {hash}", hash=snap['seed_hash'][:12]))
         return "\n".join(lines), buttons
 
-    def render_pause(self, key, snap, row, waiting: bool = False) -> tuple[str, discord.ui.View]:
+    def render_pause(self, key, snap, row, waiting: bool = False, *, t=None) -> tuple[str, discord.ui.View]:
         """The turn message between hands: the seats with their stacks and Sit, Leave, Rebuy, Deal now (the lobby round's buttons)."""
+        t = t or i18n.english()
         name, table = self.store.currency_name(key[0]), self.table(key)
         if waiting:
             stamp = f"<t:{int(d)}:R>" if (d := table.deadlines.get("lobby")) else ""
-            lines = [f"**Waiting for players.** The next hand needs {holdem.MIN_SEATS} seats; sit to continue" + (f". The table closes {stamp} if no hand starts." if stamp else ".")]
+            lines = [t("**Waiting for players.** The next hand needs {count} seats; sit to continue. The table closes {stamp} if no hand starts.", count=holdem.MIN_SEATS, stamp=stamp) if stamp
+                     else t("**Waiting for players.** The next hand needs {count} seats; sit to continue.", count=holdem.MIN_SEATS)]
         else:
-            stamp = f"<t:{int(d)}:R>" if (d := table.deadlines.get("next")) else "soon"
-            lines = [f"**Next hand starts {stamp}.** Sit, leave or top up now; the host can deal at once."]
+            lines = [t("**Next hand starts {stamp}.** Sit, leave or top up now; the host can deal at once.", stamp=f"<t:{int(d)}:R>") if (d := table.deadlines.get("next"))
+                     else t("**Next hand starts soon.** Sit, leave or top up now; the host can deal at once.")]
         for seat in snap["seats"]:
-            lines.append(f"{seat['index'] + 1}. {GameTables._who(seat)} — {seat['stack']:,} {name}")
-        lines.append(f"-# Next seed hash: {snap['seed_hash'][:12]}")
+            lines.append(f"{seat['index'] + 1}. {GameTables._who(seat, t=t)} — {seat['stack']:,} {name}")
+        lines.append("-# " + t("Next seed hash: {hash}", hash=snap['seed_hash'][:12]))
         view, tid, rid = discord.ui.View(timeout=None), key[1], snap["round_id"]
-        for action, label, style in (("sit", "Sit", discord.ButtonStyle.primary), ("leave", "Leave", discord.ButtonStyle.secondary),
-                                     ("rebuy", "Rebuy", discord.ButtonStyle.secondary), ("deal", "Deal now", discord.ButtonStyle.success)):
+        for action, label, style in (("sit", t.p("button.holdem", "Sit"), discord.ButtonStyle.primary), ("leave", t.p("button.holdem", "Leave"), discord.ButtonStyle.secondary),
+                                     ("rebuy", t.p("button.holdem", "Rebuy"), discord.ButtonStyle.secondary), ("deal", t.p("button.holdem", "Deal now"), discord.ButtonStyle.success)):
             view.add_item(HoldemButton(action, tid, rid, 0, label, style))
         return "\n".join(lines), view
 
-    def _result_text(self, key, snap, state, res) -> str:
-        who = lambda i: GameTables._who(snap["seats"][i])
-        lines = [f"**Hand {snap['number']}** · table {key[1]}"]
+    def _result_text(self, key, snap, state, res, *, t=None) -> str:
+        t = t or i18n.english()
+        who = lambda i: GameTables._who(snap["seats"][i], t=t)
+        lines = [t("**Hand {hand}** · table {number}", hand=snap['number'], number=key[1])]
         if res.board:
-            lines.append(f"Board: {self._cards(res.board)}")
+            lines.append(t("Board: {board}", board=self._cards(res.board)))
         for i in res.shown:
-            lines.append(f"{who(i)} shows {self._cards(state.holes[i])} — {holdem.hand_name(holdem.evaluate(state.holes[i] + state.board_full))}")
+            lines.append(t("{who} shows {cards} — {hand}", who=who(i), cards=self._cards(state.holes[i]), hand=holdem.hand_phrase(holdem.evaluate(state.holes[i] + state.board_full))))
         for k, pot in enumerate(res.pots):
-            label = "Pot" if len(res.pots) == 1 else "Main pot" if k == 0 else "Side pot" if len(res.pots) == 2 else f"Side pot {k}"
+            label = t("Pot") if len(res.pots) == 1 else t("Main pot") if k == 0 else t("Side pot") if len(res.pots) == 2 else t("Side pot {number}", number=k)
             winners = ", ".join(who(w) for w in pot.winners)
-            lines.append(f"{label} {pot.amount:,}: " + (f"{winners} win" if len(pot.winners) > 1 else f"{winners} wins") + (f" with {holdem.hand_name(pot.hand)}" if pot.hand else ""))
+            if len(pot.winners) > 1:
+                body = t("{winners} win with {hand}", winners=winners, hand=holdem.hand_phrase(pot.hand)) if pot.hand else t("{winners} win", winners=winners)
+            else:
+                body = t("{winners} wins with {hand}", winners=winners, hand=holdem.hand_phrase(pot.hand)) if pot.hand else t("{winners} wins", winners=winners)
+            lines.append(t("{label} {amount:,}:", label=label, amount=pot.amount) + " " + body)
         for seat in res.seats:
             lines.append(f"• {who(seat.seat)}: {seat.start:,} → {seat.end:,} ({seat.net:+,})")
-        lines.append(f"-# Seed hash: {snap['seed_hash'][:12]} (the seed is revealed when the table closes)")
+        lines.append("-# " + t("Seed hash: {hash} (the seed is revealed when the table closes)", hash=snap['seed_hash'][:12]))
         return "\n".join(lines)
 
     def _final_state(self, key, snap):
@@ -623,24 +687,26 @@ class HoldemTables:
         moves = [(r["seat_index"], r["move"]) for r in self.store.all("SELECT seat_index,move FROM game_moves WHERE guild_id=? AND round_id=? ORDER BY id", (key[0], snap["round_id"]))]
         return holdem.replay(self.store.settled_seed(key[0], snap["round_id"]), seats, moves, snap["rules"], snap["rules"]["button"])
 
-    def _seeds(self, key) -> list[str]:
+    def _seeds(self, key, *, t=None) -> list[str]:
         """The seeds of a closed table's hands as posts under SEEDS_CHARS each, oldest first; none for a table that never dealt."""
-        posts, head, line = [], "Seeds (revealed now)", ""
+        t = t or i18n.english()
+        posts, head, line = [], t("Seeds (revealed now)"), ""
         for n, seed in self.store.table_seeds(*key):
             entry = f"#{n} {seed}"
             if line and len(head) + len(line) + len(entry) + 6 > SEEDS_CHARS:
                 posts.append(f"-# {head}: {line}")
-                head, line = "Seeds (cont.)", ""
+                head, line = t("Seeds (cont.)"), ""
             line += (", " if line else "") + entry
         if line:
             posts.append(f"-# {head}: {line}")
         return posts
 
-    def _summary(self, key) -> str:
-        lines = ["**Table closed.** Cash-outs:"]
+    def _summary(self, key, *, t=None) -> str:
+        t = t or i18n.english()
+        lines = [t("**Table closed.** Cash-outs:")]
         for row in self.store.table_cash_summary(*key)["cashouts"]:
             who = f"<@{row['ref_id']}>" if row["kind"] == "member" else f"**{discord.utils.escape_markdown(discord.utils.escape_mentions(row['name']))}**"
-            lines.append(f"• {who}: bought in {row['bought_in']:,}, cashed out {row['cashed_out']:,} ({row['net']:+,})")
+            lines.append(t("• {who}: bought in {bought_in:,}, cashed out {cashed_out:,} ({net:+,})", who=who, bought_in=row['bought_in'], cashed_out=row['cashed_out'], net=row['net']))
         return "\n".join(lines)
 
     def _timeout_streak(self, guild_id, table_id, user_id) -> int:
@@ -683,22 +749,23 @@ class HoldemTables:
         """Under the table lock: the new snapshot of a dealt or moved hand becomes the timers and messages it needs."""
         if snap["status"] == "playing":
             self._after(key, snap)
-            out.turn = self.render_turn(key, snap)
+            out.turn = self.render_turn(key, snap, t=self._t(key[0]))
             out.board = True
         else:
             self._finish(key, snap, out)
 
     def _finish(self, key, snap, out: _Out) -> None:
         """A settled hand: the result post, the next lobby (busted seats leave), seats that timed out twice in a row cashed out; fewer than two seats left closes the table."""
-        guild_id, table = key[0], self.table(key)
+        guild_id, table, t = key[0], self.table(key), self._t(key[0])
         self._after(key, snap)
         state = self._final_state(key, snap)
         res = holdem.result(state)
-        who = lambda seat: GameTables._who(seat)
-        notes = [f"{who(seat)} is out of chips" + (" and can sit again to rejoin." if seat["kind"] == "member" else " and leaves the table.") for seat in snap["seats"] if seat["busted"]]
+        who = lambda seat: GameTables._who(seat, t=t)
+        notes = [t("{who} is out of chips and can sit again to rejoin.", who=who(seat)) if seat["kind"] == "member" else t("{who} is out of chips and leaves the table.", who=who(seat))
+                 for seat in snap["seats"] if seat["busted"]]
         out_members = {seat["ref_id"] for seat in snap["seats"] if seat["busted"] and seat["kind"] == "member"}
         lobby = self.store.next_round(*key)
-        notes += [f"{who(seat)} leaves because <@{seat['brought_by']}> is out of chips, and is cashed out with {self.store.last_cash_out(guild_id, key[1], 'character', seat['ref_id']):,}."
+        notes += [t("{who} leaves because {member} is out of chips, and is cashed out with {amount:,}.", who=who(seat), member=f"<@{seat['brought_by']}>", amount=self.store.last_cash_out(guild_id, key[1], 'character', seat['ref_id']))
                   for seat in snap["seats"] if seat["kind"] == "character" and not seat["busted"] and seat["brought_by"] in out_members]
         over = len(lobby["seats"]) < holdem.MIN_SEATS
         if not over:
@@ -707,13 +774,13 @@ class HoldemTables:
                     brought = [c for c in lobby["seats"] if c["kind"] == "character" and c["brought_by"] == seat["ref_id"]]
                     lobby = self.store.leave_round(guild_id, lobby["round_id"], seat["ref_id"])
                     paid = lambda s: self.store.last_cash_out(guild_id, key[1], s["kind"], s["ref_id"])
-                    notes.append(f"{who(seat)} ran out of time in two hands in a row and was cashed out with {paid(seat):,}."
-                                 + "".join(f" {who(c)} leaves too, cashed out with {paid(c):,}." for c in brought))
+                    notes.append(t("{who} ran out of time in two hands in a row and was cashed out with {amount:,}.", who=who(seat), amount=paid(seat))
+                                 + "".join(" " + t("{who} leaves too, cashed out with {amount:,}.", who=who(c), amount=paid(c)) for c in brought))
         view = None
         if not res.shown:
             view = discord.ui.View(timeout=None)
-            view.add_item(HoldemButton("show", key[1], snap["round_id"], 0, "Show", discord.ButtonStyle.secondary))
-        out.result = ("\n".join([self._result_text(key, snap, state, res), *notes]), view)
+            view.add_item(HoldemButton("show", key[1], snap["round_id"], 0, t.p("button.holdem", "Show"), discord.ButtonStyle.secondary))
+        out.result = ("\n".join([self._result_text(key, snap, state, res, t=t), *notes]), view)
         busted = [i for i, seat in enumerate(snap["seats"]) if seat["busted"]]
         if len(res.shown) > 1 or busted:
             names, events = self._talk_names(guild_id, snap), []
@@ -727,17 +794,17 @@ class HoldemTables:
             self.store.close_table(*key)
             self._forget(key)
             self.arm(key, "archive", self.ARCHIVE_SECONDS)
-            out.summary, out.seeds = self._summary(key), self._seeds(key)
-            out.turn = ("Table closed.", None)
-            out.lobby = (f"Table closed: fewer than {holdem.MIN_SEATS} players still had chips." + CASHED, None)
-            out.board_text = f"**{NAME}** · table {key[1]} — closed after hand {snap['number']}."
+            out.summary, out.seeds = self._summary(key, t=t), self._seeds(key, t=t)
+            out.turn = (t("Table closed."), None)
+            out.lobby = (t("Table closed: fewer than {count} players still had chips.", count=holdem.MIN_SEATS) + " " + t(CASHED), None)
+            out.board_text = t("**{game}** · table {number} — closed after hand {hand}.", game=terms.GAME_HOLDEM, number=key[1], hand=snap['number'])
             out.closed = True
             return
         table.deadlines["next"] = self.clock() + self.NEXT_HAND_SECONDS
         self.arm(key, "next", self.NEXT_HAND_SECONDS, lobby["round_id"])
         if len(lobby["seats"]) < holdem.MIN_SEATS:
             self._touch_lobby(key, lobby["round_id"])
-        out.turn = self.render_pause(key, lobby, row)
+        out.turn = self.render_pause(key, lobby, row, t=t)
         out.board = True
 
     def _apply(self, key, snap, seat, move, actor) -> _Out:
@@ -782,27 +849,28 @@ class HoldemTables:
         except ConflictError:
             return _Out(STALE)
         except GameError as error:
-            return _Out(str(error))
+            return _Out(error)
 
-    def _raise_problem(self, key, snap, seat, amount) -> str | None:
+    def _raise_problem(self, key, snap, seat, amount) -> Phrase | None:
         v = self.store.seat_view(key[0], snap["round_id"], seat)
         if not any(m.startswith("raise:") for m in holdem.legal_moves_for_view(v)):
-            return "You can't raise now."
+            return Phrase(RAISE_NOW)
         top = v.bets[seat] + v.stacks[seat]
         if amount > top:
-            return f"Your whole stack makes a total bet of {top:,}; you can't raise to more."
+            return Phrase(WHOLE_STACK, top=top)
         if amount != top and amount < v.min_raise_to:
-            return f"You can only go all-in, to {top:,}." if top < v.min_raise_to else f"The smallest raise is to {v.min_raise_to:,} in total."
+            return Phrase(ALL_IN_ONLY, top=top) if top < v.min_raise_to else Phrase(SMALLEST_RAISE, amount=v.min_raise_to)
         return None
 
     # --- /game start ------------------------------------------------------------------------
 
     async def start_command(self, interaction: discord.Interaction, favorites: bool = False) -> None:
         guild_id = interaction.guild_id
+        t = discord_locale.invoker_t(interaction)
         channel_id = getattr(interaction, "channel_id", None) or interaction.channel.id
         user = interaction.user
         if user.bot:
-            await self._say(interaction, f"Bots cannot play {NAME}.")
+            await self._say(interaction, t("Bots cannot play {game}.", game=terms.GAME_HOLDEM))
             return
         if not self.store.game_enabled(guild_id, "holdem"):
             await self._say(interaction, HOLDEM_OFF)
@@ -817,7 +885,7 @@ class HoldemTables:
         try:
             opened = self.store.open_table(guild_id, channel_id, "holdem", user.id)
         except GameError as error:
-            await self._say(interaction, str(error))
+            await self._say(interaction, t.error(error))
             return
         key, round_id = (guild_id, opened["table_id"]), opened["round_id"]
         self.table(key)
@@ -829,19 +897,19 @@ class HoldemTables:
                     stake = default_buy_in(opened["rules"] or holdem.normalize_rules(None))
                     if space_id is not None:
                         result = self.store.join_with_favorites(guild_id, round_id, user.id, stake, space_id)
-                        snap, note = result["snapshot"], self.bot.games._favorites_note(result, note)
+                        snap, note = result["snapshot"], self.bot.games._favorites_note(result, note, t=t)
                     else:
                         snap = self.store.join_round(guild_id, round_id, user.id, stake)
             except GameError as error:
                 self.store.close_table(*key)
                 self._release(key)
                 self.tables.pop(key, None)
-                refusal = str(error)
+                refusal = t.error(error)
             else:
                 refusal = None
                 self.table(key).deadlines["lobby"] = self.clock() + self.LOBBY_SECONDS
                 self.arm(key, "lobby", self.LOBBY_SECONDS, round_id)
-                content, view = self.render_lobby(key, snap, self._row(key))
+                content, view = self.render_lobby(key, snap, self._row(key), t=self._t(guild_id))
                 out = self._seal(key, _Out())
         if refusal is not None:
             await self._say(interaction, refusal)
@@ -862,11 +930,11 @@ class HoldemTables:
         fresh = None
         async with self.runtime.lock(key):
             if table.issued > out.seq and (row := self._row(key))["status"] == "open":  # someone sat before the message existed
-                fresh = self._seal(key, _Out(lobby=self.render_lobby(key, self.store.latest_round(*key), row)))
+                fresh = self._seal(key, _Out(lobby=self.render_lobby(key, self.store.latest_round(*key), row, t=self._t(guild_id))))
         await self._publish(key, fresh)
         try:
             partial = await self._channel(channel_id)
-            thread = await partial.get_partial_message(message.id).create_thread(name=f"{NAME} · table {key[1]}", auto_archive_duration=1440)
+            thread = await partial.get_partial_message(message.id).create_thread(name=self._t(guild_id)("{game} · table {number}", game=terms.GAME_HOLDEM, number=key[1]), auto_archive_duration=1440)
         except discord.HTTPException as error:
             logging.warning("Could not open the Texas Hold'em thread (%s)", type(error).__name__)
             await self._thread_failed(interaction, key, isinstance(error, discord.Forbidden))
@@ -877,7 +945,7 @@ class HoldemTables:
             if row["status"] == "open":
                 self.store.set_table_thread(*key, thread.id)
                 self.threads[thread.id] = key
-                ready = self._seal(key, _Out(lobby=self.render_lobby(key, self.store.latest_round(*key), row)))
+                ready = self._seal(key, _Out(lobby=self.render_lobby(key, self.store.latest_round(*key), row, t=self._t(guild_id))))
         if ready is None:  # closed while the thread was being made: nothing else to say there, just archive it
             try:
                 await thread.edit(archived=True, locked=True)
@@ -888,16 +956,17 @@ class HoldemTables:
             await self._say(interaction, note)
 
     async def _thread_failed(self, interaction, key, forbidden: bool) -> None:
+        t, ct = discord_locale.invoker_t(interaction), self._t(key[0])
         async with self.runtime.lock(key):
             row = self._row(key)
             if row is not None and row["status"] == "open":
                 self.store.close_table(*key)
             self._forget(key)
-            out = self._seal(key, _Out(lobby=("Table closed: I couldn't open a thread here." + CASHED, None), closed=True))
+            out = self._seal(key, _Out(lobby=(ct("Table closed: I couldn't open a thread here.") + " " + ct(CASHED), None), closed=True))
         await self._publish(key, out)
         self.tables.pop(key, None)
         self.ended.discard(key)
-        await self._say(interaction, (THREAD_FORBIDDEN if forbidden else THREAD_FAILED) + CASHED)
+        await self._say(interaction, (t(THREAD_FORBIDDEN) if forbidden else t(THREAD_FAILED)) + " " + t(CASHED))
 
     # --- buttons ----------------------------------------------------------------------------
 
@@ -909,7 +978,7 @@ class HoldemTables:
         key = (guild_id, table_id)
         if action in ("sit", "rebuy"):
             async with self.runtime.lock(key):
-                modal, refusal = self._modal(key, round_id, action, interaction.user.id)
+                modal, refusal = self._modal(key, round_id, action, interaction.user.id, t=discord_locale.invoker_t(interaction))
             if modal is not None:
                 try:
                     await interaction.response.send_modal(modal)
@@ -931,14 +1000,14 @@ class HoldemTables:
             return
         await self._ack(interaction)
         async with self.runtime.lock(key):
-            out = self._press(interaction.user.id, key, action, round_id, moves)
+            out = self._press(interaction.user.id, key, action, round_id, moves, t=discord_locale.invoker_t(interaction))
         await self._publish(key, out)
         if out.say == STALE:
             await self._reap(key)  # the table may have been closed from outside
         if out.say:
             await self._say(interaction, out.say)
 
-    def _press(self, user_id, key, action, round_id, moves) -> _Out:
+    def _press(self, user_id, key, action, round_id, moves, *, t=None) -> _Out:
         loaded, refusal = self._load(key, round_id)
         if refusal is not None:
             return refusal
@@ -947,7 +1016,7 @@ class HoldemTables:
             if action == "leave":
                 return self._leave(key, row, snap, user_id)
             if action == "fill":
-                return self._fill(key, row, snap, user_id)
+                return self._fill(key, row, snap, user_id, t=t)
             if action == "assist":
                 return self._assist(key, row, snap, user_id, bool(moves))
             if action == "deal":
@@ -960,16 +1029,17 @@ class HoldemTables:
         except ConflictError:
             return _Out(STALE)
         except GameError as error:
-            return _Out(str(error))
+            return _Out(error)
 
-    def _modal(self, key, round_id, action, user_id):
+    def _modal(self, key, round_id, action, user_id, *, t=None):
         """(the modal to open, None) or (None, the private refusal). Nothing is charged until the member submits."""
+        t = t or i18n.english()
         loaded, refusal = self._load(key, round_id)
         if refusal is not None:
             return None, refusal.say
         row, snap = loaded
         if snap["status"] != "joining":
-            return None, "This round has already started."
+            return None, ROUND_STARTED
         rules, name = snap["rules"] or holdem.normalize_rules(None), self.store.currency_name(key[0])
         low, high = buy_in_range(rules)
         mine = next((s for s in snap["seats"] if s["kind"] == "member" and s["ref_id"] == user_id), None)
@@ -977,27 +1047,35 @@ class HoldemTables:
             if mine is None:
                 return None, NO_SEAT
             room = max(high - mine["stack"], 0)
-            return AmountModal("rebuy", key[0], key[1], snap["round_id"], "Rebuy", f"Chips to add (up to {room:,})", f"Up to {room:,} {name}"), None
+            return AmountModal("rebuy", key[0], key[1], snap["round_id"], t.p("modal.holdem", "Rebuy"), t.p("modal.holdem", "Chips to add (up to {room:,})", room=room),
+                               t.p("modal.holdem", "Up to {room:,} {currency}", room=room, currency=name)), None
         if mine is not None:
-            return None, "You already have a seat in this round."
+            return None, HAVE_SEAT
         if len(snap["seats"]) >= holdem.MAX_SEATS:
-            return None, "The table is full."
+            return None, TABLE_FULL
         default = default_buy_in(rules)
-        return AmountModal("sit", key[0], key[1], snap["round_id"], "Sit at the table", f"Buy-in, {low:,} to {high:,}", f"{low:,} to {high:,} {name}", str(default)), None
+        return AmountModal("sit", key[0], key[1], snap["round_id"], t.p("modal.holdem", "Sit at the table"), t.p("modal.holdem", "Buy-in, {low:,} to {high:,}", low=low, high=high),
+                           t.p("modal.holdem", "{low:,} to {high:,} {currency}", low=low, high=high, currency=name), str(default)), None
 
     async def submit(self, interaction: discord.Interaction, modal: AmountModal) -> None:
         guild_id = interaction.guild_id
+        t = discord_locale.invoker_t(interaction)
         if guild_id is None or interaction.user.bot or guild_id != modal.guild_id:
             await self._say(interaction, STALE)
             return
         key, text = (guild_id, modal.table_id), (modal.field.value or "").strip()
         if not re.fullmatch(r"-?[0-9]{1,12}", text):
-            await self._say(interaction, {"sit": "The buy-in must be a whole number.", "raise": "The raise must be a whole number."}.get(modal.kind, "The rebuy must be a whole number above zero."))
+            if modal.kind == "sit":
+                await self._say(interaction, t("The buy-in must be a whole number."))
+            elif modal.kind == "raise":
+                await self._say(interaction, t("The raise must be a whole number."))
+            else:
+                await self._say(interaction, t("The rebuy must be a whole number above zero."))
             return
         if modal.kind == "raise":
             async with self.runtime.lock(key):
                 out = self._member_move(key, interaction.user.id, modal.round_id, modal.moves, f"raise:{int(text)}")
-            await self._say(interaction, out.say or f"You raise to {int(text):,}.")
+            await self._say(interaction, out.say or t("You raise to {amount:,}.", amount=int(text)))
             await self._publish(key, out)
             if out.say == STALE:
                 await self._reap(key)
@@ -1018,13 +1096,13 @@ class HoldemTables:
         try:
             if kind == "sit":
                 snap = self.store.join_round(key[0], round_id, user_id, amount)
-                say = f"You sit down with {amount:,} {name}."
+                say = Phrase(SAT_DOWN, amount=amount, currency=name)
             else:
                 snap = self.store.rebuy(key[0], round_id, user_id, amount)
                 stack = next(s["stack"] for s in snap["seats"] if s["kind"] == "member" and s["ref_id"] == user_id)
-                say = f"You added {amount:,} {name}; your stack is {stack:,}."
+                say = Phrase(ADDED_CHIPS, amount=amount, currency=name, stack=stack)
         except GameError as error:
-            return _Out(str(error))
+            return _Out(error)
         self._touch_lobby(key, round_id)
         return self._paint(key, row, snap, self._seal(key, _Out(say)))
 
@@ -1033,11 +1111,12 @@ class HoldemTables:
         snap = self.store.leave_round(key[0], snap["round_id"], user_id)
         self._touch_lobby(key, snap["round_id"])  # an empty table stays open; the idle timer closes it
         name = self.store.currency_name(key[0])
-        return self._paint(key, row, snap, self._seal(key, _Out(f"You left the table and cashed out {mine['stack']:,} {name}.")))
+        return self._paint(key, row, snap, self._seal(key, _Out(Phrase(LEFT_CASHED, amount=mine['stack'], currency=name))))
 
-    def _fill(self, key, row, snap, user_id) -> _Out:
+    def _fill(self, key, row, snap, user_id, *, t=None) -> _Out:
+        t = t or i18n.english()
         if user_id != row["opened_by"]:
-            return _Out("Only the host can fill seats.")
+            return _Out(ONLY_HOST_FILL)
         guild_id, binding = key[0], self.store.binding(row["channel_id"])
         if binding is None:
             return _Out(NO_CHARACTER_SEATS)
@@ -1052,11 +1131,11 @@ class HoldemTables:
             seated += result["seated"]
             skipped += result["skipped"]
         name = self.store.currency_name(guild_id)
-        why = lambda reason: f"not enough {name}" if reason == "broke" else SKIPPED.get(reason, reason)
-        parts = (["Seated: " + ", ".join(s["name"] for s in seated) + "."] if seated else []) + \
-                (["Not seated: " + ", ".join(f"{s['name']} ({why(s['reason'])})" for s in skipped) + "."] if skipped else [])
+        why = lambda reason: t("not enough {currency}", currency=name) if reason == "broke" else t.render(SKIPPED.get(reason, reason))
+        parts = ([t(SEATED, names=", ".join(s["name"] for s in seated))] if seated else []) + \
+                ([t(NOT_SEATED_LIST, names=", ".join(t("{name} ({reason})", name=s['name'], reason=why(s['reason'])) for s in skipped))] if skipped else [])
         if not parts:
-            return _Out("No one is left in the cast who can take a seat.")
+            return _Out(NO_CAST_LEFT)
         if not seated:
             return _Out(" ".join(parts))
         self._touch_lobby(key, snap["round_id"])
@@ -1064,45 +1143,49 @@ class HoldemTables:
 
     def _assist(self, key, row, snap, user_id, on) -> _Out:
         snap = self.store.set_table_assist(key[0], snap["round_id"], user_id, on)
-        return self._paint(key, row, snap, self._seal(key, _Out(f"Assist is {'on' if on else 'off'}.")))
+        return self._paint(key, row, snap, self._seal(key, _Out(ASSIST_ON if on else ASSIST_OFF)))
 
     def _paint(self, key, row, snap, out: _Out) -> _Out:
         """Shows the seats where the table is waiting: the lobby message before the first hand, the turn message between hands."""
+        t = self._t(key[0])
         if row["turn_message_id"] is not None:
-            out.turn = self.render_pause(key, snap, row)
+            out.turn = self.render_pause(key, snap, row, t=t)
         else:
-            out.lobby = self.render_lobby(key, snap, row)
+            out.lobby = self.render_lobby(key, snap, row, t=t)
         return out
 
     def _deal(self, key, row, snap, user_id) -> _Out:
         if user_id != row["opened_by"]:
-            return _Out("Only the host can deal.")
+            return _Out(ONLY_HOST_DEAL)
         if row["thread_id"] is None:
-            return _Out("The table thread isn't ready yet; try again in a moment.")
+            return _Out(THREAD_NOT_READY)
         if len(snap["seats"]) < holdem.MIN_SEATS:
-            return _Out(f"{NAME} needs at least {holdem.MIN_SEATS} seats to deal.")
+            return _Out(Phrase(NEEDS_SEATS, game=terms.GAME_HOLDEM, count=holdem.MIN_SEATS))
         snap = self.store.deal(key[0], snap["round_id"])
         out = _Out()
         if row["turn_message_id"] is None:  # the table's first hand: the board and the turn message are posted
-            out.start = self.render_board(key, snap)
-            out.lobby = (f"**{NAME}** · table {key[1]}\nThe hands are played in the thread.", None)
+            t = self._t(key[0])
+            out.start = self.render_board(key, snap, t=t)
+            out.lobby = (t("**{game}** · table {number}\nThe hands are played in the thread.", game=terms.GAME_HOLDEM, number=key[1]), None)
         self._progress(key, snap, out)
         return self._seal(key, out)
 
     def _close(self, key, row, snap, user_id) -> _Out:
         if user_id != row["opened_by"]:
-            return _Out("Only the host can close the table.")
+            return _Out(ONLY_HOST_CLOSE)
         self.store.close_table(*key)
         self._forget(key)
         self.arm(key, "archive", self.ARCHIVE_SECONDS)
-        out = _Out("Table closed." + CASHED, lobby=("Table closed by the host." + CASHED, None), closed=True)
+        t = self._t(key[0])
+        out = _Out(CLOSED_CASHED, lobby=(t("Table closed by the host.") + " " + t(CASHED), None), closed=True)
         self._ended_after_hands(key, row, out)
         return self._seal(key, out)
 
     def _ended_after_hands(self, key, row, out: _Out) -> None:
         """A table that played hands ends with its cash-out summary in the thread and a turn message without buttons."""
         if row["turn_message_id"] is not None:
-            out.turn, out.summary, out.seeds = ("Table closed.", None), self._summary(key), self._seeds(key)
+            t = self._t(key[0])
+            out.turn, out.summary, out.seeds = (t("Table closed."), None), self._summary(key, t=t), self._seeds(key, t=t)
 
     # --- /game hand and /game rules ---------------------------------------------------------
 
@@ -1116,16 +1199,18 @@ class HoldemTables:
 
     async def _show_cards(self, interaction, key, round_id) -> None:
         """My cards: the presser's own hole cards (and, with Assist on, the made hand and the odds), privately."""
+        t = discord_locale.invoker_t(interaction)
         async with self.runtime.lock(key):
-            text, plan = self._cards_of(key, round_id, interaction.user.id)
+            text, plan = self._cards_of(key, round_id, interaction.user.id, t=t)
         if plan is not None:
-            text += "\n" + await self._assist_line(plan)
+            text += "\n" + await self._assist_line(plan, t=t)
         await self._say(interaction, text)
         if text == STALE:
             await self._reap(key)
 
-    def _cards_of(self, key, round_id, user_id):
+    def _cards_of(self, key, round_id, user_id, *, t=None):
         """Under the table lock: (private text, assist plan or None)."""
+        t = t or i18n.english()
         if round_id is None:
             if not self._open_here(self._row(key)):
                 return STALE, None
@@ -1139,44 +1224,46 @@ class HoldemTables:
         if seat is None:
             return NOT_SEATED, None
         if snap["status"] == "joining":
-            return "The hand hasn't started yet.", None
+            return NOT_STARTED, None
         if snap["status"] != "playing":
             return NO_HAND, None
         v = self.store.seat_view(key[0], snap["round_id"], seat)
-        text = f"**Your cards:** {self._cards(v.hole)}"
+        text = t("**Your cards:** {cards}", cards=self._cards(v.hole))
         if not (snap["rules"] and snap["rules"]["assist"] and self.store.game_rules(key[0], "holdem")["assist"]):
             return text, None
         opponents = max(1, sum(1 for i, folded in enumerate(v.folded) if not folded and i != seat))
         return text, (key[0], snap["round_id"], seat, v.street, tuple(v.hole), tuple(v.board), opponents, self.store.policy_seed(key[0], snap["round_id"], f"assist/{seat}"))
 
-    async def _assist_line(self, plan) -> str:
-        """The odds text, computed off the event loop once per hand, seat and street."""
+    async def _assist_line(self, plan, *, t=None) -> str:
+        """The odds text, computed off the event loop once per hand, seat and street (the odds are kept, the words are made for each reader)."""
+        t = t or i18n.english()
         guild_id, round_id, seat, street, hole, board, opponents, seed = plan
-        cached = self.assists.get((guild_id, round_id, seat, street))
-        if cached is None:
+        a = self.assists.get((guild_id, round_id, seat, street))
+        if a is None:
             a = await asyncio.to_thread(holdem.assist, hole, board, opponents, seed)
-            cached = f"Assist — you have: {a.current}. Likely final hands: " + ", ".join(f"{name} {p:.0%}" for name, p in a.chances) + f". Chance to win against random hands: {a.win:.0%}."
             if len(self.assists) > 512:
                 self.assists.clear()
-            self.assists[(guild_id, round_id, seat, street)] = cached
-        return cached
+            self.assists[(guild_id, round_id, seat, street)] = a
+        return t("Assist — you have: {current}. Likely final hands: {chances}. Chance to win against random hands: {win:.0%}.",
+                 current=a.current_phrase or a.current, chances=", ".join(f"{t.render(name)} {p:.0%}" for name, p in a.chances), win=a.win)
 
     # --- raising and showing ----------------------------------------------------------------
 
     async def _open_picker(self, interaction, key, round_id, moves) -> None:
+        t = discord_locale.invoker_t(interaction)
         async with self.runtime.lock(key):
-            picker, refusal = self._picker(key, round_id, moves, interaction.user.id)
+            picker, refusal = self._picker(key, round_id, moves, interaction.user.id, t=t)
         if picker is None:
             await self._say(interaction, refusal)
             if refusal == STALE:
                 await self._reap(key)
             return
         try:
-            await interaction.response.send_message("Choose your raise (the total bet this round).", view=picker, ephemeral=True, allowed_mentions=NO_MENTIONS)
+            await interaction.response.send_message(t("Choose your raise (the total bet this round)."), view=picker, ephemeral=True, allowed_mentions=NO_MENTIONS)
         except discord.HTTPException as error:
             logging.warning("Texas Hold'em could not open the raise picker: %s", type(error).__name__)
 
-    def _picker(self, key, round_id, moves, user_id):
+    def _picker(self, key, round_id, moves, user_id, *, t=None):
         loaded, refusal = self._load(key, round_id)
         if refusal is not None:
             return None, STALE
@@ -1190,11 +1277,12 @@ class HoldemTables:
             return None, NOT_YOUR_TURN
         amounts = [int(m[6:]) for m in holdem.legal_moves_for_view(self.store.seat_view(key[0], round_id, seat)) if m.startswith("raise:")]
         if not amounts:
-            return None, "You can't raise now."
-        return _RaisePicker(key[0], key[1], round_id, moves, amounts, amounts[-1]), None
+            return None, RAISE_NOW
+        return _RaisePicker(key[0], key[1], round_id, moves, amounts, amounts[-1], t=t), None
 
-    async def _answer(self, interaction, text: str) -> None:
+    async def _answer(self, interaction, text) -> None:
         """Replaces the private picker with the answer (or replies when the interaction was already answered)."""
+        text = words(discord_locale.invoker_t(interaction), text)
         if interaction.response.is_done():
             await self._say(interaction, text)
             return
@@ -1210,7 +1298,7 @@ class HoldemTables:
         key = (picker.guild_id, picker.table_id)
         async with self.runtime.lock(key):
             out = self._member_move(key, interaction.user.id, picker.round_id, picker.moves, f"raise:{amount}")
-        await self._answer(interaction, out.say or f"You raise to {amount:,}.")
+        await self._answer(interaction, out.say or discord_locale.invoker_t(interaction)("You raise to {amount:,}.", amount=amount))
         await self._publish(key, out)
         if out.say == STALE:
             await self._reap(key)
@@ -1219,7 +1307,9 @@ class HoldemTables:
         if interaction.guild_id != picker.guild_id or interaction.user.bot:
             await self._say(interaction, STALE)
             return
-        modal = AmountModal("raise", picker.guild_id, picker.table_id, picker.round_id, "Raise", "Total bet this round", "Your total bet, e.g. 35", moves=picker.moves)
+        t = discord_locale.invoker_t(interaction)
+        modal = AmountModal("raise", picker.guild_id, picker.table_id, picker.round_id, t.p("modal.holdem", "Raise"), t.p("modal.holdem", "Total bet this round"),
+                            t.p("modal.holdem", "Your total bet, e.g. 35"), moves=picker.moves)
         try:
             await interaction.response.send_modal(modal)
         except discord.HTTPException as error:
@@ -1227,15 +1317,16 @@ class HoldemTables:
 
     async def _show_won_hand(self, interaction, key, round_id) -> None:
         """Show: the winner of a hand everyone else folded posts their two cards, once."""
+        ct = self._t(key[0])
         async with self.runtime.lock(key):
-            text, say = self._show(key, round_id, interaction.user.id)
+            text, say = self._show(key, round_id, interaction.user.id, t=ct)
         if text is None:
             await self._say(interaction, say)
             if say == STALE:
                 await self._reap(key)
             return
         view = discord.ui.View(timeout=None)
-        view.add_item(HoldemButton("show", key[1], round_id, 0, "Show", disabled=True))
+        view.add_item(HoldemButton("show", key[1], round_id, 0, ct.p("button.holdem", "Show"), disabled=True))
         try:
             await interaction.response.edit_message(view=view)
         except discord.HTTPException as error:
@@ -1243,8 +1334,9 @@ class HoldemTables:
         row = self._row(key)
         await self._post(row["thread_id"] if row else None, text)
 
-    def _show(self, key, round_id, user_id):
-        """Under the table lock: (public text, None) or (None, private refusal)."""
+    def _show(self, key, round_id, user_id, *, t=None):
+        """Under the table lock: (public text, None) or (None, private refusal). ``t`` is the channel's (the public text)."""
+        t = t or i18n.english()
         loaded, refusal = self._load(key, round_id)
         if refusal is not None:
             return None, STALE
@@ -1255,18 +1347,19 @@ class HoldemTables:
         if snap["status"] != "settled":
             return None, STALE
         if mine["outcome"] != "win":
-            return None, "Only the winner can show their cards."
+            return None, ONLY_WINNER
         state = self._final_state(key, snap)
         if holdem.result(state).shown:
-            return None, "The cards were already shown at the showdown."
+            return None, ALREADY_SHOWN
         if (key[0], round_id) in self.shown:
-            return None, "You already showed your cards."
+            return None, SHOWED
         self.shown.add((key[0], round_id))
-        return f"{GameTables._who(mine)} shows {self._cards(state.holes[mine['index']])}.", None
+        return t("{who} shows {cards}.", who=GameTables._who(mine, t=t), cards=self._cards(state.holes[mine['index']])), None
 
-    def rules_text(self, guild_id) -> str:
+    def rules_text(self, guild_id, *, t=None) -> str:
+        t = t or i18n.english()
         rules = self.store.game_rules(guild_id, "holdem")
-        return holdem.how_to_play(rules) + "\n" + holdem.rules_text(rules)
+        return "\n".join(t.render(p) for p in holdem.how_to_play_phrases(rules)) + "\n" + " · ".join(t.render(p) for p in holdem.rules_phrases(rules))
 
     # --- timers' work -----------------------------------------------------------------------
 
@@ -1287,7 +1380,8 @@ class HoldemTables:
             self.store.close_table(*key)
             self._forget(key)
             self.arm(key, "archive", self.ARCHIVE_SECONDS)
-            out = _Out(lobby=("Table closed: nobody started the game." + CASHED, None), closed=True)
+            t = self._t(guild_id)
+            out = _Out(lobby=(t("Table closed: nobody started the game.") + " " + t(CASHED), None), closed=True)
             self._ended_after_hands(key, row, out)
             out = self._seal(key, out)
         await self._publish(key, out)
@@ -1493,7 +1587,7 @@ class HoldemTables:
             else:
                 self.runtime.disarm(key, "next")
                 self._touch_lobby(key, round_id)
-                out = self._seal(key, _Out(turn=self.render_pause(key, snap, row, waiting=True)))
+                out = self._seal(key, _Out(turn=self.render_pause(key, snap, row, waiting=True, t=self._t(guild_id))))
         await self._publish(key, out)
 
     async def on_archive_timer(self, guild_id, table_id) -> None:
@@ -1511,8 +1605,8 @@ class HoldemTables:
         """Closes every Hold'em table left open by a previous run (the store voids an unfinished hand and cashes out every stack), then tells
         the lobby and the thread and archives it (best effort)."""
         closed = failed = 0
-        for t in self.store.open_cash_tables():
-            guild_id, table_id = t["guild_id"], t["table_id"]
+        for opened in self.store.open_cash_tables():
+            guild_id, table_id = opened["guild_id"], opened["table_id"]
             try:
                 self.store.close_table(guild_id, table_id)
                 closed += 1
@@ -1523,12 +1617,13 @@ class HoldemTables:
             self._release((guild_id, table_id))
             self._drop_banter((guild_id, table_id))
             self.tables.pop((guild_id, table_id), None)
-            text = "This table closed when the bot restarted." + CASHED
-            await self._edit(t["channel_id"], t["message_id"], content=text, view=None)
-            if t["thread_id"] is not None:
-                await self._post(t["thread_id"], text)
-                for post in self._seeds((guild_id, table_id)):
-                    await self._post(t["thread_id"], post)
-                await self._archive(t["thread_id"])
+            ct = self._t(guild_id)
+            text = ct("This table closed when the bot restarted.") + " " + ct(CASHED)
+            await self._edit(opened["channel_id"], opened["message_id"], content=text, view=None)
+            if opened["thread_id"] is not None:
+                await self._post(opened["thread_id"], text)
+                for post in self._seeds((guild_id, table_id), t=ct):
+                    await self._post(opened["thread_id"], post)
+                await self._archive(opened["thread_id"])
         if closed or failed:
             logging.info("Texas Hold'em recovery: %d tables closed, %d failures", closed, failed)
