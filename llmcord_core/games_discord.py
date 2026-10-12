@@ -246,6 +246,7 @@ class GameTables:
         spoken = getattr(self.bot, "spoken", None)
         if spoken is not None:
             spoken.turn_changed(key)
+            spoken.forget(key)
 
     # --- dashboard closes (no IPC: the dashboard closes tables in the shared database) -------
 
@@ -741,7 +742,11 @@ class GameTables:
         key = (guild_id, table_id)
         async with self.runtime.lock(key):
             out = self._press(interaction.user.id, key, action, round_id, moves)
+            spoken = getattr(self.bot, "spoken", None)
+            claim = spoken.claim_table_move(key, round_id, moves, interaction.user.id, action) if spoken is not None and out.say is None and out.paints else None
         await self._finish(interaction, out, via=interaction)
+        if claim is not None:
+            spoken.keep_claimed(claim)  # FEAT-37 F: after the answer and the repaint, outside the lock
 
     async def play_spoken(self, interaction: discord.Interaction, table_id: int, round_id: int, moves: int, move: str) -> str | None:
         """A move chosen on a spoken-move check: the normal press path (same lock, same stale check), but the repaint goes to the

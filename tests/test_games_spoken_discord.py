@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from llmcord_core import games_spoken_discord as gsd
-from llmcord_core.spoken.interpret import Decision
+from llmcord_core.spoken.interpret import Decision, Features
 from llmcord_core.spoken.onnx_embedder import ModelError
 from test_games_discord import ALICE, BOB, CARA, CH, G, STALE, Click, GameCase
 
@@ -75,8 +75,11 @@ class SpokenCase(GameCase):
         self.decision = Decision("sure", ("hit",))
         self.legal_seen = []
 
-        def decide(vector, legal, head):
+        self.examples_seen = []
+
+        def decide(vector, legal, head, examples=()):
             self.legal_seen.append(sorted(legal))
+            self.examples_seen.append(list(examples))
             return self.decision
 
         for patcher in (mock.patch.object(gsd.interpret, "decide", side_effect=decide), mock.patch.object(gsd.spoken_head, "blackjack_head", return_value=object())):
@@ -342,13 +345,6 @@ class PressTests(SpokenCase):
         self.assertTrue(msg.posts[0].deleted)
         self.assertEqual((self.latest()["moves"], self.spoken.pending), (before, {}))
 
-    async def test_outcomes_go_through_the_seam(self):
-        await self.deal()
-        msg = await self.say(ALICE)
-        with mock.patch.object(self.spoken, "_note_outcome") as seam:
-            await self.click(ALICE, msg, None)
-        seam.assert_called_once_with(G, "hit me", ("hit",), "talk")
-
 
 class ReviewTests(SpokenCase):
     async def test_turn_changing_while_the_reply_is_in_flight_deletes_the_own_reply(self):
@@ -433,6 +429,258 @@ class ReviewTests(SpokenCase):
             first, second = await self.say(ALICE), await self.say(ALICE)
         self.assertEqual((first.posts, second.posts, self.runtime.texts), ([], [], []))
         self.assertEqual(len([r for r in logs.records if "bad head" in r.getMessage()]), 1)
+
+
+FEATURES = Features(0.912345678, 0.5, 0.25)
+
+
+class KeepCase(SpokenCase):
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        self.store.set_spoken_keep_phrases(G, True)
+        self.sure = Decision("sure", ("hit",), FEATURES)
+        self.unsure = Decision("unsure", ("hit", "stand"), FEATURES)
+        self.silent = Decision("silent", (), FEATURES)
+
+    def kept(self):
+        return self.store.spoken_phrases(G)
+
+    async def table(self, user, label):
+        await self.press(user, label)
+        await self.settle()
+
+
+class CaptureTests(KeepCase):
+    async def test_talk_press_keeps_a_false_positive(self):
+        await self.deal()
+        self.decision = self.unsure
+        msg = await self.say(ALICE, "maybe later")
+        await self.click(ALICE, msg, None)
+        (row,) = self.kept()
+        self.assertEqual((row["text"], row["kind"], row["label"], row["band"], row["offered"]), ("maybe later", "false_positive", "talk", "unsure", ["hit", "stand"]))
+        self.assertEqual(row["scores"], {"p1": 0.9123, "margin": 0.5, "talk_gap": 0.25})
+
+    async def test_unsure_second_move_keeps_a_false_positive_but_the_first_does_not(self):
+        await self.deal()
+        self.decision = self.unsure
+        msg = await self.say(ALICE, "hmm")
+        await self.click(ALICE, msg, "hit")
+        self.assertEqual(self.kept(), [])
+        msg = await self.say(ALICE, "hmm ok")
+        await self.click(ALICE, msg, "stand")
+        (row,) = self.kept()
+        self.assertEqual((row["text"], row["kind"], row["label"]), ("hmm ok", "false_positive", "stand"))
+
+    async def test_a_sure_check_answered_with_its_move_keeps_nothing(self):
+        await self.deal()
+        self.decision = self.sure
+        msg = await self.say(ALICE)
+        await self.click(ALICE, msg, "hit")
+        self.assertEqual(self.kept(), [])
+
+    async def test_a_silent_reading_then_a_table_button_keeps_a_false_negative(self):
+        await self.deal()
+        self.decision = self.silent
+        await self.say(ALICE, "ok I'll stay put")
+        await self.table(ALICE, "Stand")
+        (row,) = self.kept()
+        self.assertEqual((row["text"], row["kind"], row["label"], row["band"], row["offered"]), ("ok I'll stay put", "false_negative", "stand", "silent", []))
+        self.assertEqual(row["scores"]["p1"], 0.9123)
+
+    async def test_a_move_the_check_did_not_offer_keeps_a_false_negative(self):
+        await self.deal()
+        self.decision = self.sure
+        msg = await self.say(ALICE, "gimme")
+        await self.table(ALICE, "Stand")
+        (row,) = self.kept()
+        self.assertEqual((row["kind"], row["label"], row["band"], row["offered"]), ("false_negative", "stand", "sure", ["hit"]))
+        self.assertTrue(msg.posts[0].deleted)
+
+    async def test_a_table_button_of_an_offered_move_keeps_nothing(self):
+        await self.deal()
+        self.decision = self.unsure
+        await self.say(ALICE, "hmm")
+        await self.table(ALICE, "Hit")
+        self.assertEqual(self.kept(), [])
+
+    async def test_a_later_turn_without_a_reading_keeps_nothing(self):
+        await self.deal()
+        self.decision = self.silent
+        await self.say(ALICE, "pass")
+        await self.table(ALICE, "Hit")
+        self.assertEqual(len(self.kept()), 1)
+        await self.table(ALICE, "Stand")
+        await self.table(BOB, "Stand")
+        self.assertEqual((len(self.kept()), self.spoken.ended), (1, {}))
+
+    async def test_hook_needs_the_same_round_moves_and_member(self):
+        from llmcord_core.games_discord import Turn
+        key = (G, 1)
+        reading = lambda: gsd._Reading(Turn(5, 2, ALICE, CH), "t", "silent", (), {"p1": 0.1})
+        for args in ((6, 2, ALICE), (5, 3, ALICE), (5, 2, BOB)):
+            self.spoken.ended[key] = reading()
+            self.assertIsNone(self.spoken.claim_table_move(key, *args, "hit"), args)
+        self.spoken.ended[key] = reading()
+        self.assertIsNone(self.spoken.claim_table_move(key, 5, 2, ALICE, "deal"))
+        self.spoken.ended[key] = reading()
+        claim = self.spoken.claim_table_move(key, 5, 2, ALICE, "hit")
+        self.assertEqual(self.kept(), [])  # claiming is memory only
+        self.spoken.keep_claimed(claim)
+        self.assertEqual(len(self.kept()), 1)
+        self.assertEqual(self.spoken.ended, {})
+
+    async def test_a_reading_still_in_flight_keeps_nothing(self):
+        await self.deal()
+        self.decision = self.silent
+        await self.say(ALICE, "old phrase")
+        self.runtime.gate = asyncio.Event()
+        self.spoken.note_message(Said(ALICE, "new phrase"))
+        await asyncio.sleep(0)
+        await self.press(ALICE, "Stand")
+        self.runtime.gate.set()
+        await self.settle()
+        self.assertEqual(self.kept(), [])
+
+    async def test_a_turn_timeout_keeps_nothing(self):
+        await self.deal()
+        self.decision = self.silent
+        await self.say(ALICE, "thinking")
+        snap = self.latest()
+        await self.games.on_turn_timer(G, snap["table_id"], snap["round_id"], snap["moves"])
+        await self.settle()
+        self.assertEqual(self.kept(), [])
+
+    async def test_nothing_is_remembered_or_kept_when_the_switch_is_off(self):
+        await self.deal()
+        self.store.set_spoken_moves_enabled(G, False)
+        await self.say(ALICE, "pass")
+        await self.table(ALICE, "Stand")
+        self.assertEqual((self.spoken.readings, self.spoken.ended, self.kept()), ({}, {}, []))
+
+    async def test_keeping_off_or_member_off_stores_nothing(self):
+        await self.deal()
+        self.decision = self.unsure
+        msg = await self.say(ALICE, "hmm")
+        self.store.set_spoken_keep_phrases(G, False)
+        await self.click(ALICE, msg, None)
+        self.assertEqual(self.kept(), [])
+        self.store.set_spoken_keep_phrases(G, True)
+        self.store.set_spoken_member_on(G, ALICE, False)
+        self.decision = self.silent
+        await self.say(ALICE, "pass")
+        self.assertIn(self.key(), self.spoken.readings)
+        await self.table(ALICE, "Stand")
+        self.assertEqual(self.kept(), [])
+
+    async def test_the_same_scenario_with_the_member_on_keeps_a_row(self):
+        await self.deal()
+        self.decision = self.silent
+        await self.say(ALICE, "pass")
+        await self.table(ALICE, "Stand")
+        self.assertEqual(len(self.kept()), 1)
+
+    async def test_talk_press_then_a_table_move_keeps_only_the_false_positive(self):
+        await self.deal()
+        self.decision = self.sure
+        msg = await self.say(ALICE, "maybe")
+        await self.click(ALICE, msg, None)
+        await self.table(ALICE, "Stand")
+        (row,) = self.kept()
+        self.assertEqual((row["kind"], row["label"]), ("false_positive", "talk"))
+
+    async def test_the_keep_comes_after_the_answer(self):
+        await self.deal()
+        self.decision = self.silent
+        await self.say(ALICE, "pass")
+        order, real, finish = [], self.store.keep_spoken_phrase, self.games._finish
+
+        async def late(*a, **k):
+            await finish(*a, **k)
+            order.append("finish")
+
+        self.games._finish = late
+        self.store.keep_spoken_phrase = lambda *a: order.append("keep") or real(*a)
+        await self.table(ALICE, "Stand")
+        self.assertEqual(order, ["finish", "keep"])
+
+    async def test_a_failing_keep_never_breaks_the_press(self):
+        await self.deal()
+        self.decision = self.unsure
+        msg = await self.say(ALICE, "hmm")
+        before = self.latest()["moves"]
+        with mock.patch.object(self.store, "keep_spoken_phrase", side_effect=RuntimeError("db")), self.assertLogs(level="ERROR"):
+            click = await self.click(ALICE, msg, "stand")
+        self.assertEqual((self.latest()["moves"], click.response.edited[-1]["content"]), (before + 1, "✔ Stand"))
+        self.decision = self.silent
+        await self.say(BOB, "pass")
+        with mock.patch.object(self.store, "keep_spoken_phrase", side_effect=RuntimeError("db")), self.assertLogs(level="ERROR"):
+            await self.table(BOB, "Stand")
+        self.assertEqual(self.latest()["status"], "settled")
+
+    async def test_keep_runs_outside_the_table_lock(self):
+        await self.deal()
+        self.decision = self.silent
+        await self.say(ALICE, "pass")
+        locked = []
+        real = self.store.keep_spoken_phrase
+        self.store.keep_spoken_phrase = lambda *a: locked.append(self.games.runtime.lock(self.key()).locked()) or real(*a)
+        await self.table(ALICE, "Stand")
+        self.assertEqual(locked, [False])
+
+    async def test_memory_is_bounded_and_dropped_with_the_table(self):
+        await self.deal()
+        self.decision = self.silent
+        await self.say(ALICE, "pass")
+        key = self.key()
+        self.assertIn(key, self.spoken.readings)
+        snap = self.latest()
+        await self.games.on_turn_timer(G, snap["table_id"], snap["round_id"], snap["moves"])
+        self.assertEqual((list(self.spoken.readings), list(self.spoken.ended)), ([], [key]))
+        await self.games.set_channel(G, CH, False)
+        self.assertEqual((self.spoken.readings, self.spoken.ended), ({}, {}))
+
+
+class ExampleCacheTests(KeepCase):
+    def add(self, text, label):
+        ident = self.store.keep_spoken_phrase(G, ALICE, "blackjack", text, [], "silent", {}, "false_negative", label)
+        return self.store.promote_spoken_phrase(G, ident, label, ALICE)
+
+    async def test_no_examples_pass_an_empty_list_and_embed_nothing_extra(self):
+        await self.deal()
+        await self.say(ALICE, "hit me")
+        self.assertEqual((self.examples_seen, self.runtime.texts), ([[]], ["hit me"]))
+        self.assertEqual(self.spoken.examples, {})
+
+    async def test_examples_are_embedded_once_per_revision(self):
+        await self.deal()
+        self.add("one more", "hit")
+        await self.say(ALICE, "a")
+        self.assertEqual(self.runtime.texts, ["one more", "a"])
+        self.assertEqual(self.examples_seen[-1], [([0.0], "hit")])
+        await self.say(ALICE, "b")
+        self.assertEqual(self.runtime.texts, ["one more", "a", "b"])
+        self.add("chat", "talk")
+        await self.say(ALICE, "c")
+        self.assertEqual(self.runtime.texts, ["one more", "a", "b", "chat", "c"])  # only the new id
+        self.assertEqual(self.examples_seen[-1], [([0.0], "hit"), ([0.0], "talk")])
+
+    async def test_a_deleted_example_is_dropped_from_the_cache(self):
+        await self.deal()
+        first, second = self.add("one more", "hit"), self.add("chat", "talk")
+        await self.say(ALICE, "a")
+        self.store.delete_spoken_example(G, first)
+        await self.say(ALICE, "b")
+        self.assertEqual(self.examples_seen[-1], [([0.0], "talk")])
+        self.assertEqual([i for i, _, _ in self.spoken.examples[G][1]], [second])
+
+    async def test_a_failed_embed_is_retried_next_time(self):
+        await self.deal()
+        self.add("one more", "hit")
+        self.runtime.error = ModelError("bad")
+        await self.say(ALICE, "a")
+        self.runtime.error = None
+        await self.say(ALICE, "b")
+        self.assertEqual(self.examples_seen[-1], [([0.0], "hit")])
 
 
 class RegistrationTests(unittest.TestCase):

@@ -8,7 +8,7 @@ from pathlib import Path
 from llmcord_core.spoken import blackjack
 from llmcord_core.spoken.embedder import FakeEmbedder
 from llmcord_core.spoken.head import BLACKJACK_PATH, BLACKJACK_SHA256, Head, HeadError, blackjack_head, load_head, parse_head
-from llmcord_core.spoken.interpret import decide
+from llmcord_core.spoken.interpret import EXAMPLE_MATCH, decide
 
 TH = {"t_sure": 0.4, "margin": 0.1, "g_sure": 0.0, "t_floor": 0.2, "g_floor": -0.3}
 
@@ -88,6 +88,52 @@ class BandTests(unittest.TestCase):
         self.assertEqual(decide([0.0], ["hit", "stand"], head).band, "silent")  # gap -0.3 < -0.2
         head = tiny({"hit": 0.3, "stand": 0.1, "talk": 0.6}, {**TH, "t_sure": 2.0, "t_floor": 0.1, "g_floor": -0.4})
         self.assertEqual(decide([0.0], ["hit", "stand"], head).band, "unsure")
+
+
+class ExampleTests(unittest.TestCase):
+    def head(self):
+        probs = {"hit": 0.5, "stand": 0.3, "talk": 0.2}  # sure for hit, without examples; two dims so unit vectors can differ
+        return Head(tuple(probs), (0.0, 0.0), (1.0, 1.0), ((0.0,) * 3, (0.0,) * 3), tuple(math.log(p) for p in probs.values()), 1.0, dict(TH), "m", "r", "query: ")
+
+    def near(self, sim):
+        """A unit vector whose dot product with [1, 0] is `sim`."""
+        return [sim, math.sqrt(1 - sim * sim)]
+
+    def test_no_examples_is_the_old_result(self):
+        base = decide([1.0, 0.0], ["hit", "stand"], self.head())
+        self.assertEqual(decide([1.0, 0.0], ["hit", "stand"], self.head(), ()), base)
+        self.assertEqual(decide([1.0, 0.0], ["hit", "stand"], self.head(), []), base)
+
+    def test_a_move_example_above_the_threshold_forces_sure(self):
+        d = decide([1.0, 0.0], ["hit", "stand"], self.head(), [(self.near(EXAMPLE_MATCH + 0.005), "stand")])
+        self.assertEqual((d.band, d.moves), ("sure", ("stand",)))
+        self.assertIsNotNone(d.features)
+
+    def test_a_talk_example_above_the_threshold_forces_silent_with_features(self):
+        d = decide([1.0, 0.0], ["hit", "stand"], self.head(), [(self.near(0.99), "talk")])
+        self.assertEqual((d.band, d.moves), ("silent", ()))
+        self.assertAlmostEqual(d.features.p1, 0.5, places=9)
+
+    def test_below_the_threshold_falls_through(self):
+        d = decide([1.0, 0.0], ["hit", "stand"], self.head(), [(self.near(EXAMPLE_MATCH - 0.01), "talk")])
+        self.assertEqual((d.band, d.moves), ("sure", ("hit",)))
+
+    def test_the_threshold_itself_matches(self):
+        d = decide([1.0, 0.0], ["hit", "stand"], self.head(), [([EXAMPLE_MATCH, math.sqrt(1 - EXAMPLE_MATCH ** 2)], "talk")])
+        self.assertEqual(d.band, "silent")
+
+    def test_an_illegal_move_example_is_ignored(self):
+        d = decide([1.0, 0.0], ["hit", "stand"], self.head(), [(self.near(0.99), "double"), (self.near(0.99), "bogus")])
+        self.assertEqual((d.band, d.moves), ("sure", ("hit",)))
+
+    def test_the_best_example_wins_and_an_illegal_closer_one_does_not_mask_it(self):
+        ex = [(self.near(0.999), "double"), (self.near(0.97), "stand"), (self.near(0.98), "talk")]
+        self.assertEqual(decide([1.0, 0.0], ["hit", "stand"], self.head(), ex).band, "silent")
+        ex = [(self.near(0.999), "double"), (self.near(0.97), "stand")]
+        self.assertEqual(decide([1.0, 0.0], ["hit", "stand"], self.head(), ex).moves, ("stand",))
+
+    def test_no_legal_moves_stays_silent(self):
+        self.assertEqual(decide([1.0, 0.0], ["double"], self.head(), [(self.near(0.99), "talk")]).band, "silent")
 
 
 class HeadLoadTests(unittest.TestCase):
