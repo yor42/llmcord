@@ -16,6 +16,8 @@ from fastapi.responses import PlainTextResponse, RedirectResponse, Response
 from starlette.datastructures import MutableHeaders
 from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES, GZipMiddleware
 
+from . import i18n
+from .i18n import UserError, codes
 from .store import Store
 from .auth import AuthService
 from .discord_api import DISCORD_API
@@ -115,17 +117,18 @@ def _register_auth_routes(app: FastAPI, base_url: str, client_id: str, client_se
 
     @app.get("/auth/callback")
     async def callback(request: Request, code: str, state: str):
+        t = i18n.english()  # i18n: FEAT-45 request locale
         if not secrets.compare_digest(request.cookies.get("llmcord_oauth_state", ""), state):
-            raise HTTPException(403, "Invalid OAuth state")
+            raise HTTPException(403, t("Invalid OAuth state"))
         expiry = app.state.states.pop(state, 0)
         if expiry < time.time():
-            raise HTTPException(403, "Invalid OAuth state")
+            raise HTTPException(403, t("Invalid OAuth state"))
         response = await app.state.http.post(DISCORD_API + "/oauth2/token",
             data={"grant_type": "authorization_code", "code": code,
                   "redirect_uri": base_url + "/auth/callback",
                   "client_id": client_id, "client_secret": client_secret})
         if response.status_code >= 400:
-            raise HTTPException(401, "Discord sign-in failed")
+            raise HTTPException(401, t("Discord sign-in failed"))
         tokens = response.json()
         user = await discord_get("/users/@me", "Bearer " + tokens["access_token"])
         ident = secrets.token_urlsafe(40)
@@ -143,11 +146,12 @@ def _register_auth_routes(app: FastAPI, base_url: str, client_id: str, client_se
 
     @app.post("/logout")
     async def logout(request: Request):
+        t = i18n.english()  # i18n: FEAT-45 request locale
         session = await session_for(request)
         app.state.auth.check_origin(request.headers.get("origin"))
         form = await request.form()
         if not secrets.compare_digest(str(form.get("csrf", "")), session["csrf"]):
-            raise HTTPException(403, "Invalid form token")
+            raise HTTPException(403, t("Invalid form token"))
         app.state.auth.drop_session(request.cookies.get("llmcord_session", ""))
         result = RedirectResponse("/", status_code=303)
         result.delete_cookie("llmcord_session")
@@ -159,19 +163,21 @@ def _register_avatar_routes(app: FastAPI) -> set:
 
     @app.get("/guild/{guild_id}/characters/{character_id}/avatar")
     async def character_avatar(request: Request, guild_id: int, character_id: int):
+        t = i18n.english()  # i18n: FEAT-45 request locale
         await require_admin(request, guild_id)
         row = app.state.store.one("SELECT avatar FROM characters WHERE guild_id=? AND id=?",
             (guild_id, character_id))
         if not row or not row["avatar"]:
-            raise HTTPException(404, "Avatar not found")
+            raise HTTPException(404, t("Avatar not found"))
         return Response(row["avatar"], media_type="image/png", headers=AVATAR_CACHE)
 
     @app.get('/guild/{guild_id}/characters/{character_id}/avatars/{slot_key}')
     async def emotion_avatar(request: Request, guild_id: int, character_id: int, slot_key: str):
+        t = i18n.english()  # i18n: FEAT-45 request locale
         await require_admin(request, guild_id)
         row = app.state.store.avatar_slot(guild_id, character_id, slot_key)
         if not row['image']:
-            raise HTTPException(404, 'Avatar not found')
+            raise HTTPException(404, t('Avatar not found'))
         return Response(row['image'], media_type='image/png', headers=AVATAR_CACHE)
 
     return {character_avatar, emotion_avatar}
@@ -182,9 +188,9 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
     base_url = base_url.rstrip("/")
     parsed_url = urlparse(base_url)
     if parsed_url.scheme != "https" or not parsed_url.hostname:
-        raise ValueError("WEB_BASE_URL must be a private HTTPS URL")
+        raise UserError(codes.WEB_BASE_URL)
     if not client_id or not client_secret or not bot_token:
-        raise ValueError("Discord OAuth and bot credentials are required")
+        raise UserError(codes.WEB_CREDENTIALS)
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         try:
@@ -209,11 +215,13 @@ def create_app(database_path: str | Path, base_url: str, client_id: str,
     # ConflictError is a ValueError; no parent-app route writes, so none reaches here (NiceGUI actions handle it).
     @app.exception_handler(ValueError)
     async def invalid_value(_request: Request, error: ValueError):
-        return PlainTextResponse(f"Invalid input: {str(error)}", status_code=400)
+        t = i18n.english()  # i18n: FEAT-45 request locale
+        return PlainTextResponse(t('Invalid input: {error}', error=t.error(error)), status_code=400)
 
     @app.exception_handler(sqlite3.IntegrityError)
     async def duplicate_value(_request: Request, _error: sqlite3.IntegrityError):
-        return PlainTextResponse("This name or entry already exists", status_code=409)
+        t = i18n.english()  # i18n: FEAT-45 request locale
+        return PlainTextResponse(t("This name or entry already exists"), status_code=409)
 
     _load_config(app, config_path)
     app.state.auth = AuthService(app)

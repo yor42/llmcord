@@ -14,6 +14,7 @@ from . import playstyle_generate
 from .backend import dashboard_gateway, effective_backend
 from .budget import BudgetExceeded
 from .errors import ModelConfigError, error_detail, is_timeout
+from .i18n import UserError, codes
 from .games import playstyle
 from .models import TurnMessage
 from .usage import capture_usage
@@ -92,7 +93,7 @@ class AdminService:
         The call is counted in model_usage (feature 'playstyle'), refused at the spending hard cap, and key-pinned like the bot's calls. ValueError carries the message shown to the admin."""
         character = self.store.character_by_id(character_id)
         if character is None or character['guild_id'] != guild_id:
-            raise ValueError('That character was not found. Reload the page.')
+            raise UserError(codes.ADMIN_CHARACTER_NOT_FOUND)
         request, schema = playstyle_generate.request(character), playstyle_generate.schema()
         seam = getattr(self.app.state, 'play_style_model', None)  # test seam: tests/dashboard_server.py replaces the model call
         gateway = None if seam else dashboard_gateway(self.effective_backend(), self.limits, self.store)
@@ -103,17 +104,19 @@ class AdminService:
                 with capture_usage(guild_id, None, 'playstyle'):
                     raw = await asyncio.wait_for(gateway.structured_compiled(playstyle_generate.ROLE, request, 'play_style', schema), GENERATE_SECONDS)
         except BudgetExceeded:
-            raise ValueError('The spending hard cap is reached, so no model calls are made until it resets.') from None
+            raise UserError(codes.ADMIN_HARD_CAP) from None
         except ModelConfigError as error:
             raise ValueError(str(error)[:300]) from None
         except ValueError as error:
             log.warning('Play style generation got an unreadable answer (%s)', type(error).__name__)
-            raise ValueError('The model returned an answer that could not be read. Try again.') from None
+            raise UserError(codes.ADMIN_UNREADABLE_ANSWER) from None
         except (asyncio.TimeoutError, TimeoutError):
-            raise ValueError('The model did not respond in time. Try again.') from None
+            raise UserError(codes.ADMIN_MODEL_TIMEOUT) from None
         except Exception as error:
             log.warning('Play style generation failed (%s)', type(error).__name__)
-            raise ValueError('The model did not respond in time. Try again.' if is_timeout(error) else 'The model call failed: ' + error_detail(error, 300)) from None
+            if is_timeout(error):
+                raise UserError(codes.ADMIN_MODEL_TIMEOUT) from None
+            raise UserError(codes.ADMIN_MODEL_CALL_FAILED, detail=error_detail(error, 300)) from None
         finally:
             if gateway is not None:
                 try:

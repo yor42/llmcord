@@ -1417,6 +1417,35 @@ msgid "Invalid compatible reasoning_effort in {name}"
 msgstr ""
 
 #: llmcord_core/i18n/codes.py
+msgid "WEB_BASE_URL must be a private HTTPS URL"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Discord OAuth and bot credentials are required"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That character was not found. Reload the page."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The spending hard cap is reached, so no model calls are made until it resets."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The model returned an answer that could not be read. Try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The model did not respond in time. Try again."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The model call failed: {detail}"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
 msgid "It's not your turn."
 msgstr ""
 

@@ -6,6 +6,50 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
+#: llmcord_core/auth.py
+msgid "Discord permission checks are temporarily rate limited. Please try again shortly."
+msgstr ""
+
+#: llmcord_core/auth.py
+msgid "Cannot reach Discord to check permissions. Please try again shortly."
+msgstr ""
+
+#: llmcord_core/auth.py
+msgid "Discord session expired. Please sign in again."
+msgstr ""
+
+#: llmcord_core/auth.py
+msgid "Discord denied the permission check. Please sign in again."
+msgstr ""
+
+#: llmcord_core/auth.py
+msgid "Discord permission checks are unavailable. Please try again shortly."
+msgstr ""
+
+#: llmcord_core/auth.py llmcord_core/dashboard.py
+msgid "Sign in with Discord"
+msgstr ""
+
+#: llmcord_core/auth.py
+msgid "Discord session expired"
+msgstr ""
+
+#: llmcord_core/auth.py
+msgid "Invalid request origin"
+msgstr ""
+
+#: llmcord_core/auth.py llmcord_core/web.py
+msgid "Invalid form token"
+msgstr ""
+
+#: llmcord_core/auth.py
+msgid "Server administrator permission required"
+msgstr ""
+
+#: llmcord_core/auth.py
+msgid "Operator permission required"
+msgstr ""
+
 #: llmcord_core/currency_ui.py
 #, python-brace-format
 msgid "Game channels saved. Closed {closed} open table(s) and refunded their bets."
@@ -772,10 +816,6 @@ msgstr ""
 
 #: llmcord_core/dashboard.py
 msgid "This action was rejected"
-msgstr ""
-
-#: llmcord_core/dashboard.py
-msgid "Sign in with Discord"
 msgstr ""
 
 #: llmcord_core/dashboard.py
@@ -3407,5 +3447,28 @@ msgstr ""
 #: llmcord_core/shop_ui.py
 msgctxt "column"
 msgid "Result"
+msgstr ""
+
+#: llmcord_core/web.py
+msgid "Invalid OAuth state"
+msgstr ""
+
+#: llmcord_core/web.py
+msgid "Discord sign-in failed"
+msgstr ""
+
+#: llmcord_core/web.py
+msgid "Avatar not found"
+msgstr ""
+
+#. i18n: FEAT-45 request locale
+#: llmcord_core/web.py
+#, python-brace-format
+msgid "Invalid input: {error}"
+msgstr ""
+
+#. i18n: FEAT-45 request locale
+#: llmcord_core/web.py
+msgid "This name or entry already exists"
 msgstr ""
 

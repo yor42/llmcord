@@ -1,13 +1,10 @@
 {
   "files": {
-    "llmcord_core/admin.py": {
-      "raise": 5
-    },
     "llmcord_core/admin_store.py": {
       "raise": 2
     },
     "llmcord_core/auth.py": {
-      "raise": 16
+      "raise": 1
     },
     "llmcord_core/avatars.py": {
       "raise": 2
@@ -73,7 +70,7 @@
       "raise": 2
     },
     "llmcord_core/web.py": {
-      "raise": 9
+      "raise": 1
     }
   },
   "version": 1
