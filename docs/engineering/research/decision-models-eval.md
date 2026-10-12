@@ -1,6 +1,6 @@
 # Decision models for spoken-move interpretation (research note, 2026-10-12)
 
-Status: findings and benchmark plan only. Nothing is wired into the bot. Needs a go-ahead before it becomes a backlog item (new provider wire format, and sending player chat to a third party).
+Status: benchmark done (FEAT-43, 2026-10-12, results and recommendation at the end). Nothing is wired into the bot. Using any result in the bot needs the user's opt-in decision (new provider wire format, and sending player chat to a third party).
 
 ## Question
 Could OpenAI's Decisions API (`gpt-6-luna`) or Microsoft Decision-1 replace or back up the local e5 interpreter, compared with Haiku 5.5 and Gemini Flash-Lite (D37 assumes these are better at similar cost; never measured)?
@@ -79,3 +79,58 @@ The e5 control is the recorded D34 number. e5 per-row scores are not reproduced 
 
 ### Safety rules for the script
 Dry run by default (prints call count and a cost estimate, makes no request and needs no key); a paid run needs `--run`. A `--max-usd` budget aborts a run once the reported usage cost passes it. Results go to `--out` (default outside the repo), never into the repo; they hold phrases, ids and answers, no headers. Each model is smoke-tested with a few calls before the full run.
+
+## Results (FEAT-43 full run, 2026-10-12)
+3,110 calls, 0 errors, $0.080 spent (estimate was $0.166). Items: the 195 blackjack rows (133 moves, 62 table talk) and 116 doubt phrases. Raw per-call results stayed outside the repo (`~/decision-eval-out`). Reproduce: `prototypes/decision_eval/README.md`.
+
+How to read: every decision candidate gives one answer per item; shuffled `choice` candidates are asked in 3 option orders and the majority answer counts. "Right move" is the share of the 133 move rows where the answer is the label or an accepted move. "Silent" is the share of the 62 talk rows answered `talk` (strict). One answer per item is not the same as e5's "right move among up to two buttons", so the e5 row is only a rough yardstick.
+
+### Blackjack moves
+| Candidate | Right move | Silent on chatter | Right move ko | Silent ko | p50 / p95 latency | Cost per 1,000 decisions |
+| --- | --- | --- | --- | --- | --- | --- |
+| e5 int8 + head (D34, recorded, up to 2 buttons) | about 95% | about 70% | n/a | n/a | tens of ms on the Pi | $0 |
+| Qwen 3.5 4B local (FEAT-39) | 71% | 95% | n/a | n/a | 0.66 s (remote GPU) | $0 |
+| OpenAI `choice` + `other` | 81% (108/133) | 100% (62/62) | 82% | 100% | 0.29 / 0.37 s | about $0.10 (3 calls; estimated) |
+| **OpenAI per-move `predicate`** | **97% (129/133)** | 97% (60/62) | 97% | 100% | 0.27 / 0.35 s | about $0.026 (estimated) |
+| Decision-1 `choice` + `other` | 93% (124/133) | 100% (62/62) | 90% | 100% | 0.68 / 0.77 s | $0.024 (3 calls) |
+| **Decision-1 per-move `noul`** | **98% (130/133)** | **100% (62/62)** | 96% | 100% | 0.71 / 0.81 s | **$0.007** |
+| Haiku 5.5 (reasoning off) | 94% (125/133) | 100% (62/62) | 96% | 100% | 1.36 / 2.23 s | $0.046 |
+| Gemini 3.5 Flash-Lite | 97% (129/133) | 98% (61/62) | 99% | 97% | 1.04 / 1.23 s | $0.084 |
+
+Costs come from provider usage where given. OpenAI's Decisions response carries no cost field, so its costs are estimates from the $0.10/M input price. Latency is per request from this Windows machine over the public internet, with a fresh connection per call.
+
+### I Doubt It doubts (116 phrases)
+| Candidate | Doubt recall | Silent on non-doubts | Silent ko |
+| --- | --- | --- | --- |
+| `read_doubt` word rule (recorded) | 100% (60/60) | 100% (56/56) | 100% |
+| OpenAI `choice` | 92% | 86% | 70% |
+| OpenAI `predicate` | 100% | 77% | 67% |
+| Decision-1 `choice` | 78% | 88% | 81% |
+| Decision-1 `noul` | 95% | 77% | 74% |
+| Haiku 5.5 | 97% | 82% | 67% |
+| Flash-Lite | 90% | 86% | 74% |
+
+### Findings
+1. **Per-move yes/no questions beat one `choice` question.** For OpenAI the gap is large (97% vs 81% right move): its `choice` answer leans toward `other` on clear moves and its probabilities are under-confident (the 0.9-0.99 bucket was only 92% right). Decision-1 `choice` is better (93%) but still below its own `noul` mode (98%). This agrees with the community reports that `choice` is the weaker mode. Order dependence turned out small: 96% of bj items (98% of doubts) gave the same OpenAI `choice` answer in all 3 option orders, Decision-1 100% (99%); the top probability moved by 0.07 and 0.01 on average.
+2. **Decision-1 `noul` per move is the best single reader here**: 98% right, 100% silent, $0.007 per 1,000 messages. Its probabilities separate the bands cleanly. Top move probability >= 0.9: 121 rows, all moves. From 0.5 to 0.9: 9 rows, all moves. Below 0.5: 65 rows, of which 62 are chatter and 3 are moves (the only 3 misses). So `sure` >= 0.9, `unsure` 0.5-0.9, `silent` < 0.5 would have had no wrong `sure` on this set. OpenAI `predicate` is almost as good (AUROC 0.997 vs 1.000) but its band edges are looser: the 0.7-0.9 bucket is 94% moves, and two chatter rows crossed ("wait 잠깐" and "insurance is a scam lol").
+3. **The decision models, Haiku and Flash-Lite make mostly different mistakes.** Decision-1 `noul` and Haiku never miss the same move (3 + 8 misses, 11 distinct rows); Decision-1 `noul` and OpenAI `predicate` share 1 of 6. No move was missed by all six candidates. The six hard rows (missed by 3 or more candidates) are short or elliptical stands and slang: "됐어요", "I'm happy with this", "나 이걸로 할게", "노노 됐어", plus "send it" and "ㅎㅌ". A cascade of two readers is cheap and useful; one weak reader is not.
+4. **Korean was not worse than English** for the `noul` and `predicate` modes on blackjack (96-97% right, 100% silent). On doubts, Korean silence was the weakest for every LLM (67-74%).
+5. **Every LLM reader loses to the word rule on doubts.** None got above 88% silent on non-doubts (negations such as "never lies" and "구라 아니야", and lexical false friends). Keep `read_doubt` as is; do not use any of these for doubts.
+6. **Baselines (D37):** Haiku 5.5 and Gemini 3.5 Flash-Lite are both good (94-97% right move, 98-100% silent), far better than the local Qwen 3.5 4B (71% right) and about as good as the best decision mode. D37's expectation that a cheap hosted model beats a local one is confirmed on quality. Their cost is 6 to 12 times Decision-1's but still only $0.05-0.08 per 1,000 messages. They are slower (1.0-1.4 s p50, p95 up to 2.2 s) and give no probabilities, so there is no `sure`/`unsure` split.
+7. **Speed:** OpenAI Decisions answers in about 0.27 s (p95 0.35 s). Decision-1 through OpenRouter took 0.7 s (OpenRouter's page quotes 0.22 s at the provider; the rest is routing plus our fresh connection per call). Both Decisions APIs are faster than the chat baselines.
+
+### Recommendation
+- **Do not replace e5.** The recorded e5 numbers (95% right / 70% silent) belong to a local, free, offline, private reader, and nothing here is a reason to send every message off the Pi.
+- **Best fit: a second reader behind e5, only for messages e5 did not call silent.** e5 is silent on only about 70% of chatter, so about 30% of chatter wrongly gets a move check. A per-move yes/no reader (Decision-1 `noul`, or OpenAI `predicate`) was 97-100% silent on chatter on this set and costs well under a cent per 1,000 messages. It could veto most false checks and choose between the two buttons of an unsure check. Only messages e5 would act on go out, which keeps volume and exposure small. A missed real move only costs the player one button tap.
+- **Ranking:** (1) Decision-1 `noul` per move: best numbers, cheapest, cleanest probabilities. Risks: unversioned weights ("updated continually"), an `/api/alpha` endpoint, one upstream provider. (2) OpenAI `predicate` per move: fastest (0.27 s) and almost as good. Risks: public beta, a single model. Test both for drift before relying on a threshold. (3) Haiku or Flash-Lite: they run on the existing Chat Completions path (`compatible` provider, no new wire format) but give no probabilities.
+- **Not recommended:** `choice` questions on either Decisions API, any LLM for doubts, or reading every message with an LLM.
+
+### Caveats
+- n = 133 moves + 62 chatter rows (a 95% interval is roughly +-3 to 4 points). The phrases are synthetic, written for the e5 work. Real channel chatter is more varied, so real false-positive rates need checking on kept phrases (D35) before any threshold is trusted.
+- e5's per-row scores were not reproduced here (it needs the ONNX model), so the cascade is argued from the recorded e5 numbers and the LLM separation tables, not simulated row by row. The honest next step is to dump e5's per-row bands from `prototypes/spoken_moves/run.py` and replay the cascade on the same rows.
+- Prompts were fixed once after a 6-item smoke test. The OpenAI inputs initially lacked context and scored 0/3 on moves (now one shared context sentence for all decision candidates). Haiku 5.5 needed reasoning switched off, because otherwise it spends its token budget on hidden reasoning and returns nothing. The full set was not used for tuning. The chat baselines' system prompts carry slightly less context than the decision candidates' framing.
+- One run and one sample per call. The Decisions APIs have no temperature setting, and the shuffled `choice` majority hides within-item variation. Decision-1 weights can change under a stable API shape.
+
+### Integration and privacy if adopted (not started)
+- It needs a new provider kind in `models.py` for the Decisions wire formats (both differ from Chat Completions), key pins for `api.openai.com` and `openrouter.ai` (`config.py:109`, `LLMCORD_KEY_HOSTS`), fake-transport tests, and an e5-only fallback when the API is down, slow (budget about 1 s) or over a per-server rate.
+- Messages from the member whose turn it is would leave the Pi. That needs an explicit per-server opt-in, separate from `/memory opt_in`, shown in the Games tab and in `/games spoken_moves`, with the chosen provider's data-retention and training terms checked first.
