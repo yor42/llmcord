@@ -4,3 +4,7 @@
 eabe0b165598b39dd9d024f25e89161eaa7c61a2:tests/test_model_backend_store.py:generic-api-key:141
 eabe0b165598b39dd9d024f25e89161eaa7c61a2:tests/test_model_backend_store.py:generic-api-key:192
 eabe0b165598b39dd9d024f25e89161eaa7c61a2:tests/test_model_backend_store.py:generic-api-key:391
+# sha256 checksums of the public multilingual-e5-small files (the key "tokenizer.json" looks like a token name): not secrets.
+f82911043d10beb5de2df4203a1fc7aa500d081f:llmcord_core/spoken/onnx_embedder.py:generic-api-key:22
+d30c1063d0ab2634ef40a31833c867f5127db53b:prototypes/spoken_moves/models.lock.json:generic-api-key:7
+d30c1063d0ab2634ef40a31833c867f5127db53b:prototypes/spoken_moves/models.lock.json:generic-api-key:17
