@@ -13,7 +13,33 @@ from .scene_ui import confirm_dialog
 
 PURPOSE_LABELS = {'dialogue': NP_('model role', 'Dialogue'), 'director': NP_('model role', 'Director'), 'extraction': N_('Extraction'),
                   'summary': N_('Summary'), 'images': N_('Images')}
+BLOCK_NAMES = {
+    'main': NP_('prompt block', 'Main'), 'location': NP_('prompt block', 'Location'), 'time': NP_('prompt block', 'Time'),
+    'name': NP_('prompt block', 'Name'), 'lore_before_char': NP_('prompt block', 'Lore Before Char'),
+    'description': NP_('prompt block', 'Description'), 'personality': NP_('prompt block', 'Personality'),
+    'scenario': NP_('prompt block', 'Scenario'), 'opening': NP_('prompt block', 'Opening'),
+    'card_instructions': NP_('prompt block', 'Card Instructions'), 'lore_after_char': NP_('prompt block', 'Lore After Char'),
+    'lore_before_examples': NP_('prompt block', 'Lore Before Examples'), 'examples': NP_('prompt block', 'Examples'),
+    'lore_after_examples': NP_('prompt block', 'Lore After Examples'), 'lore_in_chat': NP_('prompt block', 'Lore In Chat'),
+    'personal': NP_('prompt block', 'Personal'), 'encounters': NP_('prompt block', 'Encounters'),
+    'summary': NP_('prompt block', 'Summary'), 'preceding': NP_('prompt block', 'Preceding'), 'recent': NP_('prompt block', 'Recent'),
+    'history': NP_('prompt block', 'History'), 'character_voice': NP_('prompt block', 'Character Voice'),
+    'card_post_history': NP_('prompt block', 'Card Post History'), 'payload': NP_('prompt block', 'Payload'),
+}
 ADAPT_LABELS = {'top_system': N_('moved to top-level system instructions'), 'user': N_('converted to user instructions')}
+
+
+def block_display_name(b, t):
+    """Display only: a block still carrying its default name is translated; renamed, imported and empty names are shown as stored."""
+    name, ident = b.get('name') or '', str(b.get('id') or '')
+    if not name:
+        return t('Untitled block')
+    if ident in BLOCK_NAMES and name == ident.replace('_', ' ').title():
+        return t.render(BLOCK_NAMES[ident])
+    if ident.startswith('custom-') and name == ident.replace('_', ' ').title():
+        # the stored English default title-cases the code; keep English byte-identical, other languages show the code as it is
+        return name if t.locale == 'en' else t('Custom-{code}', code=ident[len('custom-'):])
+    return name
 
 
 def _preset_snapshot(state, name):
@@ -270,7 +296,7 @@ def _preset_editor(ctx, state, purpose, collect):
                         toggle.props['aria-expanded'] = 'true' if opened else 'false'
                         with toggle:
                             # phrasing content only (a <button> cannot hold divs); trailing spaces keep the accessible name readable
-                            _span().classes('ll-block-name').bind_text_from(b, 'name', backward=lambda v: (v or t('Untitled block')) + ' ')
+                            _span().classes('ll-block-name').bind_text_from(b, 'name', backward=lambda v, b=b: block_display_name({**b, 'name': v}, t) + ' ')
                             with ui.element('span').classes('ll-block-meta'):
                                 _span().bind_text_from(b, 'role', backward=lambda v: t.render(PROMPT_ROLE_LABELS.get(v, v)))
                                 _span(' \u00b7 ')
@@ -291,7 +317,7 @@ def _preset_editor(ctx, state, purpose, collect):
                                 if 0 <= at + delta < len(blocks):
                                     blocks.insert(at + delta, blocks.pop(at))
                                 render_editor.refresh()
-                        with more_menu(b['name'] or t('Untitled block')) as menu:
+                        with more_menu(block_display_name(b, t)) as menu:
                             more_button = menu.parent_slot.parent
                             up = ui.menu_item(t('Move up'), on_click=lambda b=b: move(-1, b)).props('role=menuitem')
                             down = ui.menu_item(t('Move down'), on_click=lambda b=b: move(1, b)).props('role=menuitem')
@@ -402,7 +428,7 @@ def _preset_export(ctx, collect):
             try:
                 portable = set(ST_MARKERS.values())  # the check export_preset uses
                 def option(b):
-                    label = f"{b['name'] or t('Untitled block')} ({b['id']})"
+                    label = f"{block_display_name(b, t)} ({b['id']})"
                     return label if b['source'] == 'text' or b['source'] in portable or b['source'].startswith('unsupported:') else t('{label} \u2014 not portable', label=label)
                 return {b['id']: option(b) for b in purpose_blocks(collect(), 'dialogue')}
             except ValueError:
@@ -437,7 +463,7 @@ def _preset_preview(ctx, purpose, collect):
             diagnostics.clear()
             with diagnostics:
                 ui.label(t('Estimated input tokens: {count}', count=request.estimated_tokens))
-                names = {b['id']: b.get('name') or b['id'] for b in purpose_blocks(bundle, purpose.value)}
+                names = {b['id']: block_display_name(b, t) if b.get('name') else b['id'] for b in purpose_blocks(bundle, purpose.value)}
                 def omitted_text(entry):
                     ident, sep, rest = entry.partition(':')
                     if sep and rest.isdigit():
