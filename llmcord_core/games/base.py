@@ -7,11 +7,16 @@ import secrets
 from dataclasses import dataclass
 from typing import Protocol, Sequence
 
+from ..i18n import CodedError
+
 SEAT_KINDS = ("member", "character")
 
 
-class IllegalMove(Exception):
-    """A move that the rules do not allow right now (wrong seat, wrong phase, not legal)."""
+class IllegalMove(CodedError, Exception):
+    """A move that the rules do not allow right now (wrong seat, wrong phase, not legal).
+
+    IllegalMove(codes.X, **params) or the legacy IllegalMove('text'); not a ValueError on purpose.
+    """
 
 
 @dataclass(frozen=True)

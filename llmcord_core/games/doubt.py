@@ -8,6 +8,7 @@ import json
 from dataclasses import dataclass, field, replace
 from typing import Optional, Sequence
 
+from ..i18n import Phrase, UserError, codes, terms
 from .base import IllegalMove, Seat, seed_hash, shuffled
 
 RANKS = ("A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K")
@@ -29,37 +30,47 @@ def normalize_rules(value=None):
     if value is None:
         value = {}
     if not isinstance(value, dict):
-        raise ValueError("The I Doubt It rules must be a set of options.")
+        raise UserError(codes.RULES_DOUBT_OPTIONS)
     r = {**DEFAULT_RULES, **{k: v for k, v in value.items() if k in DEFAULT_RULES}}
     if r["claim_rule"] != "sequence":
-        raise ValueError("The claim rule must be sequence.")
+        raise UserError(codes.RULES_DOUBT_CLAIM)
     if type(r["ante"]) is not int or not 0 <= r["ante"] <= ANTE_MAX:
-        raise ValueError(f"The ante must be a whole number from 0 to {ANTE_MAX}.")
+        raise UserError(codes.RULES_DOUBT_ANTE, limit=ANTE_MAX)
     lo, hi = TIMEOUT_RANGE
     if type(r["turn_timeout"]) is not int or not lo <= r["turn_timeout"] <= hi:
-        raise ValueError(f"The turn timeout must be a whole number of seconds from {lo} to {hi}.")
+        raise UserError(codes.RULES_DOUBT_TIMEOUT, low=lo, high=hi)
     return {k: r[k] for k in DEFAULT_RULES}
+
+
+def rules_phrases(rules=None):
+    """The table's rules in plain words, one Phrase per part (display only); join with " · "."""
+    r = normalize_rules(rules)
+    ante = Phrase(terms.DOUBT_RULE_ANTE, ante=r["ante"]) if r["ante"] else Phrase(terms.DOUBT_RULE_NO_ANTE)
+    return [Phrase(terms.DOUBT_RULE_SEQUENCE), ante, Phrase(terms.DOUBT_RULE_TIMEOUT, seconds=r["turn_timeout"])]
 
 
 def rules_text(rules=None):
     """The table's rules in plain words (display only), one line."""
+    return " · ".join(str(p) for p in rules_phrases(rules))
+
+
+def how_to_play_phrases(rules=None):
+    """The how-to-play lines, one Phrase per line (display only); join with a newline."""
     r = normalize_rules(rules)
-    ante = f"Ante {r['ante']}" if r["ante"] else "No ante"
-    return f"Claims follow the sequence A to K · {ante} · {r['turn_timeout']} s per turn"
+    return [
+        Phrase(terms.DOUBT_HOW_TITLE),
+        Phrase(terms.DOUBT_HOW_GOAL),
+        Phrase(terms.DOUBT_HOW_TURN),
+        Phrase(terms.DOUBT_HOW_NO_PASS),
+        Phrase(terms.DOUBT_HOW_DOUBT),
+        Phrase(terms.DOUBT_HOW_STANDS),
+        Phrase(terms.DOUBT_HOW_WIN_POT, ante=r["ante"]) if r["ante"] else Phrase(terms.DOUBT_HOW_WIN),
+        Phrase(terms.DOUBT_HOW_TIMEOUT, seconds=r["turn_timeout"]),
+    ]
 
 
 def how_to_play(rules=None):
-    r = normalize_rules(rules)
-    return "\n".join([
-        "**I Doubt It in short**",
-        "Be the first to get rid of all your cards.",
-        "• On your turn, put 1 to 4 cards face down on the pile and claim they are all the forced rank. The rank goes A, 2, 3 ... K, then A again, one step per claim.",
-        "• You can't pass. If you hold none of the rank, you bluff.",
-        "• Anyone else can doubt the claim. The cards are shown: if any is the wrong rank, the claimer takes the whole pile. If the claim was true, the doubter takes it.",
-        "• If nobody doubts and the next player plays, the claim stands.",
-        "• Empty your hand and survive the doubt window to win" + (f" the pot ({r['ante']} each)." if r["ante"] else "."),
-        f"• Take longer than {r['turn_timeout']} s and a card is played for you.",
-    ])
+    return "\n".join(str(p) for p in how_to_play_phrases(rules))
 
 
 @dataclass(frozen=True)
@@ -171,9 +182,13 @@ def held_counts(hand):
     return {rank: counts[rank] for rank in RANKS if rank in counts}
 
 
+def cards_phrase(n):
+    """Count with its noun: "1 card", "3 cards". Engine plural, branch-chosen with the English rule (one card, else cards)."""
+    return Phrase(terms.CARD_COUNT_MANY if n != 1 else terms.CARD_COUNT_ONE, count=n)
+
+
 def cards_text(n):
-    """Count with its noun: "1 card", "3 cards"."""
-    return f"{n} card{'s' if n != 1 else ''}"
+    return str(cards_phrase(n))
 
 
 def _plays(hand):
