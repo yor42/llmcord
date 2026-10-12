@@ -4458,6 +4458,30 @@ class DashboardBrowserTests(unittest.TestCase):
             self.post_hook('/_test/games', {'blackjack_rules': classic})
             context.close()
 
+    def test_games_tab_spoken_moves_switch_saves_and_persists(self):
+        """FEAT-37 E: the Blackjack section shows 'Read moves from chat (Experimental)' with its help line, toggling shows the save bar, Save persists with a games.spoken_moves audit row, reload shows it on, and guild 2 is untouched."""
+        from playwright.sync_api import expect
+        other = self.state()['games']['2']
+        context, page, errors = self.open_games()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            switch = page.get_by_role('switch', name='Read moves from chat (Experimental)')
+            switch.wait_for(timeout=5000)
+            page.get_by_text("On: when it's a member's turn at a blackjack table, the bot reads their chat message and, if it looks like a move, replies with buttons to confirm it (for example Hit / Just table talk). Nothing is played until they press a button. English and Korean. Experimental: it can miss or misread moves, and it loads a small language model (about 0.5 GB of memory) the first time it reads a message.", exact=True).wait_for(timeout=5000)
+            self.assertEqual(switch.get_attribute('aria-checked'), 'false')
+            switch.click()
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Read moves from chat saved', exact=True).wait_for(timeout=5000)
+            self.assertTrue(self.state()['games']['1']['spoken_moves'])
+            self.assertIn('games.spoken_moves', self.audit_actions())
+            self.assertEqual(self.state()['games']['2'], other)
+            page.reload()
+            expect(page.get_by_role('switch', name='Read moves from chat (Experimental)')).to_have_attribute('aria-checked', 'true', timeout=5000)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'spoken_moves': False})
+            context.close()
+
     def test_games_tab_doubt_switch_and_rules_save_persist_and_conflict(self):
         """FEAT-21 D: the I Doubt It section saves its switch and its ante/timeout rules with audit rows, shows the claim rule read-only as Sequence, persists after reload, refuses a stale save and leaves guild 2 alone."""
         from playwright.sync_api import expect

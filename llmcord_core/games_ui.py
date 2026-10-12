@@ -147,6 +147,18 @@ def blackjack_section(ctx):
                           dirty=lambda: current() != rules['value'], reset=reset_rules, then=lambda result: refresh(),
                           enabled=lambda control: control is not soft or stand_on.value == 17)  # soft 17 only exists when the dealer stands on 17
 
+        spoken = {'value': store.spoken_moves_enabled(gid)}
+        spoken_switch = ui.switch('Read moves from chat (Experimental)', value=spoken['value'])
+        ui.label("On: when it's a member's turn at a blackjack table, the bot reads their chat message and, if it looks like a move, replies with buttons to confirm it (for example Hit / Just table talk). "
+                 'Nothing is played until they press a button. English and Korean. Experimental: it can miss or misread moves, and it loads a small language model (about 0.5 GB of memory) the first time it reads a message.').classes('ll-muted')
+        def save_spoken():
+            spoken['value'] = store.set_spoken_moves_enabled(gid, bool(spoken_switch.value), spoken['value'])
+            return spoken['value']
+        ctx.savebar.track('Read moves from chat', {spoken_switch: spoken['value']}, save=save_spoken, action='games.spoken_moves',
+                          detail=lambda result: {'enabled': result}, success='Read moves from chat saved',
+                          dirty=lambda: bool(spoken_switch.value) != spoken['value'],
+                          reset=lambda: spoken_switch.set_value(spoken['value']))
+
 
 def doubt_section(ctx):
     from nicegui import ui

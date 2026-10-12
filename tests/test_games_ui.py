@@ -103,5 +103,22 @@ class HoldemSettings(TableCase):
             self.store.set_game_character_moves(G, 'model', 'model')
 
 
+class SpokenMovesSetting(TableCase):
+    def test_default_off_save_round_trip_stays_in_guild(self):
+        """FEAT-37 E: Read moves from chat is off by default, saves per server and leaves guild 2 alone."""
+        self.assertFalse(self.store.spoken_moves_enabled(G))
+        self.assertIs(self.store.set_spoken_moves_enabled(G, True, False), True)
+        self.assertTrue(self.store.spoken_moves_enabled(G))
+        self.assertFalse(self.store.spoken_moves_enabled(2))
+        self.assertIs(self.store.set_spoken_moves_enabled(G, False, True), False)
+        self.assertFalse(self.store.spoken_moves_enabled(G))
+
+    def test_stale_save_conflicts(self):
+        self.store.set_spoken_moves_enabled(G, True)
+        with self.assertRaises(ConflictError):
+            self.store.set_spoken_moves_enabled(G, False, False)
+        self.assertTrue(self.store.spoken_moves_enabled(G))
+
+
 if __name__ == '__main__':
     unittest.main()
