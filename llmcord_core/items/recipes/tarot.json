@@ -1,7 +1,10 @@
 {
   "key": "tarot",
   "kind": "random_message",
-  "name": "Tarot",
+  "name": {
+    "en": "Tarot",
+    "ko": "타로"
+  },
   "emoji": "🔮",
   "consumable": true,
   "default_price": 60,
@@ -122,12 +125,127 @@
           "upright": "completion, wholeness, a goal reached",
           "reversed": "unfinished business, delay, a loose end"
         }
+      ],
+      "ko": [
+        {
+          "name": "바보",
+          "upright": "새로운 시작, 믿음의 도약, 순수함",
+          "reversed": "무모함, 순진함, 잘못된 선택"
+        },
+        {
+          "name": "마법사",
+          "upright": "기술, 의지력, 일을 실현하는 힘",
+          "reversed": "속임수, 낭비된 재능, 부실한 계획"
+        },
+        {
+          "name": "여사제",
+          "upright": "직관, 숨겨진 지식, 고요한 통찰",
+          "reversed": "비밀, 무시한 직감, 혼란"
+        },
+        {
+          "name": "여황제",
+          "upright": "풍요, 돌봄, 창의성",
+          "reversed": "과잉보호, 창작의 벽, 소홀함"
+        },
+        {
+          "name": "황제",
+          "upright": "권위, 체계, 안정적인 리더십",
+          "reversed": "경직, 지배, 절제 부족"
+        },
+        {
+          "name": "교황",
+          "upright": "전통, 가르침, 함께 나누는 믿음",
+          "reversed": "반항, 틀을 벗어난 길, 독단"
+        },
+        {
+          "name": "연인",
+          "upright": "조화, 깊은 유대, 의미 있는 선택",
+          "reversed": "불화, 불균형, 피해 온 어려운 선택"
+        },
+        {
+          "name": "전차",
+          "upright": "결단력, 승리, 통제",
+          "reversed": "방향 상실, 공격성, 좌절"
+        },
+        {
+          "name": "힘",
+          "upright": "용기, 인내, 조용한 자신감",
+          "reversed": "자기 의심, 거친 충동, 나약함"
+        },
+        {
+          "name": "은둔자",
+          "upright": "성찰, 고독, 내면의 인도",
+          "reversed": "고립, 위축, 외로움"
+        },
+        {
+          "name": "운명의 수레바퀴",
+          "upright": "행운, 순환, 전환점",
+          "reversed": "나쁜 타이밍, 변화에 대한 저항, 차질"
+        },
+        {
+          "name": "정의",
+          "upright": "공정함, 진실, 인과응보",
+          "reversed": "불공정, 부정직, 회피"
+        },
+        {
+          "name": "매달린 사람",
+          "upright": "멈춤, 내려놓음, 새로운 관점",
+          "reversed": "지체, 불필요한 희생, 우유부단"
+        },
+        {
+          "name": "죽음",
+          "upright": "끝맺음, 변화, 놓아주기",
+          "reversed": "변화에 대한 저항, 정체, 끝에 대한 두려움"
+        },
+        {
+          "name": "절제",
+          "upright": "균형, 절도, 인내",
+          "reversed": "지나침, 불균형, 조급함"
+        },
+        {
+          "name": "악마",
+          "upright": "집착, 유혹, 어두운 습관",
+          "reversed": "해방, 속박에서 벗어남, 힘을 되찾음"
+        },
+        {
+          "name": "탑",
+          "upright": "갑작스러운 변화, 격변, 깨달음",
+          "reversed": "피한 재앙, 변화에 대한 두려움, 느린 붕괴"
+        },
+        {
+          "name": "별",
+          "upright": "희망, 회복, 차분한 영감",
+          "reversed": "의심, 낙담, 잃어버린 믿음"
+        },
+        {
+          "name": "달",
+          "upright": "환상, 꿈, 불확실한 땅",
+          "reversed": "명료함이 돌아옴, 혼란이 걷힘, 두려움이 풀림"
+        },
+        {
+          "name": "태양",
+          "upright": "기쁨, 성공, 따뜻함",
+          "reversed": "시들어 가는 기쁨, 늦어진 성공, 자만"
+        },
+        {
+          "name": "심판",
+          "upright": "결산, 각성, 분명한 부름",
+          "reversed": "자기 의심, 부름을 외면함, 가혹한 판단"
+        },
+        {
+          "name": "세계",
+          "upright": "완성, 온전함, 이룬 목표",
+          "reversed": "마무리되지 않은 일, 지연, 미완의 매듭"
+        }
       ]
     }
   },
   "template": {
     "en": {
       "text": "**{name}** ({orientation})\n{meaning}"
+    },
+    "ko": {
+      "text": "**{name}** ({orientation})\n의미: {meaning}"
     }
   }
 }

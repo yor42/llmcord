@@ -1,7 +1,10 @@
 {
   "key": "d20",
   "kind": "random_message",
-  "name": "d20",
+  "name": {
+    "en": "d20",
+    "ko": "20면체 주사위 (d20)"
+  },
   "emoji": "🎲",
   "consumable": false,
   "default_price": 50,
@@ -21,6 +24,9 @@
   "template": {
     "en": {
       "text": "You rolled a **{roll}** (1-{sides})."
+    },
+    "ko": {
+      "text": "주사위 결과: **{roll}** (1-{sides})"
     }
   }
 }

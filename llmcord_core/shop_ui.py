@@ -70,7 +70,7 @@ def use_rows(uses, names, zone_name, *, t=None):
     for use in uses:
         try:
             recipe = items.get_item(use['item_key'])
-            item = f'{recipe.emoji} {recipe.name}'.strip()
+            item = f'{recipe.emoji} {items.display_name(recipe, t.locale)}'.strip()
         except (KeyError, TypeError):
             item = use['item_key']
         text = ' '.join(str((use['result'] or {}).get('text', '')).replace('**', '').split())
@@ -108,11 +108,12 @@ class ShopPanel:
         t = web_locale.current()
         ctx, store, gid = self.ctx, self.store, self.gid
         recipe = items.get_item(entry['key'])
+        name = items.display_name(recipe, t.locale)
         state = {'entry': entry}
         card = ui.element('div').classes('ll-stack ll-result w-full').props('role=group')
-        card._props['aria-label'] = recipe.name
+        card._props['aria-label'] = name
         with card:
-            ui.label(f'{recipe.emoji} {recipe.name}'.strip()).classes('ll-subtitle')
+            ui.label(f'{recipe.emoji} {name}'.strip()).classes('ll-subtitle')
             kind = recipe.kind.replace('_', ' ').capitalize()
             ui.label(t('{kind} · Consumable', kind=kind) if recipe.consumable else t('{kind} · Reusable', kind=kind)).classes('ll-muted')
             with ui.element('div').classes('ll-form-row ll-field-row'):
@@ -143,8 +144,8 @@ class ShopPanel:
                 state['entry'] = saved
                 return saved
             with ui.element('div').classes('ll-form-row'):
-                button = ctx.button(t.p('button', 'Save'), operation, 'shop.item', item_detail, success=t('{name} saved', name=recipe.name))
-                button._props['aria-label'] = t('Save {name}', name=recipe.name)
+                button = ctx.button(t.p('button', 'Save'), operation, 'shop.item', item_detail, success=t('{name} saved', name=name))
+                button._props['aria-label'] = t('Save {name}', name=name)
 
     def settings(self):
         from nicegui import ui
