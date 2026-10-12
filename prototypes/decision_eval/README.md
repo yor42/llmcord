@@ -23,6 +23,7 @@ Flags: `--candidates` (ids: oai-choice oai-predicate or-d1-choice or-d1-noul or-
 - `results.json` is rewritten as the run goes (and on an interrupt or crash), so paid results are never lost.
 - Errored calls add nothing to the spent total (providers do not normally bill errors); five consecutive errors skip the candidate.
 - All decision candidates get the same context sentence (`context_for`); a first smoke test without it gave the OpenAI candidates 0/3 on moves.
+- Haiku 5.5 and Flash-Lite are called with reasoning off/minimal: Haiku 5.5 otherwise spends the token budget on hidden reasoning and returns nothing (seen in the smoke test). Their system prompts carry slightly less context than the decision candidates' framing (no doubt-window or whose-turn wording).
 - Calls are sequential. An error counts as an invalid answer; 5 in a row skip the rest of that candidate.
 
 - No extra smoke calls: a small run (`--limit 6 --candidates <one>`) is the smoke test.

@@ -930,5 +930,48 @@ class RawExcerptTests(unittest.TestCase):
             return run_eval.main(["--run", "--candidates", "or-haiku", "--limit", "3", "--out", d], env={"OPENROUTER_API_KEY": FAKE_OR}, post=post)
 
 
+class ChatReasoningTests(unittest.TestCase):
+    """Smoke-run findings: Haiku 5.5 reasons by default and spent all 64 tokens on hidden reasoning; Flash-Lite reasoning is mandatory."""
+
+    def test_haiku_reasoning_disabled_and_small_budget(self):
+        for item in (BJ, DB):
+            b = ec.build_request("or-haiku", item)["json"]
+            self.assertEqual(b["reasoning"], {"enabled": False})
+            self.assertEqual(b["max_tokens"], 64)
+
+    def test_flashlite_minimal_hidden_reasoning(self):
+        for item in (BJ, DB):
+            b = ec.build_request("or-flashlite", item)["json"]
+            self.assertEqual(b["reasoning"], {"effort": "minimal", "exclude": True})
+            self.assertEqual(b["max_tokens"], 256)
+
+    def test_parse_answer_finish_field(self):
+        def resp(content, finish):
+            return {"choices": [{"message": {"content": content}, "finish_reason": finish}]}
+        self.assertEqual(ec.parse_answer("or-haiku", BJ, resp('{"answer": "hit"}', "stop"))["finish"], "stop")
+        r = ec.parse_answer("or-haiku", BJ, resp("", "length"))
+        self.assertEqual((r["answer"], r["finish"]), (None, "length"))
+        self.assertIsNone(ec.parse_answer("or-flashlite", BJ, {"choices": [{"message": {"content": "{}"}}]})["finish"])
+        self.assertIsNone(ec.parse_answer("or-haiku", BJ, {})["finish"])
+        self.assertIsNone(ec.parse_answer("oai-predicate", BJ, {"answers": [{"type": "predicate", "name": "move_hit", "probability": 0.9}]})["finish"])
+
+    def test_results_json_keeps_finish_next_to_raw_for_invalid_records_only(self):
+        calls = []
+
+        def post(url, body, key):
+            calls.append(1)
+            if len(calls) == 1:
+                return {"choices": [{"message": {"content": ""}, "finish_reason": "length"}]}, 0.1
+            return {"choices": [{"message": {"content": '{"answer": "talk"}'}, "finish_reason": "stop"}]}, 0.1
+        with tempfile.TemporaryDirectory() as d:
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                run_eval.main(["--run", "--candidates", "or-haiku", "--limit", "3", "--out", d], env={"OPENROUTER_API_KEY": FAKE_OR}, post=post)
+            recs = json.loads((Path(d) / "results.json").read_text(encoding="utf-8"))["records"]
+        self.assertEqual((recs[0]["answer"], recs[0]["finish"], recs[0]["raw"]), (None, "length", ""))
+        for r in recs[1:]:
+            self.assertEqual(r["answer"], "talk")
+            self.assertIsNone(r.get("finish"))
+
+
 if __name__ == "__main__":
     unittest.main()

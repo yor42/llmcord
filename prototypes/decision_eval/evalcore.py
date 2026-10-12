@@ -149,6 +149,8 @@ def build_request(candidate, item, k=0):
                     "type": "object", "properties": {"answer": {"type": "string", "enum": [*legal, "talk"]}}, "required": ["answer"], "additionalProperties": False}}}}
         if gemini:  # reasoning is mandatory on Flash-Lite: keep it minimal and out of the response
             body["reasoning"] = {"effort": "minimal", "exclude": True}
+        else:  # Haiku 5.5 reasons by default and then has no budget left for the answer
+            body["reasoning"] = {"enabled": False}
         return {"url": c["url"], "json": body, "key_env": c["key_env"]}
     openai = c["url"] == URL_OAI
     if kind == "choice":
@@ -215,11 +217,13 @@ def parse_answer(candidate, item, response_json, tau=0.5):
     """{'answer','p','probs','refusal','cost','tokens'}; answer is a legal move, 'talk', 'doubt' or None (invalid or refused)."""
     kind = CANDIDATES[candidate]["kind"]
     cost, tokens = usage_of(response_json)
-    out = {"answer": None, "p": None, "probs": {}, "refusal": False, "cost": cost, "tokens": tokens, "raw": None}
+    out = {"answer": None, "p": None, "probs": {}, "refusal": False, "cost": cost, "tokens": tokens, "raw": None, "finish": None}
     legal = item["legal"]
     try:
         if kind == "chat":
-            msg = response_json["choices"][0]["message"]
+            first = response_json["choices"][0]
+            out["finish"] = first.get("finish_reason")
+            msg = first["message"]
             if isinstance(msg.get("content"), str):
                 out["raw"] = msg["content"][:80]
             if msg.get("refusal"):

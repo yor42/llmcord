@@ -82,7 +82,7 @@ def run_calls(cands, items, a, keys, post, records, flush):
                     rec.update(ec.parse_answer(cand, it, resp, a.tau), wall=wall, error=None)
                     errors = 0
                     if rec["answer"] is not None:
-                        del rec["raw"]  # kept in results.json only to show why an answer was invalid
+                        del rec["raw"], rec["finish"]  # kept in results.json only to show why an answer was invalid
                 except Exception as e:  # an error is an invalid answer, never an abort
                     rec.update(answer=None, p=None, probs={}, refusal=False, cost=None, tokens=None, wall=None,
                                error=redact(f"{type(e).__name__}: {e}", keys.values())[:300])
