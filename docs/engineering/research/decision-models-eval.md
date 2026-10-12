@@ -52,3 +52,30 @@ Checked against OpenRouter's own pages and Microsoft's announcement and Learn do
 3. Metrics: right-move rate, silent-on-chatter rate, Korean split, p50/p95 latency, cost per 1,000 calls, `unsure` band usefulness (do probabilities separate sure from unsure?).
 4. Keys come from the environment only (`OPENAI_API_KEY`, `OPENROUTER_API_KEY`); never print them or write them to the repo.
 5. Likely role if it wins: tiebreaker behind e5 for the `unsure` band, not a replacement.
+
+## Harness design (FEAT-43)
+Code: `prototypes/decision_eval/` (`evalcore.py` pure helpers, `run_eval.py` CLI). Tests: `tests/test_decision_eval.py` (offline, fake transport). Nothing under `llmcord_core/` changes.
+
+### Items
+Reuse the labelled sets, no new phrases and no real chat:
+- **bj**: all 195 rows of `prototypes/spoken_moves/phrases.csv` (133 move rows, 62 table talk; en 71, ko 101, mixed 23). Each row has `legal` moves; pass rule as `bands.passes` (move row: answer is the label or an accepted move; talk row: `talk`, or an accepted move).
+- **doubt**: the 116 phrases of `tests/test_spoken_doubt.py` (60 doubt, 56 not), parsed with `ast` as in `prototypes/local_director/spoken_llm.py`. Language by script: any Hangul and any ASCII letter is `mix`, Hangul only is `ko`, else `en`.
+- Move meanings (`MEANING`) and the two system texts are the ones in `spoken_llm.py`, so the numbers sit next to the Qwen 3.5 4B round and the recorded e5 control (95% right move, 70% silent; D34).
+
+### Candidates (names are CLI ids)
+| id | Endpoint | Question shape | Reading |
+| --- | --- | --- | --- |
+| `oai-choice` | OpenAI `POST /v1/decisions`, model `gpt-6-luna` | one `choice` question: each legal move plus `other` ("table talk, a question, a joke, or not an instruction to act now"); option order shuffled, K orders per item | argmax; `other` is `talk` |
+| `oai-predicate` | same | one request, one `predicate` question per legal move ("Is the player choosing to <meaning> right now?") | argmax probability if >= tau, else `talk` |
+| `or-d1-choice` | OpenRouter `POST /api/alpha/decisions`, model `microsoft/microsoft-decision-1` | same as `oai-choice` in the OpenRouter wire format (`state`, `criteria` map) | as above |
+| `or-d1-noul` | same | one `noul` question per legal move in one request | as `oai-predicate` |
+| `or-haiku` | OpenRouter `POST /api/v1/chat/completions`, `anthropic/claude-haiku-5.5` | JSON-schema enum of legal moves plus `talk`, same system text as the Qwen round, temperature 0 | the enum |
+| `or-flashlite` | same, `google/gemini-3.5-flash-lite` | same | the enum |
+For doubt items the choice options are `doubt` and `other`; the predicate/noul question is "Is the player accusing another player of lying or bluffing right now?". Auth: `OPENAI_API_KEY` for `oai-*`, `OPENROUTER_API_KEY` for the rest; read from the environment only, never printed, logged, stored in results or put in a URL.
+
+### Metrics (per candidate and task)
+Right-move rate, silent-on-chatter rate, both split by en/ko/mix, invalid/refusal/error counts, p50/p95 wall latency per request (sequential, so it is not skewed by our own concurrency), cost per 1,000 calls from the provider's `usage` (else tokens x price), order stability for the shuffled choice runs (share of items whose answer is the same across the K orders, and the spread of the top probability), and probability separation: the top probability against correctness, as an AUROC, a table of accuracy by probability bucket (<0.5, 0.5-0.7, 0.7-0.9, 0.9-0.99, >=0.99), and a tau sweep for the predicate/noul and choice modes (move-right and talk-silent if an answer under tau counts as silent).
+The e5 control is the recorded D34 number. e5 per-row scores are not reproduced here (needs the ONNX model), so "behind e5" is judged from the recorded numbers and the separation tables, not row by row.
+
+### Safety rules for the script
+Dry run by default (prints call count and a cost estimate, makes no request and needs no key); a paid run needs `--run`. A `--max-usd` budget aborts a run once the reported usage cost passes it. Results go to `--out` (default outside the repo), never into the repo; they hold phrases, ids and answers, no headers. Each model is smoke-tested with a few calls before the full run.
