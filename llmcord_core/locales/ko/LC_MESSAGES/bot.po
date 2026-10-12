@@ -6,6 +6,19 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
+#: llmcord_core/catchup.py
+msgid "Nothing new here since you last spoke."
+msgstr ""
+
+#: llmcord_core/catchup.py
+msgid "Nothing new here in the last hour."
+msgstr ""
+
+#: llmcord_core/catchup.py
+#, python-brace-format
+msgid "Nothing new here in the last {hours} hours."
+msgstr ""
+
 #: llmcord_core/discord_bot.py
 msgctxt "space kind"
 msgid "world"

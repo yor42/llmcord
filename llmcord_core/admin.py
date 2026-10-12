@@ -14,6 +14,7 @@ from . import playstyle_generate
 from .backend import dashboard_gateway, effective_backend
 from .budget import BudgetExceeded
 from .errors import ModelConfigError, error_detail, is_timeout
+from . import i18n
 from .i18n import UserError, codes
 from .games import playstyle
 from .models import TurnMessage
@@ -152,47 +153,52 @@ class AdminService:
         except sqlite3.Error:
             log.warning('Audit write failed after a committed admin action (action=%s guild=%s actor=%s)', action, guild_id, actor_id, exc_info=True)
 
-    def owners(self, guild_id, channel_names=None, thread_names=None):
+    def owners(self, guild_id, channel_names=None, thread_names=None, *, t=None):
         store = self.store
         return self.owners_from(guild_id, store.list_spaces(guild_id), store.list_characters(guild_id), store.list_channels(guild_id),
-            store.list_lorebooks(guild_id), store.thread_lore_scopes(guild_id), channel_names, thread_names)
+            store.list_lorebooks(guild_id), store.thread_lore_scopes(guild_id), channel_names, thread_names, t=t)
 
     @staticmethod
-    def thread_label(scope_id, thread_names=None):
+    def thread_label(scope_id, thread_names=None, *, t=None):
         # UI-03/UI-44: thread_names None means the fetch failed or was skipped, so the archived state is unknown.
+        t = t or i18n.english()
         name = (thread_names or {}).get(scope_id)
         if name:
-            return f"Thread {name}"
-        return f"Thread …{str(scope_id)[-4:]}" if thread_names is None else f"Archived thread …{str(scope_id)[-4:]}"
+            return t('Thread {name}', name=name)
+        tail = str(scope_id)[-4:]
+        return t('Thread …{tail}', tail=tail) if thread_names is None else t('Archived thread …{tail}', tail=tail)
 
-    def owners_from(self, guild_id, spaces, characters, channels, lorebooks, thread_scopes, channel_names=None, thread_names=None):
+    def owners_from(self, guild_id, spaces, characters, channels, lorebooks, thread_scopes, channel_names=None, thread_names=None, *, t=None):
+        t = t or i18n.english()
         owners = []
         for row in spaces:
-            owners.append({'kind': 'space', 'id': row['id'], 'label': f"{row['kind'].title()}: {row['name']}"})
+            label = t('Hub: {name}', name=row['name']) if row['kind'] == 'hub' else t('World: {name}', name=row['name']) if row['kind'] == 'world' else f"{row['kind'].title()}: {row['name']}"
+            owners.append({'kind': 'space', 'id': row['id'], 'label': label})
         for row in characters:
-            owners.append({'kind': 'character', 'id': row['id'], 'label': 'Character: ' + row['name']})
+            owners.append({'kind': 'character', 'id': row['id'], 'label': t('Character: {name}', name=row['name'])})
         for row in channels:
-            owners.append({'kind': 'channel', 'id': row['channel_id'], 'label': f"Channel: {(channel_names or {}).get(row['channel_id'], row['channel_id'])}"})
-        owners.append({'kind': 'guild', 'id': guild_id, 'label': 'Server: Server-wide lore'})
+            owners.append({'kind': 'channel', 'id': row['channel_id'], 'label': t('Channel: {name}', name=(channel_names or {}).get(row['channel_id'], row['channel_id']))})
+        owners.append({'kind': 'guild', 'id': guild_id, 'label': t('Server: Server-wide lore')})
         for row in lorebooks:
-            owners.append({'kind': 'book', 'id': row['id'], 'label': 'Lorebook: ' + row['name']})
+            owners.append({'kind': 'book', 'id': row['id'], 'label': t('Lorebook: {name}', name=row['name'])})
         for scope_id in thread_scopes:
-            owners.append({'kind': 'thread', 'id': scope_id, 'label': self.thread_label(scope_id, thread_names)})
+            owners.append({'kind': 'thread', 'id': scope_id, 'label': self.thread_label(scope_id, thread_names, t=t)})
         return owners
 
-    def preview_prompt(self, guild_id, bundle, purpose, character_id, sample, sample_history, channel_id=None):
+    def preview_prompt(self, guild_id, bundle, purpose, character_id, sample, sample_history, channel_id=None, *, t=None):
         # Preview uses supplied sample data only; it never reads scene or personal-memory tables.
-        card, character_name = {}, 'Character'
+        t = t or i18n.english()
+        card, character_name = {}, t.p('preview sample', 'Character')
         if character_id:
             self.store.validate_owner(guild_id, 'character', character_id)
             row = self.store.character_by_id(character_id)
             card, character_name = json.loads(row['card']), row['name']
-        values = {'char': character_name, 'user': 'Sample user', 'group': character_name,
+        values = {'char': character_name, 'user': t.p('preview sample', 'Sample user'), 'group': character_name,
             'payload': sample, 'description': card.get('description', ''), 'personality': card.get('personality', ''),
             'scenario': card.get('scenario', ''), 'opening': card.get('first_mes', ''), 'examples': card.get('mes_example', ''),
             'mesExamples': card.get('mes_example', ''), 'mesExamplesRaw': card.get('mes_example', ''),
             'card_instructions': card.get('system_prompt', ''), 'card_post_history': card.get('post_history_instructions', ''),
-            'location': 'Sample world', 'summary': ''}
+            'location': t.p('preview sample', 'Sample world'), 'summary': ''}
         values.update(time_values((int(time.time() * 1000) - 1420070400000) << 22, self.store.resolve_timezone(guild_id, None)[0]))
         if purpose == 'dialogue':
             if channel_id:

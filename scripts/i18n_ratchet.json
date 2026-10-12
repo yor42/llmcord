@@ -52,7 +52,7 @@
       "raise": 3
     },
     "llmcord_core/presets_ui.py": {
-      "ui": 2
+      "ui": 1
     },
     "llmcord_core/prices.py": {
       "raise": 7

@@ -1,3 +1,62 @@
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Thread {name}"
+msgstr ""
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Thread …{tail}"
+msgstr ""
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Archived thread …{tail}"
+msgstr ""
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Hub: {name}"
+msgstr ""
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "World: {name}"
+msgstr ""
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Character: {name}"
+msgstr ""
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Channel: {name}"
+msgstr ""
+
+#: llmcord_core/admin.py
+msgid "Server: Server-wide lore"
+msgstr ""
+
+#: llmcord_core/admin.py
+#, python-brace-format
+msgid "Lorebook: {name}"
+msgstr ""
+
+#: llmcord_core/admin.py
+msgctxt "preview sample"
+msgid "Character"
+msgstr ""
+
+#: llmcord_core/admin.py
+msgctxt "preview sample"
+msgid "Sample user"
+msgstr ""
+
+#: llmcord_core/admin.py
+msgctxt "preview sample"
+msgid "Sample world"
+msgstr ""
+
 #: llmcord_core/auth.py
 msgid "Discord permission checks are temporarily rate limited. Please try again shortly."
 msgstr ""
@@ -650,6 +709,16 @@ msgid "Stream usage"
 msgstr ""
 
 #: llmcord_core/dashboard.py
+msgctxt "billing tier"
+msgid "paid"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "billing tier"
+msgid "free"
+msgstr ""
+
+#: llmcord_core/dashboard.py
 msgid "Billing tier"
 msgstr ""
 
@@ -1124,6 +1193,21 @@ msgstr ""
 
 #: llmcord_core/dashboard.py
 msgid "The turn log is off. Turn it on in Server settings to record model calls."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "usage role"
+msgid "dialogue"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "usage role"
+msgid "director"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "usage role"
+msgid "memory"
 msgstr ""
 
 #: llmcord_core/dashboard.py
@@ -3171,6 +3255,11 @@ msgid "Sample input"
 msgstr ""
 
 #: llmcord_core/presets_ui.py
+msgctxt "sample input"
+msgid "Hello!"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
 msgid "Sample history (one message per line)"
 msgstr ""
 
@@ -3463,6 +3552,10 @@ msgstr ""
 #: llmcord_core/shop_ui.py
 msgctxt "column"
 msgid "Result"
+msgstr ""
+
+#: llmcord_core/web.py
+msgid "the file could not be read"
 msgstr ""
 
 #: llmcord_core/web.py

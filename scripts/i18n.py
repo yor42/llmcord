@@ -28,7 +28,7 @@ KEYWORDS = {
 KEYWORDS['web'] = KEYWORDS['bot']
 DOMAIN_FILES = {
     'bot': ['llmcord_core/discord_bot.py', 'llmcord_core/*_discord.py',
-            'llmcord_core/games_spoken_doubt.py', 'llmcord_core/usage.py'],
+            'llmcord_core/games_spoken_doubt.py', 'llmcord_core/usage.py', 'llmcord_core/catchup.py'],
     'web': ['llmcord_core/dashboard.py', 'llmcord_core/*_ui.py',
             'llmcord_core/lore_workspace.py', 'llmcord_core/lore_drag.py',
             'llmcord_core/macro_highlight.py', 'llmcord_core/savebar.py',

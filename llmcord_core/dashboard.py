@@ -36,7 +36,7 @@ from .shop_ui import shop_panel
 from .presets_ui import presets_panel
 from .config import PROFILE_KEYS, format_key_ref, parse_key_ref, validate_profile_name
 from . import i18n
-from .i18n import N_, NP_, UserError, codes, web_locale
+from .i18n import N_, NP_, Msg, UserError, codes, web_locale
 from .icons import icon_css, lucide, lucide_button, more_menu
 from .lorebooks import parse_lorebook
 from .macro_highlight import MacroHighlight
@@ -331,7 +331,9 @@ async def backend_panel(ctx, config):
 
     def render_profiles(views, backend):
         if config.error:
-            ui.label(t('config.yaml could not be read, so only dashboard profiles are listed. {error}', error=config.error)).classes('text-warning')
+            detail = getattr(config, 'error_value', None)
+            detail = config.error if detail is None else t.render(detail) if isinstance(detail, Msg) else t.error(detail)
+            ui.label(t('config.yaml could not be read, so only dashboard profiles are listed. {error}', error=detail)).classes('text-warning')
         for problem in backend.problems:
             ui.label(problem).classes('text-warning')
         if not views:
@@ -401,7 +403,7 @@ async def backend_panel(ctx, config):
                         effort.bind_visibility_from(provider, 'value', lambda value: value == 'compatible')
                         structured = ui.switch(t('Structured outputs'), value=initial.get('structured_outputs', False))
                         usage = ui.switch(t('Stream usage'), value=initial.get('stream_usage', True))
-                        tier = ui.select(['paid', 'free'], value=initial.get('billing_tier', 'paid'), label=t('Billing tier')).classes('w-full')
+                        tier = ui.select({'paid': t.p('billing tier', 'paid'), 'free': t.p('billing tier', 'free')}, value=initial.get('billing_tier', 'paid'), label=t('Billing tier')).classes('w-full')
 
                         def cost_input(field, label):
                             control = ui.number(label, value=initial.get(field), min=0).props('clearable').classes('w-full')
@@ -722,7 +724,7 @@ class LiveContext:
         return types.SimpleNamespace(spaces=spaces, characters=characters, channels=channels, lorebooks=lorebooks,
             worlds={r['id']: r['name'] for r in spaces if r['kind'] == 'world'},
             hubs={r['id']: r['name'] for r in spaces if r['kind'] == 'hub'},
-            owners=self.service.owners_from(gid, spaces, characters, channels, lorebooks, scopes, self.channel_names, self.thread_names))
+            owners=self.service.owners_from(gid, spaces, characters, channels, lorebooks, scopes, self.channel_names, self.thread_names, t=web_locale.current()))
 
     def set_url(self, **params):
         sets = ''.join(f'u.searchParams.set({json.dumps(k)}, {json.dumps(v)});' for k, v in params.items())
@@ -1242,7 +1244,7 @@ def _register_pages(app):
                         if tab == 'spending':
                             budget_panel(ctx)
                         elif tab == 'backend':
-                            await backend_panel(ctx, types.SimpleNamespace(profiles=app.state.config_profiles, roles=app.state.config_roles, error=app.state.config_error))
+                            await backend_panel(ctx, types.SimpleNamespace(profiles=app.state.config_profiles, roles=app.state.config_roles, error=app.state.config_error, error_value=getattr(app.state, 'config_error_value', None)))
                         else:
                             await usage_by_server_panel(ctx, lambda: app.state.auth.guilds(session, t=t))
                 except BaseException:
@@ -1670,6 +1672,9 @@ async def turn_log_section(ctx, channel_label, live=lambda: True):
         await load(True)
 
 
+USAGE_ROLE_WORDS = {'dialogue': NP_('usage role', 'dialogue'), 'director': NP_('usage role', 'director'), 'memory': NP_('usage role', 'memory')}
+
+
 def usage_role_labels(backend_roles):
     """Profile name -> the roles it serves; a role without its own profile uses dialogue's."""
     roles = {}
@@ -1731,7 +1736,7 @@ async def monitoring_panel(ctx):
                         ('cost', t.p('column', 'Estimated USD')), ('unpriced', t.p('column', 'Without cost estimate'))]
                 ui.label(t('By model')).classes('ll-subtitle')
                 usage_table([('model', t.p('column', 'Model')), ('roles', t.p('column', 'Used for')), *tail],
-                            [{'key': f"{r['profile']}/{r['model']}", 'model': r['model'], 'roles': ', '.join(roles.get(r['profile'], [])), 'requests': f"{r['requests']:,}", 'input': f"{r['input_tokens']:,}",
+                            [{'key': f"{r['profile']}/{r['model']}", 'model': r['model'], 'roles': ', '.join(t.render(USAGE_ROLE_WORDS.get(role, role)) for role in roles.get(r['profile'], [])), 'requests': f"{r['requests']:,}", 'input': f"{r['input_tokens']:,}",
                               'output': f"{r['output_tokens']:,}", 'cost': money(r), 'unpriced': r['unpriced']} for r in report['by_model']], 'key')
                 ui.label(t('By channel')).classes('ll-subtitle')
                 usage_table([('channel', t.p('column', 'Channel')), *tail],

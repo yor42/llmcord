@@ -26,6 +26,7 @@ from .config import profiles_from_models
 from .errors import register_secret_names
 
 
+CONFIG_UNREADABLE = i18n.N_("the file could not be read")
 AVATAR_CACHE = {"Cache-Control": "private, max-age=300"}
 
 
@@ -81,6 +82,7 @@ class SecurityHeaders:
 def _load_config(app: FastAPI, config_path: str) -> None:
     # config.yaml is parsed once; the Backend tab, the prompt preview and AdminService share the result. A bad file leaves empty sets and a message.
     app.state.config_profiles, app.state.config_roles, app.state.config_error = {}, {}, None
+    app.state.config_error_value = None
     app.state.config_models, app.state.config_limits = {}, {}
     try:
         raw = {}
@@ -94,7 +96,9 @@ def _load_config(app: FastAPI, config_path: str) -> None:
         register_secret_names(p.api_key_env for p in app.state.config_profiles.values())
     except (ValueError, OSError, yaml.YAMLError, TypeError, AttributeError) as error:
         app.state.config_profiles, app.state.config_roles = {}, {}
-        app.state.config_error = str(error) if isinstance(error, ValueError) else "the file could not be read"
+        # config_error stays the English text; config_error_value is what the dashboard renders in the viewer's language.
+        app.state.config_error_value = error if isinstance(error, ValueError) else CONFIG_UNREADABLE
+        app.state.config_error = str(error) if isinstance(error, ValueError) else str(CONFIG_UNREADABLE)
 
 
 def _register_auth_routes(app: FastAPI, base_url: str, client_id: str, client_secret: str) -> None:
