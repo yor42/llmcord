@@ -1,6 +1,6 @@
 """Extract, merge and inspect gettext catalogs (FEAT-43, D39).
 
-    python scripts/i18n.py extract | update | init LANG | check | stats | ratchet [--update [--allow-increase]]
+    python scripts/i18n.py extract | update | init LANG | check | stats | coverage [--min PCT] [--locale LANG ...] | ratchet [--update [--allow-increase]]
 """
 from __future__ import annotations
 
@@ -199,12 +199,39 @@ def stats(root) -> list[dict]:
     return rows
 
 
+def _pct(translated: int, total: int) -> str:
+    return f'{100.0 * translated / total if total else 100.0:.1f}%'
+
+
+def coverage_report(root, locales=None, minimum=None) -> tuple[list[str], list[str]]:
+    """Report lines and the locale/domain pairs below `minimum` percent."""
+    rows = stats(root)
+    if locales:
+        rows = [r for r in rows if r['locale'] in locales]
+    lines, low = [], []
+    for lang in sorted({r['locale'] for r in rows}):
+        mine = [r for r in rows if r['locale'] == lang]
+        total = sum(r['total'] for r in mine)
+        done = sum(r['translated'] for r in mine)
+        lines.append(f'{lang}: {done}/{total} {_pct(done, total)} fuzzy={sum(r["fuzzy"] for r in mine)} '
+                     f'untranslated={sum(r["untranslated"] for r in mine)}')
+        for r in mine:
+            lines.append(f'  {lang}/{r["domain"]}: {r["translated"]}/{r["total"]} {_pct(r["translated"], r["total"])} '
+                         f'fuzzy={r["fuzzy"]} untranslated={r["untranslated"]}')
+            if minimum is not None and r['total'] and 100.0 * r['translated'] / r['total'] < minimum:
+                low.append(f'{lang}/{r["domain"]}: {_pct(r["translated"], r["total"])} is below {minimum:g}%')
+    return lines, low
+
+
 def main(argv=None, root=None) -> int:
     root = Path(root) if root else ROOT
     parser = argparse.ArgumentParser(prog='i18n.py', description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest='command', required=True)
     for name in ('extract', 'update', 'check', 'stats'):
         sub.add_parser(name)
+    cov = sub.add_parser('coverage')
+    cov.add_argument('--min', type=float, default=None)
+    cov.add_argument('--locale', nargs='+', action='extend', default=None)
     sub.add_parser('init').add_argument('lang')
     ratchet = sub.add_parser('ratchet')
     ratchet.add_argument('--update', action='store_true')
@@ -227,6 +254,12 @@ def main(argv=None, root=None) -> int:
         for row in stats(root):
             print('{locale:8} {domain:9} total={total} translated={translated} '
                   'fuzzy={fuzzy} untranslated={untranslated}'.format(**row))
+    elif args.command == 'coverage':
+        lines, low = coverage_report(root, args.locale, args.min)
+        print(*lines, sep='\n')
+        if low:
+            print(*(f'below minimum: {item}' for item in low), sep='\n')
+            return 1
     elif args.command == 'ratchet' and args.update:
         from scripts import i18n_check
         raised = [] if args.allow_increase else i18n_check.ratchet_increases(root)
