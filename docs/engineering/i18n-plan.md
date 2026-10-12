@@ -1,6 +1,6 @@
 # Multi-language support (i18n): architecture briefing and implementation spec
 
-**Status:** proposal, waiting for the user's go-ahead (2026-10-12). No application code has changed. Nothing here is a decision until it is recorded as `D39` in [backlog.md](backlog.md).
+**Status:** approved by the user on 2026-10-12 as **D39** in [backlog.md](backlog.md), with decisions A–E as recommended and F allowing parallel Phase 1 batches on separate files. Phase 0 is FEAT-43; the other phases are FEAT-44..46 and MNT-66..75.
 **Scope:** the Discord bot and the admin dashboard, Korean (`ko`) and English (`en`) first. Adding a language later must not need core code changes.
 **Method:** a read-only scan of the repository at `dcb4d29`, an AST inventory of string literals (section 1.3, appendix A), and the library behaviour this spec depends on, checked against the pinned versions (appendix B).
 
@@ -114,8 +114,8 @@ llmcord_core/
     format.py        # safe named-placeholder formatter, Korean particle spec, numbers and lists
     codes.py         # shared user-facing error codes (errors domain); the only place E_() appears
     terms.py         # shared vocabulary (common domain): game names, hand and rank words, On/Off, default currency
-    discord.py       # app_commands.Translator adapter; audience resolvers for interactions and guilds
-    web.py           # NiceGUI client binding, cookie/Accept-Language resolution, Quasar language mapping
+    discord_locale.py  # app_commands.Translator adapter, C_(); audience resolvers for interactions and guilds
+    web_locale.py      # NiceGUI client binding, cookie/Accept-Language resolution, Quasar language mapping
   locales/
     templates/       # generated .pot files, committed so CI can tell when they are stale
       bot.pot  commands.pot  web.pot  errors.pot  common.pot
@@ -160,15 +160,17 @@ t = i18n.Translator(loc)                       # loc comes from an audience reso
 t('Linked {world} to {hub}.', world=w, hub=h)  # whole sentence, named placeholders
 t.n('{count} character', '{count} characters', count, count=count)
 t.p('holdem action', 'Call')                   # msgctxt
+t.np('holdem', '{count} seat', '{count} seats', count)  # msgctxt + plural; count is passed as {count} automatically
 t.error(err)                                   # renders a UserError in this locale
 t.list(names); t.number(1500)                  # CLDR list and number formats
 
-BUSY = i18n.N_('The server is busy. Try again.')   # module constant: marked, translated later with t(BUSY)
+BUSY = i18n.N_('The server is busy. Try again.')   # module constant: a str (English) marked for extraction, translated later with t(BUSY)
+STAND = i18n.NP_('blackjack action', 'Stand')       # the same with a msgctxt
 
 raise i18n.UserError(codes.CURRENCY_NAME_CHANGED)   # store or engine layer: never translates
 ```
 
-- Babel extracts with the keywords `t`, `n:1,2`, `p:1c,2`, `N_`, `C_` and `E_:2`. It matches the last part of a dotted call (`t.n(…)`, `self.t(…)`), as checked in appendix B. `check` confirms that no other function in `llmcord_core` is named `t`, `n` or `p`.
+- Babel extracts with the keywords `t`, `n:1,2`, `p:1c,2`, `np:1c,2,3`, `N_`, `NP_:1c,2`, `C_` and `E_:2`. It matches the last part of a dotted call (`t.n(…)`, `self.t(…)`), as checked in appendix B. `check` confirms that no other function in `llmcord_core` is named `t`, `n`, `p` or `np`.
 - `UserError` subclasses `ValueError`, and its `str()` is the English text. Every existing `except ValueError` path, log line and `assertRaisesRegex` keeps working, so raise sites can move over one at a time.
 - **The translator is passed explicitly, not held in a context variable.** asyncio copies context into each task when the task is created. A game timer started inside a button handler would inherit the clicker's locale and post public table messages in it. Explicit passing makes that bug impossible, and `t` is easy to see in reviews and tests.
 - **Format strings in catalogs are untrusted input.** The formatter allows bare field names only. `{x.attr}`, `{x[0]}` and conversions are refused, and `check` also refuses any field that is not in the `msgid`. Escaping user values for Discord markdown and mentions (`_clean`, `allowed_mentions`) still happens in code before formatting. Catalog text never goes into `ui.html`.
@@ -212,7 +214,7 @@ The channel locale is the first of these that is set: the server bot language, t
 - **The cookie:** `llmcord_lang`, one year, `Secure`, `HttpOnly`, `SameSite=Lax`, kept separate from the session so it survives sign-out. Phase 5 can add a per-user preference stored in the database to follow an admin across devices (a schema change).
 - **The switcher:** the account menu (`account_menu`, `dashboard.py:1318`) gets a **Language** item that lists the discovered locales by their own names. Each entry is a plain POST form to a new `/lang` route that checks the CSRF token and origin exactly like `/logout` (`web.py:144`), with no JS. `next` must be a same-site path that starts with `/` and not `//`, to block open redirects. The route answers with a 303 back to the same page.
 - **The full reload is deliberate.** It rebuilds the header, the tabs, Quasar's language pack and `<html lang>` in one step. It is a navigation, like sign-out, not a panel refresh, so it is a documented exception to the ui-guide's "no full-page reloads" rule (decision E). While an editor has unsaved changes, the save bar's `beforeunload` warning protects them, or the menu item can be disabled while dirty, matching how the save bar refuses other actions.
-- **Binding:** the three page handlers (`dashboard.py:1132`, `:1167`, `:1213`) set `client.llmcord_locale` next to the existing `client.llmcord_binding`. `LiveContext` exposes `ctx.t`, and helpers without `ctx` call `i18n.web.current()`, which reads `ui.context.client`. NiceGUI runs event handlers and `ui.timer` callbacks in the client's context, so toasts after a click come out in the right language. `_attempt` (`dashboard.py:56`, `:752`) renders `UserError` with `t.error`.
+- **Binding:** the three page handlers (`dashboard.py:1132`, `:1167`, `:1213`) set `client.llmcord_locale` next to the existing `client.llmcord_binding`. `LiveContext` exposes `ctx.t`, and helpers without `ctx` call `i18n.web_locale.current()`, which reads `ui.context.client`. NiceGUI runs event handlers and `ui.timer` callbacks in the client's context, so toasts after a click come out in the right language. `_attempt` (`dashboard.py:56`, `:752`) renders `UserError` with `t.error`.
 - **Quasar and `<html lang>`:** the page handler swaps in a shallow copy of `client.page` with `language` mapped from our locale (`ko` to `ko-KR`). The mapping is derived from NiceGUI's `Language` literal, so a new pack needs no table edit. `lang="ko"` also lets screen readers pronounce Korean correctly.
 - **Routes:** no locale prefix in URLs. `?tab=` keys stay code names, so a link one admin sends opens in the other admin's own language. There is no SEO concern, because the dashboard is private behind Tailscale. An optional `?lang=` sets the cookie, for testing and `scripts/screenshot_dashboard.py`.
 - **JS:** `lore_drag.js` gets its two messages as props. The ECharts formatter gets the page locale and the translated unit.
@@ -319,7 +321,7 @@ There is no code change. An optional `LLMCORD_LOCALES=en,ko` environment allowli
 | C | **Schema v22**: `guild_settings.language` (`''` means follow Discord), because non-Community servers report `en-US` | Yes; Korean public messages need it |
 | D | Korean register: 해요체 throughout; the glossary in section 5 | Yes; the user reviews the terms marked *to confirm* |
 | E | The language switch is a POST and redirect (a full reload), an explicit exception to the ui-guide's no-reload rule | Yes |
-| F | Run Phase 1 batches one at a time (the CLAUDE.md default), or allow parallel worktrees for batches on separate files | One at a time, unless speed matters more than review load |
+| F | Run Phase 1 batches one at a time (the CLAUDE.md default), or allow parallel worktrees for batches on separate files | One at a time, unless speed matters more than review load. **User chose parallel** (2026-10-12). |
 | G | New CLAUDE.md invariants once Phase 0 lands: "translate at the edge", "the audience decides the language", "English text is the message id; tests run in `en`" | Yes |
 
 ## 10. Risks
