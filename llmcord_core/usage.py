@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 
 from llmcord_core import i18n
+from llmcord_core.i18n import terms
 
 _capture = ContextVar('llmcord_model_usage', default=None)
 
@@ -137,3 +138,26 @@ def reply_footer(model, usage, *, t=None):
     if usage and usage.cost_basis == 'paid-list':
         return t('\n\n-# {model} · Reply input: {inputs} · Output: {outputs} · Est. paid cost: {cost}', model=model, inputs=inputs, outputs=outputs, cost=cost)
     return t('\n\n-# {model} · Reply input: {inputs} · Output: {outputs} · Est. cost: {cost}', model=model, inputs=inputs, outputs=outputs, cost=cost)
+
+
+def stage_label(stage, t):
+    """Words for a turn step name; a name that is not a known step is returned as stored."""
+    return t.render(terms.STAGE_WORDS.get(stage, stage))
+
+
+def turn_log_stage(text, t):
+    """MNT-80: the Monitoring turn log's stored English stage text in the viewer's language.
+
+    Stored form, written by _log_model_call and _log_failure: "{feature} · {purpose or role}" or "{feature} · failed at {stage}".
+    Split on the first ' · ' only; each part is translated only when it is a known identifier, anything else (old rows, custom text) is kept as stored.
+    """
+    feature, separator, rest = text.partition(' · ')
+    if not separator:
+        return text
+    if rest.startswith('failed at '):
+        stage = rest[len('failed at '):]
+        if stage:
+            rest = t('failed at {stage}', stage=stage_label(stage, t))
+    else:
+        rest = t.render(terms.LOG_WORDS.get(rest, rest))
+    return t.render(terms.LOG_WORDS.get(feature, feature)) + separator + rest

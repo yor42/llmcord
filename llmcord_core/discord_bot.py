@@ -33,7 +33,7 @@ from .admin_store import ConflictError, CurrencyError
 from .store import Store
 from .avatars import emotion_stream
 from .errors import ModelConfigError, error_detail, error_stack, reference_id, user_detail
-from .usage import capture_usage, log_attribution, log_purpose, log_scope, mask_for_log, reply_footer
+from .usage import capture_usage, stage_label, log_attribution, log_purpose, log_scope, mask_for_log, reply_footer
 from .identity import discord_identity, message_context
 from .favorites_discord import register_favorites_commands
 from .game_talk import TalkBudget
@@ -787,25 +787,7 @@ class SkitBot(commands.Bot):
 
 
 def _stage_label(stage, t):
-    if stage == STAGE_SPEAKER_SELECTION:
-        return t("speaker selection")
-    if stage == STAGE_IMAGE_DESCRIPTION:
-        return t("image description")
-    if stage == STAGE_DIALOGUE:
-        return t("dialogue generation")
-    if stage == 'saving scene input':
-        return t("saving scene input")
-    if stage == 'preparing character prompt':
-        return t("preparing character prompt")
-    if stage == 'webhook setup':
-        return t("webhook setup")
-    if stage == 'avatar lookup':
-        return t("avatar lookup")
-    if stage == 'webhook delivery':
-        return t("webhook delivery")
-    if stage == 'saving character reply':
-        return t("saving character reply")
-    return stage
+    return stage_label(stage, t)
 
 
 def _member_detail(error, ref, *, t=None):

@@ -765,3 +765,99 @@ msgstr ""
 msgid "• Take longer than {seconds} s and you check, or fold if you can't. Assist shows your hand and odds."
 msgstr ""
 
+#: llmcord_core/i18n/terms.py
+msgid "speaker selection"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "image description"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "dialogue generation"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "saving scene input"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "preparing character prompt"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "webhook setup"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "avatar lookup"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "webhook delivery"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "saving character reply"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "reply"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "ambient"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "summon"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "memory"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "catchup"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "game"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "playstyle"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "dialogue"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "director"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "extraction"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "summary"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "turn log part"
+msgid "images"
+msgstr ""
+

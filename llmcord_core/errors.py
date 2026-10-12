@@ -7,6 +7,8 @@ import secrets
 import sys
 import traceback
 
+from .i18n import CodedError
+
 TIMEOUT_TYPES = (('httpx', 'TimeoutException'), ('openai', 'APITimeoutError'), ('anthropic', 'APITimeoutError'))
 
 
@@ -14,7 +16,7 @@ LOOSE_CREDENTIAL = re.compile(r'(?i)\b(?:Bearer|Bot)\s+[^\s,;]+')
 STRICT_CREDENTIAL = re.compile(r'(?i:Authorization)\s*:\s*(?:(?:Bearer|Bot|Basic)\s+)?[^\s,;]+|\b(?:Bearer|Bot) [A-Za-z0-9._~+/=-]{20,}')
 
 
-class ModelConfigError(RuntimeError):
+class ModelConfigError(CodedError, RuntimeError):
     """A model profile cannot be used as saved. The message names the profile, host or variable, never a key value."""
 
 

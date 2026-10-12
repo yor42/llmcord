@@ -433,3 +433,9 @@ PRESETS_UI_ORDER_REQUIRED = E_('presets_ui.order_required', 'Choose a prompt ord
 
 # --- FEAT-44 (2a): server language
 SERVER_LANGUAGE_UNKNOWN = E_('server_language.unknown', 'Unknown language: {language}')
+
+# --- MNT-77/MNT-80: model config errors
+MODEL_CONFIG_PROFILE = E_('model.config_profile', 'Profile {profile}: {error}')
+MODEL_CONFIG_ENV_MISSING = E_('model.config_env_missing', "{env} is not set in {environment}'s environment (profile {profile})")
+MODEL_CONFIG_ENV_MISSING_BOT = E_('model.config_env_missing_bot', "{env} is not set in the bot's environment (profile {profile})")
+MODEL_CONFIG_ENV_MISSING_DASHBOARD = E_('model.config_env_missing_dashboard', "{env} is not set in the dashboard's environment (profile {profile})")

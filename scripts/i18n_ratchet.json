@@ -46,7 +46,7 @@
       "raise": 2
     },
     "llmcord_core/models.py": {
-      "raise": 7
+      "raise": 5
     },
     "llmcord_core/playstyle_generate.py": {
       "raise": 3

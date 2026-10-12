@@ -41,6 +41,7 @@ from .icons import icon_css, lucide, lucide_button, more_menu
 from .lorebooks import parse_lorebook
 from .macro_highlight import MacroHighlight
 from .savebar import SaveBar
+from .usage import turn_log_stage
 from .scene_ui import confirm_dialog, delete_book_dialog, delete_space_dialog, direct_import_dialog, guideline_editor
 
 
@@ -1548,7 +1549,7 @@ def turn_log_row(entry, zone_name, channel_label, *, t=None):
     inputs, outputs = entry['input_tokens'], entry['output_tokens']
     tokens = '—' if inputs is None and outputs is None else t('{inputs} in / {outputs} out', inputs='—' if inputs is None else format(inputs, ','), outputs='—' if outputs is None else format(outputs, ','))
     return {'time': datetime.fromtimestamp(entry['created_at'], zone).strftime('%Y-%m-%d %H:%M'), 'channel': channel_label(entry['channel_id']),
-            'stage': entry['stage'] or '—', 'model': entry['model'] or '—', 'tokens': tokens, 'error': entry['status'] == 'error',
+            'stage': turn_log_stage(entry['stage'], t) if entry['stage'] else '—', 'model': entry['model'] or '—', 'tokens': tokens, 'error': entry['status'] == 'error',
             'status': t.p('status', 'Error') if entry['status'] == 'error' else t.p('status', 'OK'), 'reference': entry['reference_id'] or '', 'preview': (entry['preview'] or '').strip()}
 
 
