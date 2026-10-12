@@ -196,7 +196,7 @@ def profile_view(backend, config_profiles, db_rows, environ=os.environ):
 def role_options(saved_value, backend_profiles, config_role):
     """Options for a role select: use config.yaml, each available profile, and a saved value that no longer resolves."""
     options = {'': f'Use config.yaml ({config_role or "none"})'}
-    options.update({name: name for name in backend_profiles})
+    options.update({name: f'{name} · {profile.model}' for name, profile in backend_profiles.items()})
     if saved_value and saved_value not in options:
         options[saved_value] = f'{saved_value} (not available)'
     return options
@@ -304,7 +304,7 @@ async def backend_panel(ctx, config):
         with ui.element('div').classes('ll-form-row'):
             for role in ROLES:
                 selects[role] = ui.select(role_options(saved.get(role), backend.profiles, config.roles.get(role)), value=saved.get(role) or '', label=ROLE_LABELS[role]).classes('ll-wide')
-        ui.label('A role set here replaces the config.yaml role of the same name.').classes('ll-muted')
+        ui.label('Roles choose from your profiles. Add a profile below to use another model. A role set here replaces the config.yaml role of the same name.').classes('ll-muted')
 
         def chosen():
             return {role: selects[role].value or None for role in ROLES}

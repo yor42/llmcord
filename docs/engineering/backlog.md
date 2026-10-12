@@ -139,7 +139,7 @@
 | UI-55 | Blackjack: a **How to play** button under each table message gives a short ephemeral guide (goal, card values, the buttons, payouts) | user 2026-10-10 | Done (b75796d) |
 | UI-56 | Blackjack: the table message shows the rules as a gray `-# ` line in plain words ("Dealer stands on 17 · Blackjack pays 3:2 · …"), built from the round's rules so FEAT-28 options show up | user 2026-10-10 | Done (b75796d) |
 | UI-57 | Games tab: the "Rounds in the end-of-table summary" number field is too narrow, so its label shows as "Round…"; widen it like the other number fields | FEAT-28 screenshot 2026-10-10 | Done (3c46366) |
-| UI-58 | Bot settings → Backend: the Dialogue/Director/Memory role selects list model profiles, but an option such as "google/flash" does not say so. Label each option `profile · model` (for example `google/flash · gemini-3.8-flash`) and add a hint under the role selects: "Roles choose from your profiles. Add a profile below to use another model." No "Add profile…" entry inside the selects | user 2026-10-11 | Open |
+| UI-58 | Bot settings → Backend: the Dialogue/Director/Memory role selects list model profiles, but an option such as "google/flash" does not say so. Label each option `profile · model` (for example `google/flash · gemini-3.8-flash`) and add a hint under the role selects: "Roles choose from your profiles. Add a profile below to use another model." No "Add profile…" entry inside the selects | user 2026-10-11 | Done (2026-10-12) |
 
 ## Features
 

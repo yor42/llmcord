@@ -71,13 +71,15 @@ class EditorHelperTests(unittest.TestCase):
         self.assertEqual(sorted(options), ['', 'fine', 'local', 'main'])
         self.assertEqual(options[''], 'Use config.yaml (main)')
         self.assertNotIn('broken', options)
+        self.assertEqual(options['main'], 'main · gpt-x')
+        self.assertEqual(options['fine'], 'fine · m')
         self.assertEqual(role_options(None, {}, None), {'': 'Use config.yaml (none)'})
 
     def test_role_options_mark_an_unavailable_saved_value(self):
         """FEAT-11: a saved role naming a profile that no longer resolves stays selectable, labelled not available."""
         options = role_options('gone', {'main': CONFIG['main']}, 'main')
         self.assertEqual(options['gone'], 'gone (not available)')
-        self.assertEqual(role_options('main', {'main': CONFIG['main']}, 'main')['main'], 'main')
+        self.assertEqual(role_options('main', {'main': CONFIG['main']}, 'main')['main'], 'main · gpt-x')
 
     def test_editor_initial_coerces_unknown_choices(self):
         """FEAT-11: an unknown provider or billing tier becomes the default, an unknown reasoning effort is dropped, and the input is not mutated."""
