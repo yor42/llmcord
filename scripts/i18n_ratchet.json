@@ -31,13 +31,13 @@
     },
     "llmcord_core/discord_bot.py": {
       "raise": 15,
-      "ui": 118
+      "ui": 42
     },
     "llmcord_core/engine.py": {
       "raise": 2
     },
     "llmcord_core/favorites_discord.py": {
-      "ui": 16
+      "ui": 5
     },
     "llmcord_core/game_chooser.py": {
       "raise": 1
@@ -58,10 +58,10 @@
       "raise": 3
     },
     "llmcord_core/games_discord.py": {
-      "ui": 12
+      "ui": 3
     },
     "llmcord_core/games_doubt_discord.py": {
-      "ui": 16
+      "ui": 1
     },
     "llmcord_core/games_holdem_discord.py": {
       "ui": 4
@@ -92,7 +92,7 @@
       "raise": 2
     },
     "llmcord_core/items_discord.py": {
-      "ui": 6
+      "ui": 2
     },
     "llmcord_core/items_store.py": {
       "raise": 16

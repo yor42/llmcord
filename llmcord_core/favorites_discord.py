@@ -7,6 +7,7 @@ import discord
 from discord import app_commands
 
 from .names import NameNotFound, resolve, suggest
+from llmcord_core.i18n.discord_locale import C_
 
 NO_MENTIONS = discord.AllowedMentions.none()
 MODE_LABELS = {'lean': 'lean', 'step_in': 'step in'}
@@ -19,7 +20,7 @@ NO_FAVORITES = 'You have no favorites yet. Add one with /favorites add.'
 
 def register_favorites_commands(bot, ctx: SimpleNamespace) -> None:
     require_guild, safe_choices = ctx.require_guild, ctx.safe_choices
-    favorites = app_commands.Group(name='favorites', description='Keep favorite characters who are more likely to answer you')
+    favorites = app_commands.Group(name='favorites', description=C_('Keep favorite characters who are more likely to answer you'))
 
     async def reply(interaction: discord.Interaction, text: str) -> None:
         await interaction.response.send_message(text, ephemeral=True, allowed_mentions=NO_MENTIONS)
@@ -32,8 +33,8 @@ def register_favorites_commands(bot, ctx: SimpleNamespace) -> None:
     own_choices = safe_choices(lambda interaction, current: suggest(
         [row['name'] for row in bot.store.favorites(interaction.guild_id, interaction.user.id)], current))
 
-    @favorites.command(name='add', description='Add a character to your favorites')
-    @app_commands.describe(character='The character to add')
+    @favorites.command(name='add', description=C_('Add a character to your favorites'))
+    @app_commands.describe(character=C_('The character to add'))
     @app_commands.autocomplete(character=add_choices)
     async def favorites_add(interaction: discord.Interaction, character: str):
         require_guild(interaction)
@@ -41,8 +42,8 @@ def register_favorites_commands(bot, ctx: SimpleNamespace) -> None:
         bot.store.add_favorite(interaction.guild_id, interaction.user.id, row['id'])
         await reply(interaction, f"Added {row['name']} to your favorites.")
 
-    @favorites.command(name='remove', description='Remove a character from your favorites')
-    @app_commands.describe(character='The favorite to remove')
+    @favorites.command(name='remove', description=C_('Remove a character from your favorites'))
+    @app_commands.describe(character=C_('The favorite to remove'))
     @app_commands.autocomplete(character=own_choices)
     async def favorites_remove(interaction: discord.Interaction, character: str):
         require_guild(interaction)
@@ -53,7 +54,7 @@ def register_favorites_commands(bot, ctx: SimpleNamespace) -> None:
         bot.store.remove_favorite(interaction.guild_id, interaction.user.id, row['character_id'])
         await reply(interaction, f"Removed {row['name']} from your favorites.")
 
-    @favorites.command(name='list', description='Show your favorites and your favorites mode')
+    @favorites.command(name='list', description=C_('Show your favorites and your favorites mode'))
     async def favorites_list(interaction: discord.Interaction):
         require_guild(interaction)
         rows = bot.store.favorites(interaction.guild_id, interaction.user.id)
@@ -66,15 +67,15 @@ def register_favorites_commands(bot, ctx: SimpleNamespace) -> None:
         mode = bot.store.favorites_mode(interaction.guild_id, interaction.user.id)
         await reply(interaction, ('\n'.join(lines) + '\n' + MODE_LINES[mode])[:1900])
 
-    @favorites.command(name='mode', description='Choose how far your favorites may go')
-    @app_commands.describe(mode='Lean: favorites in the cast answer more. Step in: favorites outside the cast can answer too')
-    @app_commands.choices(mode=[app_commands.Choice(name='Lean', value='lean'), app_commands.Choice(name='Step in', value='step_in')])
+    @favorites.command(name='mode', description=C_('Choose how far your favorites may go'))
+    @app_commands.describe(mode=C_('Lean: favorites in the cast answer more. Step in: favorites outside the cast can answer too'))
+    @app_commands.choices(mode=[app_commands.Choice(name=C_('Lean'), value='lean'), app_commands.Choice(name=C_('Step in'), value='step_in')])
     async def favorites_mode(interaction: discord.Interaction, mode: str):
         require_guild(interaction)
         bot.store.set_favorites_mode(interaction.guild_id, interaction.user.id, mode)
         await reply(interaction, f'Favorites mode: {MODE_LABELS[mode]}.')
 
-    @favorites.command(name='clear', description='Remove all your favorites')
+    @favorites.command(name='clear', description=C_('Remove all your favorites'))
     async def favorites_clear(interaction: discord.Interaction):
         require_guild(interaction)
         count = bot.store.clear_favorites(interaction.guild_id, interaction.user.id)
