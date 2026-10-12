@@ -8,1936 +8,1936 @@ msgstr ""
 
 #: llmcord_core/catchup.py
 msgid "Nothing new here since you last spoke."
-msgstr ""
+msgstr "마지막으로 말한 뒤로 새 대화가 없어요."
 
 #: llmcord_core/catchup.py
 msgid "Nothing new here in the last hour."
-msgstr ""
+msgstr "지난 1시간 동안 새 대화가 없어요."
 
 #: llmcord_core/catchup.py
 #, python-brace-format
 msgid "Nothing new here in the last {hours} hours."
-msgstr ""
+msgstr "지난 {hours}시간 동안 새 대화가 없어요."
 
 #: llmcord_core/discord_bot.py
 msgctxt "space kind"
 msgid "world"
-msgstr ""
+msgstr "월드"
 
 #: llmcord_core/discord_bot.py
 msgctxt "space kind"
 msgid "hub"
-msgstr ""
+msgstr "허브"
 
 #: llmcord_core/discord_bot.py
 msgid "space ref"
-msgstr ""
+msgstr "공간 참조"
 
 #: llmcord_core/discord_bot.py
 msgid "An admin can find details in the dashboard under Monitoring → Log."
-msgstr ""
+msgstr "관리자는 대시보드의 모니터링 → 로그에서 자세한 내용을 볼 수 있어요."
 
 #: llmcord_core/discord_bot.py
 msgid "An admin can find details in the bot log."
-msgstr ""
+msgstr "관리자는 봇 로그에서 자세한 내용을 볼 수 있어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "internal error. {pointer}"
-msgstr ""
+msgstr "내부 오류가 발생했어요. {pointer}"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Your turn failed during {stage} (ref {ref}): {detail}"
-msgstr ""
+msgstr "{stage} 단계에서 턴 처리에 실패했어요 (참조 {ref}): {detail}"
 
 #: llmcord_core/discord_bot.py
 msgid "The bot's model setup needs attention. An admin can look it up with the reference ID."
-msgstr ""
+msgstr "봇의 모델 설정을 확인해야 해요. 관리자가 참조 ID로 찾아볼 수 있어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "⏳ {phase} · {model} · 24h tracked: {tokens:,} tokens (+{unreported} unreported calls)"
-msgstr ""
+msgstr "⏳ {phase} · {model} · 24시간 집계: {tokens:,} 토큰 (+미보고 호출 {unreported}건)"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "⏳ {phase} · {model} · 24h tracked: {tokens:,} tokens"
-msgstr ""
+msgstr "⏳ {phase} · {model} · 24시간 집계: {tokens:,} 토큰"
 
 #: llmcord_core/discord_bot.py
 msgid "Use this command in a server channel."
-msgstr ""
+msgstr "서버 채널에서 이 명령어를 사용해 주세요."
 
 #: llmcord_core/discord_bot.py
 msgid "/catchup works only in character channels on this server. A server admin can allow it in other channels under Server settings in the dashboard."
-msgstr ""
+msgstr "이 서버에서는 /catchup을 캐릭터 채널에서만 쓸 수 있어요. 서버 관리자가 대시보드의 서버 설정에서 다른 채널에도 허용할 수 있어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Created {space} (#{ident})."
-msgstr ""
+msgstr "{space:을/를} 만들었어요 (#{ident})."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "#{ident} {kind}: {name} (off duty)"
-msgstr ""
+msgstr "#{ident} {kind}: {name} (휴식 모드)"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "#{ident} {kind}: {name}"
-msgstr ""
+msgstr "#{ident} {kind}: {name}"
 
 #: llmcord_core/discord_bot.py
 msgid "No worlds or hubs yet."
-msgstr ""
+msgstr "아직 월드나 허브가 없어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "{channel} is already bound to {target}; its cast and ambient setting were kept."
-msgstr ""
+msgstr "{channel:은/는} 이미 {target}에 지정되어 있어요. 출연진과 자율 참여 설정은 그대로 유지했어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Bound {channel} to {target}. Removed from its cast (not available there): {names}."
-msgstr ""
+msgstr "{channel:을/를} {target}에 지정했어요. 그곳에서 쓸 수 없는 캐릭터를 출연진에서 뺐어요: {names}."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Bound {channel} to {target}. Its cast and ambient setting were kept."
-msgstr ""
+msgstr "{channel:을/를} {target}에 지정했어요. 출연진과 자율 참여 설정은 그대로 유지했어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Bound {channel} to {target}."
-msgstr ""
+msgstr "{channel:을/를} {target}에 지정했어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Linked {world} to {hub}."
-msgstr ""
+msgstr "{world:을/를} {hub}에 연결했어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "{world} is no longer linked to {hub}; removed {count} cast entry."
 msgid_plural "{world} is no longer linked to {hub}; removed {count} cast entries."
-msgstr[0] ""
+msgstr[0] "{world:과/와} {hub}의 연결을 해제했어요. 출연진 항목 {count}개를 뺐어요."
 
 #: llmcord_core/discord_bot.py
 msgid "in character"
-msgstr ""
+msgstr "캐릭터 유지"
 
 #: llmcord_core/discord_bot.py
 msgid "off duty"
-msgstr ""
+msgstr "휴식 모드"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Hub {hub} tone: {tone}."
-msgstr ""
+msgstr "허브 {hub}의 분위기: {tone}."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Imported {name} (#{ident}) into {home} with {count} lore entries."
-msgstr ""
+msgstr "{home}에 {name} (#{ident}) 캐릭터를 가져왔어요. 로어 항목 {count}개도 함께 가져왔어요."
 
 #: llmcord_core/discord_bot.py
 msgid "No characters available."
-msgstr ""
+msgstr "사용할 수 있는 캐릭터가 없어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "{name} — home world: {world}"
-msgstr ""
+msgstr "{name} — 홈 월드: {world}"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Active cast: {names}"
-msgstr ""
+msgstr "현재 출연진: {names}"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Added {name} to the active cast."
-msgstr ""
+msgstr "현재 출연진에 {name:을/를} 추가했어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Removed {name} from the active cast."
-msgstr ""
+msgstr "현재 출연진에서 {name:을/를} 뺐어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Also dropped {count} character no longer available here."
 msgid_plural "Also dropped {count} characters no longer available here."
-msgstr[0] ""
+msgstr[0] "여기서 더 이상 사용할 수 없는 캐릭터 {count}명도 뺐어요."
 
 #: llmcord_core/discord_bot.py
 msgid "The active cast is empty. Use /cast set to choose one."
-msgstr ""
+msgstr "현재 출연진이 비어 있어요. /cast set으로 출연진을 골라 주세요."
 
 #: llmcord_core/discord_bot.py
 msgid "Channel default cast updated."
-msgstr ""
+msgstr "채널 기본 출연진을 업데이트했어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Ambient is on for {channel}."
-msgstr ""
+msgstr "{channel}에서 자율 참여를 켰어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Ambient is off for {channel}."
-msgstr ""
+msgstr "{channel}에서 자율 참여를 껐어요."
 
 #: llmcord_core/discord_bot.py
 msgid "Character replies"
-msgstr ""
+msgstr "캐릭터 응답"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "{subject} are paused: this bot reached its spending limit for this period. They resume on {date} (UTC), or sooner if an operator raises the limit."
-msgstr ""
+msgstr "{subject:이/가} 일시 중지되었어요. 이 봇이 이번 기간의 지출 한도에 도달했어요. {date} (UTC)에 다시 시작되며, 운영자가 한도를 올리면 더 빨리 재개돼요."
 
 #. i18n: {hard_cap} is either "off" or a dollar amount
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Spending warning: this bot has spent {spent} since {period}, past the soft cap of {soft_cap}. Hard cap: {hard_cap}. The period resets on {resets} (UTC)."
-msgstr ""
+msgstr "지출 경고: 이 봇이 소프트 한도({soft_cap})를 넘었어요. {period} 이후 지출: {spent}. 하드 한도: {hard_cap}. 기간은 {resets} (UTC)에 초기화돼요."
 
 #: llmcord_core/discord_bot.py
 msgid "off"
-msgstr ""
+msgstr "꺼짐"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Spending limit reached: this bot has spent {spent} since {period}, at or past the hard cap of {hard_cap}. Character replies, ambient turns, catch-ups and memory updates are paused until {resets} (UTC) or until an operator raises the cap in the dashboard's Bot settings."
-msgstr ""
+msgstr "지출 한도 도달: 이 봇이 하드 한도({hard_cap})에 도달했어요. {period} 이후 지출: {spent}. 캐릭터 응답, 자율 참여 턴, 놓친 대화 요약, 기억 업데이트가 {resets} (UTC)까지, 또는 운영자가 대시보드의 봇 설정에서 한도를 올릴 때까지 일시 중지돼요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "{count} model call without a cost estimate was counted as $0."
 msgid_plural "{count} model calls without a cost estimate were counted as $0."
-msgstr[0] ""
+msgstr[0] "비용 추정치가 없는 모델 호출 {count}건을 $0으로 계산했어요."
 
 #: llmcord_core/discord_bot.py
 msgid "Only the characters seated at this table can speak in its thread."
-msgstr ""
+msgstr "이 테이블에 앉은 캐릭터만 이 스레드에서 말할 수 있어요."
 
 #: llmcord_core/discord_bot.py
 msgid "The table's characters aren't talking right now (table talk is off or today's limit is reached)."
-msgstr ""
+msgstr "지금은 테이블의 캐릭터들이 대화하지 않아요 (테이블 잡담이 꺼져 있거나 오늘 한도에 도달했어요)."
 
 #: llmcord_core/discord_bot.py
 msgid "You can't read this channel's message history, so I can't summarize it."
-msgstr ""
+msgstr "이 채널의 메시지 기록을 읽을 권한이 없어서 요약할 수 없어요."
 
 #: llmcord_core/discord_bot.py
 msgid "Catch-ups"
-msgstr ""
+msgstr "놓친 대화 요약"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "You can use /catchup here again in {minutes} minute."
 msgid_plural "You can use /catchup here again in {minutes} minutes."
-msgstr[0] ""
+msgstr[0] "{minutes}분 뒤에 여기서 /catchup을 다시 사용할 수 있어요."
 
 #: llmcord_core/discord_bot.py
 msgid "I can't read this channel's message history."
-msgstr ""
+msgstr "이 채널의 메시지 기록을 읽을 수 없어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Could not write the catch-up: {detail} (ref {ref})"
-msgstr ""
+msgstr "놓친 대화 요약을 작성할 수 없어요: {detail} (참조 {ref})"
 
 #: llmcord_core/discord_bot.py
 msgid "The model returned nothing. Try again later."
-msgstr ""
+msgstr "모델이 아무것도 반환하지 않았어요. 나중에 다시 시도해 주세요."
 
 #: llmcord_core/discord_bot.py
 msgid "Personal memory enabled. Use /memory list or /memory opt_out anytime."
-msgstr ""
+msgstr "개인 기억을 켰어요. 언제든지 /memory list 또는 /memory opt_out을 사용할 수 있어요."
 
 #: llmcord_core/discord_bot.py
 msgid "Personal memory disabled and your saved personal facts erased."
-msgstr ""
+msgstr "개인 기억을 껐고 저장된 개인 기억을 모두 지웠어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "#{ident} {name}: {content}"
-msgstr ""
+msgstr "#{ident} {name}: {content}"
 
 #: llmcord_core/discord_bot.py
 msgid "Unknown"
-msgstr ""
+msgstr "알 수 없음"
 
 #: llmcord_core/discord_bot.py
 msgid "No personal memories saved."
-msgstr ""
+msgstr "저장된 개인 기억이 없어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Memory #{memory_id} removed."
-msgstr ""
+msgstr "기억 #{memory_id:을/를} 삭제했어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "No memory #{memory_id} of yours was found."
-msgstr ""
+msgstr "내 기억 #{memory_id:을/를} 찾을 수 없어요."
 
 #: llmcord_core/discord_bot.py
 msgid "Unknown timezone. Pick one from the list, such as Asia/Seoul."
-msgstr ""
+msgstr "알 수 없는 시간대예요. 목록에서 골라 주세요 (예: Asia/Seoul)."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Your timezone here is now {zone}. Local time: {time}."
-msgstr ""
+msgstr "이곳의 내 시간대를 {zone:으로/로} 설정했어요. 현지 시각: {time}."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Your timezone here is {zone} (your setting). Local time: {time}."
-msgstr ""
+msgstr "이곳의 내 시간대: {zone} (내 설정). 현지 시각: {time}."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Your timezone here is {zone} (server default). Local time: {time}. Use /time set to choose your own."
-msgstr ""
+msgstr "이곳의 내 시간대: {zone} (서버 기본값). 현지 시각: {time}. 직접 고르려면 /time set을 사용해 주세요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Your timezone here is UTC (no timezone set). Local time: {time}. Use /time set to choose yours."
-msgstr ""
+msgstr "이곳의 내 시간대: UTC (설정된 시간대 없음). 현지 시각: {time}. 직접 고르려면 /time set을 사용해 주세요."
 
 #: llmcord_core/discord_bot.py
 msgid "You had no timezone set here."
-msgstr ""
+msgstr "이곳에 설정된 내 시간대가 없어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Cleared your timezone. Characters now use {zone} (server default)."
-msgstr ""
+msgstr "내 시간대 설정을 지웠어요. 이제 캐릭터는 서버 기본 시간대인 {zone:을/를} 사용해요."
 
 #: llmcord_core/discord_bot.py
 msgid "Cleared your timezone. Characters now use UTC (no timezone set)."
-msgstr ""
+msgstr "내 시간대 설정을 지웠어요. 이제 캐릭터는 UTC를 사용해요 (설정된 시간대 없음)."
 
 #: llmcord_core/discord_bot.py
 msgid "Choose a member or a character, not both."
-msgstr ""
+msgstr "멤버나 캐릭터 중 하나만 골라 주세요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "{who} has {amount:,} {currency}."
-msgstr ""
+msgstr "{who}의 잔액은 {amount:,} {currency:이에요/예요}."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "You have {amount:,} {currency}."
-msgstr ""
+msgstr "내 잔액은 {amount:,} {currency:이에요/예요}."
 
 #: llmcord_core/discord_bot.py
 msgid "Daily check-ins are off on this server."
-msgstr ""
+msgstr "이 서버에서는 일일 출석 체크가 꺼져 있어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "You already checked in today. Next check-in {reset}."
-msgstr ""
+msgstr "오늘은 이미 출석 체크했어요. 다음 출석 체크: {reset}."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Checked in: +{payout:,} {currency} (day {streak} streak). Balance: {balance:,} {currency}. Next check-in {reset}."
-msgstr ""
+msgstr "출석 체크 완료: +{payout:,} {currency} ({streak}일 연속). 잔액: {balance:,} {currency}. 다음 출석 체크: {reset}."
 
 #: llmcord_core/discord_bot.py
 msgid "The daily check-in settings were changed elsewhere. Run the command again."
-msgstr ""
+msgstr "일일 출석 체크 설정이 다른 곳에서 변경되었어요. 명령어를 다시 실행해 주세요."
 
 #: llmcord_core/discord_bot.py
 msgid "Daily check-ins are now off."
-msgstr ""
+msgstr "이제 일일 출석 체크가 꺼졌어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Daily check-in: {amount:,} {currency}, no streak bonus."
-msgstr ""
+msgstr "일일 출석 체크: {amount:,} {currency}, 연속 출석 보너스 없음."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Daily check-in: {amount:,} {currency}, +{bonus:,} per streak day for up to {days:,} days."
-msgstr ""
+msgstr "일일 출석 체크: {amount:,} {currency}, 연속 출석 하루마다 +{bonus:,} (최대 {days:,}일)."
 
 #: llmcord_core/discord_bot.py
 msgid "Bots cannot hold a balance."
-msgstr ""
+msgstr "봇은 잔액을 가질 수 없어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Gave {amount:,} {currency} to {member}. New balance: {balance:,} {currency}."
-msgstr ""
+msgstr "{member}에게 {amount:,} {currency:을/를} 지급했어요. 새 잔액: {balance:,} {currency}."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Took {amount:,} {currency} from {member}. New balance: {balance:,} {currency}."
-msgstr ""
+msgstr "{member}에게서 {amount:,} {currency:을/를} 회수했어요. 새 잔액: {balance:,} {currency}."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "This server's currency is now called {name}."
-msgstr ""
+msgstr "이 서버의 화폐 이름을 {name:으로/로} 바꿨어요."
 
 #: llmcord_core/discord_bot.py
 msgctxt "lore scope"
 msgid "channel"
-msgstr ""
+msgstr "채널"
 
 #: llmcord_core/discord_bot.py
 msgctxt "lore scope"
 msgid "world or hub"
-msgstr ""
+msgstr "월드 또는 허브"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Added {label} lore #{ident}."
-msgstr ""
+msgstr "{label} 로어 #{ident:을/를} 추가했어요."
 
 #: llmcord_core/discord_bot.py
 msgctxt "lore scope"
 msgid "thread"
-msgstr ""
+msgstr "스레드"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "#{ident} [{scope}] {content}"
-msgstr ""
+msgstr "#{ident} [{scope}] {content}"
 
 #: llmcord_core/discord_bot.py
 msgid "No lore for this channel or its world or hub yet."
-msgstr ""
+msgstr "이 채널이나 연결된 월드 또는 허브에 아직 로어가 없어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Pinned lore #{lore_id}."
-msgstr ""
+msgstr "로어 #{lore_id:을/를} 고정했어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Updated lore #{lore_id}."
-msgstr ""
+msgstr "로어 #{lore_id:을/를} 수정했어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Promoted lore #{lore_id} to {where} as lore #{ident}."
-msgstr ""
+msgstr "로어 #{lore_id:을/를} {where:으로/로} 승격했어요 (새 로어 #{ident})."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Deleted lore #{lore_id}."
-msgstr ""
+msgstr "로어 #{lore_id:을/를} 삭제했어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "No lore #{lore_id} in this server."
-msgstr ""
+msgstr "이 서버에 로어 #{lore_id:이/가} 없어요."
 
 #: llmcord_core/discord_bot.py
 msgid "Scene reset. Your next mention or summon starts fresh."
-msgstr ""
+msgstr "장면을 초기화했어요. 다음 멘션이나 소환부터 새로 시작해요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Deleted {count} stored messages from this scene."
-msgstr ""
+msgstr "이 장면에서 저장된 메시지 {count}개를 삭제했어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Also forgot {personal} personal fact and {encounters} encounter."
-msgstr ""
+msgstr "개인 기억 {personal}개와 만남 기록 {encounters}개도 지웠어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Also forgot {personal} personal fact and {encounters} encounters."
-msgstr ""
+msgstr "개인 기억 {personal}개와 만남 기록 {encounters}개도 지웠어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Also forgot {personal} personal facts and {encounters} encounter."
-msgstr ""
+msgstr "개인 기억 {personal}개와 만남 기록 {encounters}개도 지웠어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Also forgot {personal} personal facts and {encounters} encounters."
-msgstr ""
+msgstr "개인 기억 {personal}개와 만남 기록 {encounters}개도 지웠어요."
 
 #: llmcord_core/discord_bot.py
 msgid "an unnamed entry"
-msgstr ""
+msgstr "이름 없는 항목"
 
 #: llmcord_core/discord_bot.py
 msgid "a world or hub"
-msgstr ""
+msgstr "월드 또는 허브"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "character {name}"
-msgstr ""
+msgstr "캐릭터 {name}"
 
 #: llmcord_core/discord_bot.py
 msgid "a character"
-msgstr ""
+msgstr "캐릭터"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "lorebook {name}"
-msgstr ""
+msgstr "로어북 {name}"
 
 #: llmcord_core/discord_bot.py
 msgid "a lorebook"
-msgstr ""
+msgstr "로어북"
 
 #: llmcord_core/discord_bot.py
 msgid "server-wide lore"
-msgstr ""
+msgstr "서버 전체 로어"
 
 #: llmcord_core/discord_bot.py
 msgid "a thread"
-msgstr ""
+msgstr "스레드"
 
 #: llmcord_core/discord_bot.py
 msgid "#unknown-channel"
-msgstr ""
+msgstr "#알-수-없는-채널"
 
 #: llmcord_core/discord_bot.py
 msgid "another owner"
-msgstr ""
+msgstr "다른 소유 범위"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "{label} ({owner}, {reason})"
-msgstr ""
+msgstr "{label} ({owner}, {reason})"
 
 #: llmcord_core/discord_bot.py
 msgid "sticky"
-msgstr ""
+msgstr "지속"
 
 #: llmcord_core/discord_bot.py
 msgid "constant"
-msgstr ""
+msgstr "상시"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "keyword: {word}"
-msgstr ""
+msgstr "키워드: {word}"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Lore: {lore}"
-msgstr ""
+msgstr "로어: {lore}"
 
 #: llmcord_core/discord_bot.py
 msgid "none"
-msgstr ""
+msgstr "없음"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Branch messages: {branch}; nearby group messages: {nearby}"
-msgstr ""
+msgstr "분기 메시지: {branch}, 주변 그룹 메시지: {nearby}"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Personal facts: {facts}; character encounters: {encounters}"
-msgstr ""
+msgstr "개인 기억: {facts}, 캐릭터 만남 기록: {encounters}"
 
 #: llmcord_core/discord_bot.py
 msgid "Built-in default"
-msgstr ""
+msgstr "기본 내장"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Preset: {name} (revision {revision}); emotion: {emotion}"
-msgstr ""
+msgstr "프리셋: {name} (리비전 {revision}), 감정: {emotion}"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Prompt blocks: {blocks}; trimmed blocks: {trimmed}"
-msgstr ""
+msgstr "프롬프트 블록: {blocks}, 잘린 블록: {trimmed}"
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Provider adaptations: {adaptations}"
-msgstr ""
+msgstr "제공업체별 조정: {adaptations}"
 
 #: llmcord_core/discord_bot.py
 msgid "Only server administrators can use that command."
-msgstr ""
+msgstr "서버 관리자만 사용할 수 있는 명령어예요."
 
 #: llmcord_core/discord_bot.py
 msgid "That already exists."
-msgstr ""
+msgstr "이미 존재해요."
 
 #: llmcord_core/discord_bot.py
 msgid "The error was logged."
-msgstr ""
+msgstr "오류를 기록했어요."
 
 #: llmcord_core/discord_bot.py
 #, python-brace-format
 msgid "Something went wrong (ref {ref}). {pointer}"
-msgstr ""
+msgstr "문제가 발생했어요 (참조 {ref}). {pointer}"
 
 #: llmcord_core/favorites_discord.py
 msgid "You have no favorites yet. Add one with /favorites add."
-msgstr ""
+msgstr "아직 즐겨찾기가 없어요. /favorites add로 추가해 주세요."
 
 #: llmcord_core/favorites_discord.py
 #, python-brace-format
 msgid "Added {name} to your favorites."
-msgstr ""
+msgstr "즐겨찾기에 {name:을/를} 추가했어요."
 
 #: llmcord_core/favorites_discord.py
 #, python-brace-format
 msgid "{name} is not one of your favorites."
-msgstr ""
+msgstr "{name:은/는} 즐겨찾기에 없어요."
 
 #: llmcord_core/favorites_discord.py
 #, python-brace-format
 msgid "Removed {name} from your favorites."
-msgstr ""
+msgstr "즐겨찾기에서 {name:을/를} 뺐어요."
 
 #: llmcord_core/favorites_discord.py
 #, python-brace-format
 msgid "{n}. {name} (archived) (not available here)"
-msgstr ""
+msgstr "{n}. {name} (보관됨) (여기서 사용할 수 없음)"
 
 #: llmcord_core/favorites_discord.py
 #, python-brace-format
 msgid "{n}. {name} (archived)"
-msgstr ""
+msgstr "{n}. {name} (보관됨)"
 
 #: llmcord_core/favorites_discord.py
 #, python-brace-format
 msgid "{n}. {name} (not available here)"
-msgstr ""
+msgstr "{n}. {name} (여기서 사용할 수 없음)"
 
 #: llmcord_core/favorites_discord.py
 #, python-brace-format
 msgid "{n}. {name}"
-msgstr ""
+msgstr "{n}. {name}"
 
 #: llmcord_core/favorites_discord.py
 msgid "Mode: lean — your favorites in the cast are more likely to answer you."
-msgstr ""
+msgstr "모드: 우선 응답 — 출연진에 있는 즐겨찾기 캐릭터가 나에게 더 자주 응답해요."
 
 #: llmcord_core/favorites_discord.py
 msgid "Mode: step in — your favorites can also answer you when they are not in the cast."
-msgstr ""
+msgstr "모드: 끼어들기 — 출연진에 없는 즐겨찾기 캐릭터도 나에게 응답할 수 있어요."
 
 #: llmcord_core/favorites_discord.py
 msgid "Favorites mode: lean."
-msgstr ""
+msgstr "즐겨찾기 모드: 우선 응답."
 
 #: llmcord_core/favorites_discord.py
 msgid "Favorites mode: step in."
-msgstr ""
+msgstr "즐겨찾기 모드: 끼어들기."
 
 #: llmcord_core/favorites_discord.py
 #, python-brace-format
 msgid "Cleared {count} favorite."
 msgid_plural "Cleared {count} favorites."
-msgstr[0] ""
+msgstr[0] "즐겨찾기 {count}개를 지웠어요."
 
 #: llmcord_core/games_discord.py
 msgid "That table has moved on — use the latest buttons."
-msgstr ""
+msgstr "테이블이 이미 진행됐어요. 최신 버튼을 사용해 주세요."
 
 #: llmcord_core/games_discord.py
 msgid "Games are off in this channel."
-msgstr ""
+msgstr "이 채널에서는 게임이 꺼져 있어요."
 
 #: llmcord_core/games_discord.py
 msgid "Blackjack is off on this server."
-msgstr ""
+msgstr "이 서버에서는 블랙잭이 꺼져 있어요."
 
 #: llmcord_core/games_discord.py
 msgid "A round is being played; join the next one with /blackjack when it ends."
-msgstr ""
+msgstr "라운드가 진행 중이에요. 끝나면 /blackjack으로 다음 라운드에 참가해 주세요."
 
 #: llmcord_core/games_discord.py
 msgid "You can leave when this round ends."
-msgstr ""
+msgstr "이번 라운드가 끝나면 나갈 수 있어요."
 
 #: llmcord_core/games_discord.py
 msgid "You left the table."
-msgstr ""
+msgstr "테이블에서 나갔어요."
 
 #: llmcord_core/games_discord.py
 msgid "You're not seated at this table."
-msgstr ""
+msgstr "이 테이블에 앉아 있지 않아요."
 
 #: llmcord_core/games_discord.py
 msgid "It's not your turn."
-msgstr ""
+msgstr "내 차례가 아니에요."
 
 #: llmcord_core/games_discord.py
 msgid "Characters can't sit at tables in this channel."
-msgstr ""
+msgstr "이 채널에서는 캐릭터가 테이블에 앉을 수 없어요."
 
 #: llmcord_core/games_discord.py
 msgid "already at the table"
-msgstr ""
+msgstr "이미 테이블에 있음"
 
 #: llmcord_core/games_discord.py
 msgid "table full"
-msgstr ""
+msgstr "테이블이 가득 참"
 
 #: llmcord_core/games_discord.py
 msgid "archived"
-msgstr ""
+msgstr "보관됨"
 
 #: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
 #: llmcord_core/games_holdem_discord.py
 msgid "Table closed: games were turned off here."
-msgstr ""
+msgstr "테이블 닫힘: 이곳에서 게임이 꺼졌어요."
 
 #: llmcord_core/games_discord.py
 msgid "Table closed: blackjack was turned off on this server."
-msgstr ""
+msgstr "테이블 닫힘: 이 서버에서 블랙잭이 꺼졌어요."
 
 #: llmcord_core/games_discord.py llmcord_core/games_holdem_discord.py
 msgid "Table closed."
-msgstr ""
+msgstr "테이블이 닫혔어요."
 
 #: llmcord_core/games_discord.py
 msgid "Join with /blackjack bet:<amount>; add favorites:True to bring your favorite characters."
-msgstr ""
+msgstr "/blackjack bet:<금액>으로 참가해 주세요. 즐겨찾기 캐릭터와 함께하려면 favorites:True를 추가해 주세요."
 
 #: llmcord_core/games_discord.py
 msgctxt "blackjack result"
 msgid "refunded"
-msgstr ""
+msgstr "환불됨"
 
 #: llmcord_core/games_discord.py
 msgctxt "blackjack result"
 msgid "surrendered"
-msgstr ""
+msgstr "서렌더"
 
 #: llmcord_core/games_discord.py
 msgctxt "blackjack result"
 msgid "even money"
-msgstr ""
+msgstr "이븐 머니"
 
 #: llmcord_core/games_discord.py
 msgctxt "blackjack status"
 msgid "stands"
-msgstr ""
+msgstr "스탠드"
 
 #: llmcord_core/games_discord.py
 msgctxt "blackjack status"
 msgid "bust"
-msgstr ""
+msgstr "버스트"
 
 #: llmcord_core/games_discord.py
 msgctxt "blackjack status"
 msgid "blackjack"
-msgstr ""
+msgstr "블랙잭"
 
 #: llmcord_core/games_discord.py
 msgctxt "blackjack status"
 msgid "surrendered"
-msgstr ""
+msgstr "서렌더함"
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "{outcome} {amount}"
-msgstr ""
+msgstr "{outcome} {amount}"
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid ", insurance {amount}"
-msgstr ""
+msgstr ", 인슈어런스 {amount}"
 
 #: llmcord_core/games_discord.py
 msgctxt "button.blackjack"
 msgid "How to play"
-msgstr ""
+msgstr "게임 방법"
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "Round {number}:"
-msgstr ""
+msgstr "{number}라운드:"
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "Round {number}: dealer {total} bust —"
-msgstr ""
+msgstr "{number}라운드: 딜러 {total} 버스트 —"
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "Round {number}: dealer {total} —"
-msgstr ""
+msgstr "{number}라운드: 딜러 {total} —"
 
 #: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
 msgctxt "round net"
 msgid "even"
-msgstr ""
+msgstr "본전"
 
 #: llmcord_core/games_discord.py
 msgctxt "round net"
 msgid "push"
-msgstr ""
+msgstr "푸시"
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "Net: {entries}"
-msgstr ""
+msgstr "손익: {entries}"
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "(with {member})"
-msgstr ""
+msgstr "({member} 님과 함께)"
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "{number}. {who} bet {stake:,} {currency}"
-msgstr ""
+msgstr "{number}. {who} 베팅 {stake:,} {currency}"
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "{hand} ({total})"
-msgstr ""
+msgstr "{hand} ({total})"
 
 #: llmcord_core/games_discord.py
 msgid "(even money)"
-msgstr ""
+msgstr "(이븐 머니)"
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "(insured {amount:,})"
-msgstr ""
+msgstr "(인슈어런스 {amount:,})"
 
 #: llmcord_core/games_discord.py
 msgid "(timed out)"
-msgstr ""
+msgstr "(시간 초과)"
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "Dealer: {hand} ??"
-msgstr ""
+msgstr "딜러: {hand} ??"
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "Dealer: {hand} ({total}) bust"
-msgstr ""
+msgstr "딜러: {hand} ({total}) 버스트"
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "Dealer: {hand} ({total})"
-msgstr ""
+msgstr "딜러: {hand} ({total})"
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "Join with /blackjack bet:<amount> — dealing {stamp}."
-msgstr ""
+msgstr "/blackjack bet:<금액>으로 참가해 주세요. 카드는 {stamp} 나눠요."
 
 #: llmcord_core/games_discord.py
 msgid "Join with /blackjack bet:<amount>."
-msgstr ""
+msgstr "/blackjack bet:<금액>으로 참가해 주세요."
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "Bets: {low:,} to {high:,} {currency}."
-msgstr ""
+msgstr "베팅: {low:,}~{high:,} {currency}."
 
 #: llmcord_core/games_discord.py
 msgid "Dealer shows an ace. Insurance?"
-msgstr ""
+msgstr "딜러의 보이는 카드가 에이스예요. 인슈어런스를 걸까요?"
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "On turn: {who}."
-msgstr ""
+msgstr "차례: {who}."
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "On turn: {who} — decide {stamp}."
-msgstr ""
+msgstr "차례: {who} — 결정 마감: {stamp}."
 
 #: llmcord_core/games_discord.py
 msgid "Round cancelled. Bets are refunded."
-msgstr ""
+msgstr "라운드가 취소됐어요. 베팅액은 환불됐어요."
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "Play again or leave. The table closes {stamp} if nobody plays again."
-msgstr ""
+msgstr "다시 하거나 나갈 수 있어요. 아무도 다시 하지 않으면 테이블이 {stamp} 닫혀요."
 
 #: llmcord_core/games_discord.py
 msgid "Play again or leave."
-msgstr ""
+msgstr "다시 하거나 나갈 수 있어요."
 
 #: llmcord_core/games_discord.py
 msgid "Dealer plays."
-msgstr ""
+msgstr "딜러 차례예요."
 
 #: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "Seed: {seed} (hash {hash})"
-msgstr ""
+msgstr "시드: {seed} (해시 {hash})"
 
 #: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "Seed hash: {hash}"
-msgstr ""
+msgstr "시드 해시: {hash}"
 
 #: llmcord_core/games_discord.py
 msgctxt "button.blackjack"
 msgid "Deal now"
-msgstr ""
+msgstr "지금 시작"
 
 #: llmcord_core/games_discord.py
 msgctxt "button.blackjack"
 msgid "Leave"
-msgstr ""
+msgstr "나가기"
 
 #: llmcord_core/games_discord.py llmcord_core/games_spoken_discord.py
 msgctxt "button.blackjack"
 msgid "Hit"
-msgstr ""
+msgstr "히트"
 
 #: llmcord_core/games_discord.py llmcord_core/games_spoken_discord.py
 msgctxt "button.blackjack"
 msgid "Stand"
-msgstr ""
+msgstr "스탠드"
 
 #: llmcord_core/games_discord.py llmcord_core/games_spoken_discord.py
 msgctxt "button.blackjack"
 msgid "Double"
-msgstr ""
+msgstr "더블다운"
 
 #: llmcord_core/games_discord.py llmcord_core/games_spoken_discord.py
 msgctxt "button.blackjack"
 msgid "Surrender"
-msgstr ""
+msgstr "서렌더"
 
 #: llmcord_core/games_discord.py llmcord_core/games_spoken_discord.py
 #, python-brace-format
 msgctxt "button.blackjack"
 msgid "Insure ({cost:,})"
-msgstr ""
+msgstr "인슈어런스 ({cost:,})"
 
 #: llmcord_core/games_discord.py llmcord_core/games_spoken_discord.py
 msgctxt "button.blackjack"
 msgid "Even money"
-msgstr ""
+msgstr "이븐 머니"
 
 #: llmcord_core/games_discord.py llmcord_core/games_spoken_discord.py
 msgctxt "button.blackjack"
 msgid "No insurance"
-msgstr ""
+msgstr "인슈어런스 안 함"
 
 #: llmcord_core/games_discord.py
 msgctxt "button.blackjack"
 msgid "Play again (same bet)"
-msgstr ""
+msgstr "다시 하기 (같은 베팅)"
 
 #: llmcord_core/games_discord.py
 msgctxt "button.blackjack"
 msgid "Leave table"
-msgstr ""
+msgstr "테이블 나가기"
 
 #: llmcord_core/games_discord.py
 msgid "Bots cannot play blackjack."
-msgstr ""
+msgstr "봇은 블랙잭을 할 수 없어요."
 
 #: llmcord_core/games_discord.py
 msgid "An I Doubt It table is open in this channel."
-msgstr ""
+msgstr "이 채널에 다우트 테이블이 열려 있어요."
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "Your favorites joined too: {names}."
-msgstr ""
+msgstr "즐겨찾기 캐릭터도 함께 참가했어요: {names}."
 
 #: llmcord_core/games_discord.py llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "not enough {currency}"
-msgstr ""
+msgstr "{currency} 부족"
 
 #: llmcord_core/games_discord.py llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "Not seated: {names}."
-msgstr ""
+msgstr "자리에 앉지 못함: {names}."
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "You joined the table with {bet:,} {currency}."
-msgstr ""
+msgstr "{bet:,} {currency:으로/로} 테이블에 참가했어요."
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "Games are now on in {where}."
-msgstr ""
+msgstr "이제 {where}에서 게임이 켜져 있어요."
 
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "Games are now off in {where}."
-msgstr ""
+msgstr "이제 {where}에서 게임이 꺼져 있어요."
 
 #: llmcord_core/games_discord.py
 msgid "The open table was closed and bets were refunded."
-msgstr ""
+msgstr "열려 있던 테이블을 닫고 베팅액을 환불했어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "I Doubt It is off on this server."
-msgstr ""
+msgstr "이 서버에서는 다우트가 꺼져 있어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "I Doubt It uses the server's ante; no bet needed."
-msgstr ""
+msgstr "다우트는 서버의 앤티를 사용해서 베팅이 필요 없어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "Blackjack needs a bet: /game start game:Blackjack bet:<amount>."
-msgstr ""
+msgstr "블랙잭은 베팅이 필요해요: /game start game:Blackjack bet:<금액>."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "The table moved on — open My hand again."
-msgstr ""
+msgstr "테이블이 진행됐어요. 내 패를 다시 열어 주세요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "Someone doubted first."
-msgstr ""
+msgstr "다른 사람이 먼저 다우트했어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "Move checks are off for you. The bot won't read your chat for moves at game tables, and any phrases kept from your messages were deleted."
-msgstr ""
+msgstr "행동 확인을 껐어요. 게임 테이블에서 봇이 내 채팅을 행동으로 읽지 않고, 내 메시지에서 보관된 문장도 삭제했어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "Move checks are on for you. When this server reads moves from chat, the bot may ask you to confirm a move you typed."
-msgstr ""
+msgstr "행동 확인을 켰어요. 이 서버가 채팅에서 행동을 읽을 때, 내가 입력한 행동이 맞는지 봇이 확인을 요청할 수 있어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid " (This server has Read moves from chat turned off right now.)"
-msgstr ""
+msgstr " (지금 이 서버는 채팅에서 행동 읽기가 꺼져 있어요.)"
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
 msgid "Use /game hand in your table's thread."
-msgstr ""
+msgstr "테이블 스레드에서 /game hand를 사용해 주세요."
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
 msgid "I couldn't open the table thread. I need the Create Public Threads and Send Messages in Threads permissions in this channel. The table was closed."
-msgstr ""
+msgstr "테이블 스레드를 열 수 없었어요. 이 채널에서 공개 스레드 만들기와 스레드에서 메시지 보내기 권한이 필요해요. 테이블을 닫았어요."
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
 msgid "Couldn't open the table thread; the table is closed."
-msgstr ""
+msgstr "테이블 스레드를 열 수 없어서 테이블을 닫았어요."
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
 msgid "The table thread isn't ready yet; try again in a moment."
-msgstr ""
+msgstr "테이블 스레드가 아직 준비되지 않았어요. 잠시 후 다시 시도해 주세요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "You joined the table."
-msgstr ""
+msgstr "테이블에 참가했어요."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "You joined the table. Your ante of {ante:,} {currency} is in the pot."
-msgstr ""
+msgstr "테이블에 참가했어요. 앤티 {ante:,} {currency:이/가} 팟에 들어갔어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "You left the table. It is closed."
-msgstr ""
+msgstr "테이블에서 나갔어요. 테이블이 닫혔어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "You left the table. Your ante is refunded."
-msgstr ""
+msgstr "테이블에서 나갔어요. 앤티는 환불됐어요."
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
 msgid "Only the host can fill seats."
-msgstr ""
+msgstr "호스트만 자리를 채울 수 있어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "Only the host can start the game."
-msgstr ""
+msgstr "호스트만 게임을 시작할 수 있어요."
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
 msgid "No one is left in the cast who can take a seat."
-msgstr ""
+msgstr "출연진 중에 자리에 앉을 수 있는 캐릭터가 더 없어요."
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "Seated: {names}."
-msgstr ""
+msgstr "자리에 앉음: {names}."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "Seated: {names}. Not seated: {skipped}."
-msgstr ""
+msgstr "자리에 앉음: {names}. 앉지 못함: {skipped}."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "I Doubt It needs at least {count} seats to start."
-msgstr ""
+msgstr "다우트는 최소 {count}명이 있어야 시작할 수 있어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "There's no claim to doubt right now."
-msgstr ""
+msgstr "지금은 다우트할 선언이 없어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "You can't doubt your own claim."
-msgstr ""
+msgstr "내 선언에는 다우트할 수 없어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "The game hasn't started yet."
-msgstr ""
+msgstr "아직 게임이 시작되지 않았어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "This game is over."
-msgstr ""
+msgstr "이 게임은 끝났어요."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "Pick 1 to {max} cards to play."
-msgstr ""
+msgstr "낼 카드를 1~{max}장 골라 주세요."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "You don't hold {claim}."
-msgstr ""
+msgstr "손에 {claim:이/가} 없어요."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "You play {cards} and claim {claim}."
-msgstr ""
+msgstr "{cards:을/를} 내고 {claim:이라/라}고 선언해요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "Pick one amount for each rank."
-msgstr ""
+msgstr "숫자마다 장수를 하나씩만 골라 주세요."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgctxt "claim"
 msgid "{count} {rank}"
-msgstr ""
+msgstr "{rank} {count}장"
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgctxt "claim"
 msgid "{count} {rank}s"
-msgstr ""
+msgstr "{rank} {count}장"
 
 #: llmcord_core/games_doubt_discord.py
 msgctxt "claim count"
 msgid "one"
-msgstr ""
+msgstr "1"
 
 #: llmcord_core/games_doubt_discord.py
 msgctxt "claim count"
 msgid "two"
-msgstr ""
+msgstr "2"
 
 #: llmcord_core/games_doubt_discord.py
 msgctxt "claim count"
 msgid "three"
-msgstr ""
+msgstr "3"
 
 #: llmcord_core/games_doubt_discord.py
 msgctxt "claim count"
 msgid "four"
-msgstr ""
+msgstr "4"
 
 #: llmcord_core/games_doubt_discord.py
 msgctxt "select.doubt"
 msgid "Cards to play (1 to 4 in all)"
-msgstr ""
+msgstr "낼 카드 (모두 1~4장)"
 
 #: llmcord_core/games_doubt_discord.py
 msgctxt "button.doubt"
 msgid "Play"
-msgstr ""
+msgstr "내기"
 
 #: llmcord_core/games_doubt_discord.py
 msgid "Table closed: I Doubt It was turned off on this server."
-msgstr ""
+msgstr "테이블 닫힘: 이 서버에서 다우트가 꺼졌어요."
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
 msgid "Table closed: the table was closed."
-msgstr ""
+msgstr "테이블 닫힘: 테이블이 닫혔어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "The antes were refunded."
-msgstr ""
+msgstr "앤티를 환불했어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "The antes are refunded."
-msgstr ""
+msgstr "앤티는 환불돼요."
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "**{game}** · table {number}"
-msgstr ""
+msgstr "**{game}** · 테이블 {number}"
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "Ante: {ante:,} {currency} · Pot: {pot:,} {currency}"
-msgstr ""
+msgstr "앤티: {ante:,} {currency} · 팟: {pot:,} {currency}"
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "No ante · Pot: {pot:,} {currency}"
-msgstr ""
+msgstr "앤티 없음 · 팟: {pot:,} {currency}"
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "Host: {host}"
-msgstr ""
+msgstr "호스트: {host}"
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
 msgid "(house)"
-msgstr ""
+msgstr "(하우스)"
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "Join with the button. The host (if the host has left, any player) starts the game with {low} to {high} seats; the table closes {stamp} if it hasn't started."
-msgstr ""
+msgstr "버튼을 눌러 참가해 주세요. 호스트가 (호스트가 나갔다면 아무 플레이어나) {low}~{high}명으로 게임을 시작해요. 시작하지 않으면 테이블이 {stamp} 닫혀요."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "Join with the button. The host (if the host has left, any player) starts the game with {low} to {high} seats."
-msgstr ""
+msgstr "버튼을 눌러 참가해 주세요. 호스트가 (호스트가 나갔다면 아무 플레이어나) {low}~{high}명으로 게임을 시작해요."
 
 #: llmcord_core/games_doubt_discord.py
 msgctxt "button.doubt"
 msgid "Join"
-msgstr ""
+msgstr "참가"
 
 #: llmcord_core/games_doubt_discord.py
 msgctxt "button.doubt"
 msgid "Leave"
-msgstr ""
+msgstr "나가기"
 
 #: llmcord_core/games_doubt_discord.py
 msgctxt "button.doubt"
 msgid "Fill seats"
-msgstr ""
+msgstr "자리 채우기"
 
 #: llmcord_core/games_doubt_discord.py
 msgctxt "button.doubt"
 msgid "Start"
-msgstr ""
+msgstr "시작"
 
 #: llmcord_core/games_doubt_discord.py
 msgctxt "button.doubt"
 msgid "How to play"
-msgstr ""
+msgstr "게임 방법"
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "pot {pot:,} {currency} (ante {ante:,})"
-msgstr ""
+msgstr "팟 {pot:,} {currency} (앤티 {ante:,})"
 
 #: llmcord_core/games_doubt_discord.py
 msgctxt "seat state"
 msgid "forfeited"
-msgstr ""
+msgstr "기권"
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "{cards} · winner"
-msgstr ""
+msgstr "{cards} · 승리"
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "{cards} · on turn"
-msgstr ""
+msgstr "{cards} · 차례"
 
 #: llmcord_core/games_doubt_discord.py
 msgid "Game over."
-msgstr ""
+msgstr "게임이 끝났어요."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "Pile: {cards} · Rank to claim: {rank}"
-msgstr ""
+msgstr "더미: {cards} · 선언할 숫자: {rank}"
 
 #: llmcord_core/games_doubt_discord.py
 msgid "The game has started."
-msgstr ""
+msgstr "게임이 시작됐어요."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "{who} claims {claim}."
-msgstr ""
+msgstr "{who:이/가} {claim:이라/라}고 선언했어요."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "{who} took the pile after a doubt."
-msgstr ""
+msgstr "{who:이/가} 다우트 후 더미를 가져갔어요."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "Pile: {cards}."
-msgstr ""
+msgstr "더미: {cards}."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "Next: {who}, claim {rank} — {stamp}."
-msgstr ""
+msgstr "다음: {who}, {rank} 선언 — {stamp}."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "Next: {who}, claim {rank}."
-msgstr ""
+msgstr "다음: {who}, {rank} 선언."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "Doubt window open {stamp}."
-msgstr ""
+msgstr "다우트 시간이 열렸어요 ({stamp} 마감)."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "Doubt window open."
-msgstr ""
+msgstr "다우트 시간이 열렸어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgctxt "button.doubt"
 msgid "Doubt"
-msgstr ""
+msgstr "다우트!"
 
 #: llmcord_core/games_doubt_discord.py
 msgctxt "button.doubt"
 msgid "My hand"
-msgstr ""
+msgstr "내 패"
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "Doubt! {doubter} doubted {claimer}'s {claim}. They were {cards} — the claim was true, and {claimer} played their last cards."
-msgstr ""
+msgstr "다우트! {doubter:이/가} {claimer}의 {claim} 선언에 다우트했어요. 낸 카드: {cards} — 선언이 맞았고, {claimer:은/는} 마지막 카드를 냈어요."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "Doubt! {doubter} doubted {claimer}'s {claim}. They were {cards} — {taker} takes the pile ({pile})."
-msgstr ""
+msgstr "다우트! {doubter:이/가} {claimer}의 {claim} 선언에 다우트했어요. 낸 카드: {cards} — {taker:이/가} 더미({pile})를 가져가요."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "**{who} wins the game and takes the pot of {pot:,} {currency}.**"
-msgstr ""
+msgstr "**{who:이/가} 게임에서 이겨 팟 {pot:,} {currency:을/를} 가져가요.**"
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "**{who} wins the game.**"
-msgstr ""
+msgstr "**{who:이/가} 게임에서 이겼어요.**"
 
 #: llmcord_core/games_doubt_discord.py
 msgid "(forfeited)"
-msgstr ""
+msgstr "(기권)"
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "{who} won I Doubt It and took the pot of {pot:,} {currency}. Table closed."
-msgstr ""
+msgstr "{who:이/가} 다우트에서 이겨 팟 {pot:,} {currency:을/를} 가져갔어요. 테이블이 닫혔어요."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "{who} won I Doubt It. Table closed."
-msgstr ""
+msgstr "{who:이/가} 다우트에서 이겼어요. 테이블이 닫혔어요."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "Game over — {who} won."
-msgstr ""
+msgstr "게임 종료 — {who:이/가} 이겼어요."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "{who} forfeits and is out of the game."
-msgstr ""
+msgstr "{who:이/가} 기권해서 게임에서 빠졌어요."
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
 msgid "Table closed: I couldn't post in the table thread."
-msgstr ""
+msgstr "테이블 닫힘: 테이블 스레드에 글을 올릴 수 없었어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "Bots cannot play I Doubt It."
-msgstr ""
+msgstr "봇은 다우트를 할 수 없어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "In play — see the thread."
-msgstr ""
+msgstr "진행 중 — 스레드를 확인해 주세요."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "**Your hand** ({cards})"
-msgstr ""
+msgstr "**내 패** ({cards})"
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "Your turn: claim {rank}. Choose what to play (1 to {max} cards), then press Play."
-msgstr ""
+msgstr "내 차례예요: {rank:을/를} 선언해야 해요. 낼 카드를 고른 뒤(1~{max}장) 내기를 눌러 주세요."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "On turn: {who}, claiming {rank}."
-msgstr ""
+msgstr "차례: {who}, {rank} 선언 중."
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
 msgid "Table closed: nobody started the game."
-msgstr ""
+msgstr "테이블 닫힘: 아무도 게임을 시작하지 않았어요."
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "{who} ran out of time; a card was played for them."
-msgstr ""
+msgstr "{who:이/가} 시간을 초과해서 카드가 자동으로 나갔어요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Texas Hold'em is off on this server."
-msgstr ""
+msgstr "이 서버에서는 텍사스 홀덤이 꺼져 있어요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Texas Hold'em uses the server's blinds; you choose your buy-in when you sit."
-msgstr ""
+msgstr "텍사스 홀덤은 서버의 블라인드를 사용하고, 바이인은 자리에 앉을 때 정해요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "You do not have a seat in this round."
-msgstr ""
+msgstr "이번 라운드에 자리가 없어요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Any chips were cashed out."
-msgstr ""
+msgstr "남은 칩은 모두 정산했어요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "No hand is being played right now."
-msgstr ""
+msgstr "지금 진행 중인 핸드가 없어요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Something went wrong; try again."
-msgstr ""
+msgstr "문제가 발생했어요. 다시 시도해 주세요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "You can't raise now."
-msgstr ""
+msgstr "지금은 레이즈할 수 없어요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "Your whole stack makes a total bet of {top:,}; you can't raise to more."
-msgstr ""
+msgstr "스택 전체를 걸어도 총 베팅은 {top:,}까지예요. 그보다 더 레이즈할 수 없어요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "You can only go all-in, to {top:,}."
-msgstr ""
+msgstr "올인만 할 수 있어요 (총 {top:,})."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "The smallest raise is to {amount:,} in total."
-msgstr ""
+msgstr "레이즈는 총 {amount:,} 이상이어야 해요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "This round has already started."
-msgstr ""
+msgstr "이번 라운드는 이미 시작됐어요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "You already have a seat in this round."
-msgstr ""
+msgstr "이번 라운드에 이미 자리가 있어요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "The table is full."
-msgstr ""
+msgstr "테이블이 꽉 찼어요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "You sit down with {amount:,} {currency}."
-msgstr ""
+msgstr "{amount:,} {currency:으로/로} 자리에 앉았어요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "You added {amount:,} {currency}; your stack is {stack:,}."
-msgstr ""
+msgstr "{amount:,} {currency:을/를} 추가했어요. 현재 스택: {stack:,}."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "You left the table and cashed out {amount:,} {currency}."
-msgstr ""
+msgstr "테이블에서 나가며 {amount:,} {currency:을/를} 정산했어요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Only the host can deal."
-msgstr ""
+msgstr "호스트만 카드를 나눌 수 있어요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Only the host can close the table."
-msgstr ""
+msgstr "호스트만 테이블을 닫을 수 있어요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Assist is on."
-msgstr ""
+msgstr "어시스트가 켜졌어요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Assist is off."
-msgstr ""
+msgstr "어시스트가 꺼졌어요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "{game} needs at least {count} seats to deal."
-msgstr ""
+msgstr "{game:은/는} 최소 {count}명이 있어야 카드를 돌릴 수 있어요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Table closed. Any chips were cashed out."
-msgstr ""
+msgstr "테이블이 닫혔어요. 남은 칩은 모두 정산했어요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "The hand hasn't started yet."
-msgstr ""
+msgstr "핸드가 아직 시작되지 않았어요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Only the winner can show their cards."
-msgstr ""
+msgstr "승자만 카드를 공개할 수 있어요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "The cards were already shown at the showdown."
-msgstr ""
+msgstr "쇼다운에서 이미 카드를 공개했어요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "You already showed your cards."
-msgstr ""
+msgstr "이미 카드를 공개했어요."
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "poker street"
 msgid "Preflop"
-msgstr ""
+msgstr "프리플랍"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "poker street"
 msgid "Flop"
-msgstr ""
+msgstr "플랍"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "poker street"
 msgid "Turn"
-msgstr ""
+msgstr "턴"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "poker street"
 msgid "River"
-msgstr ""
+msgstr "리버"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "poker street"
 msgid "Showdown"
-msgstr ""
+msgstr "쇼다운"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "poker street"
 msgid "Done"
-msgstr ""
+msgstr "종료"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgctxt "button.holdem"
 msgid "All-in {amount:,}"
-msgstr ""
+msgstr "올인 {amount:,}"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgctxt "button.holdem"
 msgid "Raise to {amount:,}"
-msgstr ""
+msgstr "{amount:,}까지 레이즈"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "button.holdem"
 msgid "Exact amount"
-msgstr ""
+msgstr "금액 직접 입력"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "Table closed: {game} was turned off on this server."
-msgstr ""
+msgstr "테이블 닫힘: 이 서버에서 {game:이/가} 꺼졌어요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "Blinds {small}/{big} · Buy-in {low:,} to {high:,} {currency} · {seconds} s per move"
-msgstr ""
+msgstr "블라인드 {small}/{big} · 바이인 {low:,}~{high:,} {currency} · 행동마다 {seconds}초"
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Assist: on"
-msgstr ""
+msgstr "어시스트: 켜짐"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "Sit with the button. The host deals when {low} to {high} seats are taken; the table closes {stamp} if no hand starts."
-msgstr ""
+msgstr "버튼을 눌러 자리에 앉아 주세요. {low}~{high}명이 앉으면 호스트가 카드를 돌려요. 핸드가 시작되지 않으면 {stamp} 테이블이 닫혀요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "Sit with the button. The host deals when {low} to {high} seats are taken."
-msgstr ""
+msgstr "버튼을 눌러 자리에 앉아 주세요. {low}~{high}명이 앉으면 호스트가 카드를 돌려요."
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "button.holdem"
 msgid "Sit"
-msgstr ""
+msgstr "앉기"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "button.holdem"
 msgid "Leave"
-msgstr ""
+msgstr "나가기"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "button.holdem"
 msgid "Rebuy"
-msgstr ""
+msgstr "리바이"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "button.holdem"
 msgid "Fill seats"
-msgstr ""
+msgstr "자리 채우기"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "button.holdem"
 msgid "Assist off"
-msgstr ""
+msgstr "어시스트 끄기"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "button.holdem"
 msgid "Assist on"
-msgstr ""
+msgstr "어시스트 켜기"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "button.holdem"
 msgid "Deal"
-msgstr ""
+msgstr "카드 돌리기"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "button.holdem"
 msgid "Close table"
-msgstr ""
+msgstr "테이블 닫기"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "{who} folds."
-msgstr ""
+msgstr "{who:이/가} 폴드했어요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "{who} checks."
-msgstr ""
+msgstr "{who:이/가} 체크했어요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "{who} calls."
-msgstr ""
+msgstr "{who:이/가} 콜했어요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "{who} raises to {amount:,}."
-msgstr ""
+msgstr "{who:이/가} {amount:,}까지 레이즈했어요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "**{game}** · table {number} · hand {hand}"
-msgstr ""
+msgstr "**{game}** · 테이블 {number} · 핸드 {hand}"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "Blinds {small}/{big} · {seconds} s per move · Assist: on"
-msgstr ""
+msgstr "블라인드 {small}/{big} · 행동마다 {seconds}초 · 어시스트: 켜짐"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "Blinds {small}/{big} · {seconds} s per move"
-msgstr ""
+msgstr "블라인드 {small}/{big} · 행동마다 {seconds}초"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "{street} · Board: {board} · Pot {pot:,}"
-msgstr ""
+msgstr "{street} · 보드: {board} · 팟 {pot:,}"
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Between hands."
-msgstr ""
+msgstr "핸드 사이예요."
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "seat flag"
 msgid "(dealer)"
-msgstr ""
+msgstr "(딜러)"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "seat flag"
 msgid "folded"
-msgstr ""
+msgstr "폴드"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "seat flag"
 msgid "all-in"
-msgstr ""
+msgstr "올인"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "seat flag"
 msgid "on turn"
-msgstr ""
+msgstr "차례"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "**{street}** · hand {hand} · pot {pot:,}"
-msgstr ""
+msgstr "**{street}** · 핸드 {hand} · 팟 {pot:,}"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "Board: {board}"
-msgstr ""
+msgstr "보드: {board}"
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Blinds are posted."
-msgstr ""
+msgstr "블라인드를 냈어요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "(bet {amount:,})"
-msgstr ""
+msgstr "(베팅 {amount:,})"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "Stacks: {entries}"
-msgstr ""
+msgstr "스택: {entries}"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "On turn: {who} — {stamp}"
-msgstr ""
+msgstr "차례: {who} — {stamp}"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "On turn: {who}, thinking…"
-msgstr ""
+msgstr "차례: {who}, 생각하는 중…"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "On turn: {who}"
-msgstr ""
+msgstr "차례: {who}"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "button.holdem"
 msgid "Fold"
-msgstr ""
+msgstr "폴드"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "button.holdem"
 msgid "Check"
-msgstr ""
+msgstr "체크"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgctxt "button.holdem"
 msgid "Call {amount:,}"
-msgstr ""
+msgstr "콜 {amount:,}"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "button.holdem"
 msgid "Raise"
-msgstr ""
+msgstr "레이즈"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "button.holdem"
 msgid "My cards"
-msgstr ""
+msgstr "내 카드"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "**Waiting for players.** The next hand needs {count} seats; sit to continue. The table closes {stamp} if no hand starts."
-msgstr ""
+msgstr "**플레이어를 기다리는 중이에요.** 다음 핸드를 시작하려면 {count}명이 필요해요. 계속하려면 자리에 앉아 주세요. 핸드가 시작되지 않으면 {stamp} 테이블이 닫혀요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "**Waiting for players.** The next hand needs {count} seats; sit to continue."
-msgstr ""
+msgstr "**플레이어를 기다리는 중이에요.** 다음 핸드를 시작하려면 {count}명이 필요해요. 계속하려면 자리에 앉아 주세요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "**Next hand starts {stamp}.** Sit, leave or top up now; the host can deal at once."
-msgstr ""
+msgstr "**다음 핸드는 {stamp} 시작해요.** 지금 앉거나, 나가거나, 리바이할 수 있어요. 호스트는 바로 카드를 돌릴 수 있어요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "**Next hand starts soon.** Sit, leave or top up now; the host can deal at once."
-msgstr ""
+msgstr "**다음 핸드가 곧 시작해요.** 지금 앉거나, 나가거나, 리바이할 수 있어요. 호스트는 바로 카드를 돌릴 수 있어요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "Next seed hash: {hash}"
-msgstr ""
+msgstr "다음 시드 해시: {hash}"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "button.holdem"
 msgid "Deal now"
-msgstr ""
+msgstr "지금 카드 돌리기"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "**Hand {hand}** · table {number}"
-msgstr ""
+msgstr "**핸드 {hand}** · 테이블 {number}"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "{who} shows {cards} — {hand}"
-msgstr ""
+msgstr "{who:이/가} {cards} 공개 — {hand}"
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Pot"
-msgstr ""
+msgstr "팟"
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Main pot"
-msgstr ""
+msgstr "메인 팟"
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Side pot"
-msgstr ""
+msgstr "사이드 팟"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "Side pot {number}"
-msgstr ""
+msgstr "사이드 팟 {number}"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "{winners} win with {hand}"
-msgstr ""
+msgstr "{winners} 승리 ({hand})"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "{winners} win"
-msgstr ""
+msgstr "{winners} 승리"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "{winners} wins with {hand}"
-msgstr ""
+msgstr "{winners} 승리 ({hand})"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "{winners} wins"
-msgstr ""
+msgstr "{winners} 승리"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "{label} {amount:,}:"
-msgstr ""
+msgstr "{label} {amount:,}:"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "Seed hash: {hash} (the seed is revealed when the table closes)"
-msgstr ""
+msgstr "시드 해시: {hash} (시드는 테이블이 닫힐 때 공개돼요)"
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Seeds (revealed now)"
-msgstr ""
+msgstr "시드 (지금 공개)"
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Seeds (cont.)"
-msgstr ""
+msgstr "시드 (계속)"
 
 #: llmcord_core/games_holdem_discord.py
 msgid "**Table closed.** Cash-outs:"
-msgstr ""
+msgstr "**테이블이 닫혔어요.** 정산 내역:"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "• {who}: bought in {bought_in:,}, cashed out {cashed_out:,} ({net:+,})"
-msgstr ""
+msgstr "• {who}: 바이인 {bought_in:,}, 정산 {cashed_out:,} ({net:+,})"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "{who} is out of chips and can sit again to rejoin."
-msgstr ""
+msgstr "{who:은/는} 칩을 모두 잃었어요. 다시 앉으면 참가할 수 있어요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "{who} is out of chips and leaves the table."
-msgstr ""
+msgstr "{who:은/는} 칩을 모두 잃고 테이블을 떠나요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "{who} leaves because {member} is out of chips, and is cashed out with {amount:,}."
-msgstr ""
+msgstr "{member:이/가} 칩을 모두 잃어서 {who:은/는} 테이블을 떠나요 (정산: {amount:,})."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "{who} ran out of time in two hands in a row and was cashed out with {amount:,}."
-msgstr ""
+msgstr "{who:은/는} 2핸드 연속으로 시간을 넘겨서 테이블에서 나갔어요 (정산: {amount:,})."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "{who} leaves too, cashed out with {amount:,}."
-msgstr ""
+msgstr "{who}도 테이블을 떠나요 (정산: {amount:,})."
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "button.holdem"
 msgid "Show"
-msgstr ""
+msgstr "카드 공개"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "Table closed: fewer than {count} players still had chips."
-msgstr ""
+msgstr "테이블 닫힘: 칩이 남은 플레이어가 {count}명보다 적어요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "**{game}** · table {number} — closed after hand {hand}."
-msgstr ""
+msgstr "**{game}** · 테이블 {number} — 핸드 {hand} 후에 닫혔어요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "Bots cannot play {game}."
-msgstr ""
+msgstr "봇은 {game:을/를} 플레이할 수 없어요."
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "modal.holdem"
 msgid "Rebuy"
-msgstr ""
+msgstr "리바이"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgctxt "modal.holdem"
 msgid "Chips to add (up to {room:,})"
-msgstr ""
+msgstr "추가할 칩 (최대 {room:,})"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgctxt "modal.holdem"
 msgid "Up to {room:,} {currency}"
-msgstr ""
+msgstr "최대 {room:,} {currency}"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "modal.holdem"
 msgid "Sit at the table"
-msgstr ""
+msgstr "테이블에 앉기"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgctxt "modal.holdem"
 msgid "Buy-in, {low:,} to {high:,}"
-msgstr ""
+msgstr "바이인 ({low:,}~{high:,})"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgctxt "modal.holdem"
 msgid "{low:,} to {high:,} {currency}"
-msgstr ""
+msgstr "{low:,}~{high:,} {currency}"
 
 #: llmcord_core/games_holdem_discord.py
 msgid "The buy-in must be a whole number."
-msgstr ""
+msgstr "바이인은 정수여야 해요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "The raise must be a whole number."
-msgstr ""
+msgstr "레이즈 금액은 정수여야 해요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "The rebuy must be a whole number above zero."
-msgstr ""
+msgstr "리바이 금액은 0보다 큰 정수여야 해요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "You raise to {amount:,}."
-msgstr ""
+msgstr "{amount:,}까지 레이즈했어요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
@@ -1945,266 +1945,268 @@ msgid ""
 "**{game}** · table {number}\n"
 "The hands are played in the thread."
 msgstr ""
+"**{game}** · 테이블 {number}\n"
+"핸드는 스레드에서 진행돼요."
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Table closed by the host."
-msgstr ""
+msgstr "호스트가 테이블을 닫았어요."
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "**Your cards:** {cards}"
-msgstr ""
+msgstr "**내 카드:** {cards}"
 
 #: llmcord_core/games_holdem_discord.py
 msgid "Choose your raise (the total bet this round)."
-msgstr ""
+msgstr "레이즈 금액을 골라 주세요 (이번 라운드의 총 베팅액)."
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "modal.holdem"
 msgid "Raise"
-msgstr ""
+msgstr "레이즈"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "modal.holdem"
 msgid "Total bet this round"
-msgstr ""
+msgstr "이번 라운드 총 베팅액"
 
 #: llmcord_core/games_holdem_discord.py
 msgctxt "modal.holdem"
 msgid "Your total bet, e.g. 35"
-msgstr ""
+msgstr "총 베팅액 (예: 35)"
 
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "{who} shows {cards}."
-msgstr ""
+msgstr "{who:이/가} 카드를 공개했어요: {cards}"
 
 #: llmcord_core/games_spoken_discord.py
 msgid "This isn't your move check."
-msgstr ""
+msgstr "내 행동 확인이 아니에요."
 
 #: llmcord_core/games_spoken_discord.py
 msgid "Got it — left as table talk. Tired of these? Turn them off with /game spoken_moves."
-msgstr ""
+msgstr "알겠어요. 테이블 잡담으로 둘게요. 이 확인이 번거롭다면 /game spoken_moves로 끌 수 있어요."
 
 #: llmcord_core/games_spoken_discord.py
 msgctxt "button.blackjack"
 msgid "Insure"
-msgstr ""
+msgstr "인슈어런스"
 
 #: llmcord_core/games_spoken_discord.py
 #, python-brace-format
 msgid "Did you mean {first} or {second}?"
-msgstr ""
+msgstr "{first}, {second} 중 어느 쪽인가요?"
 
 #: llmcord_core/games_spoken_discord.py
 #, python-brace-format
 msgid "Did you mean {moves}?"
-msgstr ""
+msgstr "{moves} 하려던 건가요?"
 
 #: llmcord_core/games_spoken_discord.py llmcord_core/games_spoken_doubt.py
 msgctxt "button.spoken"
 msgid "Just table talk"
-msgstr ""
+msgstr "그냥 테이블 잡담"
 
 #: llmcord_core/games_spoken_doubt.py
 msgid "✔ Doubt it!"
-msgstr ""
+msgstr "✔ 다우트!"
 
 #: llmcord_core/games_spoken_doubt.py
 msgctxt "button.doubt"
 msgid "Doubt it!"
-msgstr ""
+msgstr "다우트!"
 
 #: llmcord_core/games_spoken_doubt.py
 msgid "Did you mean **Doubt it!**?"
-msgstr ""
+msgstr "**다우트!** 하려던 건가요?"
 
 #: llmcord_core/items_discord.py
 msgid "Nothing is for sale on this server right now."
-msgstr ""
+msgstr "지금 이 서버에서 판매 중인 아이템이 없어요."
 
 #: llmcord_core/items_discord.py
 msgid "You are not holding any items. Visit /shop to buy some."
-msgstr ""
+msgstr "가지고 있는 아이템이 없어요. /shop에서 구매해 보세요."
 
 #: llmcord_core/items_discord.py
 msgid "This menu belongs to someone else. Run the command yourself to get your own."
-msgstr ""
+msgstr "다른 사람의 메뉴예요. 직접 명령어를 실행해서 내 메뉴를 열어 주세요."
 
 #: llmcord_core/items_discord.py
 #, python-brace-format
 msgid "Your {name} was used, but the result could not be posted. It is saved in the use log an admin can see."
-msgstr ""
+msgstr "{name:을/를} 사용했지만 결과를 게시하지 못했어요. 관리자가 볼 수 있는 사용 기록에 저장되어 있어요."
 
 #: llmcord_core/items_discord.py
 #, python-brace-format
 msgid "Something went wrong with {name}. Check /inventory and try again."
-msgstr ""
+msgstr "{name}에 문제가 생겼어요. /inventory를 확인하고 다시 시도해 주세요."
 
 #: llmcord_core/items_discord.py
 msgid "The menu could not be refreshed. Open /shop again."
-msgstr ""
+msgstr "메뉴를 새로 고칠 수 없어요. /shop을 다시 열어 주세요."
 
 #: llmcord_core/items_discord.py
 #, python-brace-format
 msgid "+{hidden} more not shown"
-msgstr ""
+msgstr "+{hidden}개 더 있음"
 
 #: llmcord_core/items_discord.py
 msgctxt "item kind"
 msgid "consumable"
-msgstr ""
+msgstr "소모품"
 
 #: llmcord_core/items_discord.py
 msgctxt "item kind"
 msgid "reusable"
-msgstr ""
+msgstr "재사용 아이템"
 
 #: llmcord_core/items_discord.py
 msgid "Ask a question and get an answer."
-msgstr ""
+msgstr "질문하면 답을 알려 줘요."
 
 #: llmcord_core/items_discord.py
 msgid "Crack it open for a fortune and a lucky number."
-msgstr ""
+msgstr "쪼개 보면 운세와 행운의 숫자가 나와요."
 
 #: llmcord_core/items_discord.py
 msgid "Roll a die."
-msgstr ""
+msgstr "주사위를 굴려요."
 
 #: llmcord_core/items_discord.py
 msgid "Roll a twenty-sided die."
-msgstr ""
+msgstr "20면체 주사위를 굴려요."
 
 #: llmcord_core/items_discord.py
 msgid "Draw a tarot card."
-msgstr ""
+msgstr "타로 카드를 한 장 뽑아요."
 
 #: llmcord_core/items_discord.py
 msgid "A toy from the shop."
-msgstr ""
+msgstr "상점에서 산 장난감이에요."
 
 #: llmcord_core/items_discord.py
 #, python-brace-format
 msgid "{name} is not for sale right now."
-msgstr ""
+msgstr "{name:은/는} 지금 판매하지 않아요."
 
 #: llmcord_core/items_discord.py
 #, python-brace-format
 msgid "You already own {name}."
-msgstr ""
+msgstr "이미 {name:을/를} 가지고 있어요."
 
 #: llmcord_core/items_discord.py
 #, python-brace-format
 msgid "You can hold at most {cap} of {name}."
-msgstr ""
+msgstr "{name:은/는} 최대 {cap}개까지 가질 수 있어요."
 
 #: llmcord_core/items_discord.py
 #, python-brace-format
 msgid "You do not have {name}. Buy one with /shop."
-msgstr ""
+msgstr "{name:이/가} 없어요. /shop에서 구매해 주세요."
 
 #: llmcord_core/items_discord.py
 #, python-brace-format
 msgid "{name} cannot be used on this server right now."
-msgstr ""
+msgstr "지금 이 서버에서는 {name:을/를} 사용할 수 없어요."
 
 #: llmcord_core/items_discord.py
 #, python-brace-format
 msgid "{name} is recharging. Try again in {remaining} s."
-msgstr ""
+msgstr "{name:은/는} 쿨타임 중이에요. {remaining}초 후에 다시 시도해 주세요."
 
 #: llmcord_core/items_discord.py
 msgid "Toy shop"
-msgstr ""
+msgstr "장난감 상점"
 
 #: llmcord_core/items_discord.py
 #, python-brace-format
 msgid "{qty} left"
-msgstr ""
+msgstr "{qty}개 남음"
 
 #: llmcord_core/items_discord.py
 msgid "Someone"
-msgstr ""
+msgstr "누군가"
 
 #: llmcord_core/items_discord.py
 msgctxt "button.shop"
 msgid "Owned"
-msgstr ""
+msgstr "보유 중"
 
 #: llmcord_core/items_discord.py
 #, python-brace-format
 msgctxt "button.shop"
 msgid "At the limit ({cap})"
-msgstr ""
+msgstr "최대 보유 ({cap})"
 
 #: llmcord_core/items_discord.py
 #, python-brace-format
 msgctxt "button.shop"
 msgid "Need {short:,} {currency} more"
-msgstr ""
+msgstr "{short:,} {currency} 부족"
 
 #: llmcord_core/items_discord.py
 #, python-brace-format
 msgctxt "button.shop"
 msgid "Buy {emoji} {name} · {price:,}"
-msgstr ""
+msgstr "{emoji} {name} 구매 · {price:,}"
 
 #: llmcord_core/items_discord.py
 #, python-brace-format
 msgid "Your balance: {balance:,} {currency}"
-msgstr ""
+msgstr "내 잔액: {balance:,} {currency}"
 
 #: llmcord_core/items_discord.py
 #, python-brace-format
 msgid "You hold {qty}"
-msgstr ""
+msgstr "{qty}개 보유 중"
 
 #: llmcord_core/items_discord.py
 msgid "You hold none"
-msgstr ""
+msgstr "보유하지 않음"
 
 #: llmcord_core/items_discord.py
 msgid "Your items"
-msgstr ""
+msgstr "내 아이템"
 
 #: llmcord_core/items_discord.py
 msgid "use is off right now"
-msgstr ""
+msgstr "지금은 사용할 수 없음"
 
 #: llmcord_core/items_discord.py
 #, python-brace-format
 msgid "recharging, ready {when}"
-msgstr ""
+msgstr "쿨타임 중, {when} 사용 가능"
 
 #: llmcord_core/items_discord.py
 msgid "ready"
-msgstr ""
+msgstr "사용 가능"
 
 #: llmcord_core/items_discord.py
 #, python-brace-format
 msgid "Bought {emoji} {name} for {price:,} {currency}."
-msgstr ""
+msgstr "{emoji} {name:을/를} {price:,} {currency}에 구매했어요."
 
 #: llmcord_core/items_discord.py
 #, python-brace-format
 msgctxt "button.inventory"
 msgid "Use {emoji} {name}"
-msgstr ""
+msgstr "{emoji} {name} 사용"
 
 #: llmcord_core/items_discord.py
 msgid "that item"
-msgstr ""
+msgstr "그 아이템"
 
 #: llmcord_core/usage.py
 msgid "unavailable"
-msgstr ""
+msgstr "확인 불가"
 
 #: llmcord_core/usage.py
 #, python-brace-format
 msgid " (incl. {thinking:,} thinking)"
-msgstr ""
+msgstr " (추론 {thinking:,} 포함)"
 
 #: llmcord_core/usage.py
 #, python-brace-format
@@ -2213,6 +2215,9 @@ msgid ""
 "\n"
 "-# {model} · Reply input: {inputs} · Output: {outputs} · Est. paid cost: {cost}"
 msgstr ""
+"\n"
+"\n"
+"-# {model} · 응답 입력: {inputs} · 출력: {outputs} · 예상 유료 비용: {cost}"
 
 #: llmcord_core/usage.py
 #, python-brace-format
@@ -2221,9 +2226,12 @@ msgid ""
 "\n"
 "-# {model} · Reply input: {inputs} · Output: {outputs} · Est. cost: {cost}"
 msgstr ""
+"\n"
+"\n"
+"-# {model} · 응답 입력: {inputs} · 출력: {outputs} · 예상 비용: {cost}"
 
 #: llmcord_core/usage.py
 #, python-brace-format
 msgid "failed at {stage}"
-msgstr ""
+msgstr "{stage} 단계에서 실패"
 

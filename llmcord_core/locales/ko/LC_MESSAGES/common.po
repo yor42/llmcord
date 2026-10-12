@@ -9,57 +9,57 @@ msgstr ""
 #: llmcord_core/i18n/terms.py
 msgctxt "item setting"
 msgid "For sale"
-msgstr ""
+msgstr "판매 중"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "item setting"
 msgid "Allow use"
-msgstr ""
+msgstr "사용 허용"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "lookup noun"
 msgid "character"
-msgstr ""
+msgstr "캐릭터"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "lookup noun"
 msgid "world"
-msgstr ""
+msgstr "월드"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "lookup noun"
 msgid "hub"
-msgstr ""
+msgstr "허브"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "lookup noun"
 msgid "world or hub"
-msgstr ""
+msgstr "월드 또는 허브"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "lookup noun plural"
 msgid "characters"
-msgstr ""
+msgstr "캐릭터"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "lookup noun plural"
 msgid "worlds"
-msgstr ""
+msgstr "월드"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "lookup noun plural"
 msgid "hubs"
-msgstr ""
+msgstr "허브"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "lookup noun plural"
 msgid "worlds or hubs"
-msgstr ""
+msgstr "월드 또는 허브"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "game name"
 msgid "Blackjack"
-msgstr ""
+msgstr "블랙잭"
 
 #. i18n: Korean: 다우트 (카드게임), or 다우트(Doubt) if the glossary picks it. 다우트 alone
 #. reads as the word "doubt"; the suffix marks the card game. See i18n-plan.md
@@ -67,17 +67,17 @@ msgstr ""
 #: llmcord_core/i18n/terms.py
 msgctxt "game name"
 msgid "I Doubt It"
-msgstr ""
+msgstr "다우트 (카드게임)"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "game name"
 msgid "Texas Hold'em"
-msgstr ""
+msgstr "텍사스 홀덤"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "game noun"
 msgid "blackjack"
-msgstr ""
+msgstr "블랙잭"
 
 #. i18n: Korean: plain 다우트, without (카드게임). It sits inside a sentence and takes
 #. particles ({game:이/가}); a closing parenthesis would break the particle
@@ -85,931 +85,931 @@ msgstr ""
 #: llmcord_core/i18n/terms.py
 msgctxt "game noun"
 msgid "I Doubt It"
-msgstr ""
+msgstr "다우트"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "game noun"
 msgid "Texas Hold'em"
-msgstr ""
+msgstr "텍사스 홀덤"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank"
 msgid "Two"
-msgstr ""
+msgstr "2"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank"
 msgid "Three"
-msgstr ""
+msgstr "3"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank"
 msgid "Four"
-msgstr ""
+msgstr "4"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank"
 msgid "Five"
-msgstr ""
+msgstr "5"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank"
 msgid "Six"
-msgstr ""
+msgstr "6"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank"
 msgid "Seven"
-msgstr ""
+msgstr "7"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank"
 msgid "Eight"
-msgstr ""
+msgstr "8"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank"
 msgid "Nine"
-msgstr ""
+msgstr "9"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank"
 msgid "Ten"
-msgstr ""
+msgstr "10"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank"
 msgid "Jack"
-msgstr ""
+msgstr "잭"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank"
 msgid "Queen"
-msgstr ""
+msgstr "퀸"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank"
 msgid "King"
-msgstr ""
+msgstr "킹"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank"
 msgid "Ace"
-msgstr ""
+msgstr "에이스"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank plural"
 msgid "Twos"
-msgstr ""
+msgstr "2"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank plural"
 msgid "Threes"
-msgstr ""
+msgstr "3"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank plural"
 msgid "Fours"
-msgstr ""
+msgstr "4"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank plural"
 msgid "Fives"
-msgstr ""
+msgstr "5"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank plural"
 msgid "Sixes"
-msgstr ""
+msgstr "6"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank plural"
 msgid "Sevens"
-msgstr ""
+msgstr "7"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank plural"
 msgid "Eights"
-msgstr ""
+msgstr "8"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank plural"
 msgid "Nines"
-msgstr ""
+msgstr "9"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank plural"
 msgid "Tens"
-msgstr ""
+msgstr "10"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank plural"
 msgid "Jacks"
-msgstr ""
+msgstr "잭"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank plural"
 msgid "Queens"
-msgstr ""
+msgstr "퀸"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank plural"
 msgid "Kings"
-msgstr ""
+msgstr "킹"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank plural"
 msgid "Aces"
-msgstr ""
+msgstr "에이스"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker category"
 msgid "High card"
-msgstr ""
+msgstr "하이카드"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker category"
 msgid "Pair"
-msgstr ""
+msgstr "원페어"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker category"
 msgid "Two pair"
-msgstr ""
+msgstr "투페어"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker category"
 msgid "Three of a kind"
-msgstr ""
+msgstr "트리플"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker category"
 msgid "Straight"
-msgstr ""
+msgstr "스트레이트"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker category"
 msgid "Flush"
-msgstr ""
+msgstr "플러시"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker category"
 msgid "Full house"
-msgstr ""
+msgstr "풀하우스"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker category"
 msgid "Four of a kind"
-msgstr ""
+msgstr "포카드"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker category"
 msgid "Straight flush"
-msgstr ""
+msgstr "스트레이트 플러시"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "poker hand"
 msgid "High card, {rank}"
-msgstr ""
+msgstr "{rank} 하이카드"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "poker hand"
 msgid "Pair of {rank}"
-msgstr ""
+msgstr "{rank} 원페어"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "poker hand"
 msgid "Two pair, {high} and {low}"
-msgstr ""
+msgstr "{high}, {low} 투페어"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "poker hand"
 msgid "Three of a kind, {rank}"
-msgstr ""
+msgstr "{rank} 트리플"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "poker hand"
 msgid "Straight, {rank} high"
-msgstr ""
+msgstr "{rank} 하이 스트레이트"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "poker hand"
 msgid "Flush, {rank} high"
-msgstr ""
+msgstr "{rank} 하이 플러시"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "poker hand"
 msgid "Full house, {trips} over {pair}"
-msgstr ""
+msgstr "{trips} 풀하우스 ({pair} 페어)"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "poker hand"
 msgid "Four of a kind, {rank}"
-msgstr ""
+msgstr "{rank} 포카드"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker hand"
 msgid "Royal flush"
-msgstr ""
+msgstr "로열 플러시"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "poker hand"
 msgid "Straight flush, {rank} high"
-msgstr ""
+msgstr "{rank} 하이 스트레이트 플러시"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "play style"
 msgid "loose"
-msgstr ""
+msgstr "루즈함"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "play style"
 msgid "tight"
-msgstr ""
+msgstr "타이트함"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "play style"
 msgid "aggressive"
-msgstr ""
+msgstr "공격적"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "play style"
 msgid "passive"
-msgstr ""
+msgstr "소극적"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "play style"
 msgid "bluffs often"
-msgstr ""
+msgstr "블러핑이 잦음"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "play style"
 msgid "rarely bluffs"
-msgstr ""
+msgstr "블러핑이 드묾"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "play style"
 msgid "stubborn"
-msgstr ""
+msgstr "고집스러움"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "play style"
 msgid "quick to fold"
-msgstr ""
+msgstr "쉽게 물러남"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "play style"
 msgid "suspicious"
-msgstr ""
+msgstr "의심 많음"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "play style"
 msgid "trusting"
-msgstr ""
+msgstr "잘 믿음"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "play style"
 msgid "reckless"
-msgstr ""
+msgstr "무모함"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "play style"
 msgid "cautious"
-msgstr ""
+msgstr "신중함"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "play style"
 msgid "sharp"
-msgstr ""
+msgstr "예리함"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "play style"
 msgid "foolish"
-msgstr ""
+msgstr "어수룩함"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "play style"
 msgid "erratic"
-msgstr ""
+msgstr "변덕스러움"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "play style"
 msgid "steady"
-msgstr ""
+msgstr "한결같음"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "play style"
 msgid "somewhat {word}"
-msgstr ""
+msgstr "약간 {word}"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "play style"
 msgid "balanced"
-msgstr ""
+msgstr "균형 잡힘"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "play style group"
 msgid "Style"
-msgstr ""
+msgstr "스타일"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "play style group"
 msgid "Reads"
-msgstr ""
+msgstr "상대 읽기"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "play style group"
 msgid "Mind"
-msgstr ""
+msgstr "판단"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "card count"
 msgid "{count} card"
-msgstr ""
+msgstr "{count}장"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "card count"
 msgid "{count} cards"
-msgstr ""
+msgstr "{count}장"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "blackjack rules line"
 msgid "Dealer hits soft 17"
-msgstr ""
+msgstr "딜러는 소프트 17에서 히트"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "blackjack rules line"
 msgid "Dealer stands on all 17s"
-msgstr ""
+msgstr "딜러는 모든 17에서 스탠드"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "blackjack rules line"
 msgid "Dealer stands on {total}"
-msgstr ""
+msgstr "딜러는 {total}에서 스탠드"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "blackjack rules line"
 msgid "Blackjack pays {ratio}"
-msgstr ""
+msgstr "블랙잭 배당 {ratio}"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "blackjack rules line"
 msgid "Dealer wins ties"
-msgstr ""
+msgstr "동점이면 딜러 승"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "blackjack rules line"
 msgid "Ties push"
-msgstr ""
+msgstr "동점이면 푸시 (베팅 반환)"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "blackjack rules line"
 msgid "Double on the first two cards"
-msgstr ""
+msgstr "첫 두 장에서 더블다운 가능"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "blackjack rules line"
 msgid "No doubling"
-msgstr ""
+msgstr "더블다운 불가"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "blackjack rules line"
 msgid "Splitting allowed"
-msgstr ""
+msgstr "스플릿 가능"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "blackjack rules line"
 msgid "No splitting"
-msgstr ""
+msgstr "스플릿 불가"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "blackjack rules line"
 msgid "Insurance"
-msgstr ""
+msgstr "인슈어런스"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "blackjack rules line"
 msgid "Late surrender"
-msgstr ""
+msgstr "레이트 서렌더"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "blackjack rules line"
 msgid "{count} deck"
-msgstr ""
+msgstr "덱 {count}개"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "blackjack rules line"
 msgid "{count} decks"
-msgstr ""
+msgstr "덱 {count}개"
 
 #: llmcord_core/i18n/terms.py
 msgid "**Blackjack in short**"
-msgstr ""
+msgstr "**블랙잭 간단 규칙**"
 
 #: llmcord_core/i18n/terms.py
 msgid "Get closer to 21 than the dealer without going over."
-msgstr ""
+msgstr "21을 넘지 않으면서 딜러보다 21에 더 가까워지면 이겨요."
 
 #: llmcord_core/i18n/terms.py
 msgid "• Cards: 2–10 are face value, J/Q/K are 10, an ace is 1 or 11."
-msgstr ""
+msgstr "• 카드: 2–10은 숫자 그대로, J/Q/K는 10, 에이스는 1 또는 11이에요."
 
 #: llmcord_core/i18n/terms.py
 msgid "• Hit takes a card. Stand keeps your hand."
-msgstr ""
+msgstr "• 히트는 카드를 한 장 더 받아요. 스탠드는 지금 패를 유지해요."
 
 #: llmcord_core/i18n/terms.py
 msgid "• Hit takes a card. Stand keeps your hand. Double doubles your bet, takes one card and ends your turn (first two cards only)."
-msgstr ""
+msgstr "• 히트는 카드를 한 장 더 받아요. 스탠드는 지금 패를 유지해요. 더블다운은 베팅을 두 배로 올리고 카드를 한 장만 받은 뒤 차례를 끝내요 (첫 두 장에서만)."
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "• Over 21 is a bust: you lose. An ace with a ten-value card on your first two cards is blackjack and pays {ratio}."
-msgstr ""
+msgstr "• 21을 넘으면 버스트로 져요. 첫 두 장이 에이스와 10점 카드면 블랙잭이고 {ratio}로 받아요."
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "• The dealer plays after everyone: it draws until {stand_on} or more."
-msgstr ""
+msgstr "• 딜러는 모두가 끝난 뒤에 플레이하고, {stand_on} 이상이 될 때까지 카드를 받아요."
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "• The dealer plays after everyone: it draws until {stand_on} or more, and also hits a soft 17."
-msgstr ""
+msgstr "• 딜러는 모두가 끝난 뒤에 플레이하고, {stand_on} 이상이 될 때까지 카드를 받아요. 소프트 17에서도 히트해요."
 
 #: llmcord_core/i18n/terms.py
 msgid "• Win: you get your bet back plus the same again. Tie: the dealer wins."
-msgstr ""
+msgstr "• 승리: 베팅액과 같은 금액을 더해 돌려받아요. 동점: 딜러가 이겨요."
 
 #: llmcord_core/i18n/terms.py
 msgid "• Win: you get your bet back plus the same again. Tie: your bet comes back."
-msgstr ""
+msgstr "• 승리: 베팅액과 같은 금액을 더해 돌려받아요. 동점: 베팅액을 돌려받아요."
 
 #: llmcord_core/i18n/terms.py
 msgid "• Insurance: when the dealer shows an ace you may put up half your bet (bets of 2 or more) that the dealer has blackjack; it pays 2 to 1. With a blackjack you may take even money (paid 1 to 1 right away) instead."
-msgstr ""
+msgstr "• 인슈어런스: 딜러의 보이는 카드가 에이스면 베팅의 절반을 걸고 (베팅 2 이상) 딜러가 블랙잭인지에 걸 수 있어요. 맞으면 2:1로 받아요. 내가 블랙잭이면 대신 이븐 머니를 선택해 바로 1:1로 받을 수 있어요."
 
 #: llmcord_core/i18n/terms.py
 msgid "• Surrender: on your first two cards, once the dealer has checked for blackjack, you may give up the hand and get half your bet back."
-msgstr ""
+msgstr "• 서렌더: 첫 두 장일 때 딜러가 블랙잭 확인을 마친 뒤 패를 포기하고 베팅의 절반을 돌려받을 수 있어요."
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "blackjack total"
 msgid "soft {total}"
-msgstr ""
+msgstr "소프트 {total}"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "blackjack outcome"
 msgid "blackjack"
-msgstr ""
+msgstr "블랙잭"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "blackjack outcome"
 msgid "win"
-msgstr ""
+msgstr "승"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "blackjack outcome"
 msgid "push"
-msgstr ""
+msgstr "푸시"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "blackjack outcome"
 msgid "lose"
-msgstr ""
+msgstr "패"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "blackjack outcome"
 msgid "bust"
-msgstr ""
+msgstr "버스트"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "blackjack outcome"
 msgid "surrender"
-msgstr ""
+msgstr "서렌더"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "blackjack outcome"
 msgid "even_money"
-msgstr ""
+msgstr "이븐 머니"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "blackjack summary"
 msgid "Dealer: {hand} ({total})"
-msgstr ""
+msgstr "딜러: {hand} ({total})"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "blackjack summary"
 msgid "Dealer: {hand} ({total}) bust"
-msgstr ""
+msgstr "딜러: {hand} ({total}) 버스트"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "blackjack summary"
 msgid "Dealer: {hand} ({total}) blackjack"
-msgstr ""
+msgstr "딜러: {hand} ({total}) 블랙잭"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "blackjack summary"
 msgid "Seat {seat}: {hand} ({total}) {outcome}"
-msgstr ""
+msgstr "좌석 {seat}: {hand} ({total}) {outcome}"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "blackjack summary"
 msgid "Seat {seat}: {hand} ({total}) {outcome}, insurance paid 2:1"
-msgstr ""
+msgstr "좌석 {seat}: {hand} ({total}) {outcome}, 인슈어런스 2:1 지급"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "blackjack summary"
 msgid "Seat {seat}: {hand} ({total}) {outcome}, insurance lost"
-msgstr ""
+msgstr "좌석 {seat}: {hand} ({total}) {outcome}, 인슈어런스 잃음"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "doubt rules line"
 msgid "Claims follow the sequence A to K"
-msgstr ""
+msgstr "선언은 A부터 K까지 순서대로"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "doubt rules line"
 msgid "Ante {ante}"
-msgstr ""
+msgstr "앤티 {ante}"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "doubt rules line"
 msgid "No ante"
-msgstr ""
+msgstr "앤티 없음"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "doubt rules line"
 msgid "{seconds} s per turn"
-msgstr ""
+msgstr "차례마다 {seconds}초"
 
 #: llmcord_core/i18n/terms.py
 msgid "**I Doubt It in short**"
-msgstr ""
+msgstr "**다우트 (카드게임) 간단 규칙**"
 
 #: llmcord_core/i18n/terms.py
 msgid "Be the first to get rid of all your cards."
-msgstr ""
+msgstr "손에 든 카드를 가장 먼저 모두 내면 이겨요."
 
 #: llmcord_core/i18n/terms.py
 msgid "• On your turn, put 1 to 4 cards face down on the pile and claim they are all the forced rank. The rank goes A, 2, 3 ... K, then A again, one step per claim."
-msgstr ""
+msgstr "• 내 차례에 카드 1~4장을 뒷면으로 더미에 내고, 모두 지정된 숫자라고 선언해요. 숫자는 A, 2, 3 ... K 다음 다시 A 순서로 선언할 때마다 하나씩 올라가요."
 
 #: llmcord_core/i18n/terms.py
 msgid "• You can't pass. If you hold none of the rank, you bluff."
-msgstr ""
+msgstr "• 패스할 수 없어요. 그 숫자의 카드가 없으면 블러핑해야 해요."
 
 #: llmcord_core/i18n/terms.py
 msgid "• Anyone else can doubt the claim. The cards are shown: if any is the wrong rank, the claimer takes the whole pile. If the claim was true, the doubter takes it."
-msgstr ""
+msgstr "• 다른 사람은 누구나 선언에 다우트할 수 있어요. 낸 카드를 공개해서 하나라도 숫자가 틀리면 선언한 사람이 더미를 전부 가져가요. 선언이 맞았다면 다우트한 사람이 가져가요."
 
 #: llmcord_core/i18n/terms.py
 msgid "• If nobody doubts and the next player plays, the claim stands."
-msgstr ""
+msgstr "• 아무도 다우트하지 않고 다음 사람이 카드를 내면 선언은 그대로 인정돼요."
 
 #: llmcord_core/i18n/terms.py
 msgid "• Empty your hand and survive the doubt window to win."
-msgstr ""
+msgstr "• 손패를 모두 내고 다우트 시간을 버티면 이겨요."
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "• Empty your hand and survive the doubt window to win the pot ({ante} each)."
-msgstr ""
+msgstr "• 손패를 모두 내고 다우트 시간을 버티면 팟을 가져가요 (1인당 {ante})."
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "• Take longer than {seconds} s and a card is played for you."
-msgstr ""
+msgstr "• {seconds}초 안에 내지 않으면 카드가 자동으로 나가요."
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "holdem rules line"
 msgid "Blinds {small}/{big}"
-msgstr ""
+msgstr "블라인드 {small}/{big}"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "holdem rules line"
 msgid "Buy-in {low} to {high} big blinds"
-msgstr ""
+msgstr "바이인: 빅 블라인드 {low}~{high}배"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgctxt "holdem rules line"
 msgid "{seconds} s per move"
-msgstr ""
+msgstr "행동마다 {seconds}초"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "holdem rules line"
 msgid "Assist on"
-msgstr ""
+msgstr "어시스트 켜짐"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "holdem rules line"
 msgid "Assist off"
-msgstr ""
+msgstr "어시스트 꺼짐"
 
 #: llmcord_core/i18n/terms.py
 msgid "**Texas Hold'em in short**"
-msgstr ""
+msgstr "**텍사스 홀덤 간단 규칙**"
 
 #: llmcord_core/i18n/terms.py
 msgid "Make the best five-card hand from your two private cards and the five shared cards."
-msgstr ""
+msgstr "내 카드 2장과 공용 카드 5장으로 가장 좋은 5장 패를 만들어요."
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "• Two seats post forced blinds ({small} and {big}) before each deal."
-msgstr ""
+msgstr "• 매 판 카드를 나누기 전에 두 자리가 블라인드({small}, {big})를 의무로 내요."
 
 #: llmcord_core/i18n/terms.py
 msgid "• Betting runs before the flop (three shared cards), then the turn, then the river. Fold, check, call or raise."
-msgstr ""
+msgstr "• 베팅은 플랍(공용 카드 3장) 전에 시작해서 플랍, 턴, 리버 순서로 진행돼요. 폴드, 체크, 콜, 레이즈 중에서 골라요."
 
 #: llmcord_core/i18n/terms.py
 msgid "• Raise at least the size of the last raise. Going all-in for less is allowed."
-msgstr ""
+msgstr "• 레이즈는 직전 레이즈 크기 이상이어야 해요. 그보다 적은 금액으로 올인하는 건 괜찮아요."
 
 #: llmcord_core/i18n/terms.py
 msgid "• If everyone else folds, you win the pot without showing. Otherwise the best hand at showdown wins."
-msgstr ""
+msgstr "• 다른 사람이 모두 폴드하면 패를 공개하지 않고 팟을 가져가요. 아니면 쇼다운에서 가장 좋은 패가 이겨요."
 
 #: llmcord_core/i18n/terms.py
 msgid "• A seat that is all-in can only win what it matched; the rest goes to a side pot."
-msgstr ""
+msgstr "• 올인한 자리는 자기가 맞춘 금액까지만 이길 수 있고, 나머지는 사이드 팟으로 가요."
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "• Take longer than {seconds} s and you check, or fold if you can't."
-msgstr ""
+msgstr "• {seconds}초가 지나면 체크하고, 체크할 수 없으면 폴드해요."
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "• Take longer than {seconds} s and you check, or fold if you can't. Assist shows your hand and odds."
-msgstr ""
+msgstr "• {seconds}초가 지나면 체크하고, 체크할 수 없으면 폴드해요. 어시스트를 켜면 내 패와 확률을 보여 줘요."
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "{purpose}/{block}: remap unsupported marker {marker}"
-msgstr ""
+msgstr "{purpose}/{block}: 지원하지 않는 마커 {marker:을/를} 다른 마커로 바꿔 주세요"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "{purpose}/{block}: use relative placement; this purpose has no conversation-history marker"
-msgstr ""
+msgstr "{purpose}/{block}: 이 용도에는 대화 기록 마커가 없으니 상대 위치 배치를 사용해 주세요"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "{purpose}/{block}: the required input payload must use the user role"
-msgstr ""
+msgstr "{purpose}/{block}: 필수 입력 내용은 user 역할을 사용해야 해요"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "{purpose}/{block}: unsupported macros {macros}"
-msgstr ""
+msgstr "{purpose}/{block}: 지원하지 않는 매크로 {macros}"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "{purpose}/{block}: remap generation triggers"
-msgstr ""
+msgstr "{purpose}/{block}: 생성 트리거를 다른 방식으로 바꿔 주세요"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "{purpose}/{block}: remove extension dependency"
-msgstr ""
+msgstr "{purpose}/{block}: 확장 기능 의존성을 제거해 주세요"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "{purpose}/{block}: choose an Anthropic placement adaptation"
-msgstr ""
+msgstr "{purpose}/{block}: Anthropic에 맞는 배치 방식을 선택해 주세요"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "{purpose}/{block}: choose a Gemini placement adaptation"
-msgstr ""
+msgstr "{purpose}/{block}: Gemini에 맞는 배치 방식을 선택해 주세요"
 
 #: llmcord_core/i18n/terms.py
 msgid "Disable or remap imported assistant prefill"
-msgstr ""
+msgstr "가져온 어시스턴트 프리필을 끄거나 다른 방식으로 바꿔 주세요"
 
 #: llmcord_core/i18n/terms.py
 msgid "A saved profile with an invalid name was skipped."
-msgstr ""
+msgstr "이름이 올바르지 않은 저장된 프로필을 건너뛰었어요."
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "Profile {name} was skipped: {reason}"
-msgstr ""
+msgstr "{name} 프로필을 건너뛰었어요: {reason}"
 
 #: llmcord_core/i18n/terms.py
 msgid "its saved settings could not be read"
-msgstr ""
+msgstr "저장된 설정을 읽을 수 없음"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "The {role} role names profile {chosen}, which is not available; using the config.yaml setting."
-msgstr ""
+msgstr "{role} 역할에 지정된 프로필({chosen})을 사용할 수 없어서 config.yaml 설정을 사용해요."
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "The provider refused the key (HTTP {status})."
-msgstr ""
+msgstr "제공업체가 키를 거부했어요 (HTTP {status})."
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "The provider needs an API key (HTTP {status})."
-msgstr ""
+msgstr "제공업체에서 API 키가 필요해요 (HTTP {status})."
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "The provider answered HTTP {status} instead of a model list."
-msgstr ""
+msgstr "제공업체가 모델 목록 대신 HTTP {status:을/를} 응답했어요."
 
 #: llmcord_core/i18n/terms.py
 msgid "The provider's model list is too large to read."
-msgstr ""
+msgstr "제공업체의 모델 목록이 너무 커서 읽을 수 없어요."
 
 #: llmcord_core/i18n/terms.py
 msgid "The provider did not respond in time."
-msgstr ""
+msgstr "제공업체가 제시간에 응답하지 않았어요."
 
 #: llmcord_core/i18n/terms.py
 msgid "Could not reach the provider."
-msgstr ""
+msgstr "제공업체에 연결할 수 없어요."
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "{env} is not set in the dashboard's environment."
-msgstr ""
+msgstr "대시보드 환경에 {env:이/가} 설정되어 있지 않아요."
 
 #: llmcord_core/i18n/terms.py
 msgid "This provider doesn't list its models; type the ID."
-msgstr ""
+msgstr "이 제공업체는 모델 목록을 제공하지 않아요. ID를 직접 입력해 주세요."
 
 #: llmcord_core/i18n/terms.py
 msgid "The provider's answer was not a model list; type the ID."
-msgstr ""
+msgstr "제공업체의 응답이 모델 목록이 아니에요. ID를 직접 입력해 주세요."
 
 #: llmcord_core/i18n/terms.py
 msgid "The provider returned no models; type the ID."
-msgstr ""
+msgstr "제공업체가 모델을 하나도 반환하지 않았어요. ID를 직접 입력해 주세요."
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "{count} model found."
-msgstr ""
+msgstr "모델 {count}개를 찾았어요."
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "{count} models found."
-msgstr ""
+msgstr "모델 {count}개를 찾았어요."
 
 #: llmcord_core/i18n/terms.py
 msgid "The model list could not be fetched; see the dashboard log."
-msgstr ""
+msgstr "모델 목록을 가져올 수 없어요. 대시보드 로그를 확인해 주세요."
 
 #: llmcord_core/i18n/terms.py
 msgid "No price found for this model; enter it by hand."
-msgstr ""
+msgstr "이 모델의 가격을 찾지 못했어요. 직접 입력해 주세요."
 
 #: llmcord_core/i18n/terms.py
 msgid "The price list could not be downloaded."
-msgstr ""
+msgstr "가격 목록을 다운로드할 수 없어요."
 
 #: llmcord_core/i18n/terms.py
 msgid "The price list is too large to read."
-msgstr ""
+msgstr "가격 목록이 너무 커서 읽을 수 없어요."
 
 #: llmcord_core/i18n/terms.py
 msgid "The price list did not respond in time."
-msgstr ""
+msgstr "가격 목록 서버가 제시간에 응답하지 않았어요."
 
 #: llmcord_core/i18n/terms.py
 msgid "The price list could not be read."
-msgstr ""
+msgstr "가격 목록을 읽을 수 없어요."
 
 #: llmcord_core/i18n/terms.py
 msgid "The price lookup failed; see the dashboard log."
-msgstr ""
+msgstr "가격 조회에 실패했어요. 대시보드 로그를 확인해 주세요."
 
 #: llmcord_core/i18n/terms.py
 msgid "speaker selection"
-msgstr ""
+msgstr "화자 선택"
 
 #: llmcord_core/i18n/terms.py
 msgid "image description"
-msgstr ""
+msgstr "이미지 설명"
 
 #: llmcord_core/i18n/terms.py
 msgid "dialogue generation"
-msgstr ""
+msgstr "대사 생성"
 
 #: llmcord_core/i18n/terms.py
 msgid "saving scene input"
-msgstr ""
+msgstr "장면 입력 저장"
 
 #: llmcord_core/i18n/terms.py
 msgid "preparing character prompt"
-msgstr ""
+msgstr "캐릭터 프롬프트 준비"
 
 #: llmcord_core/i18n/terms.py
 msgid "webhook setup"
-msgstr ""
+msgstr "웹훅 설정"
 
 #: llmcord_core/i18n/terms.py
 msgid "avatar lookup"
-msgstr ""
+msgstr "아바타 조회"
 
 #: llmcord_core/i18n/terms.py
 msgid "webhook delivery"
-msgstr ""
+msgstr "웹훅 전송"
 
 #: llmcord_core/i18n/terms.py
 msgid "saving character reply"
-msgstr ""
+msgstr "캐릭터 응답 저장"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "turn log part"
 msgid "reply"
-msgstr ""
+msgstr "응답"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "turn log part"
 msgid "ambient"
-msgstr ""
+msgstr "자율 참여"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "turn log part"
 msgid "summon"
-msgstr ""
+msgstr "소환"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "turn log part"
 msgid "memory"
-msgstr ""
+msgstr "기억"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "turn log part"
 msgid "catchup"
-msgstr ""
+msgstr "놓친 대화 요약"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "turn log part"
 msgid "game"
-msgstr ""
+msgstr "게임"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "turn log part"
 msgid "playstyle"
-msgstr ""
+msgstr "플레이 스타일"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "turn log part"
 msgid "dialogue"
-msgstr ""
+msgstr "대화"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "turn log part"
 msgid "director"
-msgstr ""
+msgstr "디렉터"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "turn log part"
 msgid "extraction"
-msgstr ""
+msgstr "추출"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "turn log part"
 msgid "summary"
-msgstr ""
+msgstr "요약"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "turn log part"
 msgid "images"
-msgstr ""
+msgstr "이미지"
 
