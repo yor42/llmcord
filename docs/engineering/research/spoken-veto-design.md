@@ -1,6 +1,6 @@
 # Design: decision-model veto behind the local spoken-move reader (FEAT-45, proposed)
 
-Status: **draft for the owner's decision. Nothing here is built, and nothing may be built or enabled until the owner answers the questions in [Decisions needed](#decisions-needed).** It follows from FEAT-43/44 ([results](decision-models-eval.md)): behind e5, a per-move yes/no reader removed all 12 leaked chatter lines on the synthetic set for 4 lost moves out of 124 (Decision-1 `noul`, tau 0.5).
+Status: **decided by the owner on 2026-10-13 (see [Decisions](#decisions-owner-2026-10-13)); FEAT-45a in progress, 45b waits for the schema go-ahead below.** It follows from FEAT-43/44 ([results](decision-models-eval.md)): behind e5, a per-move yes/no reader removed all 12 leaked chatter lines on the synthetic set for 4 lost moves out of 124 (Decision-1 `noul`, tau 0.5).
 
 ## Goal and non-goals
 - Goal: fewer wrong move-check buttons on table chat. e5 alone gave a button to about 1 chatter line in 5.
@@ -9,7 +9,7 @@ Status: **draft for the owner's decision. Nothing here is built, and nothing may
 - Not a replacement for e5. With the veto off, or any failure, behaviour is exactly today's.
 
 ## What leaves the Pi
-Only when all hold: the operator configured a provider and key, the server turned the veto on, the member turned spoken moves on (`spoken_member_on`), it is that member's turn, the message is at most 200 characters, and e5 did **not** call it silent (about 72% of messages on the test set; far fewer in real chat, where most lines are not move-like).
+Only when all hold: the operator configured a provider and key, a server admin turned the veto on, the member has spoken moves on (`spoken_member_on`, on by default) and has not opted out of the veto, it is that member's turn, the message is at most 200 characters, and e5 did **not** call it silent (about 72% of messages on the test set; far fewer in real chat, where most lines are not move-like).
 
 Sent: the message text, the legal move names of the current hand, and a fixed context sentence. Not sent: user, member, guild or channel ids or names, table or hand state, cards, history, other messages. The request has no identifier of ours. The provider still sees the bot's IP and its own account.
 
@@ -23,7 +23,7 @@ In `_read`, after `interpret.decide(...)` (line 203) and the silent-band return 
 3. Silent after the veto → return as for e5-silent (no buttons). Otherwise build the buttons from the new moves.
 4. After the await, re-run `_current()` staleness checks as lines 185/191 do, because the table may have moved on.
 
-The e5 reading already exists before the call, so a timeout, error or open breaker simply continues with e5's buttons (**fail-open**). The player sees no difference except the extra button that was always there today. The existing "one pending check per table" rule bounds in-flight calls per table.
+(The "member" gate above means members of a server where spoken moves are on, which is every member unless they switched it off.) The e5 reading already exists before the call, so a timeout, error or open breaker simply continues with e5's buttons (**fail-open**). The player sees no difference except the extra button that was always there today. The existing "one pending check per table" rule bounds in-flight calls per table.
 
 ## New code (small, separable)
 | Piece | Where | Notes |
@@ -47,9 +47,11 @@ It does not go through `ModelGateway`/`models.py`: the Decisions wire formats ar
 Three layers, all default off:
 1. **Operator**: provider and key configured in the environment.
 2. **Server admin** switches "Decision-model check for spoken moves" on, in the Games tab or by the slash command. The label and reply must say plainly: *"When on, a message that the local reader takes for a spoken move is sent to {provider}, a third-party service, to double-check it. Only the message text and the legal moves are sent, only for members who turned on spoken moves, and only on their own turn. Off by default."*
-3. **Member**: unchanged `spoken_member_on` gate. Open question below on whether the member also gets a one-line notice when they switch spoken moves on in a server where the veto is on.
+3. **Member**: the existing `spoken_member_on` gate (on by default), plus a per-member **opt-out of the veto** (`/game spoken_veto` for the member; owner decision: server-wide default on once the admin enables it, each member can opt out). Members get a one-line notice that their message may be double-checked by a third-party service and how to opt out.
 
-Before enabling: read the chosen provider's data-retention and training terms (OpenRouter's routing/logging policy and Azure-hosted Decision-1 terms; OpenAI beta terms). I have not verified any of these.
+**Schema:** the per-member opt-out needs a new `member_settings` column (`spoken_veto`), i.e. migration v22 with backup-before-upgrade. `CLAUDE.md` requires the owner's go-ahead for a schema change; that go-ahead is requested in the FEAT-45b brief and is not assumed. Alternative without a schema change: none that is clean (overloading `spoken_moves` values would be a hack).
+
+Provider terms: the owner reports that the only provider for Decision-1 on OpenRouter is Azure and that its listing says: "Private: this provider does not train on prompts and does not retain prompt data." I have not independently verified this; it is the owner's reading of the OpenRouter provider page. The OpenRouter request must not opt into prompt logging, and the docs should quote the same line with the date it was checked.
 
 ## Limits and cost
 There is no per-user or per-table rate limit today (only one pending check per table). The veto adds an in-memory per-guild token bucket (default 30 calls/minute) and a per-process daily call cap (default 5,000); beyond either, fall back to e5. At about $0.005 per 1,000 messages the money is negligible, the caps are for outages, bugs and abuse. Counters reset on restart; they are not persisted.
@@ -81,10 +83,12 @@ Item 2 touches consent and an outbound data path, so it should get an Opus revie
 - Real chat is wider than 195 synthetic phrases; the numbers above are optimistic until shadow mode says otherwise.
 - Provider outage or slowness is invisible to players by design, but then the benefit is lost silently; log the breaker state change once.
 
-## Decisions needed
-1. **Go or no-go** on sending spoken-move text to a third party at all, even for a single server (this draft assumes at most opt-in per server).
-2. **Provider**: Decision-1 via OpenRouter (recommended) or OpenAI `predicate`; accept an alpha/beta dependency?
-3. **Member notice**: a one-line notice to members when they turn spoken moves on in a server with the veto enabled (recommended), or the server switch alone?
-4. **Shadow first** (recommended) or go live on one server straight away?
-5. **Where to keep the code**: `spoken/veto*.py` outside `ModelGateway` (recommended) or a new `decisions` provider kind in `models.py`.
-6. Who verifies the provider's retention and training terms before the first shadow run.
+## Decisions (owner, 2026-10-13)
+1. Sending the text is acceptable **if opt-in**: server admin enables it (server-wide default for its members), each member can opt out.
+2. Provider: **Decision-1 via OpenRouter**; the non-release (alpha) endpoint is acceptable. OpenAI `predicate` is not built.
+3. Members get a one-line notice.
+4. The bot currently runs on a single server, a testbed. Taken as: no separate shadow period is required before going live there. The count-only shadow telemetry (FEAT-45c) stays proposed as the way to validate tau on real chat, but it no longer gates 45a/45b.
+5. Code stays out of `ModelGateway` (`spoken/veto.py`, `spoken/veto_client.py`).
+6. Provider terms: the owner's reading of the OpenRouter provider page (Azure, "does not train on prompts and does not retain prompt data").
+
+Still open: the migration go-ahead (v22, `member_settings.spoken_veto`), and the wording and timing of the member notice (proposal: appended once to the first check message a member gets per bot start, and always in `/game spoken_veto` replies).
