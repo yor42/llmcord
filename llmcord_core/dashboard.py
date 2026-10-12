@@ -17,7 +17,7 @@ import zoneinfo
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import httpx
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlencode
 from http.cookies import SimpleCookie
 
 from fastapi import HTTPException, Request
@@ -861,7 +861,7 @@ def rejection_notice(error, *, t=None):
         return None
     if error.status_code == 401:
         return t('Your Discord sign-in expired. Sign in again.')
-    return str(error.detail or t('This action was rejected'))
+    return t.lookup(str(error.detail)) if error.detail else t('This action was rejected')
 
 
 NOTICE_WINDOW = 8.0  # seconds; matches the 8000 ms toast timeout
@@ -884,6 +884,8 @@ THEME_DIVIDER, THEME_NESTED = '#3f4147', '#313338'
 THEME_MACRO_KNOWN, THEME_MACRO_UNKNOWN, THEME_MACRO_TEXT = '#7983f5', '#f23f43', '#ffffff'
 
 _THEME_CSS = f"""
+body {{ font-family: "Roboto", "-apple-system", "Helvetica Neue", Helvetica, Arial, "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }}
+:lang(ko) {{ word-break: keep-all; }}
 body.body--dark, body.body--dark .q-page, body.body--dark .q-layout {{ background: {THEME_BODY}; }}
 .q-header {{ background: {THEME_HEADER}; }}
 body.body--dark .q-card {{ background: {THEME_CARD}; }}
@@ -1097,7 +1099,7 @@ def _install_socket_auth(app):
         allowed, client, error = await socket_check(sid, message)
         if allowed:
             original_event(sid, message)
-        elif client is not None and (notice := rejection_notice(error, t=i18n.english())):  # i18n: FEAT-45 request locale
+        elif client is not None and (notice := rejection_notice(error, t=web_locale.client_t(client))):
             # The event itself is still dropped; only the bound client is told why.
             now = time.monotonic()
             last = getattr(client, 'llmcord_last_notice', None)  # lives and dies with the client
@@ -1129,7 +1131,6 @@ def _install_socket_auth(app):
 
 def _install_upload_guard(app):
     from nicegui import Client
-    t = i18n.english()  # i18n: FEAT-45 request locale
 
     @app.middleware('http')
     async def protected_uploads(request, call_next):
@@ -1138,12 +1139,13 @@ def _install_upload_guard(app):
             parts = path.split('/')
             client = Client.instances.get(parts[4]) if len(parts) > 4 else None
             binding = getattr(client, 'llmcord_binding', None)
+            t = web_locale.client_t(client) if client is not None else web_locale.request_t(request)
             if not binding or request.cookies.get('llmcord_session') != binding[0]:
                 return PlainTextResponse(t('Sign in with Discord'), 401)
             if binding[1] is OPERATOR:
                 return PlainTextResponse(t('Uploads are not available here'), 403)
             try:
-                await app.state.auth.guard(binding[0], binding[1], request.headers.get('x-csrf-token', ''), request.headers.get('origin'))
+                await app.state.auth.guard(binding[0], binding[1], request.headers.get('x-csrf-token', ''), request.headers.get('origin'), t=t)
             except HTTPException as error:
                 return PlainTextResponse(error.detail, error.status_code)
             if int(request.headers.get('content-length', 0)) > MAX_AVATAR_BYTES + 65536:
@@ -1166,6 +1168,7 @@ def _register_pages(app):
 
     @ui.page('/')
     async def servers(request: Request):
+        web_locale.bind_client(ui.context.client, web_locale.locale_for_request(request))
         t = web_locale.current()
         apply_theme()
         try:
@@ -1178,11 +1181,13 @@ def _register_pages(app):
                 ui.link(t('Sign in with Discord'), app.state.base_url + '/login').classes('ll-signin-btn')
                 ui.label(t('You will see the servers where you are an administrator.')).classes('ll-faint text-sm')
             return
+        web_locale.bind_client(ui.context.client, web_locale.locale_for_request(request, session))
+        t = web_locale.current()
         ui.context.client.llmcord_binding = (request.cookies['llmcord_session'], None)
-        guilds = await app.state.auth.guilds(session)
+        guilds = await app.state.auth.guilds(session, t=t)
         with ui.header().classes('items-center justify-between no-wrap'):
             header_crumb()
-            account_menu(session, app.state.auth.is_operator(session))
+            account_menu(session, app.state.auth.is_operator(session), locale=web_locale.current_locale(), path=page_path(request))
         with ui.column().classes('ll-servers gap-1'):
             ui.label(t('Your servers')).classes('text-3xl font-bold')
             ui.label(t('Servers where you are an administrator.')).classes('ll-muted')
@@ -1202,17 +1207,20 @@ def _register_pages(app):
 
     @ui.page('/operator', response_timeout=30)
     async def operator(request: Request):
+        web_locale.bind_client(ui.context.client, web_locale.locale_for_request(request))
         t = web_locale.current()
         try:
-            session = await app.state.auth.guard_operator(request.cookies.get('llmcord_session', ''), origin=request.headers.get('origin'))
+            session = await app.state.auth.guard_operator(request.cookies.get('llmcord_session', ''), origin=request.headers.get('origin'), t=t)
         except HTTPException:
             raise HTTPException(404)  # indistinguishable from an unknown path
+        web_locale.bind_client(ui.context.client, web_locale.locale_for_request(request, session))
+        t = web_locale.current()
         apply_theme()
         ui.context.client.llmcord_binding = (request.cookies['llmcord_session'], OPERATOR)
         ui.page_title(t('Bot settings'))
         with ui.header().classes('items-center justify-between no-wrap'):
             header_crumb()
-            account_menu(session, True)
+            account_menu(session, True, locale=web_locale.current_locale(), path=page_path(request))
         with ui.column().classes('ll-page'):
             ui.label(t('Bot settings')).classes('text-3xl font-bold')
             ui.label(t('Bot-wide settings. Only operators can see this page.')).classes('ll-muted')
@@ -1236,7 +1244,7 @@ def _register_pages(app):
                         elif tab == 'backend':
                             await backend_panel(ctx, types.SimpleNamespace(profiles=app.state.config_profiles, roles=app.state.config_roles, error=app.state.config_error))
                         else:
-                            await usage_by_server_panel(ctx, lambda: app.state.auth.guilds(session))
+                            await usage_by_server_panel(ctx, lambda: app.state.auth.guilds(session, t=t))
                 except BaseException:
                     built.discard(tab)
                     raise
@@ -1249,19 +1257,22 @@ def _register_pages(app):
 
     @ui.page('/guild/{guild_id}', response_timeout=30)
     async def guild(request: Request, guild_id: int):
+        web_locale.bind_client(ui.context.client, web_locale.locale_for_request(request))
         t = web_locale.current()
         apply_theme()
         session = await app.state.auth.require_admin(request, guild_id)
+        web_locale.bind_client(ui.context.client, web_locale.locale_for_request(request, session))
+        t = web_locale.current()
         ui.context.client.llmcord_binding = (request.cookies['llmcord_session'], guild_id)
         ctx = LiveContext(app, request, guild_id, session)
         ctx.is_operator = app.state.auth.is_operator(session)
         try:  # cached by require_admin; the header must not fail the page if a refetch does
-            current = next((g for g in await app.state.auth.guilds(session) if str(g.get('id')) == str(guild_id)), None)
+            current = next((g for g in await app.state.auth.guilds(session, t=t) if str(g.get('id')) == str(guild_id)), None)
         except HTTPException:
             current = None
         with ui.header().classes('items-center justify-between no-wrap'):
             header_crumb(current)
-            account_menu(session, app.state.auth.is_operator(session))
+            account_menu(session, app.state.auth.is_operator(session), locale=web_locale.current_locale(), path=page_path(request))
         with ui.column().classes('ll-page'):
             ui.label(t('Server administration')).classes('text-3xl font-bold')
             ui.label(t('Changes apply on the next bot turn. Prompt drafts require activation.')).classes('ll-muted')
@@ -1354,13 +1365,22 @@ def header_crumb(current=None):
             ui.label(str(current.get('name', ''))).classes('ll-crumb-name')
 
 
-def account_menu(session, is_operator=False):
-    """Header account button (avatar plus name) opening a menu with the name and a Sign out item."""
+def page_path(request):
+    """The current page's path and query, as the language switch's `next` (the lang parameter is dropped: the cookie takes over)."""
+    query = urlencode([(k, v) for k, v in request.query_params.multi_items() if k != 'lang'])
+    return request.url.path + ('?' + query if query else '')
+
+
+def account_menu(session, is_operator=False, *, locale='en', path='/'):
+    """Header account button (avatar plus name) opening a menu with the name, a Language section and a Sign out item."""
     from nicegui import ui
     import html
     t = web_locale.current()
     user = session['user']
     name = str(user.get('global_name') or user['username'])
+    # One hidden form outside the menu (the menu keeps only the Sign out form); the language buttons submit it through their form attribute.
+    ui.html('<form id="ll-lang-form" action="/lang" method="post" hidden><input type="hidden" name="csrf" value="' + html.escape(session['csrf'], quote=True)
+            + '"><input type="hidden" name="next" value="' + html.escape(path, quote=True) + '"></form>', sanitize=False)
     with ui.button().props('flat no-caps').classes('ll-account') as account:
         account.props['aria-label'] = t('Account menu')
         # user_avatar_url only returns a CDN URL built from a digit snowflake and a hex hash, so it is safe inside the quoted prop.
@@ -1379,8 +1399,22 @@ def account_menu(session, is_operator=False):
             if is_operator:
                 ui.link(t('Bot settings'), '/operator').classes('ll-menu-item no-underline')  # ui.link adds the /admin mount prefix
             ui.separator()
+            ui.html(language_forms(locale, t), sanitize=False)
+            ui.separator()
             # A normal POST retains the existing origin and CSRF checks.
             ui.html('<form action="/logout" method="post"><input type="hidden" name="csrf" value="' + html.escape(session['csrf'], quote=True) + '"><button type="submit" class="ll-menu-item">' + html.escape(t.p('button', 'Sign out')) + '</button></form>', sanitize=False)
+
+
+def language_forms(current, t):
+    """One submit button per available language for the page's hidden /lang form (own-language names, never translated); the current one is marked."""
+    import html
+    rows = ''.join(
+        '<button type="submit" form="ll-lang-form" name="locale" value="' + html.escape(code, quote=True)
+        + '" class="ll-menu-item' + (' font-bold' if code == current else '') + '"'
+        + (' aria-current="true"' if code == current else '') + '>' + html.escape(i18n.display_name(code))
+        + (' &#10003;' if code == current else '') + '</button>'
+        for code in i18n.available_locales())
+    return '<div role="group" aria-label="' + html.escape(t('Language'), quote=True) + '"><div class="ll-muted text-sm px-4 pt-2">' + html.escape(t('Language')) + '</div>' + rows + '</div>'
 
 
 def format_usd(value, *, t=None):
@@ -1433,7 +1467,7 @@ def usage_chart_options(report, since, now, *, t=None):
     return {'backgroundColor': 'transparent', 'textStyle': {'color': THEME_TEXT_MUTED}, 'color': palette,
             'legend': {'type': 'scroll', 'bottom': 0, 'textStyle': {'color': THEME_TEXT_MUTED}},
             'tooltip': {'trigger': 'axis', 'axisPointer': {'type': 'shadow'}, 'backgroundColor': THEME_CARD_HOVER, 'borderColor': THEME_BORDER, 'textStyle': {'color': THEME_TILE_TEXT},
-                        ':formatter': "params => params[0].axisValueLabel + '<br>' + params.filter(p => p.value > 0).map(p => p.marker + p.seriesName + ': ' + Number(p.value).toLocaleString('en-US') + '" + unit + "').join('<br>')"},
+                        ':formatter': "params => params[0].axisValueLabel + '<br>' + params.filter(p => p.value > 0).map(p => p.marker + p.seriesName + ': ' + Number(p.value).toLocaleString('" + web_locale.quasar_language(t.locale) + "') + '" + unit + "').join('<br>')"},
             'grid': {'left': 8, 'right': 8, 'top': 16, 'bottom': 48, 'containLabel': True},
             'xAxis': {'type': 'category', 'data': [d[5:] for d in days], **axis},
             'yAxis': {'type': 'value', 'splitLine': {'lineStyle': {'color': THEME_DIVIDER}}, 'axisLabel': {'color': THEME_TEXT_MUTED, ':formatter': "v => v >= 1000000 ? v / 1000000 + 'M' : v >= 1000 ? v / 1000 + 'k' : v"}},

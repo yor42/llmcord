@@ -217,6 +217,14 @@ class Translator:
     def __call__(self, msgid, /, **params) -> str:
         return self._render(getattr(msgid, 'context', None), str(msgid), None, None, params)
 
+    def lookup(self, text) -> str:
+        """For finished English that is exactly a msgid, such as an HTTPException detail raised in English by code without the viewer's locale. No formatting."""
+        text = str(text)
+        found = self._cat().get(None, text)
+        if found is not None:
+            return found
+        return pseudo(text) if self.locale == PSEUDO_LOCALE else text
+
     def n(self, singular, plural, count, /, **params) -> str:
         params.setdefault('count', count)
         return self._render(getattr(singular, 'context', None), str(singular), plural, count, params)

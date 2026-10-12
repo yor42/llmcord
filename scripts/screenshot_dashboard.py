@@ -33,7 +33,7 @@ VIEWPORTS = {
 SETTLE_SECONDS = 1.0
 
 
-def start_server(folder: Path) -> tuple[subprocess.Popen, str]:
+def start_server(folder: Path, lang: str | None = None) -> tuple[subprocess.Popen, str]:
     import trustme
     cert = trustme.CA().issue_cert('localhost')
     cert.private_key_pem.write_to_path(folder / 'key.pem')
@@ -45,6 +45,8 @@ def start_server(folder: Path) -> tuple[subprocess.Popen, str]:
     env = {**os.environ, 'LLMCORD_TEST_PORT': str(port), 'LLMCORD_TEST_KEY': str(folder / 'key.pem'),
            'LLMCORD_TEST_CERT': str(folder / 'cert.pem')}
     env.pop('LLMCORD_BENCH', None)
+    if lang == 'pseudo':
+        env['LLMCORD_I18N_PSEUDO'] = '1'
     log = (folder / 'server.log').open('w')
     process = subprocess.Popen([sys.executable, '-m', 'tests.dashboard_server'], cwd=ROOT, env=env, stdout=log, stderr=log)
     process.log = log
@@ -95,7 +97,7 @@ def failed_entry(out: Path, tab, viewport, error: str) -> dict:
             'horizontal_scroll': None, 'loaded': False}
 
 
-def capture(browser, url: str, out: Path, tab: str, viewport: str) -> dict:
+def capture(browser, url: str, out: Path, tab: str, viewport: str, lang: str | None = None) -> dict:
     context = browser.new_context(ignore_https_errors=True, **VIEWPORTS[viewport])
     errors: list[str] = []
     entry = {'path': str(out / f'{tab}-{viewport}.png'), 'top_path': str(out / f'{tab}-{viewport}-top.png'),
@@ -107,7 +109,7 @@ def capture(browser, url: str, out: Path, tab: str, viewport: str) -> dict:
         page = context.new_page()
         page.on('pageerror', lambda e: errors.append(e.stack or str(e)))
         try:
-            page.goto(f'{url}/admin/guild/1?tab={tab}', wait_until='networkidle', timeout=30000)
+            page.goto(f'{url}/admin/guild/1?tab={tab}' + (f'&lang={lang}' if lang else ''), wait_until='networkidle', timeout=30000)
             page.wait_for_function('window.did_handshake === true && window.socket?.connected === true', timeout=30000)
             page.wait_for_function(
                 "() => { const p = document.querySelector('.q-tab-panel'); return !!p && p.innerText.trim().length > 0; }",
@@ -131,6 +133,7 @@ def main() -> int:
     parser.add_argument('--out', default=str(ROOT / '.test-artifacts' / 'screenshots'))
     parser.add_argument('--tab', action='append', choices=TABS, help='repeatable; default all')
     parser.add_argument('--viewport', action='append', choices=tuple(VIEWPORTS), help='repeatable; default both')
+    parser.add_argument('--lang', help='load every page with ?lang=<locale> (pseudo starts the server with LLMCORD_I18N_PSEUDO=1)')
     parser.add_argument('--strict', action='store_true', help='exit non-zero on page JS errors too')
     args = parser.parse_args()
     out = Path(args.out)
@@ -140,7 +143,7 @@ def main() -> int:
     shots: list[dict] = []
     with tempfile.TemporaryDirectory() as temp:
         try:
-            process, url = start_server(Path(temp))
+            process, url = start_server(Path(temp), args.lang)
         except RuntimeError as exc:
             print(exc, file=sys.stderr)
             return 1
@@ -153,7 +156,7 @@ def main() -> int:
                     plan = [(tab, viewport) for tab in tabs for viewport in viewports]
                     for i, (tab, viewport) in enumerate(plan):
                         try:
-                            shots.append(capture(browser, url, out, tab, viewport))
+                            shots.append(capture(browser, url, out, tab, viewport, args.lang))
                         except BaseException as exc:
                             shots.append(failed_entry(out, tab, viewport, f'capture failed: {exc!r}'))
                             if isinstance(exc, KeyboardInterrupt):

@@ -13,6 +13,7 @@ from fastapi import HTTPException
 
 from . import i18n
 from .discord_api import DISCORD_API
+from .i18n import web_locale
 
 ADMINISTRATOR = 1 << 3
 GUILD_CACHE_TTL = 300  # seconds a session's guild list is reused (roadmap D1)
@@ -89,8 +90,8 @@ class AuthService:
         except (TypeError, ValueError):
             return 1.0
 
-    async def discord_get(self, path, token):
-        t = i18n.english()  # i18n: FEAT-45 request locale
+    async def discord_get(self, path, token, *, t=None):
+        t = t or i18n.english()  # i18n: FEAT-45 request locale: callers without a request or client (membership refresh inside guards) cannot know the viewer
         key = (path, token_key(token))
         deadline = time.monotonic() + 20
         async with self.request_locks.setdefault(key, asyncio.Lock()):
@@ -148,8 +149,8 @@ class AuthService:
             self.request_locks.pop(key, None)
             self.retry_at.pop(key, None)
 
-    async def session(self, ident):
-        t = i18n.english()  # i18n: FEAT-45 request locale
+    async def session(self, ident, *, t=None):
+        t = t or i18n.english()  # i18n: FEAT-45 request locale: callers without a request cannot know the viewer
         self.prune()
         session = self.app.state.sessions.get(ident)
         if not session or session['expires'] < time.time():
@@ -175,7 +176,7 @@ class AuthService:
         return session
 
     async def session_for(self, request):
-        return await self.session(request.cookies.get('llmcord_session', ''))
+        return await self.session(request.cookies.get('llmcord_session', ''), t=web_locale.request_t(request))
 
     def current(self, session):
         return session['expires'] >= time.time() and any(s is session for s in self.app.state.sessions.values())
@@ -184,8 +185,8 @@ class AuthService:
         for s in [session] if session is not None else list(self.app.state.sessions.values()):
             s.pop('guild_cache', None)
 
-    async def guilds(self, session):
-        t = i18n.english()  # i18n: FEAT-45 request locale
+    async def guilds(self, session, *, t=None):
+        t = t or i18n.english()  # i18n: FEAT-45 request locale: callers without a request cannot know the viewer
         # Cached on the session dict, so sign-out, 401, failed refresh and expiry drop it with the session.
         async with session.setdefault('guild_lock', asyncio.Lock()):
             if not self.current(session):  # e.g. queued behind a fetch that got a Discord 401
@@ -194,33 +195,33 @@ class AuthService:
             if cached and time.monotonic() - cached[0] < GUILD_CACHE_TTL:
                 return cached[1]
             fetched_at = time.monotonic()
-            guilds = await self.discord_get('/users/@me/guilds', 'Bearer ' + session['access'])
+            guilds = await self.discord_get('/users/@me/guilds', 'Bearer ' + session['access'], t=t)
             if self.current(session):
                 session['guild_cache'] = (fetched_at, guilds)
             return guilds
 
-    def check_origin(self, origin):
-        t = i18n.english()  # i18n: FEAT-45 request locale
+    def check_origin(self, origin, *, t=None):
+        t = t or i18n.english()  # i18n: FEAT-45 request locale: callers without a request cannot know the viewer
         if origin and origin.rstrip('/') != self.app.state.base_url:
             raise HTTPException(403, t('Invalid request origin'))
 
-    async def guard(self, ident, guild_id, csrf=None, origin=None):
-        t = i18n.english()  # i18n: FEAT-45 request locale
-        session = await self.session(ident)
-        self.check_origin(origin)
+    async def guard(self, ident, guild_id, csrf=None, origin=None, *, t=None):
+        t = t or i18n.english()  # i18n: FEAT-45 request locale: callers without a request cannot know the viewer
+        session = await self.session(ident, t=t)
+        self.check_origin(origin, t=t)
         if csrf is not None and not secrets.compare_digest(str(csrf), session['csrf']):
             raise HTTPException(403, t('Invalid form token'))
-        guilds = await self.guilds(session)
+        guilds = await self.guilds(session, t=t)
         if self.app.state.sessions.get(ident) is not session or session['expires'] < time.time():
             raise HTTPException(401, t('Discord session expired'))
         if not any(int(g['id']) == guild_id and is_server_admin(g) for g in guilds):
             raise HTTPException(403, t('Server administrator permission required'))
         return session
 
-    async def guard_operator(self, ident, csrf=None, origin=None):
-        t = i18n.english()  # i18n: FEAT-45 request locale
-        session = await self.session(ident)
-        self.check_origin(origin)
+    async def guard_operator(self, ident, csrf=None, origin=None, *, t=None):
+        t = t or i18n.english()  # i18n: FEAT-45 request locale: callers without a request cannot know the viewer
+        session = await self.session(ident, t=t)
+        self.check_origin(origin, t=t)
         if csrf is not None and not secrets.compare_digest(str(csrf), session['csrf']):
             raise HTTPException(403, t('Invalid form token'))
         if self.app.state.sessions.get(ident) is not session or session['expires'] < time.time():
@@ -236,4 +237,4 @@ class AuthService:
             return False
 
     async def require_admin(self, request, guild_id):
-        return await self.guard(request.cookies.get('llmcord_session', ''), guild_id, None, request.headers.get('origin'))
+        return await self.guard(request.cookies.get('llmcord_session', ''), guild_id, None, request.headers.get('origin'), t=web_locale.request_t(request))

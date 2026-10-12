@@ -929,6 +929,10 @@ msgid "Sign out"
 msgstr ""
 
 #: llmcord_core/dashboard.py
+msgid "Language"
+msgstr ""
+
+#: llmcord_core/dashboard.py
 msgid "$0.00"
 msgstr ""
 
@@ -3458,16 +3462,18 @@ msgid "Discord sign-in failed"
 msgstr ""
 
 #: llmcord_core/web.py
+msgid "Unknown language"
+msgstr ""
+
+#: llmcord_core/web.py
 msgid "Avatar not found"
 msgstr ""
 
-#. i18n: FEAT-45 request locale
 #: llmcord_core/web.py
 #, python-brace-format
 msgid "Invalid input: {error}"
 msgstr ""
 
-#. i18n: FEAT-45 request locale
 #: llmcord_core/web.py
 msgid "This name or entry already exists"
 msgstr ""
