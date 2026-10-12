@@ -2016,12 +2016,12 @@ msgid "Insure"
 msgstr ""
 
 #: llmcord_core/games_spoken_discord.py
-#, fuzzy, python-brace-format
+#, python-brace-format
 msgid "Did you mean {first} or {second}?"
 msgstr ""
 
 #: llmcord_core/games_spoken_discord.py
-#, fuzzy, python-brace-format
+#, python-brace-format
 msgid "Did you mean {moves}?"
 msgstr ""
 

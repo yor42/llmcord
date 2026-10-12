@@ -130,6 +130,10 @@ def _sync(root: Path, lang: str, domain: str) -> bool:
     path = root / LOCALES / lang / 'LC_MESSAGES' / f'{domain}.po'
     catalog = _read(path, lang) if path.exists() else Catalog(locale=lang)
     catalog.update(template)
+    for message in catalog:  # fuzzy on an untranslated entry is noise; keep it where a translation was carried over
+        strings = message.string if isinstance(message.string, (tuple, list)) else (message.string,)
+        if message.id and not any(strings):
+            message.flags.discard('fuzzy')
     catalog.obsolete.clear()
     return _write(path, _render_po(catalog, lang))
 
