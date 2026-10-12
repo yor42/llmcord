@@ -1,0 +1,7 @@
+{
+  "doubt": {
+    "en": ["doubt", "i doubt it", "doubt it", "liar", "you're lying", "youre lying", "bs", "bullshit", "capping", "that's cap", "thats cap", "bluff", "bluffing", "calling bs", "call bs", "sus", "he's lying", "hes lying", "she's lying", "shes lying", "stop lying", "all lies", "pack of lies"],
+    "ko": ["의심", "다우트", "구라", "개구라", "구라치", "구라치네", "구라치시네", "뻥치", "뻥치네", "뻥치시네", "뻥카", "거짓말", "거짓말쟁이", "거짓말쟁이네", "거짓", "의심스러운", "의심스러운데", "의심스럽네", "의심스러워", "블러핑", "블러프", "뻥이야", "뻥이지", "뻥이네", "뻥치냐", "뻥쳐", "구라쳐", "구라치냐"]
+  },
+  "_exclude": ["without a doubt", "without doubt", "doubtless", "doubt you'll", "doubt youll", "doubt you will", "doubt i'll", "doubt ill", "doubt i will", "의심할 여지", "의심의 여지"]
+}

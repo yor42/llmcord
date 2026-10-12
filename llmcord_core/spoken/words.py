@@ -54,7 +54,7 @@ def _found(text, lex, exclude, exact=False):
     return out
 
 
-def _negated(text, negations):
+def negated(text, negations):
     for e in negations.get("en", ()):
         if _en(e, True).search(text):
             return True
@@ -69,6 +69,9 @@ def _negated(text, negations):
         elif re.search(rf"(?<!\S){re.escape(e)}(?:(?!\S)|\s?(?:{_KO_CONT}))", text):
             return True
     return False
+
+
+_negated = negated
 
 
 def _first(text, lex, exclude):
@@ -125,5 +128,5 @@ def read(text, lexicon, kinds, negations):
         SpokenMove(k, *(amount if amount and k in amount_kinds else (None, None)),
                    preset[1] if preset and k == "raise" else None)
         for k in names[:2])
-    sure = len(names) == 1 and not implied and not _negated(text, negations) and "?" not in text and "？" not in text
+    sure = len(names) == 1 and not implied and not negated(text, negations) and "?" not in text and "？" not in text
     return Reading(cands, sure)
