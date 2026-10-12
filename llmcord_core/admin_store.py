@@ -1453,6 +1453,8 @@ class AdminStore:
 
     _SPOKEN_KEY, _SPOKEN_KEEP_KEY = 'spoken_moves', 'spoken_keep_phrases'  # FEAT-37 C: guild-wide switches kept as game_settings pseudo rows like _MOVES_KEY; never registry games
 
+    _SPOKEN_DOUBT_KEY = 'spoken_doubt'  # FEAT-38 B: same kind of pseudo row
+
     def _pseudo_flag(self, guild_id, key):
         row = self.one('SELECT enabled FROM game_settings WHERE guild_id=? AND game=?', (guild_id, key))
         return bool(row and row['enabled'])
@@ -1475,6 +1477,13 @@ class AdminStore:
 
     def set_spoken_moves_enabled(self, guild_id, on, expected=None):
         return self._set_pseudo_flag(guild_id, self._SPOKEN_KEY, on, expected, 'read moves from chat')
+
+    def spoken_doubt_enabled(self, guild_id):
+        """Experimental "Read doubts from chat" (D36): off by default; the member switch is spoken_member_on, shared with moves."""
+        return self._pseudo_flag(guild_id, self._SPOKEN_DOUBT_KEY)
+
+    def set_spoken_doubt_enabled(self, guild_id, on, expected=None):
+        return self._set_pseudo_flag(guild_id, self._SPOKEN_DOUBT_KEY, on, expected, 'read doubts from chat')
 
     def spoken_keep_setting(self, guild_id):
         """The stored "Keep phrases for tuning" flag only (what the dashboard switch shows and saves against)."""

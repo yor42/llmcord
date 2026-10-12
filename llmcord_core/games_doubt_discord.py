@@ -210,6 +210,7 @@ class DoubtTables:
         for kind in ("lobby", "window", "turn", "character"):
             self.runtime.disarm(key, kind)
         self.threads = {thread: k for thread, k in self.threads.items() if k != key}
+        self._window_changed(key, None)
         self.event_at.pop(key, None)
         self.dirty.discard(key)
 
@@ -281,9 +282,16 @@ class DoubtTables:
                 await self.sweep()
         return closed
 
+    def _window_changed(self, key, snap) -> None:
+        """Memory only: tells the spoken-doubt checks which window is open (a check for another one is dropped; its message is deleted in a task)."""
+        spoken = getattr(self.bot, "spoken_doubt", None)
+        if spoken is not None:
+            spoken.window_changed(key, snap)
+
     def _after(self, key, snap) -> None:
         """Arms the timers the new state needs. Call under the table lock."""
         table, view = self.table(key), snap["view"]
+        self._window_changed(key, snap)
         self.runtime.disarm(key, "lobby")
         if snap["status"] != "playing" or not view:
             for kind in ("window", "turn", "character"):
@@ -847,6 +855,21 @@ class DoubtTables:
             await self._reap(key)  # the table may have been closed from outside
         if out.say:
             await self._say(interaction, out.say)
+
+    async def press_doubt(self, interaction, table_id: int, round_id: int, moves: int) -> str | None:
+        """A doubt chosen on a spoken-doubt check: the doubt button's own step (same lock, same stale check, same refusal texts), but the
+        refusal is returned instead of said. None when the doubt was made."""
+        guild_id = interaction.guild_id
+        if guild_id is None or interaction.user.bot:
+            return STALE
+        key = (guild_id, table_id)
+        await self._ack(interaction)
+        async with self.runtime.lock(key):
+            out = self._press(interaction.user.id, key, "doubt", round_id, moves)
+        await self._publish(key, out)
+        if out.say == STALE:
+            await self._reap(key)
+        return out.say
 
     def _press(self, user_id, key, action, round_id, moves) -> _Out:
         loaded, refusal = self._load(key, round_id)
@@ -1511,7 +1534,7 @@ def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
         on = setting == "on"
         bot.store.set_spoken_member_on(interaction.guild_id, interaction.user.id, on)
         text = SPOKEN_ON if on else SPOKEN_OFF
-        if not bot.store.spoken_moves_enabled(interaction.guild_id):
+        if not bot.store.spoken_moves_enabled(interaction.guild_id) and not bot.store.spoken_doubt_enabled(interaction.guild_id):
             text += SPOKEN_SERVER_OFF
         await bot.doubt._say(interaction, text)
 

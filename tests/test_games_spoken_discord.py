@@ -734,6 +734,14 @@ class MemberSwitchTests(SpokenCase):
         self.assertEqual((await self.switch(ALICE, "on")).replies, [SPOKEN_ON + SPOKEN_SERVER_OFF])
         self.assertEqual((await self.switch(ALICE, "off")).replies, [SPOKEN_OFF + SPOKEN_SERVER_OFF])
 
+    async def test_no_server_note_while_either_server_switch_is_on(self):
+        self.store.set_spoken_moves_enabled(G, False)
+        self.store.set_spoken_doubt_enabled(G, True)
+        self.assertEqual((await self.switch(ALICE, "on")).replies, [SPOKEN_ON])
+        self.store.set_spoken_doubt_enabled(G, False)
+        self.store.set_spoken_moves_enabled(G, True)
+        self.assertEqual((await self.switch(ALICE, "off")).replies, [SPOKEN_OFF])
+
     async def test_member_off_is_ignored_without_touching_the_runtime(self):
         await self.deal()
         await self.switch(ALICE, "off")
