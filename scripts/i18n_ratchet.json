@@ -26,8 +26,7 @@
       "ui": 44
     },
     "llmcord_core/dashboard.py": {
-      "raise": 5,
-      "ui": 79
+      "ui": 1
     },
     "llmcord_core/discord_bot.py": {
       "raise": 3

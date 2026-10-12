@@ -716,6 +716,183 @@ msgid "OK"
 msgstr ""
 
 #: llmcord_core/dashboard.py
+msgid "Log"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Personal facts are hidden and API keys removed. Entries are kept for the current month (Server settings)."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Personal facts are hidden and API keys removed. Entries are kept for {days} days (Server settings)."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "All channels"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Channel"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Errors only"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Reference ID"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Logging is off; showing earlier entries."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "button"
+msgid "Load more"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "This entry is no longer available."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "turn log"
+msgid "Request"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "turn log"
+msgid "Response"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "turn log"
+msgid "Error"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "(empty)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Error · Ref {reference}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "OK · Ref {reference}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "No entries match these filters."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "No log entries yet."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "The turn log is off. Turn it on in Server settings to record model calls."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Deleted channel (ID …{digits})"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Bot-wide spending: {spent} of {cap} hard cap this period"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Bot-wide spending: {spent} this period; no hard cap set"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Open Bot settings"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Usage"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Usage is kept for the current month (Server settings)."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Usage is kept for {days} days (Server settings)."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Input tokens"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Output tokens"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Estimated USD"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Without cost estimate"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "By model"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Model"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Used for"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "By channel"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Channel"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "By feature"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "column"
+msgid "Feature"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{count:,} calls did not report token counts, so their tokens are not included."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Tracked for this server, including internal model calls. Cost uses list rates or your configured rates; it is not a billing statement."
+msgstr ""
+
+#: llmcord_core/dashboard.py
 msgctxt "space kind"
 msgid "world"
 msgstr ""
@@ -1329,5 +1506,481 @@ msgstr ""
 
 #: llmcord_core/dashboard.py
 msgid "This removes the emotion and its image. The neutral emotion and the fallback avatar stay."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Selective"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Secondary key logic"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Case sensitive"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Whole words only"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Depth"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Scan depth (JSON, null for default)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Probability (%)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Use probability"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Groups (JSON list)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Group weight"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Group override"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Use group scoring"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Exclude from recursion"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Prevent recursion"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Delay until recursion"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Recursion level"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Sticky turns"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Cooldown turns"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Delay turns"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Character filter names (JSON list)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Character filter tags (JSON list)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Exclude filtered characters"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Match character description"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Match character personality"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Match scenario"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Edit lore"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Create lore"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Content"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Keys"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Secondary keys"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Press Enter after each key"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Order"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Higher values appear later"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Enabled"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Always active"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Pinned"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Advanced activation and placement rules"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Preserved import fields / unsupported feature remapping"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Original fields (JSON)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Detect /pattern/flags automatically"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Regex patterns"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Literal keywords"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Keyword matching"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Message role"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Placement"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "field"
+msgid "Destination"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Save lore"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "button"
+msgid "Move"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "button"
+msgid "Copy"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Delete this lore entry?"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "This also keeps your deletion choice for future reimports."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Delete entry"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Current: {text}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "(none)"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Incoming: {text}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Keep current entry"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Use imported entry"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Resolve conflict"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Character cards"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Preview: {name}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Keep current {field}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Use imported {field}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Resolve {field} conflict"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Confirm updating the existing character and home world"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Apply card import"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Upload V2/V3 JSON or PNG card"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Direct lore entry import"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Destination owner"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Import entries into selected owner"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Named lorebooks"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Lorebook name"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Server lorebook"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Channel lorebook"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Create lorebook"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{name} · Server lorebook"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{name} · Channel lorebook"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Edit entries in Lore"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Delete lorebook"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Disable in {space}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "Enable in {space}"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+#, python-brace-format
+msgid "{format} lorebook detected · {count} entries"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Apply lorebook sync"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Upload JSON lorebook for preview"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt role"
+msgid "System"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt role"
+msgid "User"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt role"
+msgid "Assistant"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Relative to the prompt"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "In chat at depth"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Before character"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "After character"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Before examples"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "After examples"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt placement"
+msgid "Relative"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt placement"
+msgid "In chat"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Custom text"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Chat history"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Request payload"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt source"
+msgid "Location"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Character description"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Character personality"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt source"
+msgid "Scenario"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Opening message"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Lore before character"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Lore after character"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Lore before examples"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Lore after examples"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Lore in chat"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Personal facts"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgctxt "prompt source"
+msgid "Encounters"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Scene summary"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Preceding messages"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Recent messages"
 msgstr ""
 

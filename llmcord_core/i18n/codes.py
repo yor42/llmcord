@@ -245,6 +245,10 @@ DASH_WORLD_MOVE_CONFIRM = E_('dash.world_move_confirm', 'Confirm the world move 
 
 
 # --- MNT-73 (1h): dashboard.py part 2
+DASH_CARD_CONFIRM_UPDATE = E_('dash.card_confirm_update', 'Confirm updating the existing character')
+DASH_LORE_DESTINATION_CHOOSE = E_('dash.lore_destination_choose', 'Choose where to move or copy the entry.')
+DASH_OWNER_CHOOSE = E_('dash.owner_choose', 'Choose a destination owner.')
+DASH_PREVIEW_EXPIRED = E_('dash.preview_expired', 'Preview expired; upload again')
 
 
 

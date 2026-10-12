@@ -889,3 +889,19 @@ msgstr ""
 msgid "Confirm the world move before saving"
 msgstr ""
 
+#: llmcord_core/i18n/codes.py
+msgid "Confirm updating the existing character"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Choose where to move or copy the entry."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Choose a destination owner."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Preview expired; upload again"
+msgstr ""
+
