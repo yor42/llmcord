@@ -464,12 +464,17 @@ Written when Phase 1 started (2026-10-12, decision G). Every batch follows these
 
 ## 8. Adding a language later (runbook)
 
-1. `python scripts/i18n.py init ja` creates `llmcord_core/locales/ja/LC_MESSAGES/*.po` from the templates, with `Plural-Forms` from CLDR.
-2. Translate, in Poedit, Weblate or any `.po` editor, using the glossary.
-3. Run `python scripts/i18n.py check` and the pseudo-locale and screenshot review.
-4. Restart. The pack is found at startup. The dashboard menu shows it as `日本語` (from CLDR), Discord's `ja` maps to it, Quasar's `ja` pack is picked automatically, and the server language select lists it.
+As built in MNT-75 (2026-10-12):
 
-There is no code change. An optional `LLMCORD_LOCALES=en,ko` environment allowlist can hide a pack that is not finished. Recognition lexicons (spoken moves, ambient) are a separate track and are not needed for UI support.
+1. `python scripts/i18n.py init ja` creates `llmcord_core/locales/ja/LC_MESSAGES/*.po` from the templates, with `Plural-Forms` from CLDR. Add `ja` to `llmcord_core/locales/incomplete.txt` in the same change: `check` fails any pack below 100% translated, or with fuzzy entries, unless that file lists it.
+2. Translate, in Poedit, Weblate or any `.po` editor, with a glossary column for the language in [the glossary](../glossary.md) approved first. Keep placeholders exactly; Korean-style particle specs exist only for Korean. Built-in items need the language in `llmcord_core/items/recipes/*.json` too (a `name` object and a table and template entry for each `en` one).
+3. Track progress with `python scripts/i18n.py coverage` (`--locale ja`, `--min 100` to fail below a threshold). Check layout with `LLMCORD_I18N_PSEUDO=1` and `scripts/screenshot_dashboard.py --lang ja` at desktop and phone width.
+4. When `coverage` shows 100% and `check` is OK, remove the language from `incomplete.txt`. From then on CI fails if a new English string lands without its translation, so a change that adds text also adds the translation (or puts the pack back on the list).
+5. Restart. The pack is found at startup. The dashboard menu shows it under its own name (from CLDR), Discord's matching locale maps to it, Quasar's pack is picked automatically, and the server **Bot language** select lists it.
+
+There is no code change. Recognition lexicons (spoken moves, ambient) are a separate track and are not needed for UI support.
+
+**Known extraction trap.** Babel drops a message when its arguments contain another call that takes `t` (for example `t('Plays: {style}', style=', '.join(t.render(p) for p in …))`). Compute such values into a variable first; `tests/test_i18n_extraction.py` fails on any marker call that did not reach a template.
 
 ## 9. Decisions requested before any code changes
 
