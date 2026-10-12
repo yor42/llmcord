@@ -11,6 +11,7 @@ from discord import app_commands
 
 from .errors import error_detail
 from .items_store import AlreadyOwned, HoldCapReached, ItemError, NotForSale, NotHeld, OnCooldown, PriceChanged, UseDisabled
+from llmcord_core.i18n.discord_locale import C_
 
 NO_MENTIONS = discord.AllowedMentions.none()
 VIEW_SECONDS = 300
@@ -267,13 +268,13 @@ def register_items_commands(bot, ctx: SimpleNamespace) -> None:
             view.add_item(UseButton(item, index // 5))
         return embed, view
 
-    @bot.tree.command(name='shop', description='See what is for sale and buy items')
+    @bot.tree.command(name='shop', description=C_('See what is for sale and buy items'))
     async def shop(interaction: discord.Interaction):
         require_guild(interaction)
         embed, view = build_shop(interaction, interaction.guild_id)
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True, allowed_mentions=NO_MENTIONS)
 
-    @bot.tree.command(name='inventory', description='See the items you hold and use them')
+    @bot.tree.command(name='inventory', description=C_('See the items you hold and use them'))
     async def inventory(interaction: discord.Interaction):
         require_guild(interaction)
         embed, view = build_inventory(interaction, interaction.guild_id)
@@ -287,8 +288,8 @@ def register_items_commands(bot, ctx: SimpleNamespace) -> None:
         return [app_commands.Choice(name=f"{i['emoji']} {i['name']}"[:100], value=i['name'])
                 for i in held if needle in i['name'].casefold()][:25]
 
-    @bot.tree.command(name='use', description='Use an item you hold')
-    @app_commands.describe(item='The item to use')
+    @bot.tree.command(name='use', description=C_('Use an item you hold'))
+    @app_commands.describe(item=C_('The item to use'))
     @app_commands.autocomplete(item=safe_choices(held_choices))
     async def use(interaction: discord.Interaction, item: str):
         require_guild(interaction)

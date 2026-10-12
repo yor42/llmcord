@@ -28,6 +28,7 @@ from . import game_chooser
 from .games import DefaultPolicy, blackjack
 from .game_talk import TalkBudget
 from .table_runtime import TableRuntime
+from llmcord_core.i18n.discord_locale import C_
 
 STALE = "That table has moved on — use the latest buttons."
 OFF_HERE = "Games are off in this channel."
@@ -1050,14 +1051,14 @@ def register_game_commands(bot, ctx: SimpleNamespace, admin_games: app_commands.
     async def reply(interaction: discord.Interaction, message: str) -> None:
         await interaction.response.send_message(message, ephemeral=True, allowed_mentions=NO_MENTIONS)
 
-    @bot.tree.command(name="blackjack", description="Join or open a blackjack table in this channel")
-    @app_commands.describe(bet="How much to bet", favorites="Bring your favorite characters to the table")
+    @bot.tree.command(name="blackjack", description=C_("Join or open a blackjack table in this channel"))
+    @app_commands.describe(bet=C_("How much to bet"), favorites=C_("Bring your favorite characters to the table"))
     async def blackjack_command(interaction: discord.Interaction, bet: app_commands.Range[int, 1, MAX_BET], favorites: bool = False):
         require_guild(interaction)
         await bot.games.play_command(interaction, bet, favorites)
 
-    @admin_games.command(name="channel", description="Turn games on or off in a channel")
-    @app_commands.describe(enabled="On or off", channel="The channel (default: this one)")
+    @admin_games.command(name="channel", description=C_("Turn games on or off in a channel"))
+    @app_commands.describe(enabled=C_("On or off"), channel=C_("The channel (default: this one)"))
     @app_commands.checks.has_permissions(administrator=True)
     async def games_channel(interaction: discord.Interaction, enabled: bool, channel: discord.TextChannel | None = None):
         require_guild(interaction)
@@ -1071,8 +1072,8 @@ def register_game_commands(bot, ctx: SimpleNamespace, admin_games: app_commands.
             if paint is not None:
                 await bot.games.send_paint(paint)
 
-    @admin_games.command(name="bets", description="Set the smallest and largest bet")
-    @app_commands.describe(min="Smallest bet", max="Largest bet")
+    @admin_games.command(name="bets", description=C_("Set the smallest and largest bet"))
+    @app_commands.describe(min=C_("Smallest bet"), max=C_("Largest bet"))
     @app_commands.checks.has_permissions(administrator=True)
     async def games_bets(interaction: discord.Interaction, min: app_commands.Range[int, 1, MAX_BET], max: app_commands.Range[int, 1, MAX_BET]):
         require_guild(interaction)

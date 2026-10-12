@@ -43,6 +43,7 @@ from .games_spoken_doubt import SpokenDoubtButton, SpokenDoubts
 from .games_doubt_discord import DoubtButton, DoubtTables, register_doubt_commands
 from .games_holdem_discord import HoldemButton, HoldemTables
 from .items_discord import register_items_commands
+from llmcord_core.i18n.discord_locale import C_, LlmcordTranslator
 
 AVATAR_ASSET_CHECK_TTL = 600
 CACHE_LIMIT = 512
@@ -174,6 +175,7 @@ class SkitBot(commands.Bot):
         register_commands(self)
 
     async def setup_hook(self):
+        await self.tree.set_translator(LlmcordTranslator())
         if self.base_settings.development_guild_id:
             guild = discord.Object(id=self.base_settings.development_guild_id)
             self.tree.copy_global_to(guild=guild)
@@ -894,23 +896,23 @@ def _command_context(bot: SkitBot) -> SimpleNamespace:
 
 def _register_space_commands(bot: SkitBot, ctx: SimpleNamespace, admin_space: app_commands.Group) -> None:
     require_guild, guild_space, space_choices = ctx.require_guild, ctx.guild_space, ctx.space_choices
-    space = app_commands.Group(name="space", description="List the server's worlds and hubs")
+    space = app_commands.Group(name="space", description=C_("List the server's worlds and hubs"))
 
-    @admin_space.command(name="create", description="Create a world or hub")
+    @admin_space.command(name="create", description=C_("Create a world or hub"))
     @app_commands.checks.has_permissions(administrator=True)
     async def space_create(interaction: discord.Interaction, kind: Literal["world", "hub"], name: str):
         require_guild(interaction)
         ident = bot.store.create_space(interaction.guild_id, name, kind)
         await interaction.response.send_message(f"Created {kind} {name} (#{ident}).", ephemeral=True)
 
-    @space.command(name="list", description="List the server's worlds and hubs")
+    @space.command(name="list", description=C_("List the server's worlds and hubs"))
     async def space_list(interaction: discord.Interaction):
         require_guild(interaction)
         rows = bot.store.list_spaces(interaction.guild_id)
         text = "\n".join(f"#{row['id']} {row['kind']}: {row['name']}{' (off duty)' if row['kind'] == 'hub' and row['hub_tone'] == 'off_duty' else ''}" for row in rows) or "No worlds or hubs yet."
         await interaction.response.send_message(text[:1900], ephemeral=True)
 
-    @admin_space.command(name="bind", description="Bind a text channel to a world or hub")
+    @admin_space.command(name="bind", description=C_("Bind a text channel to a world or hub"))
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.autocomplete(space=space_choices())
     async def space_bind(interaction: discord.Interaction, channel: discord.TextChannel, space: str):
@@ -930,7 +932,7 @@ def _register_space_commands(bot: SkitBot, ctx: SimpleNamespace, admin_space: ap
             message = f"Bound {channel.mention} to {target}."
         await interaction.response.send_message(message[:1900], ephemeral=True)
 
-    @admin_space.command(name="link_world", description="Link a world to a hub so its characters can appear there")
+    @admin_space.command(name="link_world", description=C_("Link a world to a hub so its characters can appear there"))
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.autocomplete(hub=space_choices("hub"), world=space_choices("world"))
     async def space_link(interaction: discord.Interaction, hub: str, world: str):
@@ -939,7 +941,7 @@ def _register_space_commands(bot: SkitBot, ctx: SimpleNamespace, admin_space: ap
         bot.store.link_world(interaction.guild_id, hub_row["id"], world_row["id"])
         await interaction.response.send_message(f"Linked {world_row['name']} to {hub_row['name']}.", ephemeral=True)
 
-    @admin_space.command(name="unlink_world", description="Unlink a world from a hub and drop its characters from that hub's channel casts")
+    @admin_space.command(name="unlink_world", description=C_("Unlink a world from a hub and drop its characters from that hub's channel casts"))
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.autocomplete(hub=space_choices("hub"), world=space_choices("world"))
     async def space_unlink(interaction: discord.Interaction, hub: str, world: str):
@@ -950,10 +952,10 @@ def _register_space_commands(bot: SkitBot, ctx: SimpleNamespace, admin_space: ap
         await interaction.response.send_message(
             f"{world_row['name']} is no longer linked to {hub_row['name']}; removed {pruned} {entries}.", ephemeral=True)
 
-    @admin_space.command(name="tone", description="Set how characters behave in a hub")
+    @admin_space.command(name="tone", description=C_("Set how characters behave in a hub"))
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.autocomplete(hub=space_choices("hub"))
-    @app_commands.choices(tone=[app_commands.Choice(name="In character", value="in_character"), app_commands.Choice(name="Off duty", value="off_duty")])
+    @app_commands.choices(tone=[app_commands.Choice(name=C_("In character"), value="in_character"), app_commands.Choice(name=C_("Off duty"), value="off_duty")])
     async def space_tone(interaction: discord.Interaction, hub: str, tone: str):
         require_guild(interaction)
         hub_row = guild_space(interaction, hub, "hub")
@@ -965,9 +967,9 @@ def _register_space_commands(bot: SkitBot, ctx: SimpleNamespace, admin_space: ap
 
 def _register_character_commands(bot: SkitBot, ctx: SimpleNamespace, admin_character: app_commands.Group) -> None:
     binding_for, require_guild, guild_characters, guild_space, guild_character_choices, space_choices = ctx.binding_for, ctx.require_guild, ctx.guild_characters, ctx.guild_space, ctx.guild_character_choices, ctx.space_choices
-    character = app_commands.Group(name="character", description="Inspect characters available here")
+    character = app_commands.Group(name="character", description=C_("Inspect characters available here"))
 
-    @admin_character.command(name="import", description="Import a V2/V3 JSON or PNG character card")
+    @admin_character.command(name="import", description=C_("Import a V2/V3 JSON or PNG character card"))
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.autocomplete(world=space_choices("world"))
     async def character_import(interaction: discord.Interaction, world: str, attachment: discord.Attachment):
@@ -980,14 +982,14 @@ def _register_character_commands(bot: SkitBot, ctx: SimpleNamespace, admin_chara
         ident = bot.store.add_character(interaction.guild_id, home["id"], parsed.name, parsed.data, parsed.avatar, parsed.entries)
         await interaction.followup.send(f"Imported {parsed.name} (#{ident}) into {home['name']} with {len(parsed.entries)} lore entries.", ephemeral=True)
 
-    @character.command(name="list", description="List characters available here")
+    @character.command(name="list", description=C_("List characters available here"))
     async def character_list(interaction: discord.Interaction):
         _, binding = await binding_for(interaction)
         rows = bot.store.eligible_characters(interaction.guild_id, binding["space_id"])
         text = ", ".join(row["name"] for row in rows) or "No characters available."
         await interaction.response.send_message(text[:1900], ephemeral=True)
 
-    @character.command(name="info", description="Show a character's home world")
+    @character.command(name="info", description=C_("Show a character's home world"))
     @app_commands.autocomplete(character=guild_character_choices)
     async def character_info(interaction: discord.Interaction, character: str):
         require_guild(interaction)
@@ -1000,9 +1002,9 @@ def _register_character_commands(bot: SkitBot, ctx: SimpleNamespace, admin_chara
 
 def _register_cast_commands(bot: SkitBot, ctx: SimpleNamespace, admin_cast: app_commands.Group) -> None:
     binding_for, cast_rows, eligible_character, eligible_ids, character_choices, characters_choices, cast_member_choices = ctx.binding_for, ctx.cast_rows, ctx.eligible_character, ctx.eligible_ids, ctx.character_choices, ctx.characters_choices, ctx.cast_member_choices
-    cast = app_commands.Group(name="cast", description="Manage this channel or thread's active cast")
+    cast = app_commands.Group(name="cast", description=C_("Manage this channel or thread's active cast"))
 
-    @cast.command(name="set", description="Set the active cast with comma-separated names")
+    @cast.command(name="set", description=C_("Set the active cast with comma-separated names"))
     @app_commands.autocomplete(characters=characters_choices)
     async def cast_set(interaction: discord.Interaction, characters: str):
         parent_id, binding = await binding_for(interaction)
@@ -1013,7 +1015,7 @@ def _register_cast_commands(bot: SkitBot, ctx: SimpleNamespace, admin_cast: app_
         names = [bot.store.character_by_id(ident)["name"] for ident in dict.fromkeys(ids)]
         await interaction.response.send_message(f"Active cast: {', '.join(names)}", ephemeral=True)
 
-    @cast.command(name="add", description="Add an eligible character to the active cast")
+    @cast.command(name="add", description=C_("Add an eligible character to the active cast"))
     @app_commands.autocomplete(character=character_choices)
     async def cast_add(interaction: discord.Interaction, character: str):
         parent_id, binding = await binding_for(interaction)
@@ -1022,7 +1024,7 @@ def _register_cast_commands(bot: SkitBot, ctx: SimpleNamespace, admin_cast: app_
         bot.store.set_cast(interaction.channel.id, parent_id, [*current, row["id"]])
         await interaction.response.send_message(f"Added {row['name']} to the active cast.", ephemeral=True)
 
-    @cast.command(name="remove", description="Remove a character from the active cast")
+    @cast.command(name="remove", description=C_("Remove a character from the active cast"))
     @app_commands.autocomplete(character=cast_member_choices)
     async def cast_remove(interaction: discord.Interaction, character: str):
         parent_id, binding = await binding_for(interaction)
@@ -1036,14 +1038,14 @@ def _register_cast_commands(bot: SkitBot, ctx: SimpleNamespace, admin_cast: app_
             message += f" Also dropped {dropped} character{'s' if dropped != 1 else ''} no longer available here."
         await interaction.response.send_message(message, ephemeral=True)
 
-    @cast.command(name="show", description="Show this channel or thread's active cast")
+    @cast.command(name="show", description=C_("Show this channel or thread's active cast"))
     async def cast_show(interaction: discord.Interaction):
         parent_id, _ = await binding_for(interaction)
         ids = bot.store.get_cast(interaction.channel.id, parent_id)
         names = [bot.store.character_by_id(ident)["name"] for ident in ids if bot.store.character_by_id(ident)]
         await interaction.response.send_message(f"Active cast: {', '.join(names)}" if names else "The active cast is empty. Use /cast set to choose one.", ephemeral=True)
 
-    @admin_cast.command(name="default", description="Set the channel's default cast")
+    @admin_cast.command(name="default", description=C_("Set the channel's default cast"))
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.autocomplete(characters=characters_choices)
     async def cast_default(interaction: discord.Interaction, characters: str):
@@ -1057,23 +1059,23 @@ def _register_cast_commands(bot: SkitBot, ctx: SimpleNamespace, admin_cast: app_
 
 def _register_ambient_commands(bot: SkitBot, ctx: SimpleNamespace, admin_ambient: app_commands.Group) -> None:
     binding_for = ctx.binding_for
-    ambient = app_commands.Group(name="ambient", description="Show this channel's ambient setting")
+    ambient = app_commands.Group(name="ambient", description=C_("Show this channel's ambient setting"))
 
-    @admin_ambient.command(name="on", description="Enable ambient participation in this channel")
+    @admin_ambient.command(name="on", description=C_("Enable ambient participation in this channel"))
     @app_commands.checks.has_permissions(administrator=True)
     async def ambient_on(interaction: discord.Interaction):
         _, binding = await binding_for(interaction)
         bot.store.set_ambient(binding["channel_id"], True)
         await interaction.response.send_message(f"Ambient is on for <#{binding['channel_id']}>.", ephemeral=True)
 
-    @admin_ambient.command(name="off", description="Disable ambient participation in this channel")
+    @admin_ambient.command(name="off", description=C_("Disable ambient participation in this channel"))
     @app_commands.checks.has_permissions(administrator=True)
     async def ambient_off(interaction: discord.Interaction):
         _, binding = await binding_for(interaction)
         bot.store.set_ambient(binding["channel_id"], False)
         await interaction.response.send_message(f"Ambient is off for <#{binding['channel_id']}>.", ephemeral=True)
 
-    @ambient.command(name="status", description="Show this channel's ambient setting")
+    @ambient.command(name="status", description=C_("Show this channel's ambient setting"))
     async def ambient_status(interaction: discord.Interaction):
         _, binding = await binding_for(interaction)
         state = "on" if binding["ambient"] else "off"
@@ -1110,7 +1112,7 @@ def _operator_text(kind: str, state) -> str:
 
 def _register_summon_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
     binding_for, eligible_character, character_choices = ctx.binding_for, ctx.eligible_character, ctx.character_choices
-    @bot.tree.command(name="summon", description="Invite an eligible character for one turn")
+    @bot.tree.command(name="summon", description=C_("Invite an eligible character for one turn"))
     @app_commands.autocomplete(character=character_choices)
     async def summon(interaction: discord.Interaction, character: str, prompt: str):
         parent_id, binding = await binding_for(interaction)
@@ -1148,8 +1150,8 @@ def _register_summon_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
 
 
 def _register_catchup_command(bot: SkitBot) -> None:
-    @bot.tree.command(name="catchup", description="Privately summarize what you missed in this channel")
-    @app_commands.describe(focus="What to emphasize, such as what concerns you", hours="Look back this many hours instead")
+    @bot.tree.command(name="catchup", description=C_("Privately summarize what you missed in this channel"))
+    @app_commands.describe(focus=C_("What to emphasize, such as what concerns you"), hours=C_("Look back this many hours instead"))
     async def catchup_command(interaction: discord.Interaction, focus: app_commands.Range[str, 1, 300] | None = None,
                               hours: app_commands.Range[int, 1, 72] | None = None):
         if not interaction.guild_id or not interaction.channel:
@@ -1211,21 +1213,21 @@ def _register_catchup_command(bot: SkitBot) -> None:
 
 def _register_memory_commands(bot: SkitBot, ctx: SimpleNamespace) -> None:
     require_guild = ctx.require_guild
-    memory = app_commands.Group(name="memory", description="Control your personal character memories")
+    memory = app_commands.Group(name="memory", description=C_("Control your personal character memories"))
 
-    @memory.command(name="opt_in", description="Allow characters to remember facts you explicitly state")
+    @memory.command(name="opt_in", description=C_("Allow characters to remember facts you explicitly state"))
     async def memory_opt_in(interaction: discord.Interaction):
         require_guild(interaction)
         bot.store.set_consent(interaction.guild_id, interaction.user.id, True)
         await interaction.response.send_message("Personal memory enabled. Use /memory list or /memory opt_out anytime.", ephemeral=True)
 
-    @memory.command(name="opt_out", description="Disable and erase your personal memories")
+    @memory.command(name="opt_out", description=C_("Disable and erase your personal memories"))
     async def memory_opt_out(interaction: discord.Interaction):
         require_guild(interaction)
         bot.store.set_consent(interaction.guild_id, interaction.user.id, False)
         await interaction.response.send_message("Personal memory disabled and your saved personal facts erased.", ephemeral=True)
 
-    @memory.command(name="list", description="List what characters remember about you")
+    @memory.command(name="list", description=C_("List what characters remember about you"))
     async def memory_list(interaction: discord.Interaction):
         require_guild(interaction)
         rows = bot.store.personal(interaction.guild_id, interaction.user.id)
@@ -1235,7 +1237,7 @@ def _register_memory_commands(bot: SkitBot, ctx: SimpleNamespace) -> None:
             lines.append(f"#{row['id']} {character_row['name'] if character_row else 'Unknown'}: {row['content']}")
         await interaction.response.send_message("\n".join(lines)[:1900] or "No personal memories saved.", ephemeral=True)
 
-    @memory.command(name="forget", description="Remove one of your personal memories")
+    @memory.command(name="forget", description=C_("Remove one of your personal memories"))
     async def memory_forget(interaction: discord.Interaction, memory_id: int):
         require_guild(interaction)
         if bot.store.forget_personal(interaction.guild_id, interaction.user.id, memory_id):
@@ -1262,13 +1264,13 @@ async def _timezone_choices(interaction: discord.Interaction, current: str) -> l
 
 def _register_time_commands(bot: SkitBot, ctx: SimpleNamespace) -> None:
     require_guild = ctx.require_guild
-    time_group = app_commands.Group(name="time", description="Set the timezone characters use for you")
+    time_group = app_commands.Group(name="time", description=C_("Set the timezone characters use for you"))
 
     def local_time(interaction: discord.Interaction, zone: str) -> str:
         return time_values(interaction.id, zone)["local_time"]
 
-    @time_group.command(name="set", description="Choose your timezone in this server")
-    @app_commands.describe(zone="IANA timezone name, such as Asia/Seoul")
+    @time_group.command(name="set", description=C_("Choose your timezone in this server"))
+    @app_commands.describe(zone=C_("IANA timezone name, such as Asia/Seoul"))
     @app_commands.autocomplete(zone=_timezone_choices)
     async def time_set(interaction: discord.Interaction, zone: str):
         require_guild(interaction)
@@ -1282,7 +1284,7 @@ def _register_time_commands(bot: SkitBot, ctx: SimpleNamespace) -> None:
                 message = UNKNOWN_TIMEZONE
         await interaction.response.send_message(message, ephemeral=True)
 
-    @time_group.command(name="show", description="Show the timezone characters use for you")
+    @time_group.command(name="show", description=C_("Show the timezone characters use for you"))
     async def time_show(interaction: discord.Interaction):
         require_guild(interaction)
         zone, source = bot.store.resolve_timezone(interaction.guild_id, interaction.user.id)
@@ -1295,7 +1297,7 @@ def _register_time_commands(bot: SkitBot, ctx: SimpleNamespace) -> None:
             message = f"Your timezone here is UTC (no timezone set). Local time: {now}. Use /time set to choose yours."
         await interaction.response.send_message(message, ephemeral=True)
 
-    @time_group.command(name="clear", description="Remove your timezone in this server")
+    @time_group.command(name="clear", description=C_("Remove your timezone in this server"))
     async def time_clear(interaction: discord.Interaction):
         require_guild(interaction)
         if not bot.store.clear_user_timezone(interaction.guild_id, interaction.user.id):
@@ -1315,8 +1317,8 @@ def _register_currency_commands(bot: SkitBot, ctx: SimpleNamespace, admin_curren
     async def reply(interaction: discord.Interaction, message: str) -> None:
         await interaction.response.send_message(message, ephemeral=True, allowed_mentions=discord.AllowedMentions.none())
 
-    @bot.tree.command(name="balance", description="Show your balance, or another member's")
-    @app_commands.describe(member="Whose balance to show (default: yours)", character="A character whose balance to show")
+    @bot.tree.command(name="balance", description=C_("Show your balance, or another member's"))
+    @app_commands.describe(member=C_("Whose balance to show (default: yours)"), character=C_("A character whose balance to show"))
     @app_commands.autocomplete(character=ctx.guild_character_choices)
     async def balance(interaction: discord.Interaction, member: discord.Member | None = None, character: str | None = None):
         require_guild(interaction)
@@ -1331,7 +1333,7 @@ def _register_currency_commands(bot: SkitBot, ctx: SimpleNamespace, admin_curren
         else:
             await reply(interaction, f"{member.mention} has {bot.store.balance(guild_id, member.id):,} {name}.")
 
-    @bot.tree.command(name="daily", description="Claim your daily check-in bonus")
+    @bot.tree.command(name="daily", description=C_("Claim your daily check-in bonus"))
     async def daily(interaction: discord.Interaction):
         require_guild(interaction)
         guild_id = interaction.guild_id
@@ -1348,9 +1350,9 @@ def _register_currency_commands(bot: SkitBot, ctx: SimpleNamespace, admin_curren
         else:
             await reply(interaction, f"Checked in: +{result['payout']:,} {name} (day {result['streak']} streak). Balance: {result['balance']:,} {name}. Next check-in <t:{int(result['reset'])}:R>.")
 
-    @admin_currency.command(name="daily", description="Set the daily check-in bonus (amount 0 turns it off)")
-    @app_commands.describe(amount="Currency paid for each check-in (0 turns check-ins off)", streak_bonus="Extra per consecutive day (default: keep the current value)",
-        streak_days="How many streak days earn the bonus, up to 365 (default: keep the current value)")
+    @admin_currency.command(name="daily", description=C_("Set the daily check-in bonus (amount 0 turns it off)"))
+    @app_commands.describe(amount=C_("Currency paid for each check-in (0 turns check-ins off)"), streak_bonus=C_("Extra per consecutive day (default: keep the current value)"),
+        streak_days=C_("How many streak days earn the bonus, up to 365 (default: keep the current value)"))
     @app_commands.checks.has_permissions(administrator=True)
     async def currency_daily(interaction: discord.Interaction, amount: app_commands.Range[int, 0, 1_000_000],
             streak_bonus: app_commands.Range[int, 0, 1_000_000] | None = None, streak_days: app_commands.Range[int, 0, 365] | None = None):
@@ -1384,20 +1386,20 @@ def _register_currency_commands(bot: SkitBot, ctx: SimpleNamespace, admin_curren
         verb = f"Gave {amount:,} {name} to {member.mention}" if sign > 0 else f"Took {amount:,} {name} from {member.mention}"
         await reply(interaction, f"{verb}. New balance: {row['balance_after']:,} {name}.")
 
-    @admin_currency.command(name="grant", description="Give a member currency")
-    @app_commands.describe(member="Who receives it", amount="How much to give", reason="Why (kept in the ledger)")
+    @admin_currency.command(name="grant", description=C_("Give a member currency"))
+    @app_commands.describe(member=C_("Who receives it"), amount=C_("How much to give"), reason=C_("Why (kept in the ledger)"))
     @app_commands.checks.has_permissions(administrator=True)
     async def currency_grant(interaction: discord.Interaction, member: discord.Member, amount: app_commands.Range[int, 1, 1_000_000], reason: str):
         await change(interaction, member, amount, reason, 1)
 
-    @admin_currency.command(name="revoke", description="Take currency from a member")
-    @app_commands.describe(member="Who loses it", amount="How much to take", reason="Why (kept in the ledger)")
+    @admin_currency.command(name="revoke", description=C_("Take currency from a member"))
+    @app_commands.describe(member=C_("Who loses it"), amount=C_("How much to take"), reason=C_("Why (kept in the ledger)"))
     @app_commands.checks.has_permissions(administrator=True)
     async def currency_revoke(interaction: discord.Interaction, member: discord.Member, amount: app_commands.Range[int, 1, 1_000_000], reason: str):
         await change(interaction, member, amount, reason, -1)
 
-    @admin_currency.command(name="name", description="Set what this server calls its currency")
-    @app_commands.describe(name="For example coins or gold (1 to 32 characters)")
+    @admin_currency.command(name="name", description=C_("Set what this server calls its currency"))
+    @app_commands.describe(name=C_("For example coins or gold (1 to 32 characters)"))
     @app_commands.checks.has_permissions(administrator=True)
     async def currency_name(interaction: discord.Interaction, name: str):
         require_guild(interaction)
@@ -1407,9 +1409,9 @@ def _register_currency_commands(bot: SkitBot, ctx: SimpleNamespace, admin_curren
 
 def _register_lore_commands(bot: SkitBot, ctx: SimpleNamespace, admin_lore: app_commands.Group) -> None:
     binding_for, require_guild, guild_space, space_choices, local_scope = ctx.binding_for, ctx.require_guild, ctx.guild_space, ctx.space_choices, ctx.local_scope
-    lore = app_commands.Group(name="lore", description="Show the lore available here")
+    lore = app_commands.Group(name="lore", description=C_("Show the lore available here"))
 
-    @admin_lore.command(name="add", description="Add lore to this channel (or thread) or to its world or hub")
+    @admin_lore.command(name="add", description=C_("Add lore to this channel (or thread) or to its world or hub"))
     @app_commands.checks.has_permissions(administrator=True)
     async def lore_add(interaction: discord.Interaction, content: str, keys: str = "", scope: Literal["channel", "space"] = "channel"):
         _, binding = await binding_for(interaction)
@@ -1420,7 +1422,7 @@ def _register_lore_commands(bot: SkitBot, ctx: SimpleNamespace, admin_lore: app_
         ident = bot.store.add_lore(interaction.guild_id, scope_kind, scope_id, content, parsed, constant=not parsed, pinned=not parsed)
         await interaction.response.send_message(f"Added {label} lore #{ident}.", ephemeral=True)
 
-    @lore.command(name="list", description="Show the lore available in this location")
+    @lore.command(name="list", description=C_("Show the lore available in this location"))
     async def lore_list(interaction: discord.Interaction):
         _, binding = await binding_for(interaction)
         scopes = [("space", binding["space_id"]), ("channel", binding["channel_id"])]
@@ -1433,7 +1435,7 @@ def _register_lore_commands(bot: SkitBot, ctx: SimpleNamespace, admin_lore: app_
             lines.extend(f"#{row['id']} [{names.get(kind, kind)}] {row['content'][:100]}" for row in bot.store.list_lore(interaction.guild_id, kind, ident))
         await interaction.response.send_message("\n".join(lines)[:1900] or "No lore for this channel or its world or hub yet.", ephemeral=True)
 
-    @admin_lore.command(name="pin", description="Pin a lore entry")
+    @admin_lore.command(name="pin", description=C_("Pin a lore entry"))
     @app_commands.checks.has_permissions(administrator=True)
     async def lore_pin(interaction: discord.Interaction, lore_id: int):
         require_guild(interaction)
@@ -1442,7 +1444,7 @@ def _register_lore_commands(bot: SkitBot, ctx: SimpleNamespace, admin_lore: app_
         bot.store.pin_lore(interaction.guild_id, lore_id)
         await interaction.response.send_message(f"Pinned lore #{lore_id}.", ephemeral=True)
 
-    @admin_lore.command(name="edit", description="Correct the text of a lore entry")
+    @admin_lore.command(name="edit", description=C_("Correct the text of a lore entry"))
     @app_commands.checks.has_permissions(administrator=True)
     async def lore_edit(interaction: discord.Interaction, lore_id: int, content: str):
         require_guild(interaction)
@@ -1451,7 +1453,7 @@ def _register_lore_commands(bot: SkitBot, ctx: SimpleNamespace, admin_lore: app_
         bot.store.edit_lore(interaction.guild_id, lore_id, content)
         await interaction.response.send_message(f"Updated lore #{lore_id}.", ephemeral=True)
 
-    @admin_lore.command(name="promote", description="Copy lore into a channel or world/hub")
+    @admin_lore.command(name="promote", description=C_("Copy lore into a channel or world/hub"))
     @app_commands.checks.has_permissions(administrator=True)
     @app_commands.autocomplete(space=space_choices())
     async def lore_promote(interaction: discord.Interaction, lore_id: int, destination: Literal["channel", "space"], space: str = ""):
@@ -1469,7 +1471,7 @@ def _register_lore_commands(bot: SkitBot, ctx: SimpleNamespace, admin_lore: app_
         where = f"<#{target_id}>" if target_kind == "channel" else f"{target['kind']} {target['name']}"
         await interaction.response.send_message(f"Promoted lore #{lore_id} to {where} as lore #{ident}.", ephemeral=True)
 
-    @admin_lore.command(name="delete", description="Delete a lore entry")
+    @admin_lore.command(name="delete", description=C_("Delete a lore entry"))
     @app_commands.checks.has_permissions(administrator=True)
     async def lore_delete(interaction: discord.Interaction, lore_id: int):
         require_guild(interaction)
@@ -1484,16 +1486,16 @@ def _register_lore_commands(bot: SkitBot, ctx: SimpleNamespace, admin_lore: app_
 
 def _register_scene_commands(bot: SkitBot, ctx: SimpleNamespace, admin_scene: app_commands.Group) -> None:
     binding_for = ctx.binding_for
-    scene = app_commands.Group(name="scene", description="Start a fresh scene")
+    scene = app_commands.Group(name="scene", description=C_("Start a fresh scene"))
 
-    @scene.command(name="reset", description="Start a fresh scene from your next invitation")
+    @scene.command(name="reset", description=C_("Start a fresh scene from your next invitation"))
     async def scene_reset(interaction: discord.Interaction):
         await binding_for(interaction)
         bot.store.reset_scene(interaction.channel.id)
         await interaction.response.send_message("Scene reset. Your next mention or summon starts fresh.", ephemeral=True)
 
-    @admin_scene.command(name="delete", description="Delete a stored message and everything after it in its branch")
-    @app_commands.describe(message_id="Any stored message in this channel's scene")
+    @admin_scene.command(name="delete", description=C_("Delete a stored message and everything after it in its branch"))
+    @app_commands.describe(message_id=C_("Any stored message in this channel's scene"))
     @app_commands.checks.has_permissions(administrator=True)
     async def scene_delete(interaction: discord.Interaction, message_id: str):
         await binding_for(interaction)
@@ -1579,7 +1581,7 @@ def _context_lore_line(bot: SkitBot, interaction: discord.Interaction, item: dic
 
 def _register_context_command(bot: SkitBot, ctx: SimpleNamespace) -> None:
     binding_for = ctx.binding_for
-    @bot.tree.command(name="context", description="Inspect what informed the last character line")
+    @bot.tree.command(name="context", description=C_("Inspect what informed the last character line"))
     @app_commands.default_permissions(administrator=True)
     @app_commands.checks.has_permissions(administrator=True)
     async def context(interaction: discord.Interaction, message_id: str = ""):
@@ -1644,16 +1646,16 @@ def _register_error_handler(bot: SkitBot) -> None:
 
 def register_commands(bot: SkitBot) -> None:
     ctx = _command_context(bot)
-    admin = app_commands.Group(name="admin", description="Server administrator commands",
+    admin = app_commands.Group(name="admin", description=C_("Server administrator commands"),
                                default_permissions=discord.Permissions(administrator=True))
-    admin_space = app_commands.Group(name="space", description="Manage worlds, hubs and channel bindings", parent=admin)
-    admin_character = app_commands.Group(name="character", description="Import characters", parent=admin)
-    admin_cast = app_commands.Group(name="cast", description="Set a channel's default cast", parent=admin)
-    admin_ambient = app_commands.Group(name="ambient", description="Turn ambient participation on or off", parent=admin)
-    admin_lore = app_commands.Group(name="lore", description="Add and manage lore", parent=admin)
-    admin_scene = app_commands.Group(name="scene", description="Delete stored scenes", parent=admin)
-    admin_currency = app_commands.Group(name="currency", description="Give, take and name the server currency", parent=admin)
-    admin_games = app_commands.Group(name="games", description="Turn games on in channels and set bet limits", parent=admin)
+    admin_space = app_commands.Group(name="space", description=C_("Manage worlds, hubs and channel bindings"), parent=admin)
+    admin_character = app_commands.Group(name="character", description=C_("Import characters"), parent=admin)
+    admin_cast = app_commands.Group(name="cast", description=C_("Set a channel's default cast"), parent=admin)
+    admin_ambient = app_commands.Group(name="ambient", description=C_("Turn ambient participation on or off"), parent=admin)
+    admin_lore = app_commands.Group(name="lore", description=C_("Add and manage lore"), parent=admin)
+    admin_scene = app_commands.Group(name="scene", description=C_("Delete stored scenes"), parent=admin)
+    admin_currency = app_commands.Group(name="currency", description=C_("Give, take and name the server currency"), parent=admin)
+    admin_games = app_commands.Group(name="games", description=C_("Turn games on in channels and set bet limits"), parent=admin)
 
     _register_space_commands(bot, ctx, admin_space)
     _register_character_commands(bot, ctx, admin_character)

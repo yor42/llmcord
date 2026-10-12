@@ -26,6 +26,7 @@ from .games_discord import MAX_BET, NO_CHARACTER_SEATS, NO_MENTIONS, NOT_SEATED,
 from .games_holdem_discord import BET_NOTE
 from .game_talk import TalkBudget
 from .table_runtime import TableRuntime
+from llmcord_core.i18n.discord_locale import C_
 
 PREFIX = "llmcord:doubt"
 DOUBT_OFF = "I Doubt It is off on this server."
@@ -1480,11 +1481,11 @@ class DoubtTables:
 
 def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
     require_guild = ctx.require_guild
-    group = app_commands.Group(name="game", description="Open a table and play")
-    choices = [app_commands.Choice(name="Blackjack", value="blackjack"), app_commands.Choice(name="I Doubt It", value="doubt"), app_commands.Choice(name="Texas Hold'em", value="holdem")]
+    group = app_commands.Group(name="game", description=C_("Open a table and play"))
+    choices = [app_commands.Choice(name=C_("Blackjack"), value="blackjack"), app_commands.Choice(name=C_("I Doubt It"), value="doubt"), app_commands.Choice(name=C_("Texas Hold'em"), value="holdem")]
 
-    @group.command(name="start", description="Open a table in this channel")
-    @app_commands.describe(game="Which game", bet="Blackjack only: how much to bet", favorites="Bring your favorite characters to the table")
+    @group.command(name="start", description=C_("Open a table in this channel"))
+    @app_commands.describe(game=C_("Which game"), bet=C_("Blackjack only: how much to bet"), favorites=C_("Bring your favorite characters to the table"))
     @app_commands.choices(game=choices)
     async def game_start(interaction: discord.Interaction, game: str, bet: app_commands.Range[int, 1, MAX_BET] | None = None, favorites: bool = False):
         require_guild(interaction)
@@ -1505,14 +1506,14 @@ def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
             return
         await bot.doubt.start_command(interaction, favorites)
 
-    @group.command(name="hand", description="See your cards at this table (only you can see them)")
+    @group.command(name="hand", description=C_("See your cards at this table (only you can see them)"))
     async def game_hand(interaction: discord.Interaction):
         require_guild(interaction)
         table = bot.store.table_for_thread(interaction.guild_id, interaction.channel.id) if interaction.channel else None
         await (bot.holdem if table and table["game"] == "holdem" else bot.doubt).hand_command(interaction)
 
-    @group.command(name="rules", description="How a game is played and the rules this server uses")
-    @app_commands.describe(game="Which game")
+    @group.command(name="rules", description=C_("How a game is played and the rules this server uses"))
+    @app_commands.describe(game=C_("Which game"))
     @app_commands.choices(game=choices)
     async def game_rules(interaction: discord.Interaction, game: str):
         require_guild(interaction)
@@ -1526,9 +1527,9 @@ def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
             text = bot.games.how_to_play(rules) + "\n" + blackjack.rules_text(rules)
         await bot.doubt._say(interaction, text)
 
-    @group.command(name="spoken_moves", description="Turn move checks from your chat on or off for you")
-    @app_commands.describe(setting="On or off")
-    @app_commands.choices(setting=[app_commands.Choice(name="On", value="on"), app_commands.Choice(name="Off", value="off")])
+    @group.command(name="spoken_moves", description=C_("Turn move checks from your chat on or off for you"))
+    @app_commands.describe(setting=C_("On or off"))
+    @app_commands.choices(setting=[app_commands.Choice(name=C_("On"), value="on"), app_commands.Choice(name=C_("Off"), value="off")])
     async def game_spoken_moves(interaction: discord.Interaction, setting: str):
         require_guild(interaction)
         on = setting == "on"
