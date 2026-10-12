@@ -13,6 +13,7 @@ import random
 import string
 from dataclasses import dataclass, replace
 
+from ..i18n import codes
 from .recipe import (
     DEFAULT_LOCALE, MAX_ENTRIES, MAX_TEXT, Recipe, RecipeError, check_entries, check_int, check_locale_keyed, check_text, lookup,
 )
@@ -35,7 +36,7 @@ class Result:
 
 def _ident(name, where):
     if not isinstance(name, str) or not 1 <= len(name) <= 16 or not set(name) <= _IDENT:
-        raise RecipeError(f'{where}: names use 1-16 characters from a-z and _')
+        raise RecipeError(codes.RECIPE_NAME_FORM, where=where)
     return name
 
 
@@ -53,11 +54,11 @@ def _check_rows(rows, where):
         names = None
         for i, row in enumerate(rows):
             if not isinstance(row, dict) or not 1 <= len(row) <= MAX_FIELDS:
-                raise RecipeError(f'{where}[{i}]: expected a record of 1 to {MAX_FIELDS} fields')
+                raise RecipeError(codes.RECIPE_RECORD_FIELDS, where=where, index=i, limit=MAX_FIELDS)
             if names is None:
                 names = set(row)
             elif set(row) != names:
-                raise RecipeError(f'{where}[{i}]: fields differ from the first record')
+                raise RecipeError(codes.RECIPE_RECORD_DIFFER, where=where, index=i)
             for k, v in row.items():
                 check_text(v, f'{where}[{i}].{_ident(k, where)}')
     else:
@@ -68,24 +69,24 @@ def _check_rows(rows, where):
 def _validate_params(params):
     unknown = set(params) - set(PARAM_KEYS)
     if unknown:
-        raise RecipeError(f'unknown param(s): {", ".join(sorted(map(str, unknown)))}')
+        raise RecipeError(codes.RECIPE_UNKNOWN_PARAMS, params=', '.join(sorted(map(str, unknown))))
     if 'sides' in params:
         check_int(params['sides'], 'params.sides', 2, MAX_RANGE)
     if 'reversed_chance' in params:
         v = params['reversed_chance']
         if isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 1:
-            raise RecipeError('params.reversed_chance: expected a number from 0 to 1')
+            raise RecipeError(codes.RECIPE_REVERSED_CHANCE)
 
 
 def _range_bounds(table, params, where):
     spec = table['range']
     if set(table) != {'range'} or not isinstance(spec, list) or len(spec) != 2:
-        raise RecipeError(f'{where}: expected {{"range": [low, high]}}')
+        raise RecipeError(codes.RECIPE_RANGE_FORM, where=where)
     lo, hi = spec
     check_int(lo, f'{where}.range[0]', 0, MAX_RANGE)
     if hi == 'sides':
         if 'sides' not in params:
-            raise RecipeError(f'{where}: range uses "sides" but params.sides is missing')
+            raise RecipeError(codes.RECIPE_RANGE_SIDES, where=where)
         hi = params['sides']
     check_int(hi, f'{where}.range[1]', max(lo, 1), MAX_RANGE)
     return lo, hi
@@ -98,7 +99,7 @@ def placeholders(recipe: Recipe):
         two_sided = bool(rows) and _is_records(rows) and {'upright', 'reversed'} <= set(rows[0])
         fields = set(rows[0]) | ({'orientation', 'meaning'} if two_sided else set()) if rows and _is_records(rows) else {name}
         if fields & names:
-            raise RecipeError(f'tables.{name}: placeholder name clashes with another table or param')
+            raise RecipeError(codes.RECIPE_PLACEHOLDER_CLASH, name=name)
         names |= fields
     return names
 
@@ -108,10 +109,10 @@ def _parse_template(text, allowed, where):
     try:
         for literal, name, spec, conv in string.Formatter().parse(text):
             if name is not None and (name not in allowed or spec or conv):
-                raise RecipeError(f'{where}: placeholder {{{name}}} is not allowed')
+                raise RecipeError(codes.RECIPE_PLACEHOLDER_DENIED, where=where, name=name)
             parts.append((literal, name))
     except ValueError as exc:
-        raise RecipeError(f'{where}: {exc}') from None
+        raise RecipeError(codes.RECIPE_TEMPLATE_SYNTAX, where=where, detail=str(exc)) from None
     return parts
 
 
@@ -123,16 +124,16 @@ def _check_template(raw, allowed):
     if isinstance(raw, str):
         raw = {'text': raw}
     if not isinstance(raw, dict) or not set(raw) <= {'text', 'fields', 'footer_note'} or 'text' not in raw:
-        raise RecipeError('template: expected text, or an object with text, fields and footer_note')
+        raise RecipeError(codes.RECIPE_TEMPLATE_SHAPE)
     _parse_template(check_text(raw['text'], 'template.text', 1000), allowed, 'template.text')
     if raw.get('footer_note'):
         _parse_template(check_text(raw['footer_note'], 'template.footer_note'), allowed, 'template.footer_note')
     pairs = raw.get('fields', [])
     if not isinstance(pairs, list) or len(pairs) > 6:
-        raise RecipeError('template.fields: expected a list of at most 6')
+        raise RecipeError(codes.RECIPE_TEMPLATE_FIELDS)
     for i, pair in enumerate(pairs):
         if not isinstance(pair, list) or len(pair) != 2:
-            raise RecipeError(f'template.fields[{i}]: expected [name, value]')
+            raise RecipeError(codes.RECIPE_TEMPLATE_PAIR, index=i)
         check_text(pair[0], f'template.fields[{i}][0]', 64)
         _parse_template(check_text(pair[1], f'template.fields[{i}][1]'), allowed, f'template.fields[{i}][1]')
 
@@ -140,7 +141,7 @@ def _check_template(raw, allowed):
 def validate(recipe: Recipe):
     _validate_params(recipe.params)
     if not recipe.tables:
-        raise RecipeError('tables: at least one table is required')
+        raise RecipeError(codes.RECIPE_TABLES_REQUIRED)
     for name, table in recipe.tables.items():
         where = f'tables.{_ident(name, "tables")}'
         if _is_range(table):
@@ -152,7 +153,7 @@ def validate(recipe: Recipe):
             _check_rows(rows, f'{where}.{loc}')
             shapes.add(tuple(sorted(rows[0])) if _is_records(rows) else None)
         if len(shapes) != 1:
-            raise RecipeError(f'{where}: locales mix plain and record rows or differ in fields')
+            raise RecipeError(codes.RECIPE_LOCALES_MIX, where=where)
     allowed = placeholders(recipe)
     check_locale_keyed(recipe.template, 'template')
     for raw in recipe.template.values():
@@ -165,7 +166,7 @@ def _entries(extra, where, allow_empty=True):
     check_locale_keyed(extra, where)
     for loc, rows in extra.items():
         if not isinstance(rows, list) or len(rows) > MAX_ENTRIES or not (rows or allow_empty):
-            raise RecipeError(f'{where}.{loc}: expected a list of {"up to" if allow_empty else "1 to"} {MAX_ENTRIES} entries')
+            raise RecipeError(codes.RECIPE_ENTRIES_UP_TO if allow_empty else codes.RECIPE_ENTRIES_ONE_TO, where=where, loc=loc, limit=MAX_ENTRIES)
         for i, row in enumerate(rows):
             check_text(row, f'{where}.{loc}[{i}]', MAX_TEXT)
     return extra
@@ -175,7 +176,7 @@ def _plain_rows(rows, locale, extra, replace):
     base = lookup(replace, locale) if replace else None
     out = list(base or rows) + list((lookup(extra, locale) or []) if extra else [])
     if len(out) > MAX_ENTRIES:
-        raise RecipeError(f'more than {MAX_ENTRIES} entries after additions')
+        raise RecipeError(codes.RECIPE_TOO_MANY_ENTRIES, limit=MAX_ENTRIES)
     return out
 
 

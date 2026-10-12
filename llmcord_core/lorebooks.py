@@ -11,6 +11,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from .i18n import UserError, codes
+
 
 MAX_BOOK_BYTES = 8 * 1024 * 1024
 MAX_ENTRIES = 2000
@@ -47,7 +49,7 @@ def _strings(value: Any) -> list[str]:
 def normalize_entry(uid: str, entry: dict, *, source_format: str | None = None) -> ImportedEntry:
     content = entry.get("content", "")
     if not isinstance(content, str):
-        raise ValueError(f"Entry {uid} has no text content. Add text or remove the entry.")
+        raise UserError(codes.LOREBOOK_ENTRY_NO_TEXT, uid=uid)
     position = entry.get("position", "after_char")
     # Native ST positions: 0 before card, 1 after card, 2 before examples,
     # 3 after examples, 4 at depth; A/N and outlets need ST-only surfaces.
@@ -148,33 +150,33 @@ def export_entry(content: str, rule: dict) -> dict:
 
 def validate_rule(rule: dict, content: str | None = None) -> dict:
     if not isinstance(rule, dict):
-        raise ValueError('Rule must be an object.')
+        raise UserError(codes.LOREBOOK_RULE_OBJECT)
     default = normalize_entry('validation', {}).rule
     unknown = set(rule) - set(default)
     if unknown:
-        raise ValueError('Unknown effective rule fields: ' + ', '.join(sorted(unknown)) + '.')
+        raise UserError(codes.LOREBOOK_RULE_UNKNOWN, fields=', '.join(sorted(unknown)))
     effective = {**default, **rule}
     for key, value in default.items():
         actual = effective[key]
         if isinstance(value, bool) and not isinstance(actual, bool):
-            raise ValueError(f'{key} must be true or false.')
+            raise UserError(codes.LOREBOOK_RULE_BOOL, key=key)
         if type(value) is int and type(actual) is not int:
-            raise ValueError(f'{key} must be an integer.')
+            raise UserError(codes.LOREBOOK_RULE_INT, key=key)
         if isinstance(value, list) and key != 'unsupported' and (not isinstance(actual, list) or not all(isinstance(x, str) for x in actual)):
-            raise ValueError(f'{key} must be a list of strings.')
+            raise UserError(codes.LOREBOOK_RULE_STRINGS, key=key)
     for key in ('depth', 'sticky', 'cooldown', 'delay', 'recursion_level', 'group_weight'):
         if effective[key] < 0:
-            raise ValueError(f'{key} cannot be negative.')
+            raise UserError(codes.LOREBOOK_RULE_NEGATIVE, key=key)
     if effective['scan_depth'] is not None and (type(effective['scan_depth']) is not int or effective['scan_depth'] < 0):
-        raise ValueError('Scan depth must be a nonnegative integer or null.')
+        raise UserError(codes.LOREBOOK_SCAN_DEPTH)
     if effective['regex_enabled'] is not None and type(effective['regex_enabled']) is not bool:
-        raise ValueError('Regex enabled must be true, false or null.')
+        raise UserError(codes.LOREBOOK_REGEX_ENABLED)
     if not 0 <= effective['probability'] <= 100 or effective['selective_logic'] not in range(4):
-        raise ValueError('Probability must be 0 to 100 and secondary matching logic 0 to 3. Fix these values and try again.')
+        raise UserError(codes.LOREBOOK_PROBABILITY)
     if effective['role'] not in {'system', 'user', 'assistant'}:
-        raise ValueError('Message role must be system, user or assistant. Choose one of these.')
+        raise UserError(codes.LOREBOOK_ROLE)
     if not isinstance(effective['original'], dict):
-        raise ValueError('Original import must be an object.')
+        raise UserError(codes.LOREBOOK_ORIGINAL)
     # Recompute warnings from the actual effective settings, not stale warnings.
     normalized = normalize_entry('validation', export_entry(
         effective['original'].get('content', '') if content is None else content, effective)).rule
@@ -184,15 +186,15 @@ def validate_rule(rule: dict, content: str | None = None) -> dict:
 
 def parse_lorebook(data: bytes) -> ImportedBook:
     if len(data) > MAX_BOOK_BYTES:
-        raise ValueError("Lorebook exceeds 8 MiB. Upload a smaller file.")
+        raise UserError(codes.LOREBOOK_TOO_BIG)
     raw = json.loads(data.decode("utf-8-sig"))
     source_format = 'sillytavern'
     if isinstance(raw, dict) and raw.get('type') == 'risu':
         source_format = 'risu'
         if type(raw.get('ver')) is not int or raw['ver'] != 1:
-            raise ValueError('Only RisuAI version-1 lorebook exports are supported.')
+            raise UserError(codes.LOREBOOK_RISU_VERSION)
         if not isinstance(raw.get('data'), list):
-            raise ValueError('RisuAI lorebook data must be an entry array.')
+            raise UserError(codes.LOREBOOK_RISU_DATA)
         source = []
         for index, item in enumerate(raw['data']):
             ident = item.get('uid', item.get('id')) if isinstance(item, dict) else None
@@ -211,12 +213,12 @@ def parse_lorebook(data: bytes) -> ImportedBook:
         source = [(str(item.get("id", index)) if isinstance(item, dict) else str(index), item)
                   for index, item in enumerate(raw["entries"])]
     else:
-        raise ValueError("Expected an entry array, an object with entries, or a RisuAI version-1 lorebook export.")
+        raise UserError(codes.LOREBOOK_FORMAT)
     if len(source) > MAX_ENTRIES:
-        raise ValueError("Lorebook has too many entries. Split it into smaller books.")
+        raise UserError(codes.LOREBOOK_TOO_MANY)
     entries = {}
     for uid, item in source:
         if not isinstance(item, dict) or uid in entries:
-            raise ValueError(f"Invalid or duplicate lorebook entry {uid}.")
+            raise UserError(codes.LOREBOOK_ENTRY_INVALID, uid=uid)
         entries[uid] = normalize_entry(uid, item, source_format=source_format)
     return ImportedBook(json.dumps(raw, ensure_ascii=False), entries, source_format)

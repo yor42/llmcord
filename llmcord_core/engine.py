@@ -14,6 +14,7 @@ from .models import DIRECTOR_SCHEMA, MEMORY_SCHEMA, ImageInput, ModelGateway, Tu
 from .store import Store
 from .prompts import compile_prompt, time_values
 from .errors import error_detail
+from .i18n import UserError, codes
 from .usage import log_purpose, mask_for_log
 from .identity import speaker_context, user_line
 
@@ -146,7 +147,7 @@ class Engine:
         cast = [eligible[ident] for ident in (scene.allowed_ids if restricted else self.store.get_cast(scene.channel_id, scene.parent_channel_id)) if ident in eligible]
         if scene.forced_character_id is not None:
             if scene.forced_character_id not in eligible:
-                raise ValueError("That character cannot join this world or hub.")
+                raise UserError(codes.ENGINE_CANNOT_JOIN)
             forced = eligible[scene.forced_character_id]
             cast = [forced, *[row for row in cast if row["id"] != forced["id"]]]
         archived = {} if restricted else {row['id']: row for row in self.store.archived_favorite_rows(scene.guild_id, scene.user_id, scene.space_id)}

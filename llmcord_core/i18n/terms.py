@@ -7,6 +7,18 @@ from . import N_, NP_  # noqa: F401  (terms are added by the Phase 1 batches)
 
 
 # --- MNT-67 (1b): other shared modules
+# Shop setting labels (items_store.py).
+ITEM_SETTING_FOR_SALE = NP_('item setting', 'For sale')
+ITEM_SETTING_ALLOW_USE = NP_('item setting', 'Allow use')
+# Nouns for name lookups (names.py): singular and plural, keyed by the English noun the callers pass.
+NOUN_CHARACTER = NP_('lookup noun', 'character')
+NOUN_WORLD = NP_('lookup noun', 'world')
+NOUN_HUB = NP_('lookup noun', 'hub')
+NOUN_WORLD_OR_HUB = NP_('lookup noun', 'world or hub')
+NOUN_CHARACTERS = NP_('lookup noun plural', 'characters')
+NOUN_WORLDS = NP_('lookup noun plural', 'worlds')
+NOUN_HUBS = NP_('lookup noun plural', 'hubs')
+NOUN_WORLDS_OR_HUBS = NP_('lookup noun plural', 'worlds or hubs')
 
 
 

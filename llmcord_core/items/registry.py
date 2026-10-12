@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from typing import Callable
 
+from ..i18n import codes
 from . import random_message
 from .recipe import DEFAULT_LOCALE, Recipe, RecipeError, parse_common
 
@@ -25,14 +26,14 @@ def get_kind(key) -> Kind:
     try:
         return _KINDS[key]
     except (KeyError, TypeError):
-        raise RecipeError(f'unknown kind {key!r}') from None
+        raise RecipeError(codes.RECIPE_UNKNOWN_KIND, kind=repr(key)) from None
 
 
 def validate_recipe(data) -> Recipe:
     recipe = parse_common(data)
     kind = get_kind(recipe.kind)
     if recipe.audience != kind.audience:
-        raise RecipeError(f'audience {recipe.audience!r} does not match kind {kind.key!r} ({kind.audience!r})')
+        raise RecipeError(codes.RECIPE_AUDIENCE_MISMATCH, audience=repr(recipe.audience), kind=repr(kind.key), expected=repr(kind.audience))
     kind.validate(recipe)
     return recipe
 

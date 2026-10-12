@@ -10,16 +10,10 @@
       "raise": 16
     },
     "llmcord_core/avatars.py": {
-      "raise": 14
+      "raise": 2
     },
     "llmcord_core/backend.py": {
-      "raise": 7
-    },
-    "llmcord_core/cards.py": {
-      "raise": 10
-    },
-    "llmcord_core/config.py": {
-      "raise": 33
+      "raise": 6
     },
     "llmcord_core/currency_ui.py": {
       "raise": 1,
@@ -33,7 +27,7 @@
       "raise": 3
     },
     "llmcord_core/engine.py": {
-      "raise": 2
+      "raise": 1
     },
     "llmcord_core/game_chooser.py": {
       "raise": 1
@@ -56,9 +50,6 @@
     "llmcord_core/games_ui.py": {
       "ui": 91
     },
-    "llmcord_core/holdem_store.py": {
-      "raise": 11
-    },
     "llmcord_core/icons.py": {
       "raise": 1,
       "ui": 1
@@ -66,29 +57,11 @@
     "llmcord_core/items/catalog.py": {
       "raise": 2
     },
-    "llmcord_core/items/random_message.py": {
-      "raise": 16
-    },
-    "llmcord_core/items/recipe.py": {
-      "raise": 17
-    },
-    "llmcord_core/items/registry.py": {
-      "raise": 2
-    },
-    "llmcord_core/items_store.py": {
-      "raise": 16
-    },
     "llmcord_core/lore_workspace.py": {
       "ui": 33
     },
-    "llmcord_core/lorebooks.py": {
-      "raise": 18
-    },
     "llmcord_core/models.py": {
       "raise": 7
-    },
-    "llmcord_core/names.py": {
-      "raise": 4
     },
     "llmcord_core/playstyle_generate.py": {
       "raise": 3
@@ -99,9 +72,6 @@
     },
     "llmcord_core/prices.py": {
       "raise": 7
-    },
-    "llmcord_core/prompts.py": {
-      "raise": 24
     },
     "llmcord_core/savebar.py": {
       "raise": 2,
