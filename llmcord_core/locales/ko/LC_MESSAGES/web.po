@@ -1818,9 +1818,9 @@ msgid "How this character plays card games. No style is saved, so it plays in a 
 msgstr "이 캐릭터가 카드 게임을 하는 방식이에요. 저장된 스타일이 없어서 캐릭터에서 유도한 스타일로 플레이하며, 슬라이더는 그 스타일을 보여 줘요. 직접 정한 스타일을 유지하려면 저장해 주세요."
 
 #: llmcord_core/dashboard.py
-msgctxt "Plays: {style}"
-msgid ", "
-msgstr ", "
+#, python-brace-format
+msgid "Plays: {style}"
+msgstr "플레이 성향: {style}"
 
 #: llmcord_core/dashboard.py
 msgid "Draft from the description. Review it, then press Save play style; nothing is saved yet."
@@ -2670,9 +2670,9 @@ msgid "{game} rules"
 msgstr "{game} 규칙"
 
 #: llmcord_core/games_ui.py
-msgctxt "Table rules line: {rules}"
-msgid " · "
-msgstr " · "
+#, python-brace-format
+msgid "Table rules line: {rules}"
+msgstr "테이블 규칙 줄: {rules}"
 
 #: llmcord_core/games_ui.py
 msgid "Rule changes apply from the next round. Open rounds keep the rules they were dealt with."

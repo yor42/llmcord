@@ -1132,8 +1132,10 @@ class HoldemTables:
             skipped += result["skipped"]
         name = self.store.currency_name(guild_id)
         why = lambda reason: t("not enough {currency}", currency=name) if reason == "broke" else t.render(SKIPPED.get(reason, reason))
-        parts = ([t(SEATED, names=", ".join(s["name"] for s in seated))] if seated else []) + \
-                ([t(NOT_SEATED_LIST, names=", ".join(t("{name} ({reason})", name=s['name'], reason=why(s['reason'])) for s in skipped))] if skipped else [])
+        seated_names = ", ".join(s["name"] for s in seated)
+        skipped_names = ", ".join(t("{name} ({reason})", name=s['name'], reason=why(s['reason'])) for s in skipped)
+        parts = ([t(SEATED, names=seated_names)] if seated else []) + \
+                ([t(NOT_SEATED_LIST, names=skipped_names)] if skipped else [])
         if not parts:
             return _Out(NO_CAST_LEFT)
         if not seated:
@@ -1244,8 +1246,10 @@ class HoldemTables:
             if len(self.assists) > 512:
                 self.assists.clear()
             self.assists[(guild_id, round_id, seat, street)] = a
+        current = a.current_phrase or a.current
+        chances = ", ".join(f"{t.render(name)} {p:.0%}" for name, p in a.chances)
         return t("Assist — you have: {current}. Likely final hands: {chances}. Chance to win against random hands: {win:.0%}.",
-                 current=a.current_phrase or a.current, chances=", ".join(f"{t.render(name)} {p:.0%}" for name, p in a.chances), win=a.win)
+                 current=current, chances=chances, win=a.win)
 
     # --- raising and showing ----------------------------------------------------------------
 

@@ -78,7 +78,8 @@ def _kind_word(t, kind):
 
 
 def _space_ref(t, kind, name):
-    return t.p('space ref', '{kind} {name}', kind=_kind_word(t, kind), name=name)
+    kind_word = _kind_word(t, kind)
+    return t.p('space ref', '{kind} {name}', kind=kind_word, name=name)
 
 
 def split_discord(text: str, limit: int = 1900) -> list[str]:

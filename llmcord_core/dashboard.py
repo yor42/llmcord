@@ -2214,7 +2214,8 @@ def play_style_editor(ctx, character, revision):
         def current():
             return playstyle.PlayStyle(**{trait: int(slider.value) for trait, slider in sliders.items()})
         def update():
-            summary.set_text(t('Plays: {style}', style=', '.join(t.render(p) for p in playstyle.describe_phrases(current()))))
+            style_text = ', '.join(t.render(p) for p in playstyle.describe_phrases(current()))
+            summary.set_text(t('Plays: {style}', style=style_text))
         for slider in sliders.values():
             slider.on_value_change(lambda _: update())
         update()
