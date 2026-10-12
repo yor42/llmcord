@@ -244,7 +244,10 @@ The channel locale is the first of these that is set: the server bot language, t
   - Blackjack: 히트, 스탠드, 더블다운, 스플릿, 서렌더, 인슈어런스, 이븐 머니.
   - Hold'em: 폴드, 체크, 콜, 레이즈, 올인, 블라인드, 바이인, 스택, 팟.
   - Hands: 하이카드, 원페어, 투페어, 트리플, 스트레이트, 플러시, 풀하우스, 포카드, 스트레이트 플러시, 로열 플러시.
-  - I Doubt It is known in Korea as 다우트.
+  - I Doubt It is known in Korea as 다우트. Because 다우트 alone can read as just the English word "doubt", Korean players add **(카드게임)** or **(Doubt)** to make clear it is the card game (user guidance, 2026-10-12).
+    - Where the name stands alone (the game's name in titles, pickers, command choices and game lists: the `game name` term `GAME_DOUBT` and messages that type "I Doubt It" as a heading), write `다우트 (카드게임)`. `다우트(Doubt)` is the alternative; pick one when the glossary is approved and use it everywhere.
+    - Inside a sentence (the `game noun` term `NOUN_DOUBT`, or the name passed as `{game}`), write plain `다우트`. A suffix after the name breaks particle choice: `{game:이/가}` after `)` falls back to `이(가)`, while `다우트` ends in 트 (no 받침) and gets `가`.
+    - The doubt call itself (the "Doubt!" button, "Doubt it!") is `다우트!`. The spoken-move lexicon already reads 다우트 as a doubt.
   - A test checks that the Korean label of every move button appears in `spoken/lexicon/*.json`, so a player who types the button's label is read as making that move.
 - **Proposed glossary** (needs the user's approval; it will become a `ko` column in [the glossary](../glossary.md)):
 
@@ -262,6 +265,7 @@ The channel locale is the first of these that is set: the server bot language, t
 | Turn log | 턴 로그 | Catch-up | 놓친 대화 요약 |
 | Ambient participation | 자율 참여 | Table talk | 테이블 잡담 |
 | Spoken move / Move check | 채팅 무브 / 무브 확인 *(to confirm)* | Claim / Doubt / Pile | 선언 / 다우트 / 더미 |
+| I Doubt It (game name, standalone) | 다우트 (카드게임) *(or 다우트(Doubt))* | I Doubt It (in a sentence) | 다우트 |
 
 ## 6. Migration plan
 
@@ -395,7 +399,7 @@ Written when Phase 1 started (2026-10-12, decision G). Every batch follows these
 - **Engine plurals:** engines have no `t.n`, so a count chooses between two whole constants by the old English rule (`'{count} card'` / `'{count} cards'`). That is enough for English and Korean. Before adding a language with more plural forms, Phase 4 needs a deferred plural phrase that carries both forms and the count.
 - **Stored and model-facing text stays English:** ledger reasons, `round_facts` (the Hold'em `hand`), `Result.summary` as stored through the `admin_store` snapshot, and `table_block`. A surface that wants a translated summary needs the store to expose the state or the phrases; 1f and 1i decide that.
 - **Translator notes for Phase 2:** the blackjack outcome terms (`NP_('blackjack outcome', 'even_money')`, `push`, `bust`, …) are the raw tokens the old summary printed. Better English wording would change English, so it is a separate item.
-- **Phase 1 leftovers that Phase 2 translators will notice (from 1f):** some messages type the game name ("I Doubt It") instead of taking `{game}`, and a few pieces are joined in code (`", insurance {amount}"`, `" (This server has Read moves ...)"`, `" " + t("(timed out)")`), so a translation cannot reorder them. Both keep English identical. Turning them into whole messages with `{game}` changes no English but needs an identity check, so it belongs with the Phase 2 Korean pass.
+- **Phase 1 leftovers that Phase 2 translators will notice (from 1f):** some messages type the game name ("I Doubt It") instead of taking `{game}`, and a few pieces are joined in code (`", insurance {amount}"`, `" (This server has Read moves ...)"`, `" " + t("(timed out)")`), so a translation cannot reorder them. Both keep English identical. Turning them into whole messages with `{game}` changes no English but needs an identity check, so it belongs with the Phase 2 Korean pass. Until then the translator applies the 다우트 rule in section 5 to each such message: `다우트 (카드게임)` in a heading, `다우트` in a sentence.
 
 **Edge call sites from 1c.** Line numbers are at `0f09f05`. Each site switches from the English wrapper to the twin, rendered with the right audience.
 
