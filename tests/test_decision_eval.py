@@ -849,5 +849,86 @@ class CliRoundOneTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertTrue((Path(out) / "results.json").exists())
 
+class FramingTests(unittest.TestCase):
+    """Prompt fairness: decision candidates get the same table-chat context the chat baselines have in their system prompt.
+    evalcore.context_for(item) -> str is shared by oai-* (framed `input` string) and or-d1-* (`state` = {"context", "message"})."""
+    OAI = ("oai-choice", "oai-predicate")
+    D1 = ("or-d1-choice", "or-d1-noul")
+
+    def test_context_for(self):
+        bj, db = ec.context_for(BJ), ec.context_for(DB)
+        self.assertIsInstance(bj, str)
+        for needle in ("blackjack", "Discord", "table", "turn"):
+            self.assertIn(needle, bj)
+        self.assertIn("I Doubt It", db)
+        self.assertNotIn("blackjack", db)
+        self.assertEqual(ec.context_for(BJ), ec.context_for({**BJ, "text": "other", "id": "zz"}))
+
+    def test_openai_input_is_framed_string(self):
+        for cand in self.OAI:
+            for item in (BJ, DB, {**BJ, "text": "카드 한 장 더"}):
+                inp = ec.build_request(cand, item)["json"]["input"]
+                self.assertIsInstance(inp, str, cand)
+                self.assertIn(ec.context_for(item), inp)
+                tail = inp.rstrip()[-(len(item["text"]) + 2):]
+                self.assertEqual(tail[1:-1], item["text"], cand)
+                self.assertEqual(tail[0], tail[-1])
+                self.assertIn(tail[0], "\"“”'")
+        self.assertIn("blackjack", ec.build_request("oai-choice", BJ)["json"]["input"])
+        self.assertIn("I Doubt It", ec.build_request("oai-predicate", DB)["json"]["input"])
+
+    def test_d1_state_is_context_and_message_dict(self):
+        for cand in self.D1:
+            for item in (BJ, DB):
+                self.assertEqual(ec.build_request(cand, item)["json"]["state"], {"context": ec.context_for(item), "message": item["text"]}, cand)
+
+    def test_chat_unchanged(self):
+        for cand in ("or-haiku", "or-flashlite"):
+            b = ec.build_request(cand, BJ)["json"]
+            self.assertNotIn("state", b)
+            self.assertNotIn("input", b)
+            self.assertIn("messages", b)
+
+
+class RawExcerptTests(unittest.TestCase):
+    def chat(self, content):
+        return {"choices": [{"message": {"content": content}}]}
+
+    def test_invalid_chat_answers_keep_first_80_chars(self):
+        long_bad = '{"answer": "surrender", "why": "' + "z" * 100 + '"}'
+        for content in ("not json " + "q" * 120, long_bad):
+            r = ec.parse_answer("or-haiku", BJ, self.chat(content))
+            self.assertIsNone(r["answer"])
+            self.assertEqual(r["raw"], content[:80])
+        self.assertEqual(ec.parse_answer("or-flashlite", BJ, self.chat("oops"))["raw"], "oops")
+
+    def test_raw_is_none_without_chat_content_or_for_other_kinds(self):
+        self.assertIsNone(ec.parse_answer("or-haiku", BJ, {"choices": []})["raw"])
+        self.assertIsNone(ec.parse_answer("or-haiku", BJ, {})["raw"])
+        r = ec.parse_answer("oai-predicate", BJ, {"answers": [{"type": "predicate", "name": "move_hit", "probability": 0.9}]})
+        self.assertIsNone(r["raw"])
+
+    def test_results_json_keeps_raw_only_for_invalid_records(self):
+        bad = "not json " + "q" * 120
+        calls = []
+
+        def post(url, body, key):
+            calls.append(1)
+            return chat_resp(bad if len(calls) == 1 else '{"answer": "talk"}'), 0.1
+        with tempfile.TemporaryDirectory() as d:
+            self._run(d, post)
+            recs = json.loads((Path(d) / "results.json").read_text(encoding="utf-8"))["records"]
+        self.assertEqual(len(recs), 3)
+        self.assertIsNone(recs[0]["answer"])
+        self.assertEqual(recs[0]["raw"], bad[:80])
+        for r in recs[1:]:
+            self.assertEqual(r["answer"], "talk")
+            self.assertIsNone(r.get("raw"))
+
+    def _run(self, d, post):
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            return run_eval.main(["--run", "--candidates", "or-haiku", "--limit", "3", "--out", d], env={"OPENROUTER_API_KEY": FAKE_OR}, post=post)
+
+
 if __name__ == "__main__":
     unittest.main()

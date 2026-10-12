@@ -22,6 +22,7 @@ Flags: `--candidates` (ids: oai-choice oai-predicate or-d1-choice or-d1-noul or-
 - `--run` refuses (exit 2, before any call) when the dry-run estimate exceeds `--max-usd`; a dry run prints an "exceeds" line.
 - `results.json` is rewritten as the run goes (and on an interrupt or crash), so paid results are never lost.
 - Errored calls add nothing to the spent total (providers do not normally bill errors); five consecutive errors skip the candidate.
+- All decision candidates get the same context sentence (`context_for`); a first smoke test without it gave the OpenAI candidates 0/3 on moves.
 - Calls are sequential. An error counts as an invalid answer; 5 in a row skip the rest of that candidate.
 
 - No extra smoke calls: a small run (`--limit 6 --candidates <one>`) is the smoke test.

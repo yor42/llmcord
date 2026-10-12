@@ -121,6 +121,14 @@ def predicate_text(item, move):
     return f"Is the player choosing to {move_text(move)} right now, as an instruction to act (not a question, a joke or chit-chat)?"
 
 
+def context_for(item):
+    """One sentence of where the message was typed, given to every candidate (the chat ones also have it in their system prompt)."""
+    if item["task"] == "doubt":
+        return "This message was typed by a player at an I Doubt It card table, during the doubt window."
+    return ("This message was typed in a Discord blackjack table chat by the player whose turn it is, as a possible move for the current hand "
+            "(it may be English, Korean or mixed).")
+
+
 def choice_name(item):
     return "doubt_call" if item["task"] == "doubt" else "player_move"
 
@@ -154,7 +162,9 @@ def build_request(candidate, item, k=0):
         q = [{"type": "predicate", "name": f"move_{m}", "instructions": predicate_text(item, m)} for m in item["legal"]]
     else:
         q = {f"move_{m}": {"type": "noul", "instructions": predicate_text(item, m)} for m in item["legal"]}
-    body = {"model": c["model"], "input": text, "questions": q} if openai else {"model": c["model"], "state": {"message": text}, "questions": q}
+    ctx = context_for(item)
+    body = ({"model": c["model"], "input": f"{ctx}\nMessage: \"{text}\"", "questions": q} if openai
+            else {"model": c["model"], "state": {"context": ctx, "message": text}, "questions": q})
     return {"url": c["url"], "json": body, "key_env": c["key_env"]}
 
 
@@ -205,11 +215,13 @@ def parse_answer(candidate, item, response_json, tau=0.5):
     """{'answer','p','probs','refusal','cost','tokens'}; answer is a legal move, 'talk', 'doubt' or None (invalid or refused)."""
     kind = CANDIDATES[candidate]["kind"]
     cost, tokens = usage_of(response_json)
-    out = {"answer": None, "p": None, "probs": {}, "refusal": False, "cost": cost, "tokens": tokens}
+    out = {"answer": None, "p": None, "probs": {}, "refusal": False, "cost": cost, "tokens": tokens, "raw": None}
     legal = item["legal"]
     try:
         if kind == "chat":
             msg = response_json["choices"][0]["message"]
+            if isinstance(msg.get("content"), str):
+                out["raw"] = msg["content"][:80]
             if msg.get("refusal"):
                 out["refusal"] = True
                 return out
