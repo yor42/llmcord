@@ -447,6 +447,8 @@ Written when Phase 1 started (2026-10-12, decision G). Every batch follows these
 
 **End of Phase 1.** The ratchet's `ui` counts are zero except for reviewed exceptions. The `raise` counts that remain are internal diagnostics, each listed in its batch report. Section 7 originally said the allowlist "must be empty". That predates the review fix that counts every exception class, so internal errors now count too.
 
+**Phase 1 finished on 2026-10-12** (MNT-66..74, merged through 8e2d785; English output unchanged, no existing test edited). Ratchet `ui` counts left: `dashboard.py` 1 (the `${OPENAI_API_KEY}` placeholder) and `presets_ui.py` 2 (the preset name defaults "Default copy" and "Imported preset", which become stored names). The remaining `raise` counts are internal diagnostics and engine invariant guards (games, spoken head and embedder, models, prices, backend), each listed in its batch report in [backlog.md](backlog.md). Follow-ups that Phase 2 needs before Korean ships everywhere: MNT-76 (returned text with structured values) and MNT-77 (`ModelConfigError` codes).
+
 ## 7. Quality gates and automation
 
 | Check | Where | Catches |
