@@ -5,3 +5,56 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
+
+#: llmcord_core/i18n/codes.py
+msgid "An attachment exceeds the configured size limit"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Too many image attachments"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The configured dialogue model cannot read images"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Only text and image attachments are supported"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Use this command in a server channel."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "This channel is not bound to a world or hub. Ask an administrator to bind it with /admin space bind."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Card exceeds 8 MiB. Upload a smaller file."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Give one or more character names, separated by commas."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Lore entry not found. Check the number with /lore list."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Destination world or hub not found. Check the name with /space list."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Give a numeric message ID."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Scene message not found in this channel. Give the ID of a message in this scene."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "No saved context for that character line. Leave the ID empty to use the latest one."
+msgstr ""
+

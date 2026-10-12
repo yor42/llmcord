@@ -7,6 +7,8 @@ from contextvars import ContextVar
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 
+from llmcord_core import i18n
+
 _capture = ContextVar('llmcord_model_usage', default=None)
 
 
@@ -124,12 +126,14 @@ def collect_usage(profile_name, profile, role, usage):
     return record
 
 
-def reply_footer(model, usage):
+def reply_footer(model, usage, *, t=None):
+    t = t or i18n.english()
     # The caller supplies a markdown-escaped, bounded model label.
-    inputs = f'{usage.input_tokens:,}' if usage and usage.input_tokens is not None else 'unavailable'
-    outputs = f'{usage.output_tokens:,}' if usage and usage.output_tokens is not None else 'unavailable'
+    inputs = f'{usage.input_tokens:,}' if usage and usage.input_tokens is not None else t('unavailable')
+    outputs = f'{usage.output_tokens:,}' if usage and usage.output_tokens is not None else t('unavailable')
     if usage and usage.output_tokens is not None and usage.reasoning_tokens:
-        outputs += f' (incl. {usage.reasoning_tokens:,} thinking)'
-    cost = f'${usage.cost_usd:.6f}' if usage and usage.cost_usd is not None else 'unavailable'
-    label = 'Est. paid cost' if usage and usage.cost_basis == 'paid-list' else 'Est. cost'
-    return f'\n\n-# {model} · Reply input: {inputs} · Output: {outputs} · {label}: {cost}'
+        outputs += t(' (incl. {thinking:,} thinking)', thinking=usage.reasoning_tokens)
+    cost = f'${usage.cost_usd:.6f}' if usage and usage.cost_usd is not None else t('unavailable')
+    if usage and usage.cost_basis == 'paid-list':
+        return t('\n\n-# {model} · Reply input: {inputs} · Output: {outputs} · Est. paid cost: {cost}', model=model, inputs=inputs, outputs=outputs, cost=cost)
+    return t('\n\n-# {model} · Reply input: {inputs} · Output: {outputs} · Est. cost: {cost}', model=model, inputs=inputs, outputs=outputs, cost=cost)
