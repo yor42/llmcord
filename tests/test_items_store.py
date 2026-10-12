@@ -178,7 +178,7 @@ class BuyTests(unittest.TestCase):
         before = self.snapshot()
         with self.assertRaises(PriceChanged) as caught:
             self.store.buy_item(G, U, BALL, expected_price=price - 1)
-        self.assertEqual((caught.exception.code, caught.exception.price), ("price_changed", price))
+        self.assertEqual((caught.exception.kind, caught.exception.price), ("price_changed", price))
         self.assertEqual(str(caught.exception), f"The price changed to {price:,}. Open /shop again.")
         self.assertEqual(self.snapshot(), before)
         self.assertEqual(self.store.buy_item(G, U, BALL, expected_price=price)["price"], price)
@@ -215,11 +215,11 @@ class BuyTests(unittest.TestCase):
         self.store.save_shop_item(G, "tarot", expected_revision=0, for_sale=True)
         with self.assertRaises(InsufficientFunds) as ctx:
             self.store.buy_item(G, U, "tarot")
-        self.assertEqual((ctx.exception.balance, ctx.exception.code), (0, "insufficient"))
+        self.assertEqual((ctx.exception.balance, ctx.exception.kind), (0, "insufficient"))
         self.assertEqual(self.snapshot(), before)
 
     def test_error_codes_are_distinct(self):
-        codes = {c.code for c in (NotForSale, HoldCapReached, AlreadyOwned, InsufficientFunds, NotHeld, UseDisabled, OnCooldown)}
+        codes = {c.kind for c in (NotForSale, HoldCapReached, AlreadyOwned, InsufficientFunds, NotHeld, UseDisabled, OnCooldown)}
         self.assertEqual(len(codes), 7)
 
     def test_consumable_hold_cap_follows_the_setting(self):
@@ -395,7 +395,7 @@ class ConcurrencyTests(unittest.TestCase):
                     action(store)
                     results.append("ok")
                 except (CurrencyError, ValueError) as error:
-                    results.append(getattr(error, "code", "refused"))
+                    results.append(getattr(error, "kind", "refused"))
 
             threads = [threading.Thread(target=run, args=(s,)) for s in stores]
             for t in threads:
