@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from .backend import ROLES as MODEL_ROLES
 from .config import PROFILE_KEYS, check_key_pin, key_hosts_from_env, profile_from_mapping, validate_profile_name
 from .errors import mask_facts, redact
-from .i18n import UserError, codes
+from .i18n import UserError, available_locales, codes, negotiate
 from .games import IllegalMove, Seat, blackjack, new_seed, registry, seed_hash
 from .lorebooks import normalize_entry, parse_lorebook
 
@@ -89,7 +89,8 @@ CREATE TABLE IF NOT EXISTS guild_settings (
  game_min_bet INTEGER NOT NULL DEFAULT 1, game_max_bet INTEGER NOT NULL DEFAULT 1000,
  max_cast INTEGER NOT NULL DEFAULT 5, max_favorites INTEGER NOT NULL DEFAULT 5, archived_favorites INTEGER NOT NULL DEFAULT 0,
  character_refill_cap INTEGER NOT NULL DEFAULT 1000, game_character_talk INTEGER NOT NULL DEFAULT 1, game_summary_rounds INTEGER NOT NULL DEFAULT 5, blackjack_enabled INTEGER NOT NULL DEFAULT 1,
- game_talk_daily_limit INTEGER NOT NULL DEFAULT 100, blackjack_rules TEXT NOT NULL DEFAULT '', item_hold_cap INTEGER NOT NULL DEFAULT 10
+ game_talk_daily_limit INTEGER NOT NULL DEFAULT 100, blackjack_rules TEXT NOT NULL DEFAULT '', item_hold_cap INTEGER NOT NULL DEFAULT 10,
+ language TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS currency_daily (
  guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, last_day TEXT NOT NULL, streak INTEGER NOT NULL,
@@ -580,7 +581,7 @@ class AdminStore:
             'lore': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0'},
             'lorebook_entries': {'entry_key': "TEXT NOT NULL DEFAULT ''", 'revision': 'INTEGER NOT NULL DEFAULT 0', 'pinned': 'INTEGER NOT NULL DEFAULT 0', 'source_message_id': 'INTEGER', 'promoted_from': 'INTEGER'},
             'characters': {'avatar_manual': 'INTEGER NOT NULL DEFAULT 0'},
-            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0', 'currency_name': "TEXT NOT NULL DEFAULT ''", 'daily_amount': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_bonus': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_days': 'INTEGER NOT NULL DEFAULT 7', 'game_min_bet': 'INTEGER NOT NULL DEFAULT 1', 'game_max_bet': 'INTEGER NOT NULL DEFAULT 1000', 'max_cast': 'INTEGER NOT NULL DEFAULT 5', 'max_favorites': 'INTEGER NOT NULL DEFAULT 5', 'archived_favorites': 'INTEGER NOT NULL DEFAULT 0', 'character_refill_cap': 'INTEGER NOT NULL DEFAULT 1000', 'game_character_talk': 'INTEGER NOT NULL DEFAULT 1', 'game_talk_daily_limit': 'INTEGER NOT NULL DEFAULT 100', 'game_summary_rounds': 'INTEGER NOT NULL DEFAULT 5', 'blackjack_enabled': 'INTEGER NOT NULL DEFAULT 1', 'blackjack_rules': "TEXT NOT NULL DEFAULT ''", 'item_hold_cap': 'INTEGER NOT NULL DEFAULT 10'},
+            'guild_settings': {'usage_footer': 'INTEGER NOT NULL DEFAULT 1', 'timezone': "TEXT NOT NULL DEFAULT ''", 'turn_log_enabled': 'INTEGER NOT NULL DEFAULT 0', 'turn_log_days': 'INTEGER NOT NULL DEFAULT 14', 'catchup_anywhere': 'INTEGER NOT NULL DEFAULT 0', 'currency_name': "TEXT NOT NULL DEFAULT ''", 'daily_amount': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_bonus': 'INTEGER NOT NULL DEFAULT 0', 'daily_streak_days': 'INTEGER NOT NULL DEFAULT 7', 'game_min_bet': 'INTEGER NOT NULL DEFAULT 1', 'game_max_bet': 'INTEGER NOT NULL DEFAULT 1000', 'max_cast': 'INTEGER NOT NULL DEFAULT 5', 'max_favorites': 'INTEGER NOT NULL DEFAULT 5', 'archived_favorites': 'INTEGER NOT NULL DEFAULT 0', 'character_refill_cap': 'INTEGER NOT NULL DEFAULT 1000', 'game_character_talk': 'INTEGER NOT NULL DEFAULT 1', 'game_talk_daily_limit': 'INTEGER NOT NULL DEFAULT 100', 'game_summary_rounds': 'INTEGER NOT NULL DEFAULT 5', 'blackjack_enabled': 'INTEGER NOT NULL DEFAULT 1', 'blackjack_rules': "TEXT NOT NULL DEFAULT ''", 'item_hold_cap': 'INTEGER NOT NULL DEFAULT 10', 'language': "TEXT NOT NULL DEFAULT ''"},
             'game_rounds': {'rules_json': "TEXT NOT NULL DEFAULT ''", 'button': 'INTEGER'},
             'game_tables': {'thread_id': 'INTEGER', 'board_message_id': 'INTEGER', 'turn_message_id': 'INTEGER'},
             'game_seats': {'brought_by': 'INTEGER', 'insurance': 'INTEGER NOT NULL DEFAULT 0', 'stack': 'INTEGER NOT NULL DEFAULT 0 CHECK(stack>=0)'},
@@ -1101,6 +1102,19 @@ class AdminStore:
     def set_usage_footer(self, guild_id, enabled):
         with self.write_admin():
             self.db.execute('INSERT INTO guild_settings(guild_id,usage_footer) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET usage_footer=excluded.usage_footer', (guild_id, int(bool(enabled))))
+
+    def server_language(self, guild_id):
+        row = self.one('SELECT language FROM guild_settings WHERE guild_id=?', (guild_id,))
+        return row['language'] if row else ''
+
+    def set_server_language(self, guild_id, language):
+        """'' follows Discord; otherwise a locale the application has a catalog for."""
+        value = negotiate([language], available_locales(), None) if language else ''
+        if language and value is None:
+            raise UserError(codes.SERVER_LANGUAGE_UNKNOWN, language=language)
+        with self.write_admin():
+            self.db.execute('INSERT INTO guild_settings(guild_id,language) VALUES(?,?) ON CONFLICT(guild_id) DO UPDATE SET language=excluded.language', (guild_id, value))
+        return value
 
     def catchup_anywhere(self, guild_id):
         row = self.one('SELECT catchup_anywhere FROM guild_settings WHERE guild_id=?', (guild_id,))

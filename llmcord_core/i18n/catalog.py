@@ -55,6 +55,12 @@ class Catalog:
 
 
 def available_locales(root=None) -> tuple[str, ...]:
+    """Cached per (root, LLMCORD_LOCALES, LLMCORD_I18N_PSEUDO); clear_cache() drops it."""
+    return _available_locales(root, os.environ.get('LLMCORD_LOCALES', ''), os.environ.get('LLMCORD_I18N_PSEUDO') == '1')
+
+
+@functools.lru_cache(maxsize=None)
+def _available_locales(root, wanted, pseudo) -> tuple[str, ...]:
     base = Path(root) if root is not None else LOCALES_DIR
     found = []
     if base.is_dir():
@@ -64,12 +70,12 @@ def available_locales(root=None) -> tuple[str, ...]:
                 continue
             if any((path / 'LC_MESSAGES' / f'{d}.po').is_file() for d in DOMAINS):
                 found.append(name)
-    wanted = os.environ.get('LLMCORD_LOCALES', '').strip()
+    wanted = wanted.strip()
     if wanted:
         keep = {normalize(x) for x in wanted.split(',') if x.strip()}
         found = [x for x in found if x in keep]
     result = ['en', *found]
-    if os.environ.get('LLMCORD_I18N_PSEUDO') == '1':
+    if pseudo:
         result.append(PSEUDO_LOCALE)
     return tuple(result)
 
@@ -145,3 +151,4 @@ def _load_catalog(locale, root=None) -> Catalog:
 
 def clear_cache() -> None:
     _load_catalog.cache_clear()
+    _available_locales.cache_clear()

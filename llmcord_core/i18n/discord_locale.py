@@ -47,27 +47,49 @@ class LlmcordTranslator(app_commands.Translator):
         return text
 
 
+_server_language_source = None
+_warned_guilds: set[int] = set()
+
+
+def set_server_language_source(fn) -> None:
+    """Register fn(guild_id) -> stored server language for channel_t; None clears it."""
+    global _server_language_source
+    _server_language_source = fn
+    _warned_guilds.clear()
+
+
 def invoker_locale(interaction, available=None) -> str:
-    return negotiate([interaction.locale], available or available_locales())
+    locale = getattr(interaction, 'locale', None)
+    if locale is not None and not isinstance(locale, str):
+        locale = getattr(locale, 'value', None) or str(locale)
+    return negotiate([locale], available or available_locales())
 
 
 def invoker_t(interaction):
-    """Translator for a message only the invoking user sees (ephemeral replies, modals, autocomplete).
-
-    English until FEAT-44, which returns Translator(invoker_locale(interaction)).
-    """
-    from . import english
-    return english()
+    """Translator for a message only the invoking user sees (ephemeral replies, modals, autocomplete)."""
+    from . import Translator
+    return Translator(invoker_locale(interaction))
 
 
 def channel_t(guild):
-    """Translator for a message the channel sees.
+    """Translator for a message the channel sees: server language, then a community guild's preferred locale, then en.
 
     Resolve it at each render; never capture it in a timer or closure.
-    English until FEAT-44, which uses the server bot language.
     """
-    from . import english
-    return english()
+    from . import Translator, english
+    if guild is None:
+        return english()
+    language = ''
+    source = _server_language_source
+    guild_id = getattr(guild, 'id', None)
+    if source is not None and guild_id is not None:
+        try:
+            language = source(guild_id) or ''
+        except Exception as error:
+            if guild_id not in _warned_guilds:
+                _warned_guilds.add(guild_id)
+                log.warning('cannot read the server language of guild %s: %s', guild_id, type(error).__name__)
+    return Translator(channel_locale(language, guild))
 
 
 def channel_locale(server_language, guild, available=None) -> str:

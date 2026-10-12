@@ -152,18 +152,16 @@ class LocaleHelperTests(FixtureCase):
 class PhaseOneLocaleTests(unittest.TestCase):
     """FEAT-43: invoker_t and channel_t are English stubs that ignore their argument."""
 
-    def test_invoker_t_is_english_until_feat44(self):
-        """FEAT-44 changes this: invoker_t will follow the interaction locale, so update this test then."""
+    def test_invoker_t_follows_the_interaction_locale(self):
+        """FEAT-44: invoker_t follows the interaction locale; an object without one gets en."""
         fake = SimpleNamespace(locale=discord.Locale.korean)
-        self.assertIs(dl.invoker_t(fake), i18n.english())
-        self.assertEqual(dl.invoker_t(fake).locale, "en")
-        self.assertIs(dl.invoker_t(object()), i18n.english())
+        self.assertEqual(dl.invoker_t(fake).locale, "ko")
+        self.assertEqual(dl.invoker_t(object()).locale, "en")
 
-    def test_channel_t_is_english_until_feat44(self):
-        """FEAT-44 changes this: channel_t will follow the server bot language, so update this test then."""
+    def test_channel_t_follows_a_community_guild_locale(self):
+        """FEAT-44: with no server language, channel_t follows a COMMUNITY guild's preferred locale; no guild gets en."""
         guild = SimpleNamespace(features=["COMMUNITY"], preferred_locale=discord.Locale.korean)
-        self.assertIs(dl.channel_t(guild), i18n.english())
-        self.assertEqual(dl.channel_t(guild).locale, "en")
+        self.assertEqual(dl.channel_t(guild).locale, "ko")
         self.assertIs(dl.channel_t(None), i18n.english())
 
 
