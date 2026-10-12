@@ -1,6 +1,7 @@
 """Translation at the edge: gettext catalogs keyed by the English text, errors as codes (FEAT-43, D39)."""
 from __future__ import annotations
 
+import functools
 import logging
 import re
 from typing import NamedTuple
@@ -12,7 +13,7 @@ from .negotiate import DEFAULT_LOCALE, PSEUDO_LOCALE, display_name, negotiate, n
 __all__ = [
     'DEFAULT_LOCALE', 'PSEUDO_LOCALE', 'DOMAINS', 'LOCALES_DIR', 'normalize', 'negotiate', 'parse_accept_language',
     'display_name', 'available_locales', 'load_catalog', 'clear_cache', 'MessageFormatError',
-    'Msg', 'N_', 'NP_', 'ErrorCode', 'E_', 'UserError', 'Translator', 'pseudo',
+    'Msg', 'N_', 'NP_', 'ErrorCode', 'E_', 'UserError', 'Translator', 'pseudo', 'english',
 ]
 
 log = logging.getLogger('llmcord_core.i18n')
@@ -56,9 +57,20 @@ def E_(code, msgid, /) -> ErrorCode:
 
 
 class UserError(ValueError):
-    """An error meant for the user, raised as a code; str() is the English message."""
+    """An error meant for the user, raised as a code; str() is the English message.
+
+    Legacy form: UserError('plain text') has code None and no params, so error classes can
+    subclass it before every raise site is converted; Translator.error returns str(err) for it.
+    """
 
     def __init__(self, code, /, **params):
+        if isinstance(code, str):
+            if params:
+                raise TypeError('params are not allowed with a plain-text message')
+            super().__init__(str(code))
+            self.code = None
+            self.params = {}
+            return
         try:
             text = format_message(code.msgid, params)
         except MessageFormatError:
@@ -68,11 +80,19 @@ class UserError(ValueError):
         self.params = params
 
     def __reduce__(self):
+        if self.code is None:
+            return (_rebuild_user_error, (type(self), str(self.args[0]), {}))
         return (_rebuild_user_error, (type(self), self.code, self.params))
 
 
 def _rebuild_user_error(cls, code, params):
     return cls(code, **params)
+
+
+@functools.cache
+def english() -> Translator:
+    """The English translator. Phase 1 code that has no audience yet uses it; it never changes language."""
+    return Translator(DEFAULT_LOCALE)
 
 
 def pseudo(text: str) -> str:
@@ -128,7 +148,7 @@ class Translator:
         return self._render(context, str(singular), plural, count, params)
 
     def error(self, err) -> str:
-        if isinstance(err, UserError):
+        if isinstance(err, UserError) and err.code is not None:
             try:
                 return self(err.code.msgid, **err.params)
             except MessageFormatError:

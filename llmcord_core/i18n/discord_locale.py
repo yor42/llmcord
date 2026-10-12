@@ -51,6 +51,25 @@ def invoker_locale(interaction, available=None) -> str:
     return negotiate([interaction.locale], available or available_locales())
 
 
+def invoker_t(interaction):
+    """Translator for a message only the invoking user sees (ephemeral replies, modals, autocomplete).
+
+    English until FEAT-44, which returns Translator(invoker_locale(interaction)).
+    """
+    from . import english
+    return english()
+
+
+def channel_t(guild):
+    """Translator for a message the channel sees.
+
+    Resolve it at each render; never capture it in a timer or closure.
+    English until FEAT-44, which uses the server bot language.
+    """
+    from . import english
+    return english()
+
+
 def channel_locale(server_language, guild, available=None) -> str:
     available = available or available_locales()
     chosen = normalize(server_language)

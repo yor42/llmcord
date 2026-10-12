@@ -352,6 +352,68 @@ Phase 0 landed on 2026-10-12. It went through a multi-lens review (security, con
 - The tooling follows symlinks under `locales/`.
 - A baseline that is valid JSON of the wrong shape (for example `{"files": []}`) makes `check` and `ratchet --update` stop with a traceback instead of the "unreadable" message. They still exit non-zero and leave the file unchanged.
 
+### 6.2 Phase 1 conventions (MNT-66..74)
+
+Written when Phase 1 started (2026-10-12, decision G). Every batch follows these rules, so batches that run in parallel come out alike.
+
+**Where `t` comes from.** In Phase 1 every translator is English. Phase 2 changes only the resolvers below, not the call sites. Each call site states its audience now, while someone is reading it.
+
+| Code | Gets `t` from | Phase 2 (FEAT-44/45) makes it |
+| --- | --- | --- |
+| Dashboard builders and their handlers | `t = web_locale.current()` at the top of the function. Closures inside a builder may keep that `t`: one client never changes language without a reload (decision E). | The viewer's language, once the page handlers call `bind_client` |
+| HTTP routes and auth (`web.py`, `auth.py`) | `t = i18n.english()` with `# i18n: FEAT-45 request locale` | `request_locale(...)` |
+| Discord text only the invoker sees: ephemeral replies, modals, autocomplete | `t = discord_locale.invoker_t(interaction)` | `interaction.locale` |
+| Discord text the channel sees: public messages, edits of public messages, timers, `on_message` paths | `t = discord_locale.channel_t(guild)` in the function that has the guild (`interaction.guild`, `channel.guild`, `message.guild`; `None` is allowed). Resolve it at each render, and never keep it in a timer, a closure or an object that outlives the render. | The server bot language |
+| A renderer or helper that builds text for its caller | A keyword-only parameter, `def render_lobby(table, *, t=None): t = t or i18n.english()`. Production callers always pass `t=`. The default exists only so existing tests that call the renderer stay unchanged. | Callers pass the audience's `t` |
+| Stores, engines, `items/`, `games/`, `spoken/` (no domain) | Never. They raise `UserError(codes.X, **params)` or return structured values. Shared words go in `i18n/terms.py`. | Unchanged |
+
+**Strings.**
+- **The msgid is the exact current English text**, with named placeholders (`{world}`). Literal braces are written `{{` and `}}`.
+- **f-strings:** every f-string expression becomes a named parameter computed before the call: `t('Linked {world} to {hub}.', world=w.name, hub=h.name)`. Keep format specs such as `{n:,}`. In Phase 1, do not swap in `t.number` or `t.list` unless the English output is identical. For example, Babel's English list adds "and", so `', '.join(names)` stays as it is.
+- **Fragments and possessives become whole messages**, one per case. For example, `"Table closes" + (" soon" if x else "")` becomes `t('Table closes soon.') if x else t('Table closes.')`, with the exact old text in each branch.
+- **Plurals:** use `t.n(singular, plural, n, **params)` only where the old English used the plural form for every count except 1, which is CLDR English. Otherwise keep the old branch and call `t(...)` in each branch.
+- **Short or ambiguous text** gets a context: `t.p('tab', 'Lore')`. Component text needs a `button…`, `select…` or `modal…` context (`t.p('button.holdem', 'Call')`) so `check` enforces Discord's limits.
+- **Module-level text** becomes `N_('…')` or `NP_('context', '…')` constants, rendered with `t(CONST)` where they are shown. A constant shown without `t()` is a bug, even though English looks the same.
+- **Translator notes:** put a `# i18n: …` comment directly above a call whose placeholder meaning is not obvious, for example `# i18n: {claim} is like "two 7s"`.
+- **Name clashes:** in a function that uses the translator, no other variable may be named `t`. Rename it, for example `for table in tables`.
+- **Never translated:** model-facing prompt text, log lines, `custom_id`s, identifiers and stored values, anything a person typed, character lines, Discord `<t:…>` timestamps, and the reference ID in error replies.
+
+**Errors.**
+- **Defining a code:** `NAME = E_('area.name', 'English message with {param}.')` in `i18n/codes.py`, in the batch's own section. Each batch appends only to its own section, so parallel batches merge cleanly.
+- **Code names:** IDs are lowercase and dotted (`currency.name_changed`). They are stable, so logs and tests can cite them.
+- **Converting a raise:** a raise whose text can reach a person becomes `raise UserError(codes.NAME, **params)`.
+- **Project error classes** (`ConflictError`, `CurrencyError`, `GameError`, `ItemError`, `RecipeError`) become subclasses of `UserError`. `UserError` accepts a legacy plain message during Phase 1, so unconverted raises such as `raise ConflictError('…')` keep working. Converted raises pass a code: `raise ConflictError(codes.NAME, **params)`. `except ConflictError` and `except ValueError` are unaffected, and `str(e)` and `e.args` stay the same.
+- **Internal diagnostics stay English** and are not converted: impossible states, programming errors, and messages only logs see. The batch report lists what it left and why.
+- **Showing an error:** where a surface shows `str(err)` for a `UserError`, it switches to `t.error(err)` in the batch that owns that surface file.
+
+**Each batch.**
+- **Isolation:** it runs in its own git worktree under `.worktrees/` on branch `i18n/<batch>`. It edits only its own files, the generated catalogs and the ratchet baseline.
+- **No existing test is edited.** A failing test means English changed. Fix the code, or stop and report. New tests are allowed.
+- **Before review**, run, in the worktree:
+  1. `scripts/i18n.py extract`;
+  2. `scripts/i18n.py update`;
+  3. `scripts/i18n.py ratchet --update`, where counts only go down;
+  4. `scripts/i18n.py check`;
+  5. `scripts/verify.sh`, plus `--browser` for dashboard and web batches.
+- **Review:** a reviewer checks that every new msgid equals the old English byte for byte. It also checks the audience of each `t`, and the internal-diagnostic exceptions.
+- **Merge:** the orchestrator merges each finished batch into the working branch. Conflicts in generated files (`locales/templates/*.pot`, `locales/ko/LC_MESSAGES/*.po`, `scripts/i18n_ratchet.json`) are resolved by regenerating them on the merged tree, never by hand. Then `scripts/verify.sh` runs again.
+
+**Order.** Two batches run at a time, and two batches that edit the same source file never run together:
+
+| Batch | Can start after | Shares files with |
+| --- | --- | --- |
+| 1a MNT-66 | prep | 1b (`codes.py` sections only) |
+| 1d MNT-69 | prep | 1c, 1e, 1f (Discord modules) |
+| 1b MNT-67 | 1a, which sets the error-code pattern | 1a |
+| 1c MNT-68 | 1d | 1f, 1i (engine callers in `games_*_discord.py`, `games_ui.py`) |
+| 1e MNT-70 | 1d | 1d |
+| 1g MNT-72 | prep | 1h (`dashboard.py`) |
+| 1h MNT-73 | 1g | 1g |
+| 1f MNT-71 | 1c and 1d | 1c, 1d |
+| 1i MNT-74 | 1c | 1c |
+
+**End of Phase 1.** The ratchet's `ui` counts are zero except for reviewed exceptions. The `raise` counts that remain are internal diagnostics, each listed in its batch report. Section 7 originally said the allowlist "must be empty". That predates the review fix that counts every exception class, so internal errors now count too.
+
 ## 7. Quality gates and automation
 
 | Check | Where | Catches |

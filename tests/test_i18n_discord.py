@@ -10,6 +10,7 @@ from babel.messages.catalog import Catalog
 from babel.messages.pofile import write_po
 from discord import app_commands
 
+from llmcord_core import i18n
 from llmcord_core.i18n import clear_cache
 from llmcord_core.i18n import discord_locale as dl
 from llmcord_core.i18n.discord_locale import C_, LlmcordTranslator, channel_locale, invoker_locale
@@ -146,6 +147,24 @@ class LocaleHelperTests(FixtureCase):
         self.assertEqual(channel_locale(None, plain, avail), "en")
         self.assertEqual(channel_locale(None, None, avail), "en")
         self.assertEqual(channel_locale("", self.guild(["COMMUNITY"], discord.Locale.japanese), avail), "en")
+
+
+class PhaseOneLocaleTests(unittest.TestCase):
+    """FEAT-43: invoker_t and channel_t are English stubs that ignore their argument."""
+
+    def test_invoker_t_is_english_until_feat44(self):
+        """FEAT-44 changes this: invoker_t will follow the interaction locale, so update this test then."""
+        fake = SimpleNamespace(locale=discord.Locale.korean)
+        self.assertIs(dl.invoker_t(fake), i18n.english())
+        self.assertEqual(dl.invoker_t(fake).locale, "en")
+        self.assertIs(dl.invoker_t(object()), i18n.english())
+
+    def test_channel_t_is_english_until_feat44(self):
+        """FEAT-44 changes this: channel_t will follow the server bot language, so update this test then."""
+        guild = SimpleNamespace(features=["COMMUNITY"], preferred_locale=discord.Locale.korean)
+        self.assertIs(dl.channel_t(guild), i18n.english())
+        self.assertEqual(dl.channel_t(guild).locale, "en")
+        self.assertIs(dl.channel_t(None), i18n.english())
 
 
 if __name__ == "__main__":

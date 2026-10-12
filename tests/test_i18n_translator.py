@@ -29,6 +29,10 @@ REPO = Path(__file__).resolve().parent.parent
 LONG = NP_('menu', 'Open')
 
 
+class PickledConflict(UserError):
+    """Module level so pickle can find it."""
+
+
 class TranslatorCase(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -229,6 +233,67 @@ class ErrorTests(TranslatorCase):
         for bad in ('nodot', 'A.b', '.a.b', 'a.', 'a..b', '1a.b', 'a.B', 'a b.c', ''):
             with self.assertRaises(ValueError, msg=bad):
                 E_(bad, 'x')
+
+
+class EnglishTranslatorTests(unittest.TestCase):
+    """FEAT-43: english() is the shared Phase 1 translator."""
+
+    def test_english_is_en_translator(self):
+        tr = i18n.english()
+        self.assertIsInstance(tr, Translator)
+        self.assertEqual(tr.locale, 'en')
+
+    def test_english_is_shared(self):
+        self.assertIs(i18n.english(), i18n.english())
+
+    def test_english_renders_params(self):
+        self.assertEqual(i18n.english()('Hello {name}', name='x'), 'Hello x')
+
+
+class Conflict(UserError):
+    pass
+
+
+class LegacyUserErrorTests(TranslatorCase):
+    """FEAT-43: UserError('plain text') is the legacy form so error classes can subclass it before conversion."""
+
+    def test_plain_text_form(self):
+        err = UserError('Plain text')
+        self.assertEqual(str(err), 'Plain text')
+        self.assertEqual(err.args, ('Plain text',))
+        self.assertIsNone(err.code)
+        self.assertEqual(err.params, {})
+        self.assertIsInstance(err, ValueError)
+
+    def test_plain_text_rejects_params(self):
+        with self.assertRaises(TypeError):
+            UserError('x', a=1)
+
+    def test_subclass_works_in_both_forms(self):
+        for args, kwargs in ((('text',), {}), ((E_('test.hello', 'Hello {name}'),), {'name': 'Luna'})):
+            with self.subTest(args=args):
+                for catch in (Conflict, ValueError):
+                    with self.assertRaises(catch):
+                        raise Conflict(*args, **kwargs)
+        self.assertEqual(str(Conflict('text')), 'text')
+        self.assertEqual(str(Conflict(E_('test.hello', 'Hello {name}'), name='Luna')), 'Hello Luna')
+
+    def test_legacy_form_survives_copy_and_pickle(self):
+        for cls in (UserError, PickledConflict):
+            err = cls('Plain text')
+            clones = [copy.copy(err), copy.deepcopy(err), pickle.loads(pickle.dumps(err))]
+            for clone in clones:
+                with self.subTest(cls=cls.__name__):
+                    self.assertIs(type(clone), cls)
+                    self.assertEqual(clone.args, ('Plain text',))
+                    self.assertIsNone(clone.code)
+                    self.assertEqual(clone.params, {})
+
+    def test_translator_error_returns_plain_text(self):
+        for tr in (self.en, self.ko):
+            with self.subTest(locale=tr.locale), self.assertNoLogs(LOGGER, 'WARNING'):
+                self.assertEqual(tr.error(UserError('Plain text')), 'Plain text')
+                self.assertEqual(tr.error(Conflict('Plain')), 'Plain')
 
 
 class MsgTests(unittest.TestCase):

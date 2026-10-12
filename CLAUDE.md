@@ -49,6 +49,9 @@ The bot reads DB state fresh each turn, so dashboard edits apply on the next tur
 - **Model snapshot and key pins:** a turn resolves model profiles once (`BackendResolver.pin`), and the memory work it starts uses the same snapshot. A dashboard profile's `${NAME}_API_KEY` is sent only to a host pinned for that key (`check_key_pin`, at save and again before every call); key values are never stored, shown, audited or logged.
 - **Admin writes:** use `store.write_admin()` + revision checks (`ConflictError`), never blind overwrite.
 - **Schema:** bump `user_version` with a backup-before-upgrade migration; never edit existing migrations destructively.
+- **Translate at the edge (i18n, D39):** stores, game engines and model code never produce translated text. They raise `UserError` codes (`i18n/codes.py`) or return structured results. Only code that sends a Discord message or builds a dashboard element turns them into words, through an explicitly obtained `Translator`, never a context variable.
+- **The audience decides the language:** a Discord message only the invoker sees uses the invoker's locale (`invoker_t(interaction)`). A message the channel sees uses the channel's (`channel_t(guild)`), resolved at each render and never captured in a timer or closure. Dashboard text uses the viewer's (`web_locale.current()`). Character lines and anything people typed are never translated.
+- **English text is the message id; tests run in `en`:** wrapping a string must never change English output. A Phase 1 change that needs an existing test edited has changed English, so it stops and is reported. Rules: `docs/engineering/i18n-plan.md` sections 6.1 and 6.2.
 
 ## Care areas
 - `dashboard.py` monkey-patches NiceGUI socket handlers for auth — changes there affect every live event.
