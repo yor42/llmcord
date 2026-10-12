@@ -1652,3 +1652,7 @@ msgstr ""
 msgid "Preview expired; upload again"
 msgstr ""
 
+#: llmcord_core/i18n/codes.py
+msgid "Enter a member ID (digits only) or paste a mention."
+msgstr ""
+

@@ -15,10 +15,6 @@
     "llmcord_core/backend.py": {
       "raise": 6
     },
-    "llmcord_core/currency_ui.py": {
-      "raise": 1,
-      "ui": 44
-    },
     "llmcord_core/dashboard.py": {
       "ui": 1
     },
@@ -46,18 +42,11 @@
     "llmcord_core/games/playstyle.py": {
       "raise": 3
     },
-    "llmcord_core/games_ui.py": {
-      "ui": 91
-    },
     "llmcord_core/icons.py": {
-      "raise": 1,
-      "ui": 1
+      "raise": 1
     },
     "llmcord_core/items/catalog.py": {
       "raise": 2
-    },
-    "llmcord_core/lore_workspace.py": {
-      "ui": 33
     },
     "llmcord_core/models.py": {
       "raise": 7
@@ -66,22 +55,13 @@
       "raise": 3
     },
     "llmcord_core/presets_ui.py": {
-      "raise": 1,
-      "ui": 49
+      "ui": 2
     },
     "llmcord_core/prices.py": {
       "raise": 7
     },
     "llmcord_core/savebar.py": {
-      "raise": 2,
-      "ui": 3
-    },
-    "llmcord_core/scene_ui.py": {
-      "raise": 1,
-      "ui": 13
-    },
-    "llmcord_core/shop_ui.py": {
-      "ui": 21
+      "raise": 2
     },
     "llmcord_core/spoken/head.py": {
       "raise": 12

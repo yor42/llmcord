@@ -6,11 +6,13 @@ import logging
 import types
 
 from .admin_store import ConflictError
+from .i18n import NP_, web_locale
 
 logger = logging.getLogger(__name__)
 
-_SAVE_LABEL = 'Save changes'
-_RESET_LABEL = 'Reset'
+_SAVE_LABEL = NP_('button', 'Save changes')
+_RESET_LABEL = NP_('button', 'Reset')
+_RELOAD_LABEL = NP_('button', 'Reload')
 _LEAVE_WARNING = 'window.onbeforeunload = (e) => { e.preventDefault(); e.returnValue = ""; return ""; };'
 
 
@@ -21,22 +23,24 @@ def _same(a, b):
 class SaveBar:
     def __init__(self, ctx):
         from nicegui import ui
+        t = web_locale.current()
         self.ctx, self.editors, self.active, self.saving = ctx, [], None, False
-        self.bar = ui.element('div').classes('ll-savebar').props('role=region aria-label="Unsaved changes"')
+        self.bar = ui.element('div').classes('ll-savebar').props('role=region')
+        self.bar.props['aria-label'] = t('Unsaved changes')
         with self.bar:
             self.text = ui.label('').classes('ll-savebar-text').props('aria-live=polite')
             with ui.element('div').classes('ll-savebar-actions'):
-                self.reset_button = ui.button(_RESET_LABEL, on_click=self._reset_clicked).props('flat no-caps').classes('ll-savebar-reset')
-                self.save_button = ui.button(_SAVE_LABEL, on_click=self.save).props('no-caps')
+                self.reset_button = ui.button(t(_RESET_LABEL), on_click=self._reset_clicked).props('flat no-caps').classes('ll-savebar-reset')
+                self.save_button = ui.button(t(_SAVE_LABEL), on_click=self.save).props('no-caps')
         self.bar.set_visibility(False)
 
     def track(self, name, controls, save=None, action=None, detail=None, then=None, success=None, on_reset=None,
-              dirty=None, reset=None, save_label=_SAVE_LABEL, parts=None, reload=None, enabled=None, confirm=None):
+              dirty=None, reset=None, save_label=None, parts=None, reload=None, enabled=None, confirm=None):
         """Register an editor: controls maps each tracked control to its saved value; save runs guarded/audited on Save.
 
         dirty: optional callable replacing the per-control comparison (an exception counts as dirty).
         reset: optional callable used by Reset instead of restoring control values (on_reset still runs after).
-        save_label: the bar's Save button text while this editor is active.
+        save_label: the bar's Save button text while this editor is active (translated by the caller; default 'Save changes').
         reload: optional async callable used by Reload after a save conflict (default: refresh the current tab).
         enabled: optional callable(control) -> bool; settle() re-enables a control of this editor only when it returns true (otherwise it stays disabled).
         confirm: optional callable returning None, or (title, lines, button_label) to ask before Save writes; Cancel leaves the bar dirty (not used with parts).
@@ -66,7 +70,7 @@ class SaveBar:
         for part in parts:
             controls.update(part.controls)
         editor = types.SimpleNamespace(name=name, controls=[], save=save, action=action, detail=detail, then=then,
-                                       success=success, on_reset=on_reset, dirty=dirty, reset=reset, save_label=save_label,
+                                       success=success, on_reset=on_reset, dirty=dirty, reset=reset, save_label=save_label or web_locale.current()(_SAVE_LABEL),
                                        parts=[], reload=reload, stale=False, enabled=enabled, confirm=confirm)
         self.editors.append(editor)
         self.retrack(editor, controls)
@@ -99,12 +103,13 @@ class SaveBar:
         return any(not _same(control.value, saved) for control, saved in editor.controls)
 
     def check(self, editor):
+        t = web_locale.current()
         if self.active is not None and self.active is not editor:
             return
         if self.differs(editor):
             if self.active is None:
                 self.active = editor
-                self.text.set_text(f'{editor.name} has unsaved changes.')
+                self.text.set_text(t('{name} has unsaved changes.', name=editor.name))
                 self.save_button.set_text(editor.save_label)
                 self.bar.set_visibility(True)
                 for other in self.editors:
@@ -117,10 +122,11 @@ class SaveBar:
 
     def settle(self):
         """Hide the bar and re-enable every tracked field its editor's `enabled` predicate allows."""
+        t = web_locale.current()
         was_active, self.active = self.active, None
         self.bar.set_visibility(False)
-        self.save_button.set_text(_SAVE_LABEL)
-        self.reset_button.set_text(_RESET_LABEL)
+        self.save_button.set_text(t(_SAVE_LABEL))
+        self.reset_button.set_text(t(_RESET_LABEL))
         for editor in self.editors:
             editor.stale = False
             for control, _ in editor.controls:
@@ -141,7 +147,8 @@ class SaveBar:
         if self.active is None:
             return False
         from nicegui import ui
-        ui.notify(f'Save or reset your changes to {self.active.name} first.', type='negative', timeout=8000)
+        t = web_locale.current()
+        ui.notify(t('Save or reset your changes to {name} first.', name=self.active.name), type='negative', timeout=8000)
         self.ctx.selector.client.run_javascript(
             f'const b = document.getElementById({self.bar.html_id!r}); if (b) {{ b.classList.add("ll-savebar-alert"); setTimeout(() => b.classList.remove("ll-savebar-alert"), 1000); }}')
         return True
@@ -174,12 +181,14 @@ class SaveBar:
         await (editor.reload() if editor.reload else self.ctx.refresh(self.ctx.selector.value))
 
     def _mark_stale(self, editor):
+        t = web_locale.current()
         editor.stale = True
-        self.text.set_text(f'{editor.name} was changed somewhere else.')
-        self.reset_button.set_text('Reload')
+        self.text.set_text(t('{name} was changed somewhere else.', name=editor.name))
+        self.reset_button.set_text(t(_RELOAD_LABEL))
 
     async def save(self):
         from nicegui import ui
+        t = web_locale.current()
         editor = self.active
         if editor is None or self.saving:
             return
@@ -194,7 +203,7 @@ class SaveBar:
                     dialog.close()
                     await self._commit(editor)
                 with ui.element('div').classes('ll-form-row justify-end'):
-                    ui.button('Cancel', on_click=dialog.close).props('flat')
+                    ui.button(t.p('button', 'Cancel'), on_click=dialog.close).props('flat')
                     ui.button(button_label, on_click=confirmed, color='negative')
             dialog.on('hide', dialog.delete)
             dialog.open()
@@ -203,6 +212,7 @@ class SaveBar:
 
     async def _commit(self, editor):
         from nicegui import ui
+        t = web_locale.current()
         if self.active is not editor or self.saving:
             return
         self.saving = True
@@ -226,8 +236,8 @@ class SaveBar:
             self.settle()
         elif editor.stale:
             editor.stale = False
-            self.text.set_text(f'{editor.name} has unsaved changes.')
-            self.reset_button.set_text(_RESET_LABEL)
+            self.text.set_text(t('{name} has unsaved changes.', name=editor.name))
+            self.reset_button.set_text(t(_RESET_LABEL))
         if editor.then:
             followup = editor.then(result)
             if inspect.isawaitable(followup):
@@ -238,6 +248,7 @@ class SaveBar:
         ui.notify(message, type='warning', timeout=8000)
 
     async def _save_parts(self, editor):
+        t = web_locale.current()
         saved = {id(control): value for control, value in editor.controls}
         results = []
         for index, part in enumerate(editor.parts):
@@ -250,7 +261,7 @@ class SaveBar:
                 later = [p for p in editor.parts[index + 1:]
                          if any(not _same(control.value, saved[id(control)]) for control in p.controls)]
                 if later:
-                    self._warn('Your other changes were not saved. They are still pending.')
+                    self._warn(t('Your other changes were not saved. They are still pending.'))
                 return False, None, getattr(outcome, 'error', None)
             results.append(result)
             if part.then:  # per-part follow-up, run as soon as this part saved even if a later one fails
@@ -261,7 +272,7 @@ class SaveBar:
                 except Exception:
                     logger.exception('Save bar follow-up failed for %s', editor.name)
                     from nicegui import ui
-                    ui.notify('Saved, but the view could not refresh. Reload the page.', type='negative', timeout=8000)
+                    ui.notify(t('Saved, but the view could not refresh. Reload the page.'), type='negative', timeout=8000)
             editor.controls = [(control, sent[control] if control in sent else value) for control, value in editor.controls]
             saved.update({id(control): value for control, value in sent.items()})
         return True, results, None

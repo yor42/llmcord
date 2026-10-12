@@ -1,6 +1,8 @@
 export default {
   template: `<div role="status" aria-live="polite" class="text-sm text-slate-400">{{ message }}</div>`,
-  props: { rootId: String, listIds: Array },
+  props: { rootId: String, listIds: Array,
+    savingText: { type: String, default: "Saving lore changes…" },
+    staleText: { type: String, default: "Change could not be confirmed. Refresh to check your lore." } },
   emits: ["move"],
   data() { return { busy: false, message: "", controllers: [], timer: null, binding: 0,
     dragging: false, point: null, cancelled: false }; },
@@ -26,14 +28,14 @@ export default {
     cancelDrag(event) { if (this.dragging && event.key === "Escape") this.cancelled = true; },
     setBusy(value) {
       this.busy = value;
-      this.message = value ? "Saving lore changes…" : "";
+      this.message = value ? this.savingText : "";
       const root = document.getElementById(this.rootId);
       if (root) { root.inert = value; root.setAttribute("aria-busy", String(value)); }
       this.controllers.forEach(controller => controller.option("disabled", value));
       clearTimeout(this.timer);
       if (value) this.timer = setTimeout(() => {
         this.setBusy(false);
-        this.message = "Change could not be confirmed. Refresh to check your lore.";
+        this.message = this.staleText;
       }, 45000);
     },
     async bindLists() {
