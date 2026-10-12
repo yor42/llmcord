@@ -64,7 +64,7 @@ Run these checks in a private text channel before inviting the bot into a busy s
 6. Reply to an older character line after more messages have arrived. Confirm the new line follows the earlier branch rather than recalling later events. Check a thread separately from its parent channel.
 7. Test `/memory opt_in`, `/memory list`, `/memory forget`, and `/memory opt_out` with a test account. Confirm opt-out removes its saved personal facts.
 8. Restart both services and repeat a reply and `/context` lookup to check SQLite and webhook recovery.
-9. Enable ambient mode only after explicit turns work; verify the two-human-message threshold, cooldown, and silent director behavior.
+9. Enable ambient mode only after explicit turns work; verify the two-human-message threshold and cooldown, that plain chat stays silent, and that naming a character or asking the room gets an answer.
 10. Open all five NiceGUI sections through Tailscale. Test a real card import conflict, a lore move/copy, and a large-book search/page change. Sign out while another console tab is open and verify it cannot mutate data.
 11. Configure a private avatar asset channel, upload/publish two emotions, and verify per-message avatars in a channel and concurrent threads. Remove a backing asset, restart the bot, verify default fallback, and repair it from the console.
 12. Import a SillyTavern Chat Completion preset, select its order profile, resolve compatibility mappings, save/activate it, and verify the next turn's `/context` trace. Activate another revision during a multi-speaker turn and verify that turn retains its original revision.

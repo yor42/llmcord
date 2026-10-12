@@ -4,7 +4,7 @@ A Discord character bot for small group skits. Channels can belong to a **world*
 
 ## Documentation
 
-Start with the [documentation index](docs/README.md). It links to [getting started](docs/getting-started.md), the [server guide](docs/server-guide.md), [lore and memory](docs/lore-and-memory.md), [Raspberry Pi deployment](docs/deployment-raspberry-pi.md), [architecture](docs/architecture.md), and [verification](docs/verification.md).
+Start with the [documentation index](docs/README.md), or browse the same guides as the [project wiki](https://github.com/yor42/llmcord/wiki). It links to [getting started](docs/getting-started.md), the [server guide](docs/server-guide.md), [lore and memory](docs/lore-and-memory.md), [Raspberry Pi deployment](docs/deployment-raspberry-pi.md), [architecture](docs/architecture.md), and [verification](docs/verification.md).
 
 [GitHub CI and container releases](docs/github-ci.md) explains automatic Python/browser/security checks, native ARM64/AMD64 container verification, weekly dependency updates, and publishing versioned images to GHCR.
 

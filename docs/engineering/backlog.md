@@ -76,6 +76,7 @@
 | MNT-61 | Spoken moves: re-check `EXAMPLE_MATCH` (0.962, `spoken/interpret.py`) and the head thresholds once servers have kept phrases and example phrases; the calibration set was the prototype's 673 phrases | FEAT-37 follow-up | Open |
 | MNT-62 | Spoken moves: a reading already in flight when a member runs `/game spoken_moves setting:Off` can still post one move check (nothing is kept); re-check `spoken_member_on` before posting | FEAT-37 follow-up | Open |
 | MNT-63 | Ambient rule (FEAT-40) nits from review: the question endings 갈래/할래 also match statements ("나 먼저 갈래"); a name like "Old Man" falls back to the common word "man" (consider a 4-letter minimum or second-token only); move the `_KO_END` alias in `spoken/words.py` next to `KO_END`. Watch real channels for over-talking before tuning | review 2026-10-12 | Open |
+| MNT-64 | Keep the GitHub wiki in step with `docs/`: the wiki (2026-10-12) was generated from `docs/` by a split-and-relink script kept outside the repo (page map: getting-started → Installation / First-Server-Setup / Configuration, server-guide → one page per section, admin-console → dashboard pages; glossary from HEAD). Add it as `scripts/build_wiki.py` with a link/anchor check, and optionally a CI job that pushes the wiki on changes to `docs/` | wiki 2026-10-12 | Open |
 
 ## UI polish
 

@@ -45,6 +45,12 @@ flowchart LR
 | [`llmcord_core/scene_ui.py`](../llmcord_core/scene_ui.py) | Dashboard guideline editors, owner deletion dialogs, and direct lore imports. |
 | [`llmcord_core/lore_workspace.py`](../llmcord_core/lore_workspace.py) | Dashboard lore lists, search, pagination, and selection actions. |
 | [`llmcord_core/lore_drag.py`](../llmcord_core/lore_drag.py), [`lore_drag.js`](../llmcord_core/lore_drag.js) | Drag-and-drop lore transfers using stable entry snapshots. |
+| [`llmcord_core/ambient.py`](../llmcord_core/ambient.py), [`ambient_invite.json`](../llmcord_core/ambient_invite.json) | The English/Korean invitation rule that decides whether an ambient turn speaks. |
+| [`llmcord_core/backend.py`](../llmcord_core/backend.py) | Dashboard model profiles merged over `config.yaml`, pinned once per turn. |
+| [`llmcord_core/budget.py`](../llmcord_core/budget.py), [`catchup.py`](../llmcord_core/catchup.py) | Bot-wide spending caps; `/catchup` summaries. |
+| [`llmcord_core/items/`](../llmcord_core/items/), [`items_store.py`](../llmcord_core/items_store.py), [`items_discord.py`](../llmcord_core/items_discord.py), [`shop_ui.py`](../llmcord_core/shop_ui.py) | Items and the shop: recipes, inventory, `/shop`, `/inventory`, `/use`, and the dashboard Shop tab. |
+| [`llmcord_core/games/`](../llmcord_core/games/), `games_*discord.py`, [`holdem_store.py`](../llmcord_core/holdem_store.py), [`games_ui.py`](../llmcord_core/games_ui.py) | Minigames: seeded rules engines (blackjack, I Doubt It, Texas Hold'em), Discord tables, and the dashboard Games tab. |
+| [`llmcord_core/spoken/`](../llmcord_core/spoken/), `games_spoken_*.py` | Experimental spoken moves and doubts read from chat, with move-check buttons. |
 
 For engineering detail (process and sequence diagrams, shared state, the maintenance backlog, UI conventions, and the closed hardening record) see [`engineering/`](engineering/):
 
@@ -58,16 +64,16 @@ For engineering detail (process and sequence diagrams, shared state, the mainten
 ## Scene flow
 
 1. Discord routing accepts an explicit invitation or considers an ambient turn in a bound channel. Threads resolve their world or hub through the parent channel.
-2. The engine filters the cast to eligible characters. A structured director result chooses up to the configured three speakers. Ambient turns may select none.
+2. The engine filters the cast to eligible characters. For an ambient turn, a word rule (`ambient.py`, English and Korean, no model call) first decides whether anyone was invited; plain chat ends the turn here. A structured director result then chooses up to the configured three speakers.
 3. The human message is stored as a node. Each speaker gets its own card, permitted lore, opted-in personal facts, encounters, branch summary, and visible message history. A hub guest's prompt does not include another guest's private world lore.
 4. The dialogue adapter streams one line. A character webhook posts it; the bot saves its Discord message ID, parent ID, source trace, and World Info activations. The next speaker can react to earlier lines from the same turn.
 5. The memory adapter extracts facts and a branch summary. Repeated shared facts become local durable lore after evidence from separate scene roots. Personal facts are written only with consent.
 
 SQLite runs in WAL mode with a busy timeout. Schema version is held in `PRAGMA user_version`; migration backs up an existing older database before upgrading. Compose orders the migration service before bot and web startup.
 
-The current schema is v4. Administration writes use transactions with revision checks. Lore activation identities survive moves between the existing lore tables; an import ledger tracks baselines and moved/deleted dispositions. Guild preset activation points to an immutable revision. Each scene captures that revision before its first model call. Provider gateways consume the renderer's ordered messages, with explicit adaptations for Anthropic's top-level system field.
+The current schema is v21. Administration writes use transactions with revision checks. Lore activation identities survive moves between the existing lore tables; an import ledger tracks baselines and moved/deleted dispositions. Guild preset activation points to an immutable revision. Each scene captures that revision before its first model call. Provider gateways consume the renderer's ordered messages, with explicit adaptations for Anthropic's top-level system field.
 
-NiceGUI runs inside FastAPI under `/admin/` with one web worker. Existing form routes remain available for compatibility/testing and reuse the same authorization/storage services. Character avatars remain in SQLite; published Discord CDN assets provide per-message avatar overrides without exposing the private dashboard. An emotion header is resolved before the webhook placeholder is posted and is excluded from stored dialogue.
+NiceGUI runs inside FastAPI under `/admin/` with one web worker and is the only admin write path (the older form routes were retired). Character avatars remain in SQLite; published Discord CDN assets provide per-message avatar overrides without exposing the private dashboard. An emotion header is resolved before the webhook placeholder is posted and is excluded from stored dialogue.
 
 ## Rewinds and retention
 
