@@ -655,12 +655,12 @@ msgstr "선언은 A부터 K까지 순서대로"
 #, python-brace-format
 msgctxt "doubt rules line"
 msgid "Ante {ante}"
-msgstr "앤티 {ante}"
+msgstr "판돈 {ante}"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "doubt rules line"
 msgid "No ante"
-msgstr "앤티 없음"
+msgstr "판돈 없음"
 
 #: llmcord_core/i18n/terms.py
 #, python-brace-format

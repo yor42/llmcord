@@ -2801,12 +2801,12 @@ msgstr[0] "보관된 문장 {count}개가 삭제돼요. 예시 문장은 그대�
 
 #: llmcord_core/games_ui.py
 msgid "Off: /game start refuses I Doubt It, and open I Doubt It tables close with every ante refunded."
-msgstr "끄면: /game start로 다우트를 시작할 수 없고, 열려 있던 다우트 테이블은 모든 앤티를 환불하고 닫혀요."
+msgstr "끄면: /game start로 다우트를 시작할 수 없고, 열려 있던 다우트 테이블은 모든 판돈을 환불하고 닫혀요."
 
 #: llmcord_core/games_ui.py
 msgctxt "field"
 msgid "Ante"
-msgstr "앤티"
+msgstr "판돈"
 
 #: llmcord_core/games_ui.py
 msgid "Turn timeout (seconds)"
@@ -2823,7 +2823,7 @@ msgstr "순서대로"
 
 #: llmcord_core/games_ui.py
 msgid "Ante: each player pays this into the pot when joining; the winner takes the pot. 0 = no ante. Turn timeout: a player who runs out of time plays one card automatically; two automatic plays in a row forfeit the seat. Claims follow the sequence A, 2 … K, then A again. Changes apply to tables opened afterwards."
-msgstr "앤티: 각 플레이어가 참가할 때 이 금액을 팟에 내고, 이긴 사람이 팟을 가져가요. 0이면 앤티가 없어요. 차례 제한 시간: 시간이 다 된 플레이어는 카드 한 장이 자동으로 나가고, 두 번 연속 자동으로 내면 자리를 잃어요. 선언은 A, 2 … K, 그다음 다시 A 순서를 따라요. 변경 사항은 이후에 여는 테이블부터 적용돼요."
+msgstr "판돈: 각 플레이어가 참가할 때 이 금액을 팟에 내고, 이긴 사람이 팟을 가져가요. 0이면 판돈이 없어요. 차례 제한 시간: 시간이 다 된 플레이어는 카드 한 장이 자동으로 나가고, 두 번 연속 자동으로 내면 자리를 잃어요. 선언은 A, 2 … K, 그다음 다시 A 순서를 따라요. 변경 사항은 이후에 여는 테이블부터 적용돼요."
 
 #: llmcord_core/games_ui.py
 msgid "Read doubts from chat (Experimental)"
@@ -2978,7 +2978,7 @@ msgstr[0] "항목 {count}개 삭제"
 
 #: llmcord_core/lore_workspace.py
 msgid "Move could not be confirmed. Refresh and try again."
-msgstr "이동을 확인할 수 없어요. 새로고침한 뒤 다시 시도해 주세요."
+msgstr "이동이 성공했는지 확인할 수 없어요. 새로고침한 뒤 다시 시도해 주세요."
 
 #: llmcord_core/lore_workspace.py
 #, python-brace-format

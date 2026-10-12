@@ -941,7 +941,7 @@ msgstr "인슈어런스 안 함"
 #: llmcord_core/games_discord.py
 msgctxt "button.blackjack"
 msgid "Play again (same bet)"
-msgstr "다시 하기 (같은 베팅)"
+msgstr "다시 하기 (베팅금액 동일)"
 
 #: llmcord_core/games_discord.py
 msgctxt "button.blackjack"
@@ -1006,7 +1006,7 @@ msgstr "이 서버에서는 다우트가 꺼져 있어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "I Doubt It uses the server's ante; no bet needed."
-msgstr "다우트는 서버의 앤티를 사용해서 베팅이 필요 없어요."
+msgstr "다우트는 서버의 판돈 설정을 사용해서 베팅이 필요 없어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "Blackjack needs a bet: /game start game:Blackjack bet:<amount>."
@@ -1055,7 +1055,7 @@ msgstr "테이블에 참가했어요."
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "You joined the table. Your ante of {ante:,} {currency} is in the pot."
-msgstr "테이블에 참가했어요. 앤티 {ante:,} {currency:이/가} 팟에 들어갔어요."
+msgstr "테이블에 참가했어요. 판돈 {ante:,} {currency:이/가} 팟에 들어갔어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "You left the table. It is closed."
@@ -1063,7 +1063,7 @@ msgstr "테이블에서 나갔어요. 테이블이 닫혔어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "You left the table. Your ante is refunded."
-msgstr "테이블에서 나갔어요. 앤티는 환불됐어요."
+msgstr "테이블에서 나갔어요. 판돈은 환불됐어요."
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
 msgid "Only the host can fill seats."
@@ -1098,7 +1098,7 @@ msgstr "지금은 다우트할 선언이 없어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "You can't doubt your own claim."
-msgstr "내 선언에는 다우트할 수 없어요."
+msgstr "직접 한 선언에는 다우트할 수 없어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "The game hasn't started yet."
@@ -1179,11 +1179,11 @@ msgstr "테이블 닫힘: 테이블이 닫혔어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "The antes were refunded."
-msgstr "앤티를 환불했어요."
+msgstr "판돈을 환불했어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "The antes are refunded."
-msgstr "앤티는 환불돼요."
+msgstr "판돈은 환불돼요."
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
 #, python-brace-format
@@ -1193,12 +1193,12 @@ msgstr "**{game}** · 테이블 {number}"
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "Ante: {ante:,} {currency} · Pot: {pot:,} {currency}"
-msgstr "앤티: {ante:,} {currency} · 팟: {pot:,} {currency}"
+msgstr "판돈: {ante:,} {currency} · 팟: {pot:,} {currency}"
 
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "No ante · Pot: {pot:,} {currency}"
-msgstr "앤티 없음 · 팟: {pot:,} {currency}"
+msgstr "판돈 없음 · 팟: {pot:,} {currency}"
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
 #, python-brace-format
@@ -1247,7 +1247,7 @@ msgstr "게임 방법"
 #: llmcord_core/games_doubt_discord.py
 #, python-brace-format
 msgid "pot {pot:,} {currency} (ante {ante:,})"
-msgstr "팟 {pot:,} {currency} (앤티 {ante:,})"
+msgstr "팟 {pot:,} {currency} (판돈 {ante:,})"
 
 #: llmcord_core/games_doubt_discord.py
 msgctxt "seat state"
@@ -2000,11 +2000,11 @@ msgstr "{who:이/가} 카드를 공개했어요: {cards}"
 
 #: llmcord_core/games_spoken_discord.py
 msgid "This isn't your move check."
-msgstr "내 행동 확인이 아니에요."
+msgstr "당신의 차례가 아니에요."
 
 #: llmcord_core/games_spoken_discord.py
 msgid "Got it — left as table talk. Tired of these? Turn them off with /game spoken_moves."
-msgstr "알겠어요. 테이블 잡담으로 둘게요. 이 확인이 번거롭다면 /game spoken_moves로 끌 수 있어요."
+msgstr "알겠어요. 잡담으로 둘게요. 이 확인이 번거롭다면 /game spoken_moves로 끌 수 있어요."
 
 #: llmcord_core/games_spoken_discord.py
 msgctxt "button.blackjack"
@@ -2024,7 +2024,7 @@ msgstr "{moves} 하려던 건가요?"
 #: llmcord_core/games_spoken_discord.py llmcord_core/games_spoken_doubt.py
 msgctxt "button.spoken"
 msgid "Just table talk"
-msgstr "그냥 테이블 잡담"
+msgstr "그냥 잡담이에요"
 
 #: llmcord_core/games_spoken_doubt.py
 msgid "✔ Doubt it!"

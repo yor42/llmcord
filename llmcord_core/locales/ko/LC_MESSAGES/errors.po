@@ -379,7 +379,7 @@ msgstr "게임 설정이 다른 곳에서 변경됐어요. 페이지를 새로�
 #: llmcord_core/i18n/codes.py
 #, python-brace-format
 msgid "You need {stake:,} {name} for that ante but have {balance:,}."
-msgstr "그 앤티에 {stake:,} {name:이/가} 필요한데 {balance:,}만 있어요."
+msgstr "그 판돈에 {stake:,} {name:이/가} 필요한데 {balance:,}만 있어요."
 
 #: llmcord_core/i18n/codes.py
 #, python-brace-format
@@ -1521,7 +1521,7 @@ msgstr "선언 규칙은 순서대로(sequence)여야 해요."
 #: llmcord_core/i18n/codes.py
 #, python-brace-format
 msgid "The ante must be a whole number from 0 to {limit}."
-msgstr "앤티는 0부터 {limit}까지의 정수여야 해요."
+msgstr "판돈은 0부터 {limit}까지의 정수여야 해요."
 
 #: llmcord_core/i18n/codes.py
 #, python-brace-format
