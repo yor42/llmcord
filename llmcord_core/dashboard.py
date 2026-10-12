@@ -31,6 +31,7 @@ from .cards import parse_card
 from .currency_ui import currency_panel
 from .games import playstyle
 from .games_ui import games_panel
+from .prices import NOT_FOUND
 from .shop_ui import shop_panel
 from .presets_ui import presets_panel
 from .config import PROFILE_KEYS, format_key_ref, parse_key_ref, validate_profile_name
@@ -385,6 +386,8 @@ async def backend_panel(ctx, config):
                         costs = {field: ui.number(label, value=initial.get(field), min=0).props('clearable hint="Blank means none"').classes('w-full')
                                  for field, label in (('input_cost_per_million', 'Input cost per million (USD)'), ('output_cost_per_million', 'Output cost per million (USD)'),
                                                       ('cached_input_cost_per_million', 'Cached input cost per million (USD)'))}
+                        price_row = ui.element('div').classes('ll-form-row w-full')
+                        price_status = ui.column().classes('w-full')
                         timeout = ui.number('Timeout (seconds)', value=initial.get('timeout_seconds', 120), min=0).classes('w-full')
                         retries = ui.number('Max retries', value=initial.get('max_retries', 1), min=0, step=1, format='%d').classes('w-full')
 
@@ -447,6 +450,7 @@ async def backend_panel(ctx, config):
 
             fetching = False
             fetched = {}
+            fetch_state = {'snapshot': None, 'listed': False}
 
             async def fetch():
                 nonlocal fetching
@@ -462,6 +466,7 @@ async def backend_panel(ctx, config):
                     values = listing_mapping()
                     # Test seam only: tests/dashboard_server.py sets this; production uses the real lister.
                     lister = getattr(ctx.service.app.state, 'model_lister', None) or backend_module.list_profile_models
+                    fetch_state['snapshot'] = (provider.value, base.value, key.value)
                     fetch_button.disable()
                     return await lister(list_name or 'profile', values, key_hosts_from_env())
                 finally:
@@ -470,9 +475,10 @@ async def backend_panel(ctx, config):
                         fetch_button.enable()
 
             def fetched_models(result):
-                if dialog.is_deleted:
+                if dialog.is_deleted or fetch_state['snapshot'] != (provider.value, base.value, key.value):
                     return
                 outcome.clear()
+                fetch_state['listed'] = result.ok
                 if not result.ok:
                     picker.set_visibility(False)
                     with outcome:
@@ -486,6 +492,9 @@ async def backend_panel(ctx, config):
                     ui.label(result.message).classes('text-positive').props('role=status')
 
             def stale_list(_event=None):
+                if fetch_state['listed']:
+                    outcome.clear()
+                    fetch_state['listed'] = False
                 fetched.clear()
                 picker.set_options([], value=None)
                 picker.set_visibility(False)
@@ -509,11 +518,57 @@ async def backend_panel(ctx, config):
                 if dialog.is_deleted:
                     return
                 outcome.clear()
+                fetch_state['listed'] = False
                 with outcome:
                     ui.label(result.message).classes('text-positive' if result.ok else 'text-negative').props('role=status')
+
+            pricing = False
+            price_state = {'snapshot': None}
+
+            async def look_up_prices():
+                nonlocal pricing
+                from . import prices as prices_module
+                if pricing:
+                    raise ValueError('The prices are already being looked up.')
+                wanted = (model.value or '').strip()
+                if not wanted:
+                    raise ValueError('Enter a model ID first.')
+                pricing = True
+                try:
+                    price_state['snapshot'] = (provider.value, base.value, wanted)
+                    # Test seam only: tests/dashboard_server.py sets this; production uses the real lookup.
+                    lookup = getattr(ctx.service.app.state, 'price_lookup', None) or prices_module.suggest_prices
+                    price_button.disable()
+                    return await lookup(provider.value, base.value, wanted)
+                finally:
+                    pricing = False
+                    if not dialog.is_deleted:
+                        price_button.enable()
+
+            def prices_found(result):
+                if dialog.is_deleted or price_state['snapshot'] != (provider.value, base.value, (model.value or '').strip()):
+                    return
+                price_status.clear()
+                with price_status:
+                    if not result.found:
+                        ui.label(result.message).classes('ll-muted' if result.message.startswith('No price found') else 'text-negative').props('role=status')
+                        return
+                    for field, value in zip(costs, (result.input, result.output, result.cached_input)):
+                        costs[field].value = value
+                    ui.label(f'Suggested prices from {result.source} ({result.fetched}) filled all three cost fields. Check them before saving.').props('role=status')
+
+            def stale_prices(_event=None):
+                price_status.clear()
+
+            for control in (model, provider, base):
+                control.on_value_change(stale_prices)
             with fetch_row:
                 fetch_button = ctx.button('Fetch models', fetch, 'backend.models', lambda result: {'name': (name.value or '').strip(), 'ok': result.ok, 'count': len(result.models)},
                                           then=fetched_models).props('outline')
+            with price_row:
+                price_button = ctx.button('Look up prices', look_up_prices, 'backend.prices',
+                                          lambda result: {'name': (name.value or '').strip(), 'ok': result.found or result.message == NOT_FOUND, 'found': result.found, 'source': result.source},
+                                          then=prices_found).props('outline')
             with ui.element('div').classes('ll-form-row justify-end'):
                 ui.button('Cancel', on_click=dialog.close).props('flat')
                 test = ctx.button('Test connection', probe, 'backend.test', lambda result: {'name': (name.value or '').strip(), 'ok': result.ok}, then=tested).props('outline')
@@ -521,6 +576,7 @@ async def backend_panel(ctx, config):
             outcome = ui.column().classes('w-full')
             ui.label('Test connection sends one short request from the dashboard with these settings. It is not counted in usage.').classes('ll-muted')
             ui.label('Fetch models asks the provider for its model list with these settings. Nothing is saved; you can still type any model ID.').classes('ll-muted')
+            ui.label('Look up prices fills the cost fields (under Advanced) with suggested prices from a public price list. Nothing is saved until you save the profile.').classes('ll-muted')
         dialog.on('hide', dialog.delete)
         dialog.open()
 

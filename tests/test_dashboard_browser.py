@@ -2006,6 +2006,71 @@ class DashboardBrowserTests(unittest.TestCase):
             self.post_hook('/_test/backend-lister', {'mode': 'ok'})
             context.close()
 
+    def test_operator_backend_look_up_prices(self):
+        """FEAT-42 (D38): Look up prices fills the three cost fields and says where and when from; a missing price leaves typed values; Save stores the filled prices; changing Model clears the line; a stale result is ignored; the audit row holds name, found and source."""
+        from playwright.sync_api import expect
+        context, page, errors = self.operator_page('/admin/operator?tab=backend')
+        before = self.state()
+        try:
+            self.post_hook('/_test/backend-prices', {'mode': 'found'})
+            page.get_by_role('button', name='Add profile').click()
+            dialog = self.fill_profile_editor(page, 'tmp-price', 'price-model', 4096, base='https://probe.example/v1')
+            dialog.get_by_text('Advanced', exact=True).click()
+            cached = dialog.get_by_label('Cached input cost per million (USD)', exact=True)
+            cached.fill('9')
+            dialog.get_by_role('button', name='Look up prices').click()
+            status = dialog.get_by_role('status')
+            expect(status).to_have_text('Suggested prices from LiteLLM (2026-10-12) filled all three cost fields. Check them before saving.')
+            expect(dialog.get_by_label('Input cost per million (USD)', exact=True)).to_have_value('1.25')
+            expect(dialog.get_by_label('Output cost per million (USD)', exact=True)).to_have_value('10')
+            expect(cached).to_have_value('')
+            calls = self.context.request.get(self.url + '/_test/backend-prices-calls').json()
+            self.assertEqual(calls, [{'provider': 'compatible', 'base_url': 'https://probe.example/v1', 'model': 'price-model'}])
+            self.assertEqual(self.state()['model_profiles'], before['model_profiles'])
+            self.shot(page, 'backend-look-up-prices-1000.png')
+            dialog.get_by_label('Model', exact=True).fill('price-model-2')
+            expect(dialog.get_by_role('status')).to_have_count(0)
+            expect(dialog.get_by_label('Input cost per million (USD)', exact=True)).to_have_value('1.25')
+            self.post_hook('/_test/backend-prices', {'mode': 'missing'})
+            dialog.get_by_label('Input cost per million (USD)', exact=True).fill('7')
+            dialog.get_by_role('button', name='Look up prices').click()
+            expect(status).to_have_text('No price found for this model; enter it by hand.')
+            expect(status).not_to_have_class(re.compile('text-negative'))
+            expect(dialog.get_by_label('Input cost per million (USD)', exact=True)).to_have_value(re.compile(r'^7(\.0)?$'))
+            self.post_hook('/_test/backend-prices', {'mode': 'fail'})
+            dialog.get_by_role('button', name='Look up prices').click()
+            expect(status).to_have_text('The price list could not be downloaded.')
+            expect(status).to_have_class(re.compile('text-negative'))
+            self.post_hook('/_test/backend-prices', {'mode': 'found', 'delay': 1.5})
+            dialog.get_by_label('Input cost per million (USD)', exact=True).fill('')
+            dialog.get_by_role('button', name='Look up prices').click()
+            expect(dialog.get_by_role('button', name='Look up prices')).to_be_disabled()
+            dialog.get_by_label('Model', exact=True).fill('price-model-3')
+            expect(dialog.get_by_role('button', name='Look up prices')).to_be_enabled(timeout=10000)
+            expect(dialog.get_by_role('status')).to_have_count(0)
+            expect(dialog.get_by_label('Input cost per million (USD)', exact=True)).to_have_value('')
+            self.post_hook('/_test/backend-prices', {'mode': 'found'})
+            dialog.get_by_label('Model', exact=True).fill('')
+            dialog.get_by_role('button', name='Look up prices').click()
+            expect(page.get_by_text('Enter a model ID first.')).to_be_visible()
+            dialog.get_by_label('Model', exact=True).fill('price-model')
+            dialog.get_by_role('button', name='Look up prices').click()
+            expect(dialog.get_by_role('status')).to_contain_text('Suggested prices from LiteLLM')
+            dialog.get_by_role('button', name='Save profile').click()
+            expect(page.get_by_text('Profile saved.')).to_be_visible()
+            after = self.state()
+            saved = {row['name']: row['data'] for row in after['model_profiles']}['tmp-price']
+            self.assertEqual((saved.get('input_cost_per_million'), saved.get('output_cost_per_million'), saved.get('cached_input_cost_per_million')), (1.25, 10.0, None))
+            runs = [json.loads(r['detail_json']) for r in after['audit'][len(before['audit']):] if r['action'] == 'backend.prices']
+            found = {'name': 'tmp-price', 'ok': True, 'found': True, 'source': 'LiteLLM'}
+            missing, failed = {**found, 'found': False}, {**found, 'ok': False, 'found': False}
+            self.assertEqual(runs, [found, missing, failed, found, found])
+            self.assertFalse(self.page_errors(page), errors)
+        finally:
+            self.post_hook('/_test/backend-prices', {'mode': 'found'})
+            self.post_hook('/_test/backend-reset', {})
+            context.close()
+
     def test_operator_backend_test_connection_button_disabled_while_running(self):
         """D24 step 5 (FEAT-11): while a test is running the button is disabled; it comes back with the result once the tester answers."""
         from playwright.sync_api import expect

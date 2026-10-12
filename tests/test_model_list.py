@@ -159,6 +159,11 @@ class ModelListTests(unittest.TestCase):
             profile_mapping({'provider': 'openai', 'model': '', 'context_tokens': 1})
         self.assertTrue(profile_mapping({'provider': 'openai', 'model': 'model-list', 'context_tokens': 1}))
 
+    def test_single_model_message_is_singular(self):
+        rec = Recorder(lambda r: httpx.Response(200, json={'data': [{'id': 'only'}]}))
+        result = run(list_profile_models('p', mapping(base_url='https://lister.example/v1'), hosts(), ENV, rec.transport))
+        self.assertEqual(result.message, '1 model found.')
+
 
 if __name__ == '__main__':
     unittest.main()

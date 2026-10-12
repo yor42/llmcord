@@ -691,6 +691,29 @@ def main():
     async def backend_lister_calls():
         return lister['calls']
 
+    pricer = {'mode': 'found', 'calls': [], 'delay': 0}
+    async def fake_price_lookup(provider, base_url, model):
+        from llmcord_core.prices import PriceResult
+        pricer['calls'].append({'provider': provider, 'base_url': base_url, 'model': model})
+        if pricer['delay']:
+            await asyncio.sleep(pricer['delay'])
+        if pricer['mode'] == 'found':
+            return PriceResult(True, 1.25, 10.0, None, 'LiteLLM', '2026-10-12', '')
+        if pricer['mode'] == 'missing':
+            return PriceResult(False, None, None, None, 'LiteLLM', '2026-10-12', 'No price found for this model; enter it by hand.')
+        return PriceResult(False, None, None, None, 'LiteLLM', '', 'The price list could not be downloaded.')
+    app.state.price_lookup = fake_price_lookup
+
+    @app.post('/_test/backend-prices')
+    async def backend_prices(request: Request):
+        value = await request.json()
+        pricer.update(mode=value.get('mode', 'found'), delay=value.get('delay', 0), calls=[])
+        return {'ok': True}
+
+    @app.get('/_test/backend-prices-calls')
+    async def backend_prices_calls():
+        return pricer['calls']
+
     @app.post('/_test/backend-reset')
     async def backend_reset():
         # Drop every dashboard profile and role assignment (cleanup after the Backend tab tests).

@@ -313,7 +313,7 @@ async def list_profile_models(name, mapping, key_hosts, environ=os.environ, tran
             return _list_failure(text, secret)
         if not found:
             return _list_failure('The provider returned no models; type the ID.')
-        return ModelListResult(True, tuple(found[key] for key in sorted(found)), f'{len(found)} models found.')
+        return ModelListResult(True, tuple(found[key] for key in sorted(found)), f'{len(found)} model{"" if len(found) == 1 else "s"} found.')
     except Exception as error:
         logging.warning('Model list failed unexpectedly: %s', type(error).__name__)
         return ModelListResult(False, (), 'The model list could not be fetched; see the dashboard log.')
