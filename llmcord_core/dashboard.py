@@ -26,7 +26,7 @@ from fastapi.responses import PlainTextResponse
 from .auth import guild_icon_url, is_server_admin, user_avatar_url
 from .admin_store import ConflictError
 from .backend import ROLES, effective_backend
-from .avatars import MAX_AVATAR_BYTES, avatar_version, normalize_avatar
+from .avatars import MAX_AVATAR_BYTES, avatar_version, label_to_store, normalize_avatar, slot_display_label
 from .cards import parse_card
 from .currency_ui import currency_panel
 from .games import playstyle
@@ -1043,6 +1043,7 @@ def mount_dashboard(app):
     ui.number.default_props('outlined dense')
     _install_socket_auth(app)
     _install_upload_guard(app)
+    _install_not_found()
     _register_pages(app)
     ui.run_with(app, mount_path='/admin', title='llmcord admin', dark=True, reconnect_timeout=15,
                 gzip_middleware_factory=None, on_air=None, show_welcome_message=False)
@@ -1129,6 +1130,34 @@ def _install_socket_auth(app):
                 if inspect.isawaitable(value):
                     await value
         core.sio.on(name, guarded_socket)
+
+
+def _install_not_found():
+    """MNT-81 d: replace NiceGUI's English 404 page with one in the viewer's language. An unknown path and a guild the viewer cannot see
+    both end here with the same content; nothing from the path or the guild is shown."""
+    from nicegui import Client, core, ui
+    from nicegui.page import page
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+    current = core.app.exception_handlers[404]
+    original = getattr(current, 'original', current)  # mount_dashboard runs once per app in tests
+
+    async def not_found(request, exception):
+        endpoint = request.scope.get('endpoint')
+        if core.root is not None or (endpoint is not None and endpoint is not core.app and not request.scope.get('nicegui_page_path') and isinstance(exception, StarletteHTTPException)):
+            return await original(request, exception)  # JSON for non-page endpoints, unchanged
+        with Client(page(''), request=request) as client:
+            web_locale.bind_client(client, web_locale.locale_for_request(request))
+            t = web_locale.current()
+            apply_theme()
+            ui.page_title(t('Page not found'))
+            with ui.column().classes('ll-page'):
+                ui.label(t('Page not found')).classes('text-3xl font-bold').props('role=heading aria-level=1')
+                ui.label(t('This page does not exist, or you cannot open it.')).classes('ll-muted')
+                ui.link(t('Back to your servers'), '/')
+        return client.build_response(request, 404)
+
+    not_found.original = original
+    core.app.add_exception_handler(404, not_found)
 
 
 def _install_upload_guard(app):
@@ -2250,22 +2279,25 @@ def static_avatar_editor(ctx, character, revision):
 def avatar_editor(ctx, character_id, slot):
     from nicegui import ui
     t = web_locale.current()
-    with ui.expansion(slot['label']).classes('w-full ll-subpanel'), ui.element('div').classes('ll-stack'):
+    shown = slot_display_label(slot['slot_key'], slot['label'], t)
+    with ui.expansion(shown).classes('w-full ll-subpanel'), ui.element('div').classes('ll-stack'):
         if slot['has_image']:
             ui.image(ctx.app.state.base_url + f"/guild/{ctx.guild_id}/characters/{character_id}/avatars/{slot['slot_key']}?v={slot['image_version']}").classes('w-24 h-24 rounded-lg')
         ui.label(t('Stable key: {key}', key=slot['slot_key'])).classes('ll-muted')
         with ui.element('div').classes('ll-form-row'):
-            label = ui.input(t.p('field', 'Label'), value=slot['label'])
+            label = ui.input(t.p('field', 'Label'), value=shown)
             description = ui.input(t('When to use this emotion'), value=slot['description'])
+        def stored_label():
+            return label_to_store(slot['label'], shown, label.value)
         async def upload(event):
             image = normalize_avatar(await event.file.read())
-            ctx.store.save_avatar(ctx.guild_id, character_id, slot['slot_key'], label.value or '', description.value or '', image, slot['revision'])
+            ctx.store.save_avatar(ctx.guild_id, character_id, slot['slot_key'], stored_label(), description.value or '', image, slot['revision'])
             return True
         ctx.upload(upload, t('Upload avatar image'), 'avatar.slot.edit', {'character': character_id, 'slot': slot['slot_key']},
                    then=lambda _: ctx.refresh(), success=t('Emotion image saved'))
         with ui.element('div').classes('ll-form-row'):
             def save():
-                ctx.store.save_avatar(ctx.guild_id, character_id, slot['slot_key'], label.value or '', description.value or '', None, slot['revision'])
+                ctx.store.save_avatar(ctx.guild_id, character_id, slot['slot_key'], stored_label(), description.value or '', None, slot['revision'])
                 return True
             ctx.button(t('Save emotion'), save, 'avatar.slot.edit', {'character': character_id, 'slot': slot['slot_key']}, then=lambda _: ctx.refresh())
             async def publish():
@@ -2276,7 +2308,7 @@ def avatar_editor(ctx, character_id, slot):
                     ctx.store.clear_avatar_image(ctx.guild_id, character_id, slot['slot_key'], slot['revision'])
                     return True
                 lucide_button(t('Remove emotion image'), 'trash-2', color='negative', on_click=lambda: confirm_dialog(
-                    ctx, t('Remove the image from {label}?', label=slot['label']), [t('The emotion and its label stay; only the image is removed.')],
+                    ctx, t('Remove the image from {label}?', label=shown), [t('The emotion and its label stay; only the image is removed.')],
                     t('Remove emotion image'), remove_image, 'avatar.image.delete', {'character': character_id, 'slot': slot['slot_key']},
                     then=lambda _: ctx.refresh('characters')))
             if slot['slot_key'] != 'neutral':
@@ -2284,7 +2316,7 @@ def avatar_editor(ctx, character_id, slot):
                     ctx.store.delete_avatar(ctx.guild_id, character_id, slot['slot_key'], slot['revision'])
                     return True
                 lucide_button(t('Remove emotion'), 'trash-2', color='negative', on_click=lambda: confirm_dialog(
-                    ctx, t('Remove emotion {label}?', label=slot['label']), [t('This removes the emotion and its image. The neutral emotion and the fallback avatar stay.')],
+                    ctx, t('Remove emotion {label}?', label=shown), [t('This removes the emotion and its image. The neutral emotion and the fallback avatar stay.')],
                     t('Remove emotion'), delete, 'avatar.slot.delete', then=lambda _: ctx.refresh()))
 
 

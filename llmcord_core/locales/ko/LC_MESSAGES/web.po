@@ -888,6 +888,18 @@ msgid "This action was rejected"
 msgstr ""
 
 #: llmcord_core/dashboard.py
+msgid "Page not found"
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "This page does not exist, or you cannot open it."
+msgstr ""
+
+#: llmcord_core/dashboard.py
+msgid "Back to your servers"
+msgstr ""
+
+#: llmcord_core/dashboard.py
 msgid "Uploads are not available here"
 msgstr ""
 
@@ -2410,6 +2422,36 @@ msgstr ""
 msgid "Recent messages"
 msgstr ""
 
+#: llmcord_core/emotion_ui.py
+msgctxt "emotion"
+msgid "Neutral"
+msgstr ""
+
+#: llmcord_core/emotion_ui.py
+msgctxt "emotion"
+msgid "Happy"
+msgstr ""
+
+#: llmcord_core/emotion_ui.py
+msgctxt "emotion"
+msgid "Sad"
+msgstr ""
+
+#: llmcord_core/emotion_ui.py
+msgctxt "emotion"
+msgid "Angry"
+msgstr ""
+
+#: llmcord_core/emotion_ui.py
+msgctxt "emotion"
+msgid "Surprised"
+msgstr ""
+
+#: llmcord_core/emotion_ui.py
+msgctxt "emotion"
+msgid "Embarrassed"
+msgstr ""
+
 #: llmcord_core/games_ui.py
 msgctxt "blackjack move"
 msgid "Hit"
@@ -3021,11 +3063,140 @@ msgid "Images"
 msgstr ""
 
 #: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Main"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Location"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Time"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Name"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Lore Before Char"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Description"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Personality"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Scenario"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Opening"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Card Instructions"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Lore After Char"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Lore Before Examples"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Examples"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Lore After Examples"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Lore In Chat"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Personal"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Encounters"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Summary"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Preceding"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Recent"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "History"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Character Voice"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Card Post History"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgctxt "prompt block"
+msgid "Payload"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
 msgid "moved to top-level system instructions"
 msgstr ""
 
 #: llmcord_core/presets_ui.py
 msgid "converted to user instructions"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+msgid "Untitled block"
+msgstr ""
+
+#: llmcord_core/presets_ui.py
+#, python-brace-format
+msgid "Custom-{code}"
 msgstr ""
 
 #: llmcord_core/presets_ui.py
@@ -3103,10 +3274,6 @@ msgstr ""
 
 #: llmcord_core/presets_ui.py
 msgid "Import preview loaded. Resolve compatibility items, save a draft, then activate."
-msgstr ""
-
-#: llmcord_core/presets_ui.py
-msgid "Untitled block"
 msgstr ""
 
 #: llmcord_core/presets_ui.py

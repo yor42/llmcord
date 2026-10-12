@@ -13,11 +13,24 @@ from urllib.parse import urlsplit
 from PIL import Image, ImageOps
 
 from .discord_api import DISCORD_API
+from .emotion_ui import SLOT_LABELS
 from .i18n import UserError, codes
 
 log = logging.getLogger(__name__)
 DEFAULT_SLOTS = ('neutral', 'happy', 'sad', 'angry', 'surprised', 'embarrassed')
 MAX_AVATAR_BYTES = 8 * 1024 * 1024
+
+
+def slot_display_label(slot_key, label, t):
+    """Display only: a default emotion still carrying its default label is translated; anything else is shown as stored."""
+    if slot_key in SLOT_LABELS and label == slot_key.title():
+        return t.render(SLOT_LABELS[slot_key])
+    return label
+
+
+def label_to_store(stored, shown, typed):
+    """An untouched translated default keeps the stored label, so viewing in another language never writes over it."""
+    return stored if typed == shown else typed or ''
 
 
 def avatar_version(data):
