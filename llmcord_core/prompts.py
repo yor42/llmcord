@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from .i18n import UserError, codes
+from .i18n import Phrase, UserError, codes, terms
 from .lore import estimate_tokens
 from .models import TurnMessage
 
@@ -161,36 +161,44 @@ def purpose_blocks(bundle, purpose):
     return bundle['purposes'].get(purpose, default_bundle()['purposes'][purpose])
 
 
-def compatibility(bundle, providers):
+def compatibility_phrases(bundle, providers):
+    """Each compatibility problem as one whole Phrase (named params); compatibility() is their English."""
     problems = []
     for purpose in PURPOSES:
         history_seen = False
         for b in purpose_blocks(bundle, purpose):
             if not b['enabled']:
                 continue
+            where = {'purpose': purpose, 'block': b['name']}
             if b['source'] not in SOURCES or (purpose != 'dialogue' and b['source'] not in {'text', 'payload'}):
-                problems.append(f"{purpose}/{b['name']}: remap unsupported marker {b['source']}")
+                problems.append(Phrase(terms.COMPAT_MARKER, **where, marker=b['source']))
             if purpose != 'dialogue' and b['placement'] == 'in_chat':
-                problems.append(f"{purpose}/{b['name']}: use relative placement; this purpose has no conversation-history marker")
+                problems.append(Phrase(terms.COMPAT_RELATIVE, **where))
             if purpose != 'dialogue' and b['source'] == 'payload' and b['role'] != 'user':
-                problems.append(f"{purpose}/{b['name']}: the required input payload must use the user role")
+                problems.append(Phrase(terms.COMPAT_PAYLOAD_ROLE, **where))
             unknown = set(re.findall(r'\{\{(.*?)\}\}', b['content'], flags=re.S)) - MACROS
             if unknown:
-                problems.append(f"{purpose}/{b['name']}: unsupported macros {', '.join(sorted(unknown))}")
+                problems.append(Phrase(terms.COMPAT_MACROS, **where, macros=', '.join(sorted(unknown))))
             triggers = b['raw'].get('injection_trigger', [])
             if triggers and 'normal' not in [str(t).lower() for t in triggers]:
-                problems.append(f"{purpose}/{b['name']}: remap generation triggers")
+                problems.append(Phrase(terms.COMPAT_TRIGGERS, **where))
             if b['raw'].get('extension'):
-                problems.append(f"{purpose}/{b['name']}: remove extension dependency")
+                problems.append(Phrase(terms.COMPAT_EXTENSION, **where))
             needs_system_mapping = b['source'] == 'lore_in_chat' or (b['role'] == 'system' and (history_seen or b['placement'] == 'in_chat'))
             if providers.get(purpose) in {'anthropic', 'gemini'} and needs_system_mapping and not b['adaptation']:
-                label = 'an Anthropic' if providers[purpose] == 'anthropic' else 'a Gemini'
-                problems.append(f"{purpose}/{b['name']}: choose {label} placement adaptation")
+                if providers[purpose] == 'anthropic':
+                    problems.append(Phrase(terms.COMPAT_ADAPT_ANTHROPIC, **where))
+                else:
+                    problems.append(Phrase(terms.COMPAT_ADAPT_GEMINI, **where))
             history_seen |= b['source'] == 'history'
     source = bundle.get('source', {})
     if source.get('assistant_prefill') and not source.get('prefill_disabled'):
-        problems.append('Disable or remap imported assistant prefill')
+        problems.append(Phrase(terms.COMPAT_PREFILL))
     return problems
+
+
+def compatibility(bundle, providers):
+    return [str(p) for p in compatibility_phrases(bundle, providers)]
 
 
 def substitute(text, values):

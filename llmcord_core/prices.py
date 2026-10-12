@@ -13,13 +13,15 @@ from urllib.parse import urlparse
 
 import httpx
 
+from .i18n import Phrase, terms
+
 LITELLM_URL = 'https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json'
 PRICE_MAX_BYTES = 10 * 1024 * 1024
 OPENROUTER_URL = 'https://openrouter.ai/api/v1/models'
 PRICE_DEADLINE_SECONDS = 30
 PRICE_TIMEOUT_SECONDS = 15
 PRICE_CACHE_SECONDS = 24 * 3600
-NOT_FOUND = 'No price found for this model; enter it by hand.'
+NOT_FOUND = terms.PRICE_NOT_FOUND
 
 
 @dataclass(frozen=True)
@@ -31,10 +33,26 @@ class PriceResult:
     source: str
     fetched: str
     message: str
+    phrase: Phrase | None = None
+    not_found: bool = False
+
+    def __post_init__(self):
+        if not self.not_found and not self.found and self.message == NOT_FOUND:
+            object.__setattr__(self, "not_found", True)
 
 
 class _PriceFailure(Exception):
-    pass
+    def __init__(self, phrase: Phrase):
+        super().__init__(str(phrase))
+        self.phrase = phrase
+
+
+def _failed(source, date, phrase, not_found=False):
+    return PriceResult(False, None, None, None, source, date, str(phrase), phrase, not_found)
+
+
+def _not_found(source, date):
+    return _failed(source, date, Phrase(NOT_FOUND), True)
 
 
 _cache: dict[str, tuple[float, str, dict]] = {}
@@ -57,18 +75,18 @@ async def _download(url, transport):
         async with httpx.AsyncClient(transport=transport, follow_redirects=False, timeout=PRICE_TIMEOUT_SECONDS) as client:
             async with client.stream('GET', url, headers={'Accept': 'application/json'}) as response:
                 if response.status_code != 200:
-                    raise _PriceFailure('The price list could not be downloaded.')
+                    raise _PriceFailure(Phrase(terms.PRICE_DOWNLOAD))
                 body = bytearray()
                 async for chunk in response.aiter_bytes():
                     body += chunk
                     if len(body) > PRICE_MAX_BYTES:
-                        raise _PriceFailure('The price list is too large to read.')
+                        raise _PriceFailure(Phrase(terms.PRICE_TOO_LARGE))
     except _PriceFailure:
         raise
     except (httpx.TimeoutException, asyncio.TimeoutError):
-        raise _PriceFailure('The price list did not respond in time.') from None
+        raise _PriceFailure(Phrase(terms.PRICE_TIMEOUT)) from None
     except httpx.HTTPError:
-        raise _PriceFailure('The price list could not be downloaded.') from None
+        raise _PriceFailure(Phrase(terms.PRICE_DOWNLOAD)) from None
     return bytes(body)
 
 
@@ -76,14 +94,14 @@ def _index(url, raw):
     try:
         data = json.loads(raw)
     except ValueError:
-        raise _PriceFailure('The price list could not be read.') from None
+        raise _PriceFailure(Phrase(terms.PRICE_UNREADABLE)) from None
     if url == LITELLM_URL:
         if not isinstance(data, dict):
-            raise _PriceFailure('The price list could not be read.')
+            raise _PriceFailure(Phrase(terms.PRICE_UNREADABLE))
         return {key: value for key, value in data.items() if key != 'sample_spec' and isinstance(value, dict)}
     items = data.get('data') if isinstance(data, dict) else None
     if not isinstance(items, list):
-        raise _PriceFailure('The price list could not be read.')
+        raise _PriceFailure(Phrase(terms.PRICE_UNREADABLE))
     return {item['id']: item for item in items if isinstance(item, dict) and isinstance(item.get('id'), str)}
 
 
@@ -114,7 +132,7 @@ def _per_million(value):
 def _result(entry, fields, source, date):
     prices = [_per_million(entry.get(field)) for field in fields]
     if prices[0] is None and prices[1] is None:
-        return PriceResult(False, None, None, None, source, date, NOT_FOUND)
+        return _not_found(source, date)
     return PriceResult(True, *prices, source, date, '')
 
 
@@ -131,7 +149,7 @@ async def suggest_prices(provider, base_url, model, transport=None, now=time.tim
     try:
         model = (model or '').strip().removeprefix('models/')
         if not model:
-            return PriceResult(False, None, None, None, source, date, NOT_FOUND)
+            return _not_found(source, date)
         base = (base_url or '').strip().rstrip('/')
         openrouter = provider != 'anthropic' and (urlparse(base).hostname or '').lower() == 'openrouter.ai'
         if openrouter:
@@ -141,9 +159,9 @@ async def suggest_prices(provider, base_url, model, transport=None, now=time.tim
         try:
             date, table = await asyncio.wait_for(_load(url, transport, now), PRICE_DEADLINE_SECONDS)
         except asyncio.TimeoutError:
-            return PriceResult(False, None, None, None, source, date, 'The price list did not respond in time.')
+            return _failed(source, date, Phrase(terms.PRICE_TIMEOUT))
         except _PriceFailure as error:
-            return PriceResult(False, None, None, None, source, date, str(error))
+            return _failed(source, date, error.phrase)
         family = None if openrouter else _litellm_family(provider, base)
         for candidate in [model] if openrouter else ([f'{family}/{model}'] if family else []) + [model]:
             entry = table.get(candidate)
@@ -156,7 +174,7 @@ async def suggest_prices(provider, base_url, model, transport=None, now=time.tim
             result = _result(entry, fields, source, date)
             if result.found:
                 return result
-        return PriceResult(False, None, None, None, source, date, NOT_FOUND)
+        return _not_found(source, date)
     except Exception as error:
         logging.warning('Price lookup failed unexpectedly: %s', type(error).__name__)
-        return PriceResult(False, None, None, None, source, date, 'The price lookup failed; see the dashboard log.')
+        return _failed(source, date, Phrase(terms.PRICE_FAILED))

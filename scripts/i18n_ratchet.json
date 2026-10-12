@@ -9,9 +9,6 @@
     "llmcord_core/avatars.py": {
       "raise": 2
     },
-    "llmcord_core/backend.py": {
-      "raise": 6
-    },
     "llmcord_core/dashboard.py": {
       "ui": 1
     },
@@ -53,9 +50,6 @@
     },
     "llmcord_core/presets_ui.py": {
       "ui": 1
-    },
-    "llmcord_core/prices.py": {
-      "raise": 7
     },
     "llmcord_core/savebar.py": {
       "raise": 2
