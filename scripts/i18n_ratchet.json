@@ -1,0 +1,138 @@
+{
+  "files": {
+    "llmcord_core/admin.py": {
+      "raise": 5
+    },
+    "llmcord_core/admin_store.py": {
+      "raise": 97
+    },
+    "llmcord_core/auth.py": {
+      "raise": 1
+    },
+    "llmcord_core/avatars.py": {
+      "raise": 14
+    },
+    "llmcord_core/backend.py": {
+      "raise": 2
+    },
+    "llmcord_core/cards.py": {
+      "raise": 10
+    },
+    "llmcord_core/config.py": {
+      "raise": 33
+    },
+    "llmcord_core/currency_ui.py": {
+      "raise": 1,
+      "ui": 38
+    },
+    "llmcord_core/dashboard.py": {
+      "raise": 22,
+      "ui": 262
+    },
+    "llmcord_core/discord_bot.py": {
+      "raise": 15,
+      "ui": 118
+    },
+    "llmcord_core/engine.py": {
+      "raise": 2
+    },
+    "llmcord_core/favorites_discord.py": {
+      "ui": 16
+    },
+    "llmcord_core/game_chooser.py": {
+      "raise": 1
+    },
+    "llmcord_core/games/base.py": {
+      "raise": 2
+    },
+    "llmcord_core/games/blackjack.py": {
+      "raise": 10
+    },
+    "llmcord_core/games/doubt.py": {
+      "raise": 7
+    },
+    "llmcord_core/games/holdem.py": {
+      "raise": 14
+    },
+    "llmcord_core/games/playstyle.py": {
+      "raise": 3
+    },
+    "llmcord_core/games_discord.py": {
+      "ui": 12
+    },
+    "llmcord_core/games_doubt_discord.py": {
+      "ui": 16
+    },
+    "llmcord_core/games_holdem_discord.py": {
+      "ui": 4
+    },
+    "llmcord_core/games_spoken_doubt.py": {
+      "ui": 1
+    },
+    "llmcord_core/games_ui.py": {
+      "ui": 62
+    },
+    "llmcord_core/icons.py": {
+      "raise": 1,
+      "ui": 1
+    },
+    "llmcord_core/items/catalog.py": {
+      "raise": 2
+    },
+    "llmcord_core/items/random_message.py": {
+      "raise": 16
+    },
+    "llmcord_core/items/recipe.py": {
+      "raise": 17
+    },
+    "llmcord_core/items/registry.py": {
+      "raise": 2
+    },
+    "llmcord_core/items_discord.py": {
+      "ui": 6
+    },
+    "llmcord_core/items_store.py": {
+      "raise": 8
+    },
+    "llmcord_core/lore_workspace.py": {
+      "ui": 33
+    },
+    "llmcord_core/lorebooks.py": {
+      "raise": 18
+    },
+    "llmcord_core/models.py": {
+      "raise": 7
+    },
+    "llmcord_core/names.py": {
+      "raise": 3
+    },
+    "llmcord_core/playstyle_generate.py": {
+      "raise": 3
+    },
+    "llmcord_core/presets_ui.py": {
+      "raise": 1,
+      "ui": 49
+    },
+    "llmcord_core/prompts.py": {
+      "raise": 24
+    },
+    "llmcord_core/savebar.py": {
+      "raise": 2,
+      "ui": 3
+    },
+    "llmcord_core/scene_ui.py": {
+      "raise": 1,
+      "ui": 13
+    },
+    "llmcord_core/shop_ui.py": {
+      "ui": 21
+    },
+    "llmcord_core/store.py": {
+      "raise": 26
+    },
+    "llmcord_core/web.py": {
+      "raise": 3
+    }
+  },
+  "version": 1
+}

@@ -3,4 +3,7 @@ target-version = "py312"
 extend-exclude = [".venv", ".venv314", "data", ".test-artifacts"]
 
 [lint]
-select = ["F", "E9", "B006", "B008", "ASYNC"]
+select = ["F", "E9", "B006", "B008", "ASYNC", "INT"]
+
+[lint.flake8-gettext]
+extend-function-names = ["t", "N_", "C_"]
