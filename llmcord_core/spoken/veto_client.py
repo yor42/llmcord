@@ -18,6 +18,14 @@ ENV_SWITCH = "LLMCORD_SPOKEN_VETO"
 ENV_VALUE = "openrouter-d1"
 ENV_KEY = "OPENROUTER_API_KEY"
 
+# Internal diagnostics for VetoError; never shown to a user.
+CLOSED = "client closed"
+BREAKER_OPEN = "breaker open"
+TOO_LARGE = "response too large"
+BAD_JSON = "invalid json"
+STATUS = "status "
+REQUEST_FAILED = "request failed: "
+
 
 class VetoClient:
     def __init__(self, api_key, *, transport=None, clock=time.monotonic, timeout=1.0, connect_timeout=0.3, max_bytes=65536, fail_limit=5, cooldown=60.0):
@@ -34,9 +42,9 @@ class VetoClient:
         """{move: probability} for the legal moves; raises VetoError on bad input, an open breaker, or any failed call."""
         body = veto.build_request(text, legal)
         if self._closed:
-            raise VetoError("client closed")
+            raise VetoError(CLOSED)
         if self.breaker_open:
-            raise VetoError("breaker open")
+            raise VetoError(BREAKER_OPEN)
         try:
             probs = veto.parse_response(await self._post(body), legal)
         except VetoError:
@@ -50,23 +58,23 @@ class VetoClient:
             async with self._http.stream("POST", veto.ORIGIN + veto.PATH, json=body) as resp:
                 if resp.status_code != 200:
                     log.warning("veto call failed: status %s", resp.status_code)
-                    raise VetoError(f"status {resp.status_code}")
+                    raise VetoError(STATUS + str(resp.status_code))
                 raw = b""
                 async for chunk in resp.aiter_bytes():
                     raw += chunk
                     if len(raw) > self._max_bytes:
                         log.warning("veto call failed: response too large")
-                        raise VetoError("response too large")
+                        raise VetoError(TOO_LARGE)
         except VetoError:
             raise
         except Exception as e:
             log.warning("veto call failed: %s", type(e).__name__)
-            raise VetoError(f"request failed: {type(e).__name__}") from None
+            raise VetoError(REQUEST_FAILED + type(e).__name__) from None
         try:
             return json.loads(raw)
         except ValueError:
             log.warning("veto call failed: invalid json")
-            raise VetoError("invalid json") from None
+            raise VetoError(BAD_JSON) from None
 
     def _fail(self):
         self._fails += 1

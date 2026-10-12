@@ -12,6 +12,13 @@ MODEL = "microsoft/microsoft-decision-1"
 TAU = 0.5
 MAX_CHARS = 200
 
+# Internal diagnostics for VetoError; never shown to a user.
+BAD_LENGTH = "bad message length"
+NO_MOVES = "no legal moves"
+NO_ANSWERS = "no answers"
+BAD_ANSWER = "unusable answer"
+BAD_PROBABILITY = "unusable probability"
+
 MEANING = {"hit": "take another card", "stand": "keep the hand, take no more cards", "double": "double the bet and take exactly one more card",
            "surrender": "give up the hand and lose half the bet", "insure": "buy insurance against a dealer blackjack",
            "no_insurance": "decline insurance", "even_money": "take even money on own blackjack against a dealer ace"}
@@ -30,9 +37,9 @@ def predicate_text(move):
 def build_request(text, legal):
     """The JSON body for one message and the legal moves; raises VetoError for empty or oversized text or no moves."""
     if not isinstance(text, str) or not text or len(text) > MAX_CHARS:
-        raise VetoError("bad message length")
+        raise VetoError(BAD_LENGTH)
     if not legal or not all(isinstance(m, str) and m for m in legal):
-        raise VetoError("no legal moves")
+        raise VetoError(NO_MOVES)
     return {"model": MODEL, "state": {"context": CONTEXT, "message": text},
             "questions": {f"move_{m}": {"type": "noul", "instructions": predicate_text(m)} for m in legal}}
 
@@ -41,15 +48,15 @@ def parse_response(data, legal):
     """{move: probability in [0, 1]} for every legal move; raises VetoError on anything else, including a refusal."""
     answers = data.get("answers") if isinstance(data, dict) else None
     if not isinstance(answers, dict):
-        raise VetoError("no answers")
+        raise VetoError(NO_ANSWERS)
     out = {}
     for move in legal:
         answer = answers.get(f"move_{move}")
         if not isinstance(answer, dict) or answer.get("type") == "refusal" or "noul" not in answer:
-            raise VetoError("unusable answer")
+            raise VetoError(BAD_ANSWER)
         p = answer["noul"]
         if isinstance(p, bool) or not isinstance(p, (int, float)) or not math.isfinite(p) or not 0 <= p <= 1:
-            raise VetoError("unusable probability")
+            raise VetoError(BAD_PROBABILITY)
         out[move] = float(p)
     return out
 
