@@ -33,6 +33,9 @@ ANTE_NOTE = "I Doubt It uses the server's ante; no bet needed."
 BET_NEEDED = "Blackjack needs a bet: /game start game:Blackjack bet:<amount>."
 MOVED_ON = "The table moved on — open My hand again."
 DOUBTED_FIRST = "Someone doubted first."
+SPOKEN_OFF = "Move checks are off for you. The bot won't read your chat for moves at game tables, and any phrases kept from your messages were deleted."
+SPOKEN_ON = "Move checks are on for you. When this server reads moves from chat, the bot may ask you to confirm a move you typed."
+SPOKEN_SERVER_OFF = " (This server has Read moves from chat turned off right now.)"
 NO_TABLE = "Use /game hand in your table's thread."
 THREAD_FORBIDDEN = ("I couldn't open the table thread. I need the Create Public Threads and Send Messages in Threads "
                     "permissions in this channel. The table was closed.")
@@ -1498,6 +1501,18 @@ def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
         else:
             rules = bot.store.blackjack_rules(interaction.guild_id)
             text = bot.games.how_to_play(rules) + "\n" + blackjack.rules_text(rules)
+        await bot.doubt._say(interaction, text)
+
+    @group.command(name="spoken_moves", description="Turn move checks from your chat on or off for you")
+    @app_commands.describe(setting="On or off")
+    @app_commands.choices(setting=[app_commands.Choice(name="On", value="on"), app_commands.Choice(name="Off", value="off")])
+    async def game_spoken_moves(interaction: discord.Interaction, setting: str):
+        require_guild(interaction)
+        on = setting == "on"
+        bot.store.set_spoken_member_on(interaction.guild_id, interaction.user.id, on)
+        text = SPOKEN_ON if on else SPOKEN_OFF
+        if not bot.store.spoken_moves_enabled(interaction.guild_id):
+            text += SPOKEN_SERVER_OFF
         await bot.doubt._say(interaction, text)
 
     bot.tree.add_command(group)

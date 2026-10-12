@@ -22,7 +22,7 @@ from .spoken import interpret
 MAX_CHARS = 200  # longer messages are chat, not a move: ignored before any inference
 PREFIX = "llmcord:bjs"
 NOT_YOURS = "This isn't your move check."
-TALK_KEPT = "Got it — left as table talk."
+TALK_KEPT = "Got it — left as table talk. Tired of these? Turn them off with /game spoken_moves."
 RUNTIME_OFF = "Spoken moves are unavailable: the reading model is not ready."
 
 
@@ -96,6 +96,8 @@ class SpokenMoves:
             return
         if not self.bot.store.spoken_moves_enabled(guild.id):
             self.examples.pop(guild.id, None)
+            return
+        if not self.bot.store.spoken_member_on(guild.id, message.author.id):
             return
         self.latest[key] = number = self.latest.get(key, 0) + 1
         self._spawn(self._check(key, turn, number, message, text))

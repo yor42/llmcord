@@ -7,6 +7,8 @@ from unittest import mock
 from llmcord_core import games_spoken_discord as gsd
 from llmcord_core.spoken.interpret import Decision, Features
 from llmcord_core.spoken.onnx_embedder import ModelError
+from helpers import command, invoke
+from llmcord_core.games_doubt_discord import SPOKEN_OFF, SPOKEN_ON, SPOKEN_SERVER_OFF
 from test_games_discord import ALICE, BOB, CARA, CH, G, STALE, Click, GameCase
 
 
@@ -568,7 +570,7 @@ class CaptureTests(KeepCase):
         self.store.set_spoken_member_on(G, ALICE, False)
         self.decision = self.silent
         await self.say(ALICE, "pass")
-        self.assertIn(self.key(), self.spoken.readings)
+        self.assertNotIn(self.key(), self.spoken.readings)
         await self.table(ALICE, "Stand")
         self.assertEqual(self.kept(), [])
 
@@ -694,6 +696,67 @@ class RegistrationTests(unittest.TestCase):
         import inspect
         from llmcord_core import discord_bot
         self.assertIn("SpokenButton", inspect.getsource(discord_bot.SkitBot.setup_hook))
+
+class MemberSwitchTests(SpokenCase):
+    async def switch(self, user, setting, guild_id=G):
+        click = Click(self.bot, user, guild_id=guild_id)
+        await invoke(self.bot, "game spoken_moves", click, setting=setting)
+        return click
+
+    def keep(self, guild, user, text):
+        self.store.set_spoken_keep_phrases(guild, True)
+        return self.store.keep_spoken_phrase(guild, user, "blackjack", text, ["hit"], "unsure", {}, "false_positive", "talk")
+
+    def test_registered_under_game_with_on_and_off_choices(self):
+        cmd = command(self.bot, "game spoken_moves")
+        self.assertEqual(cmd.description, "Turn move checks from your chat on or off for you")
+        self.assertEqual([(c.name, c.value) for c in cmd._params["setting"].choices], [("On", "on"), ("Off", "off")])
+        self.assertLessEqual(len(self.bot.tree.get_command("game").commands), 25)
+
+    async def test_off_stores_off_and_purges_only_that_members_phrases(self):
+        self.store.set_spoken_moves_enabled(2, True)
+        self.keep(G, ALICE, "mine"), self.keep(G, BOB, "his"), self.keep(2, ALICE, "other server")
+        click = await self.switch(ALICE, "off")
+        self.assertEqual(click.replies, [SPOKEN_OFF])
+        self.assertFalse(self.store.spoken_member_on(G, ALICE))
+        self.assertEqual([p["text"] for p in self.store.spoken_phrases(G)], ["his"])
+        self.assertEqual([p["text"] for p in self.store.spoken_phrases(2)], ["other server"])
+        self.assertTrue(self.store.spoken_member_on(G, BOB) and self.store.spoken_member_on(2, ALICE))
+
+    async def test_on_stores_on(self):
+        await self.switch(ALICE, "off")
+        click = await self.switch(ALICE, "on")
+        self.assertEqual(click.replies, [SPOKEN_ON])
+        self.assertTrue(self.store.spoken_member_on(G, ALICE))
+
+    async def test_server_switch_off_adds_one_note(self):
+        self.store.set_spoken_moves_enabled(G, False)
+        self.assertEqual((await self.switch(ALICE, "on")).replies, [SPOKEN_ON + SPOKEN_SERVER_OFF])
+        self.assertEqual((await self.switch(ALICE, "off")).replies, [SPOKEN_OFF + SPOKEN_SERVER_OFF])
+
+    async def test_member_off_is_ignored_without_touching_the_runtime(self):
+        await self.deal()
+        await self.switch(ALICE, "off")
+        with mock.patch.object(self.spoken, "_spawn") as spawn:
+            self.spoken.note_message(Said(ALICE, "hit me"))
+        spawn.assert_not_called()
+        self.assertEqual((self.runtime.texts, self.spoken.latest, self.spoken.pending), ([], {}, {}))
+        self.assertEqual(len((await self.say(BOB, "hit me")).posts) + len((await self.say(ALICE)).posts), 0)
+
+    async def test_an_open_check_still_works_after_the_member_turns_off(self):
+        await self.deal()
+        msg = await self.say(ALICE)
+        await self.switch(ALICE, "off")
+        self.assertIn(self.key(), self.spoken.pending)
+        click = await self.click(ALICE, msg, "hit")
+        self.assertNotEqual(click.replies, [STALE])
+
+    async def test_talk_reply_points_to_the_switch(self):
+        await self.deal()
+        msg = await self.say(ALICE)
+        click = await self.click(ALICE, msg, None)
+        self.assertEqual(click.replies, ["Got it \u2014 left as table talk. Tired of these? Turn them off with /game spoken_moves."])
+
 
 
 if __name__ == "__main__":

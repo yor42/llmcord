@@ -1,9 +1,11 @@
 """Dashboard Games tab (FEAT-27): settings shared by all games, then one section per game (blackjack first)."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from .admin_store import ConflictError
 from .currency_ui import channels_toast, save_bets, save_channels
 
 _whole = lambda value: int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and value == int(value) else value
@@ -191,15 +193,13 @@ def blackjack_section(ctx):
         keep = {'value': store.spoken_keep_setting(gid)}
         keep_switch = ui.switch('Keep phrases for tuning', value=keep['value'])
         ui.label('On: when a move check was wrong (the member pressed Just table talk or picked the other move) or missed a move they then played with a table button, the bot keeps that chat message here '
-                 'so you can turn it into an example phrase for this server. Only while Read moves from chat is on. Members can turn it off for themselves with /games spoken_moves off. '
+                 'so you can turn it into an example phrase for this server. Only while Read moves from chat is on. Members can turn it off for themselves with /game spoken_moves off. '
                  'Turning this off deletes every kept phrase. Kept phrases are deleted after the history retention period.').classes('ll-muted')
         def save_keep():
             keep['value'] = store.set_spoken_keep_phrases(gid, bool(keep_switch.value), keep['value'])
             return keep['value']
         def confirm_keep():
-            count = len(store.spoken_phrases(gid, 'blackjack', 500)) if keep['value'] and not keep_switch.value else 0
-            if count:
-                return 'Turn off keeping?', [f"{count} kept {'phrase is' if count == 1 else 'phrases are'} deleted. Example phrases stay."], 'Turn off and delete'
+            return keep_confirm(store, gid, keep['value'], bool(keep_switch.value))
         ctx.savebar.track('Keep phrases for tuning', {keep_switch: keep['value']}, save=save_keep, action='games.spoken_keep',
                           detail=lambda result: {'enabled': result}, success='Keep phrases for tuning saved',
                           dirty=lambda: bool(keep_switch.value) != keep['value'],
@@ -228,7 +228,7 @@ def blackjack_section(ctx):
                     ui.label(f"{row['check']} \u00b7 {row['meant']} \u00b7 {row['when']}").classes('ll-muted')
                     with ui.element('div').classes('ll-form-row ll-field-row'):
                         pick = ui.select(move_options, value=row['label'], label='Move').classes('ll-wide')
-                        ctx.button('Make example', lambda row=row, pick=pick: store.promote_spoken_phrase(gid, row['id'], pick.value, actor(), revision),
+                        ctx.button('Make example', lambda row=row, pick=pick: refresh_on_refusal(lambda: store.promote_spoken_phrase(gid, row['id'], pick.value, actor(), revision)),
                                    'games.spoken_example_add', lambda result, pick=pick: {'label': pick.value}, then=gone('Example phrase added'), success=None,
                                    conflict=refreshed).props('outline size=sm')
                         lucide_button('Delete', 'trash-2', on_click=lambda row=row: confirm_dialog(
@@ -250,6 +250,30 @@ def blackjack_section(ctx):
                             lambda: store.delete_spoken_example(gid, example['id'], revision), 'games.spoken_example_delete', None,
                             then=gone('Example phrase removed'), conflict=refreshed)).props('outline size=sm color=negative')
         lists()
+
+
+def keep_confirm(store, gid, was_on, now_on):
+    """The savebar question before turning keeping off: how many phrases (all games) go. A failed count still asks, without a number."""
+    if not (was_on and not now_on):
+        return None
+    try:
+        count = len(store.spoken_phrases(gid, None, store.SPOKEN_PHRASES_MAX))
+    except Exception:
+        logging.exception('Could not count kept phrases')
+        return 'Turn off keeping?', ['Every kept phrase is deleted. Example phrases stay.'], 'Turn off and delete'
+    if count:
+        return 'Turn off keeping?', [f"{count} kept {'phrase is' if count == 1 else 'phrases are'} deleted. Example phrases stay."], 'Turn off and delete'
+    return None
+
+
+def refresh_on_refusal(operation):
+    """Runs a store call; a refusal (for example the phrase is gone) is re-raised as a conflict so the button refreshes the lists, with the same message."""
+    try:
+        return operation()
+    except ConflictError:
+        raise
+    except ValueError as error:
+        raise ConflictError(str(error)) from error
 
 
 def doubt_section(ctx):

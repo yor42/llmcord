@@ -327,6 +327,13 @@ EXPECTED_COMMANDS = {
         "None",
         False,
     ),
+    "game spoken_moves": (
+        "Turn move checks from your chat on or off for you",
+        (("setting", "string", True, "On or off", False, (("On", "on"), ("Off", "off"))),),
+        0,
+        "None",
+        False,
+    ),
     "game start": (
         "Open a table in this channel",
         (

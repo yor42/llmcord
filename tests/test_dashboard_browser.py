@@ -4492,7 +4492,7 @@ class DashboardBrowserTests(unittest.TestCase):
             bar = page.get_by_role('region', name='Unsaved changes')
             switch = page.get_by_role('switch', name='Keep phrases for tuning')
             switch.wait_for(timeout=5000)
-            page.get_by_text('On: when a move check was wrong (the member pressed Just table talk or picked the other move) or missed a move they then played with a table button, the bot keeps that chat message here so you can turn it into an example phrase for this server. Only while Read moves from chat is on. Members can turn it off for themselves with /games spoken_moves off. Turning this off deletes every kept phrase. Kept phrases are deleted after the history retention period.', exact=True).wait_for(timeout=5000)
+            page.get_by_text('On: when a move check was wrong (the member pressed Just table talk or picked the other move) or missed a move they then played with a table button, the bot keeps that chat message here so you can turn it into an example phrase for this server. Only while Read moves from chat is on. Members can turn it off for themselves with /game spoken_moves off. Turning this off deletes every kept phrase. Kept phrases are deleted after the history retention period.', exact=True).wait_for(timeout=5000)
             page.get_by_text('No kept phrases yet.', exact=True).wait_for(timeout=5000)
             page.get_by_text('No example phrases yet.', exact=True).wait_for(timeout=5000)
             self.assertEqual(switch.get_attribute('aria-checked'), 'false')

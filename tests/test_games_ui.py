@@ -1,5 +1,6 @@
 """FEAT-21 part D: the Games tab builds one section per registered game (registry order), and the doubt settings write per guild."""
 import unittest
+from unittest import mock
 
 from test_game_tables import G, TableCase
 
@@ -185,6 +186,44 @@ class KeptPhraseRows(TableCase):
         self.store.set_spoken_keep_phrases(G, False, True)
         self.assertEqual(self.store.spoken_phrases(G), [])
         self.assertEqual(len(self.store.spoken_examples(G, 'blackjack')), 1)
+
+class KeepConfirmAndRefusals(TableCase):
+    def keep(self, text, user=7):
+        self.store.set_spoken_moves_enabled(G, True)
+        self.store.set_spoken_keep_phrases(G, True)
+        return self.store.keep_spoken_phrase(G, user, 'blackjack', text, ['hit'], 'unsure', {}, 'false_positive', 'talk')
+
+    def test_confirm_counts_every_kept_phrase_in_the_server(self):
+        self.keep('one'), self.keep('two')
+        self.store.db.execute("UPDATE spoken_phrases SET game='holdem' WHERE text='two'")
+        ask = games_ui.keep_confirm(self.store, G, True, False)
+        self.assertEqual(ask, ('Turn off keeping?', ['2 kept phrases are deleted. Example phrases stay.'], 'Turn off and delete'))
+        self.assertIsNone(games_ui.keep_confirm(self.store, G, True, True))
+        self.assertIsNone(games_ui.keep_confirm(self.store, G, False, False))
+
+    def test_confirm_is_silent_with_nothing_kept(self):
+        self.assertIsNone(games_ui.keep_confirm(self.store, G, True, False))
+
+    def test_a_failing_count_still_asks_without_a_number(self):
+        with mock.patch.object(self.store, 'spoken_phrases', side_effect=RuntimeError('db')), self.assertLogs(level='ERROR'):
+            ask = games_ui.keep_confirm(self.store, G, True, False)
+        self.assertEqual(ask, ('Turn off keeping?', ['Every kept phrase is deleted. Example phrases stay.'], 'Turn off and delete'))
+
+    def test_a_refusal_becomes_a_conflict_with_the_same_message(self):
+        with self.assertRaisesRegex(ConflictError, '^That phrase is no longer there.$'):
+            games_ui.refresh_on_refusal(lambda: self.store.promote_spoken_phrase(G, 999, 'hit', 1))
+        with self.assertRaises(ConflictError):
+            games_ui.refresh_on_refusal(lambda: (_ for _ in ()).throw(ConflictError('x')))
+        self.assertEqual(games_ui.refresh_on_refusal(lambda: 5), 5)
+        with self.assertRaises(RuntimeError):
+            games_ui.refresh_on_refusal(lambda: (_ for _ in ()).throw(RuntimeError('x')))
+
+    def test_help_text_names_the_member_command(self):
+        import inspect
+        source = inspect.getsource(games_ui)
+        self.assertIn('/game spoken_moves off', source)
+        self.assertNotIn('/games spoken_moves', source)
+
 
 
 if __name__ == '__main__':

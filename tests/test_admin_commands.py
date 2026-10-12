@@ -45,7 +45,7 @@ MEMBER_SURFACE = {
     "shop": None,
     "inventory": None,
     "use": None,
-    "game": {"start", "hand", "rules"},
+    "game": {"start", "hand", "rules", "spoken_moves"},
     "lore": {"list"},
     "scene": {"reset"},
 }
@@ -93,6 +93,7 @@ MEMBER_ARGS = {
     "blackjack": (10,),
     "game start": ("blackjack", 10),
     "game rules": ("doubt",),
+    "game spoken_moves": ("off",),
     "use": ("Dice",),
 }
 
@@ -109,9 +110,9 @@ class AdminSurfaceTests(unittest.TestCase):
         self.bot.store.close()
 
     def test_surface_table_matches_d11(self):
-        """Guard for the tests below: the expected tables have the 21 admin and 33 member (plus the admin-only /context) commands: D11's 27 plus FEAT-21 B1's ``/game start``, ``/game hand`` and ``/game rules``."""
+        """Guard for the tests below: the expected tables have the 21 admin and 34 member (plus the admin-only /context) commands: D11's 27 plus FEAT-21 B1's ``/game start``, ``/game hand`` and ``/game rules``."""
         self.assertEqual(len(ADMIN_PATHS), 21)
-        self.assertEqual(len(MEMBER_PATHS), 33)
+        self.assertEqual(len(MEMBER_PATHS), 34)
         self.assertEqual(set(ADMIN_OPTIONS), ADMIN_PATHS)
 
     def test_admin_group_holds_exactly_the_admin_subcommands(self):
