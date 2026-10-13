@@ -24,6 +24,7 @@ from .admin_store import ConflictError, GameError
 from .games import blackjack, doubt
 from .games_discord import MAX_BET, NO_CHARACTER_SEATS, NO_MENTIONS, NOT_SEATED, NOT_YOUR_TURN, OFF_HERE, STALE, GameTables, _sign, words
 from .games_holdem_discord import BET_NOTE
+from .games_spoken_discord import VETO_NOTICE
 from .game_talk import TalkBudget
 from .table_runtime import TableRuntime
 from llmcord_core import i18n
@@ -39,6 +40,8 @@ DOUBTED_FIRST = N_("Someone doubted first.")
 SPOKEN_OFF = N_("Move checks are off for you. The bot won't read your chat for moves at game tables, and any phrases kept from your messages were deleted.")
 SPOKEN_ON = N_("Move checks are on for you. When this server reads moves from chat, the bot may ask you to confirm a move you typed.")
 SPOKEN_SERVER_OFF = N_(" (This server has Read moves from chat turned off right now.)")
+VETO_MEMBER_ON = N_("The decision-model check is on for you.")
+VETO_MEMBER_OFF = N_("The decision-model check is off for you.")
 NO_TABLE = N_("Use /game hand in your table's thread.")
 THREAD_FORBIDDEN = N_("I couldn't open the table thread. I need the Create Public Threads and Send Messages in Threads "
                       "permissions in this channel. The table was closed.")
@@ -1598,5 +1601,16 @@ def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
         if not bot.store.spoken_moves_enabled(interaction.guild_id) and not bot.store.spoken_doubt_enabled(interaction.guild_id):
             text += t(SPOKEN_SERVER_OFF)
         await bot.doubt._say(interaction, text)
+
+    @group.command(name="spoken_veto", description=C_("Turn the decision-model check of your move messages on or off for you"))
+    @app_commands.describe(setting=C_("On, off or status"))
+    @app_commands.choices(setting=[app_commands.Choice(name=C_("On"), value="on"), app_commands.Choice(name=C_("Off"), value="off"), app_commands.Choice(name=C_("Status"), value="status")])
+    async def game_spoken_veto(interaction: discord.Interaction, setting: str):
+        require_guild(interaction)
+        if setting != "status":
+            bot.store.set_spoken_veto_member_on(interaction.guild_id, interaction.user.id, setting == "on")
+        t = discord_locale.invoker_t(interaction)
+        on = bot.store.spoken_veto_member_on(interaction.guild_id, interaction.user.id)
+        await bot.doubt._say(interaction, f"{t(VETO_MEMBER_ON) if on else t(VETO_MEMBER_OFF)} {t(VETO_NOTICE)}")
 
     bot.tree.add_command(group)

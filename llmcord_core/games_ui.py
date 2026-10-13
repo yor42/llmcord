@@ -202,6 +202,19 @@ def blackjack_section(ctx):
                           dirty=lambda: bool(spoken_switch.value) != spoken['value'],
                           reset=lambda: spoken_switch.set_value(spoken['value']))
 
+        from .spoken.veto_client import PROVIDER
+        veto = {'value': store.spoken_veto_enabled(gid)}
+        veto_switch = ui.switch(t('Decision-model check for spoken moves'), value=veto['value'])
+        ui.label(t('When on, a message that the local reader takes for a spoken move is sent to {provider}, a third-party service, to double-check it. '
+                   'Only the message text and the legal moves are sent, only for members who turned on spoken moves, and only on their own turn. Off by default.', provider=PROVIDER)).classes('ll-muted')
+        def save_veto():
+            veto['value'] = store.set_spoken_veto_enabled(gid, bool(veto_switch.value), veto['value'])
+            return veto['value']
+        ctx.savebar.track(t('Decision-model check for spoken moves'), {veto_switch: veto['value']}, save=save_veto, action='games.spoken_veto',
+                          detail=lambda result: {'enabled': result}, success=t('Decision-model check for spoken moves saved'),
+                          dirty=lambda: bool(veto_switch.value) != veto['value'],
+                          reset=lambda: veto_switch.set_value(veto['value']))
+
         from .icons import lucide_button
         from .scene_ui import confirm_dialog
         labels = _move_labels(t)

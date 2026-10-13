@@ -53,6 +53,7 @@ class VetoCase(SpokenCase):
         await super().asyncSetUp()
         self.fake = self.spoken.veto = FakeVeto()
         self.store.set_spoken_veto_enabled(G, True)
+        self.spoken.veto_notified.update({(G, ALICE), (G, BOB)})  # FEAT-49b3: the first-message notice has its own tests (test_spoken_veto_ui.py)
         self.decision = Decision("unsure", ("hit", "stand"))
         self.fake.probs = {"hit": 0.9, "stand": 0.9}
 

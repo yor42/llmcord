@@ -2700,6 +2700,19 @@ msgid "Read moves from chat saved"
 msgstr "채팅에서 행동 읽기 설정을 저장했어요"
 
 #: llmcord_core/games_ui.py
+msgid "Decision-model check for spoken moves"
+msgstr "채팅 행동 결정 모델 확인"
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "When on, a message that the local reader takes for a spoken move is sent to {provider}, a third-party service, to double-check it. Only the message text and the legal moves are sent, only for members who turned on spoken moves, and only on their own turn. Off by default."
+msgstr "켜면, 로컬 리더가 채팅 행동으로 판단한 메시지가 확인을 위해 외부 서비스인 {provider}로 전송돼요. 전송되는 것은 메시지 문장과 가능한 행동뿐이고, 채팅 행동을 켠 멤버에 대해서만, 그리고 그 멤버의 차례일 때만 전송돼요. 기본값은 꺼짐이에요."
+
+#: llmcord_core/games_ui.py
+msgid "Decision-model check for spoken moves saved"
+msgstr "채팅 행동 결정 모델 확인 설정을 저장했어요"
+
+#: llmcord_core/games_ui.py
 msgid "Tuning"
 msgstr "조정"
 

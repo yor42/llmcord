@@ -26,7 +26,7 @@ ADMIN_SURFACE = {
     "lore": {"add", "pin", "edit", "promote", "delete"},
     "scene": {"delete"},
     "currency": {"grant", "revoke", "name", "daily"},
-    "games": {"channel", "bets"},
+    "games": {"channel", "bets", "spoken_veto"},
 }
 # D11: member group -> subcommands; ``None`` marks a top-level command without subcommands.
 MEMBER_SURFACE = {
@@ -45,7 +45,7 @@ MEMBER_SURFACE = {
     "shop": None,
     "inventory": None,
     "use": None,
-    "game": {"start", "hand", "rules", "spoken_moves"},
+    "game": {"start", "hand", "rules", "spoken_moves", "spoken_veto"},
     "lore": {"list"},
     "scene": {"reset"},
 }
@@ -77,6 +77,7 @@ ADMIN_OPTIONS = {
     "admin currency daily": ["amount", "streak_bonus", "streak_days"],
     "admin games channel": ["enabled", "channel"],
     "admin games bets": ["min", "max"],
+    "admin games spoken_veto": ["setting"],
 }
 # Arguments for invoking each member command (DM test); everything else uses defaults.
 MEMBER_ARGS = {
@@ -94,6 +95,7 @@ MEMBER_ARGS = {
     "game start": ("blackjack", 10),
     "game rules": ("doubt",),
     "game spoken_moves": ("off",),
+    "game spoken_veto": ("status",),
     "use": ("Dice",),
 }
 
@@ -110,9 +112,9 @@ class AdminSurfaceTests(unittest.TestCase):
         self.bot.store.close()
 
     def test_surface_table_matches_d11(self):
-        """Guard for the tests below: the expected tables have the 21 admin and 34 member (plus the admin-only /context) commands: D11's 27 plus FEAT-21 B1's ``/game start``, ``/game hand`` and ``/game rules``."""
-        self.assertEqual(len(ADMIN_PATHS), 21)
-        self.assertEqual(len(MEMBER_PATHS), 34)
+        """Guard for the tests below: the expected tables have the 22 admin and 35 member (plus the admin-only /context) commands: D11's 27 plus FEAT-21 B1's ``/game start``, ``/game hand`` and ``/game rules``."""
+        self.assertEqual(len(ADMIN_PATHS), 22)
+        self.assertEqual(len(MEMBER_PATHS), 35)
         self.assertEqual(set(ADMIN_OPTIONS), ADMIN_PATHS)
 
     def test_admin_group_holds_exactly_the_admin_subcommands(self):

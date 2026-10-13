@@ -749,6 +749,23 @@ msgid "surrendered"
 msgstr "서렌더함"
 
 #: llmcord_core/games_discord.py
+msgid "The decision-model check for spoken moves is now on."
+msgstr "채팅 행동에 대한 결정 모델 확인을 켰어요."
+
+#: llmcord_core/games_discord.py
+msgid "The decision-model check for spoken moves is now off."
+msgstr "채팅 행동에 대한 결정 모델 확인을 껐어요."
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "When on, a message that the local reader takes for a spoken move is sent to {provider}, a third-party service, to double-check it. Only the message text and the legal moves are sent, only for members who turned on spoken moves, and only on their own turn. Off by default."
+msgstr "켜면, 로컬 리더가 채팅 행동으로 판단한 메시지가 확인을 위해 외부 서비스인 {provider}로 전송돼요. 전송되는 것은 메시지 문장과 가능한 행동뿐이고, 채팅 행동을 켠 멤버에 대해서만, 그리고 그 멤버의 차례일 때만 전송돼요. 기본값은 꺼짐이에요."
+
+#: llmcord_core/games_discord.py
+msgid "It has no effect until the operator configures it."
+msgstr "운영자가 설정하기 전에는 아무 효과가 없어요."
+
+#: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "{outcome} {amount}"
 msgstr "{outcome} {amount}"
@@ -1031,6 +1048,14 @@ msgstr "행동 확인을 켰어요. 이 서버가 채팅에서 행동을 읽을 
 #: llmcord_core/games_doubt_discord.py
 msgid " (This server has Read moves from chat turned off right now.)"
 msgstr " (지금 이 서버는 채팅에서 행동 읽기가 꺼져 있어요.)"
+
+#: llmcord_core/games_doubt_discord.py
+msgid "The decision-model check is on for you."
+msgstr "나에 대한 결정 모델 확인이 켜져 있어요."
+
+#: llmcord_core/games_doubt_discord.py
+msgid "The decision-model check is off for you."
+msgstr "나에 대한 결정 모델 확인이 꺼져 있어요."
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
 msgid "Use /game hand in your table's thread."
@@ -2005,6 +2030,10 @@ msgstr "당신의 차례가 아니에요."
 #: llmcord_core/games_spoken_discord.py
 msgid "Got it — left as table talk. Tired of these? Turn them off with /game spoken_moves."
 msgstr "알겠어요. 잡담으로 둘게요. 이 확인이 번거롭다면 /game spoken_moves로 끌 수 있어요."
+
+#: llmcord_core/games_spoken_discord.py
+msgid "Heads up: when you type a move at a game table, the message may be sent to a third-party service to double-check it. Turn that off for yourself with /game spoken_veto off."
+msgstr "안내: 게임 테이블에서 행동을 입력하면 그 메시지가 확인을 위해 외부 서비스로 전송될 수 있어요. /game spoken_veto off로 나만 끌 수 있어요."
 
 #: llmcord_core/games_spoken_discord.py
 msgctxt "button.blackjack"

@@ -17,6 +17,7 @@ log = logging.getLogger(__name__)
 ENV_SWITCH = "LLMCORD_SPOKEN_VETO"
 ENV_VALUE = "openrouter-d1"
 ENV_KEY = "OPENROUTER_API_KEY"
+PROVIDER = "OpenRouter (Microsoft Decision-1)"  # how the disclosure names the third-party service
 
 # Internal diagnostics for VetoError; never shown to a user.
 CLOSED = "client closed"

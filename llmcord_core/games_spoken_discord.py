@@ -29,7 +29,8 @@ MAX_CHARS = 200  # longer messages are chat, not a move: ignored before any infe
 PREFIX = "llmcord:bjs"
 NOT_YOURS = N_("This isn't your move check.")
 TALK_KEPT = N_("Got it — left as table talk. Tired of these? Turn them off with /game spoken_moves.")
-RUNTIME_OFF = "Spoken moves are unavailable: the reading model is not ready."
+VETO_NOTICE = N_("Heads up: when you type a move at a game table, the message may be sent to a third-party service to double-check it. Turn that off for yourself with /game spoken_veto off.")
+RUNTIME_OFF ="Spoken moves are unavailable: the reading model is not ready."
 
 
 def _names(t) -> dict:
@@ -91,7 +92,8 @@ class SpokenMoves:
         self.closed = False
         self._warned: set[str] = set()
         self.veto = veto_client.from_env(env if env is not None else os.environ)  # None unless the operator switch and a key are set
-        self.veto_timeout = 1.0
+        self.veto_timeout = 1.5  # above the client's own 1.0 s timeout, so that one trips the breaker first
+        self.veto_notified: set[tuple] = set()  # (guild, member) told that a message may be double-checked by a third party; memory only, so a restart tells again
         self.limiter = VetoLimiter()
 
     # --- entry points -------------------------------------------------------------------------
@@ -261,7 +263,12 @@ class SpokenMoves:
         """(band, moves) after the optional decision-model veto; e5's own reading whenever it is off, limited, slow or failing."""
         veto, store, guild = self.veto, self.bot.store, key[0]
         if (veto is None or veto.breaker_open or not store.spoken_veto_enabled(guild) or not store.spoken_veto_member_on(guild, turn.member_id)
-                or not self._current(key, turn, number) or not self.limiter.allow(guild)):
+                or not self._current(key, turn, number)):
+            return decision.band, decision.moves
+        if (guild, turn.member_id) not in self.veto_notified:  # nothing leaves before the member has been told, and this message is not sent
+            await self._notify(message, guild, turn.member_id)
+            return decision.band, decision.moves
+        if not self.limiter.allow(guild):
             return decision.band, decision.moves
         started = time.monotonic()
         try:
@@ -274,6 +281,16 @@ class SpokenMoves:
             return decision.band, decision.moves
         logging.info("Spoken-move veto %s -> %s in %.0f ms", decision.band, result[0], (time.monotonic() - started) * 1000)
         return result
+
+    async def _notify(self, message, guild, member_id) -> None:
+        """The one-line notice (channel language, rendered now), once per member and server per process; a failed post is tried again with the next message."""
+        member = (guild, member_id)
+        self.veto_notified.add(member)  # before the await, so two quick messages post one notice
+        try:
+            await message.reply(discord_locale.channel_t(message.guild)(VETO_NOTICE), mention_author=False, allowed_mentions=NO_MENTIONS)
+        except Exception as error:
+            self.veto_notified.discard(member)
+            logging.warning("Could not post the decision-model check notice: %s", type(error).__name__)
 
     @staticmethod
     async def _delete(message) -> None:

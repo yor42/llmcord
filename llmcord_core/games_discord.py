@@ -26,6 +26,7 @@ from discord import app_commands
 from .admin_store import ConflictError, GameError
 from . import game_chooser
 from .games import DefaultPolicy, blackjack
+from .spoken import veto_client
 from .game_talk import TalkBudget
 from .table_runtime import TableRuntime
 from llmcord_core import i18n
@@ -51,6 +52,11 @@ RESULT_REFUNDED = NP_("blackjack result", "refunded")
 RESULT_WORDS = {"surrender": NP_("blackjack result", "surrendered"), "even_money": NP_("blackjack result", "even money")}
 STATUS_WORDS = {"stand": NP_("blackjack status", "stands"), "bust": NP_("blackjack status", "bust"),
                 "blackjack": NP_("blackjack status", "blackjack"), "surrender": NP_("blackjack status", "surrendered")}
+VETO_ADMIN_ON = N_("The decision-model check for spoken moves is now on.")
+VETO_ADMIN_OFF = N_("The decision-model check for spoken moves is now off.")
+VETO_DISCLOSURE = N_("When on, a message that the local reader takes for a spoken move is sent to {provider}, a third-party service, to double-check it. "
+                     "Only the message text and the legal moves are sent, only for members who turned on spoken moves, and only on their own turn. Off by default.")
+VETO_NOT_CONFIGURED = N_("It has no effect until the operator configures it.")
 PREFIX = "llmcord:bj"
 NO_MENTIONS = discord.AllowedMentions.none()
 
@@ -1113,6 +1119,21 @@ def register_game_commands(bot, ctx: SimpleNamespace, admin_games: app_commands.
         finally:
             if paint is not None:
                 await bot.games.send_paint(paint)
+
+    @admin_games.command(name="spoken_veto", description=C_("Turn the decision-model check for spoken moves on or off"))
+    @app_commands.describe(setting=C_("On or off"))
+    @app_commands.choices(setting=[app_commands.Choice(name=C_("On"), value="on"), app_commands.Choice(name=C_("Off"), value="off")])
+    @app_commands.checks.has_permissions(administrator=True)
+    async def games_spoken_veto(interaction: discord.Interaction, setting: str):
+        require_guild(interaction)
+        on = setting == "on"
+        bot.store.set_spoken_veto_enabled(interaction.guild_id, on)
+        t = discord_locale.invoker_t(interaction)
+        text = t(VETO_ADMIN_ON) if on else t(VETO_ADMIN_OFF)
+        text += " " + t(VETO_DISCLOSURE, provider=veto_client.PROVIDER)
+        if bot.spoken.veto is None:
+            text += " " + t(VETO_NOT_CONFIGURED)
+        await reply(interaction, text)
 
     @admin_games.command(name="bets", description=C_("Set the smallest and largest bet"))
     @app_commands.describe(min=C_("Smallest bet"), max=C_("Largest bet"))

@@ -68,6 +68,13 @@ EXPECTED_COMMANDS = {
         "None",
         False,
     ),
+    "admin games spoken_veto": (
+        "Turn the decision-model check for spoken moves on or off",
+        (("setting", "string", True, "On or off", False, (("On", "on"), ("Off", "off"))),),
+        1,
+        "None",
+        False,
+    ),
     "admin games channel": (
         "Turn games on or off in a channel",
         (
@@ -330,6 +337,13 @@ EXPECTED_COMMANDS = {
     "game spoken_moves": (
         "Turn move checks from your chat on or off for you",
         (("setting", "string", True, "On or off", False, (("On", "on"), ("Off", "off"))),),
+        0,
+        "None",
+        False,
+    ),
+    "game spoken_veto": (
+        "Turn the decision-model check of your move messages on or off for you",
+        (("setting", "string", True, "On, off or status", False, (("On", "on"), ("Off", "off"), ("Status", "status"))),),
         0,
         "None",
         False,
