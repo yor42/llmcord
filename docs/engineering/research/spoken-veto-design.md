@@ -91,4 +91,8 @@ Item 2 touches consent and an outbound data path, so it should get an Opus revie
 5. Code stays out of `ModelGateway` (`spoken/veto.py`, `spoken/veto_client.py`).
 6. Provider terms: the owner's reading of the OpenRouter provider page (Azure, "does not train on prompts and does not retain prompt data").
 
-Still open: the migration go-ahead (v23, `member_settings.spoken_veto`), and the wording and timing of the member notice (proposal: appended once to the first check message a member gets per bot start, and always in `/game spoken_veto` replies).
+7. Migration v23 (`member_settings.spoken_veto`, default on) approved 2026-10-13.
+
+Implemented differently from the proposal on one point: the member notice is a separate one-line channel reply posted **before** anything is sent. The first time a member would be affected since the bot started, the bot posts the notice and skips the veto for that message; later messages use it. The notice is also in every `/game spoken_veto` reply. The mark is in memory only, so a restart repeats the notice. The outer call guard is 1.5 s so the client's own 1.0 s timeout feeds the breaker first.
+
+Status: FEAT-49a/b built (fbff1c5, 9c28524, dbd8631, 601b240, 6f84205). Nothing is enabled until the operator sets `LLMCORD_SPOKEN_VETO=openrouter-d1` and `OPENROUTER_API_KEY`. Shadow telemetry (49c) and the drift script stay proposed.
