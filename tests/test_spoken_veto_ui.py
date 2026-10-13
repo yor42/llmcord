@@ -26,6 +26,7 @@ import test_games_spoken_discord as tgsd
 import test_spoken_veto_wiring as wiring
 from llmcord_core import games_spoken_discord as gsd
 from llmcord_core.admin_store import ConflictError
+from llmcord_core.i18n import discord_locale as dl
 from test_game_tables import TableCase
 
 G, ALICE, BOB = tgsd.G, tgsd.ALICE, tgsd.BOB
@@ -292,6 +293,11 @@ class NoticeTests(NoticeCase):
 
 
 class NoticeLanguageTests(NoticeCase):
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        dl.set_server_language_source(self.store.server_language)  # SkitBot.setup_hook registers it in production
+        self.addCleanup(dl.set_server_language_source, None)
+
     async def test_the_notice_follows_the_channel_language_at_render_time(self):
         """FEAT-49b3: the notice is the channel's (channel_t(guild)), resolved when posted: English first, Korean after the server language changes."""
         await self.deal()
