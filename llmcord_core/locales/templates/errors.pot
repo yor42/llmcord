@@ -361,7 +361,7 @@ msgid "The read doubts from chat setting was changed elsewhere. Reload the page 
 msgstr ""
 
 #: llmcord_core/i18n/codes.py
-msgid "The chat veto setting was changed elsewhere. Reload the page and try again."
+msgid "The decision-model check setting was changed elsewhere. Reload the page and try again."
 msgstr ""
 
 #: llmcord_core/i18n/codes.py

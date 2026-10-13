@@ -63,12 +63,19 @@ class StoreSettingTests(TableCase):
     def test_stale_save_conflicts_with_a_reload_message(self):
         """FEAT-49b3: a switch saved against a stale value is refused with the reload message and keeps the stored value."""
         self.store.set_spoken_veto_enabled(G, True)
-        with self.assertRaisesRegex(ConflictError, "^The chat veto setting was changed elsewhere. Reload the page and try again.$"):
+        with self.assertRaisesRegex(ConflictError, "^The decision-model check setting was changed elsewhere. Reload the page and try again.$"):
             self.store.set_spoken_veto_enabled(G, False, False)
         self.assertTrue(self.store.spoken_veto_enabled(G))
 
 
+SERVER_OFF = "(This server has the decision-model check turned off right now.)"
+
+
 class MemberCommandTests(tgsd.SpokenCase):
+    async def asyncSetUp(self):
+        await super().asyncSetUp()
+        self.store.set_spoken_veto_enabled(G, True)  # FEAT-49 review: with the server switch off the reply differs (see ServerOffReplyTests)
+
     async def switch(self, user, setting, guild_id=G, interaction=None):
         click = interaction or FakeInteraction(guild_id=guild_id, user_id=user)
         await invoke(self.bot, "game spoken_veto", click, setting=setting)
@@ -115,6 +122,27 @@ class MemberCommandTests(tgsd.SpokenCase):
         self.assertNotEqual(reply, english)
         self.assertRegex(reply, HANGUL)
         self.assertIn(OPT_OUT, reply)
+
+
+class ServerOffReplyTests(tgsd.SpokenCase):
+    async def test_replies_say_the_server_has_it_off_and_omit_the_notice(self):
+        """FEAT-49 review: with the server switch off, on/off/status replies end with the server-off sentence and carry no notice line."""
+        self.assertFalse(self.store.spoken_veto_enabled(G))
+        for setting in ("on", "off", "status"):
+            click = FakeInteraction(user_id=ALICE)
+            await invoke(self.bot, "game spoken_veto", click, setting=setting)
+            reply = click.replies[0]
+            with self.subTest(setting=setting):
+                self.assertIn(SERVER_OFF, reply)
+                self.assertFalse(has_notice(reply), reply)
+                self.assertIs(click.response.sent[0][1]["ephemeral"], True)
+
+    async def test_server_on_has_no_server_off_sentence(self):
+        """FEAT-49 review: with the server switch on the reply is the notice reply, without the server-off sentence."""
+        self.store.set_spoken_veto_enabled(G, True)
+        click = FakeInteraction(user_id=ALICE)
+        await invoke(self.bot, "game spoken_veto", click, setting="status")
+        self.assertNotIn("turned off right now", click.replies[0])
 
 
 class AdminCommandTests(tgsd.SpokenCase):
@@ -274,6 +302,62 @@ class NoticeTests(NoticeCase):
         self.decision = tgsd.Decision("unsure", ("hit", "stand"))
         msg = await self.say(ALICE, "hit me")
         self.assertEqual((len(self.notices(msg)), self.fake.calls), (1, []))
+
+    async def _hold_notice(self, msg, fail=False):
+        """Make msg's first reply (the notice) wait for ``gate``; with fail=True it then raises. Returns (entered, gate)."""
+        entered, gate, calls = asyncio.Event(), asyncio.Event(), []
+
+        async def on_reply():
+            calls.append(1)
+            if len(calls) == 1:
+                entered.set()
+                await gate.wait()
+                if fail:
+                    raise RuntimeError("discord is down")
+
+        msg.on_reply = on_reply
+        return entered, gate
+
+    async def test_second_message_while_the_notice_is_in_flight_posts_no_second_notice_and_no_call(self):
+        """FEAT-49 review: while the notice post is in flight nothing is sent and no second notice is posted; the mark is set only after it succeeded."""
+        await self.deal()
+        first = tgsd.Said(ALICE, "one")
+        entered, gate = await self._hold_notice(first)
+        self.spoken.note_message(first)
+        await asyncio.wait_for(entered.wait(), 1)
+        second = tgsd.Said(ALICE, "two")
+        before = set(self.spoken.tasks)
+        self.spoken.note_message(second)
+        await asyncio.wait_for(asyncio.gather(*(self.spoken.tasks - before)), 1)
+        self.assertEqual((self.fake.calls, self.notices(second)), ([], []))
+        self.assert_check_labels(second, ["Hit", "Stand", "Just table talk"])
+        self.assertEqual(self.spoken.veto_notified, set())
+        gate.set()
+        await self.settle()
+        self.assertEqual(len(self.notices(first)), 1)
+        self.assertEqual((self.fake.calls, self.spoken.veto_notified), ([], {(G, ALICE)}))
+        await self.say(ALICE, "three")
+        self.assertEqual([c[0] for c in self.fake.calls], ["three"])
+
+    async def test_failed_notice_does_not_mark_and_is_retried(self):
+        """FEAT-49 review: if the notice post raises, the member is not marked, nothing was sent for either message, and the next eligible message posts the notice again."""
+        await self.deal()
+        first = tgsd.Said(ALICE, "one")
+        entered, gate = await self._hold_notice(first, fail=True)
+        self.spoken.note_message(first)
+        await asyncio.wait_for(entered.wait(), 1)
+        second = tgsd.Said(ALICE, "two")
+        before = set(self.spoken.tasks)
+        self.spoken.note_message(second)
+        await asyncio.wait_for(asyncio.gather(*(self.spoken.tasks - before)), 1)
+        gate.set()
+        await self.settle()
+        self.assertEqual((self.fake.calls, self.spoken.veto_notified, self.notices(first)), ([], set(), []))
+        third = await self.say(ALICE, "three")
+        self.assertEqual((len(self.notices(third)), self.fake.calls), (1, []))
+        self.assertEqual(self.spoken.veto_notified, {(G, ALICE)})
+        await self.say(ALICE, "four")
+        self.assertEqual([c[0] for c in self.fake.calls], ["four"])
 
     async def test_marks_reset_with_a_new_instance(self):
         """FEAT-49b3: the marks live in memory only: a new SpokenMoves (a restart) notifies again."""

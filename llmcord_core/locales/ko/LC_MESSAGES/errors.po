@@ -369,8 +369,8 @@ msgid "The read doubts from chat setting was changed elsewhere. Reload the page 
 msgstr "채팅에서 다우트 읽기 설정이 다른 곳에서 변경됐어요. 페이지를 새로고침하고 다시 시도해 주세요."
 
 #: llmcord_core/i18n/codes.py
-msgid "The chat veto setting was changed elsewhere. Reload the page and try again."
-msgstr "채팅 행동 결정 모델 확인 설정이 다른 곳에서 변경됐어요. 페이지를 새로고침하고 다시 시도해 주세요."
+msgid "The decision-model check setting was changed elsewhere. Reload the page and try again."
+msgstr "채팅으로 입력한 행동의 외부 모델 재확인 설정이 다른 곳에서 변경됐어요. 페이지를 새로고침하고 다시 시도해 주세요."
 
 #: llmcord_core/i18n/codes.py
 msgid "The keep phrases setting was changed elsewhere. Reload the page and try again."

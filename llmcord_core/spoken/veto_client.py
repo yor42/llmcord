@@ -3,6 +3,7 @@
 The host is fixed in code, redirects are not followed, there are no retries, and a circuit breaker stops calls after repeated
 failures. Errors and logs carry at most a status code or an exception class name, never the key, the message or the response body.
 """
+import asyncio
 import json
 import logging
 import time
@@ -26,14 +27,15 @@ TOO_LARGE = "response too large"
 BAD_JSON = "invalid json"
 STATUS = "status "
 REQUEST_FAILED = "request failed: "
+DEADLINE = "total deadline exceeded"
 
 
 class VetoClient:
     def __init__(self, api_key, *, transport=None, clock=time.monotonic, timeout=1.0, connect_timeout=0.3, max_bytes=65536, fail_limit=5, cooldown=60.0):
-        self._http = httpx.AsyncClient(transport=transport, timeout=httpx.Timeout(timeout, connect=connect_timeout), follow_redirects=False,
+        self._http = httpx.AsyncClient(transport=transport, timeout=httpx.Timeout(timeout, connect=connect_timeout), follow_redirects=False, trust_env=False,
                                        headers={"Authorization": f"Bearer {api_key}"})
         self._clock, self._max_bytes, self._fail_limit, self._cooldown = clock, max_bytes, fail_limit, cooldown
-        self._fails, self._opened_at, self._closed = 0, None, False
+        self._total, self._fails, self._opened_at, self._closed = timeout, 0, None, False
 
     @property
     def breaker_open(self):
@@ -47,10 +49,18 @@ class VetoClient:
         if self.breaker_open:
             raise VetoError(BREAKER_OPEN)
         try:
-            probs = veto.parse_response(await self._post(body), legal)
+            try:
+                async with asyncio.timeout(self._total):
+                    data = await self._post(body)
+            except TimeoutError:
+                log.warning("veto call failed: total deadline")
+                raise VetoError(DEADLINE) from None
+            probs = veto.parse_response(data, legal)
         except VetoError:
             self._fail()
             raise
+        if self._opened_at is not None:
+            log.warning("veto breaker closed")
         self._fails, self._opened_at = 0, None
         return probs
 
@@ -80,6 +90,8 @@ class VetoClient:
     def _fail(self):
         self._fails += 1
         if self._fails >= self._fail_limit:
+            if not self.breaker_open:
+                log.warning("veto breaker open after %d failures", self._fails)
             self._opened_at = self._clock()
 
     async def close(self):

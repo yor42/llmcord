@@ -16,6 +16,7 @@ of the implementation. The seams they require are:
 """
 import asyncio
 import logging
+import re
 import unittest
 from unittest import mock
 
@@ -267,6 +268,62 @@ class StaleTests(VetoCase):
         self.fake.gate.set()
         await self.settle()
         self.assertEqual((old.posts, len(new.posts)), ([], 1))
+
+
+class DiscordIdTests(VetoCase):
+    TOKENS = ("<@123>", "<@!123>", "<@&123>", "<#123>", "<:wave:123>", "<a:wave:123>")
+
+    async def test_ids_in_the_text_never_reach_the_veto_and_spend_no_token(self):
+        """FEAT-49 review: a message with a mention or custom-emoji token is not sent (e5's buttons stand) and takes no limiter token."""
+        from llmcord_core.spoken.veto_limits import VetoLimiter
+        await self.deal()
+        self.spoken.limiter = VetoLimiter(per_minute=1, per_day=1, clock=lambda: 0.0, today=lambda: 1)
+        for token in self.TOKENS:
+            with self.subTest(token=token):
+                self.assert_e5_buttons(await self.say(ALICE, f"{token} hit me"))
+                self.assertEqual(self.fake.calls, [])
+        self.fake.probs = {"hit": 0.9, "stand": 0.1}
+        msg = await self.say(ALICE, "hit me")
+        self.assertEqual(len(self.fake.calls), 1)  # the single token was still there
+        self.assertEqual(self.labels(msg), ["Hit", "Just table talk"])
+
+    async def test_plain_text_and_unicode_emoji_are_sent_unchanged(self):
+        """FEAT-49 review: ordinary text, unicode emoji and a bare '<3' are unaffected, and what is sent never looks like a Discord token."""
+        await self.deal()
+        for text in ("hit me 😀", "stand <3 :) a@b", "hit # 1 :: ok"):
+            self.fake.calls.clear()
+            await self.say(ALICE, text)
+            self.assertEqual([c[0] for c in self.fake.calls], [text])
+            self.assertIsNone(re.search(r"<[@#:a]", self.fake.calls[0][0]))
+
+
+class SwitchRecheckTests(VetoCase):
+    async def _flip_during_embed(self, flip):
+        await self.deal()
+        self.runtime.gate = asyncio.Event()
+        msg = Said(ALICE, "hit me")
+        self.spoken.note_message(msg)
+        for _ in range(100):
+            if self.runtime.texts:
+                break
+            await asyncio.sleep(0)
+        self.assertEqual(self.runtime.texts, ["hit me"])
+        flip()
+        self.runtime.gate.set()
+        await self.settle()
+        return msg
+
+    async def test_guild_spoken_moves_turned_off_while_embedding_never_calls(self):
+        """FEAT-49 review: the server turning spoken moves off during the embedding await stops the call; e5's check is unchanged."""
+        msg = await self._flip_during_embed(lambda: self.store.set_spoken_moves_enabled(G, False))
+        self.assertEqual(self.fake.calls, [])
+        self.assert_e5_buttons(msg)
+
+    async def test_member_spoken_moves_turned_off_while_embedding_never_calls(self):
+        """FEAT-49 review: the member turning spoken moves off during the embedding await stops the call; e5's check is unchanged."""
+        msg = await self._flip_during_embed(lambda: self.store.set_spoken_member_on(G, ALICE, False))
+        self.assertEqual(self.fake.calls, [])
+        self.assert_e5_buttons(msg)
 
 
 class LimiterUnitTests(unittest.TestCase):

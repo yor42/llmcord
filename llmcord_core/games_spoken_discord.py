@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass, field
 
@@ -29,6 +30,7 @@ MAX_CHARS = 200  # longer messages are chat, not a move: ignored before any infe
 PREFIX = "llmcord:bjs"
 NOT_YOURS = N_("This isn't your move check.")
 TALK_KEPT = N_("Got it — left as table talk. Tired of these? Turn them off with /game spoken_moves.")
+DISCORD_TOKEN = re.compile(r"<(?:@[!&]?|#|a?:\w+:)\d*")  # mention, channel and custom-emoji tokens never leave the process
 VETO_NOTICE = N_("Heads up: when you type a move at a game table, the message may be sent to a third-party service to double-check it. Turn that off for yourself with /game spoken_veto off.")
 RUNTIME_OFF ="Spoken moves are unavailable: the reading model is not ready."
 
@@ -93,6 +95,7 @@ class SpokenMoves:
         self._warned: set[str] = set()
         self.veto = veto_client.from_env(env if env is not None else os.environ)  # None unless the operator switch and a key are set
         self.veto_timeout = 1.5  # above the client's own 1.0 s timeout, so that one trips the breaker first
+        self.veto_notice_pending: set[tuple] = set()  # (guild, member) whose notice post is in flight: no second notice, nothing sent meanwhile
         self.veto_notified: set[tuple] = set()  # (guild, member) told that a message may be double-checked by a third party; memory only, so a restart tells again
         self.limiter = VetoLimiter()
 
@@ -263,10 +266,14 @@ class SpokenMoves:
         """(band, moves) after the optional decision-model veto; e5's own reading whenever it is off, limited, slow or failing."""
         veto, store, guild = self.veto, self.bot.store, key[0]
         if (veto is None or veto.breaker_open or not store.spoken_veto_enabled(guild) or not store.spoken_veto_member_on(guild, turn.member_id)
+                or not store.spoken_moves_enabled(guild) or not store.spoken_member_on(guild, turn.member_id)
+                or DISCORD_TOKEN.search(text) or any(getattr(message, a, None) for a in ("raw_mentions", "raw_role_mentions", "raw_channel_mentions"))
                 or not self._current(key, turn, number)):
             return decision.band, decision.moves
-        if (guild, turn.member_id) not in self.veto_notified:  # nothing leaves before the member has been told, and this message is not sent
-            await self._notify(message, guild, turn.member_id)
+        member = (guild, turn.member_id)
+        if member not in self.veto_notified:  # nothing leaves before the member has been told, and this message is not sent
+            if member not in self.veto_notice_pending:
+                await self._notify(message, guild, turn.member_id)
             return decision.band, decision.moves
         if not self.limiter.allow(guild):
             return decision.band, decision.moves
@@ -283,14 +290,16 @@ class SpokenMoves:
         return result
 
     async def _notify(self, message, guild, member_id) -> None:
-        """The one-line notice (channel language, rendered now), once per member and server per process; a failed post is tried again with the next message."""
+        """The one-line notice (channel language, rendered now), once per member and server per process; marked only once posted, a failed post is tried again with a later message."""
         member = (guild, member_id)
-        self.veto_notified.add(member)  # before the await, so two quick messages post one notice
+        self.veto_notice_pending.add(member)
         try:
             await message.reply(discord_locale.channel_t(message.guild)(VETO_NOTICE), mention_author=False, allowed_mentions=NO_MENTIONS)
+            self.veto_notified.add(member)
         except Exception as error:
-            self.veto_notified.discard(member)
             logging.warning("Could not post the decision-model check notice: %s", type(error).__name__)
+        finally:
+            self.veto_notice_pending.discard(member)
 
     @staticmethod
     async def _delete(message) -> None:

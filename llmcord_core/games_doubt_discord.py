@@ -42,6 +42,7 @@ SPOKEN_ON = N_("Move checks are on for you. When this server reads moves from ch
 SPOKEN_SERVER_OFF = N_(" (This server has Read moves from chat turned off right now.)")
 VETO_MEMBER_ON = N_("The decision-model check is on for you.")
 VETO_MEMBER_OFF = N_("The decision-model check is off for you.")
+VETO_SERVER_OFF = N_("(This server has the decision-model check turned off right now.)")
 NO_TABLE = N_("Use /game hand in your table's thread.")
 THREAD_FORBIDDEN = N_("I couldn't open the table thread. I need the Create Public Threads and Send Messages in Threads "
                       "permissions in this channel. The table was closed.")
@@ -1611,6 +1612,7 @@ def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
             bot.store.set_spoken_veto_member_on(interaction.guild_id, interaction.user.id, setting == "on")
         t = discord_locale.invoker_t(interaction)
         on = bot.store.spoken_veto_member_on(interaction.guild_id, interaction.user.id)
-        await bot.doubt._say(interaction, f"{t(VETO_MEMBER_ON) if on else t(VETO_MEMBER_OFF)} {t(VETO_NOTICE)}")
+        head = t(VETO_MEMBER_ON) if on else t(VETO_MEMBER_OFF)
+        await bot.doubt._say(interaction, f"{head} {t(VETO_NOTICE)}" if bot.store.spoken_veto_enabled(interaction.guild_id) else f"{head} {t(VETO_SERVER_OFF)}")
 
     bot.tree.add_command(group)

@@ -23,7 +23,7 @@ In `_read`, after `interpret.decide(...)` (line 203) and the silent-band return 
 3. Silent after the veto → return as for e5-silent (no buttons). Otherwise build the buttons from the new moves.
 4. After the await, re-run `_current()` staleness checks as lines 185/191 do, because the table may have moved on.
 
-(The "member" gate above means members of a server where spoken moves are on, which is every member unless they switched it off.) The e5 reading already exists before the call, so a timeout, error or open breaker simply continues with e5's buttons (**fail-open**). The player sees no difference except the extra button that was always there today. The existing "one pending check per table" rule bounds in-flight calls per table.
+(The "member" gate above means members of a server where spoken moves are on, which is every member unless they switched it off.) The e5 reading already exists before the call, so a timeout, error or open breaker simply continues with e5's buttons (**fail-open**). The player sees no difference except the extra button that was always there today. Each message spawns its own check, and a superseded reading already inside `ask` stays in flight until it answers or times out; only the per-guild limiter bounds the number of calls.
 
 ## New code (small, separable)
 | Piece | Where | Notes |
@@ -93,6 +93,6 @@ Item 2 touches consent and an outbound data path, so it should get an Opus revie
 
 7. Migration v23 (`member_settings.spoken_veto`, default on) approved 2026-10-13.
 
-Implemented differently from the proposal on one point: the member notice is a separate one-line channel reply posted **before** anything is sent. The first time a member would be affected since the bot started, the bot posts the notice and skips the veto for that message; later messages use it. The notice is also in every `/game spoken_veto` reply. The mark is in memory only, so a restart repeats the notice. The outer call guard is 1.5 s so the client's own 1.0 s timeout feeds the breaker first.
+Implemented differently from the proposal on one point: the member notice is a separate one-line channel reply posted **before** anything is sent. The first time a member would be affected since the bot started, the bot posts the notice and skips the veto for that message; later messages use it. The notice is also in every `/game spoken_veto` reply. The mark is in memory only, so a restart repeats the notice. The client enforces its own 1.0 s total deadline, which counts as a breaker failure; the 1.5 s guard around the call is only the outer limit. A message holding a mention, channel or custom-emoji token is never sent, and while a member's notice post is in flight their other messages are not sent either (the mark is set only once the notice was posted).
 
 Status: FEAT-49a/b built (fbff1c5, 9c28524, dbd8631, 601b240, 6f84205). Nothing is enabled until the operator sets `LLMCORD_SPOKEN_VETO=openrouter-d1` and `OPENROUTER_API_KEY`. Shadow telemetry (49c) and the drift script stay proposed.

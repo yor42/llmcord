@@ -7,10 +7,13 @@ veto.py (pure): ORIGIN, PATH, MODEL, TAU, MAX_CHARS, VetoError, build_request(te
 veto_client.py: VetoClient(api_key, *, transport, clock, timeout, connect_timeout, max_bytes, fail_limit, cooldown) with
     async ask(text, legal), breaker_open, async close(); from_env(env, **kw).
 """
+import asyncio
 import json
 import logging
 import math
+import os
 import unittest
+from unittest import mock
 
 import httpx
 
@@ -394,6 +397,59 @@ class BreakerTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(client.breaker_open)
         self.assertEqual(len(rec.requests), 6)
         await client.close()
+
+
+class SlowSink:
+    """Async MockTransport handler that never answers in time (or until released)."""
+
+    def __init__(self):
+        self.entered, self.count = asyncio.Event(), 0
+
+    async def __call__(self, request):
+        self.count += 1
+        self.entered.set()
+        await asyncio.sleep(0.5)
+        return ok(hit=0.9)
+
+
+class TotalDeadlineTests(unittest.IsolatedAsyncioTestCase):
+    def slow_client(self, clock=None, **kw):
+        return VetoClient(KEY, transport=httpx.MockTransport(SlowSink()), clock=clock or Clock(), **kw)
+
+    async def test_slow_provider_raises_veto_error_and_opens_the_breaker(self):
+        """FEAT-49 review: the client enforces its own total deadline (timeout) and counts an overrun as a breaker failure."""
+        client = self.slow_client(timeout=0.05, fail_limit=2, cooldown=60.0)
+        for _ in range(2):
+            self.assertFalse(client.breaker_open)
+            with self.assertRaises(VetoError) as caught:
+                await client.ask("hit", ["hit"])
+            self.assertNotIsInstance(caught.exception, TimeoutError)
+        self.assertTrue(client.breaker_open)
+        await client.close()
+
+    async def test_external_cancellation_propagates_and_is_not_a_failure(self):
+        """FEAT-49 review: a caller cancelling ask gets CancelledError and the breaker does not count it."""
+        sink = SlowSink()
+        client = VetoClient(KEY, transport=httpx.MockTransport(sink), clock=Clock(), fail_limit=1)
+        task = asyncio.create_task(client.ask("hit", ["hit"]))
+        await asyncio.wait_for(sink.entered.wait(), 1)
+        task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+        self.assertFalse(client.breaker_open)
+        await client.close()
+
+
+class ProxyEnvTests(unittest.IsolatedAsyncioTestCase):
+    async def test_client_ignores_proxy_environment_variables(self):
+        """FEAT-49 review: the client is built with trust_env=False, so HTTPS_PROXY and friends cannot reroute the key."""
+        with mock.patch.dict(os.environ, {"HTTPS_PROXY": "http://127.0.0.1:9", "ALL_PROXY": "http://127.0.0.1:9"}):
+            client = VetoClient(KEY)
+        try:
+            self.assertFalse(client._http._trust_env)
+            self.assertEqual(client._http._mounts, {})
+        finally:
+            await client.close()
 
 
 class CloseTests(unittest.IsolatedAsyncioTestCase):

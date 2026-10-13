@@ -204,7 +204,7 @@ def blackjack_section(ctx):
 
         from .spoken.veto_client import PROVIDER
         veto = {'value': store.spoken_veto_enabled(gid)}
-        veto_switch = ui.switch(t('Decision-model check for spoken moves'), value=veto['value'])
+        veto_switch = ui.switch(t('Decision-model check for spoken moves (Experimental)'), value=veto['value'])
         ui.label(t('When on, a message that the local reader takes for a spoken move is sent to {provider}, a third-party service, to double-check it. '
                    'Only the message text and the legal moves are sent, only for members who turned on spoken moves, and only on their own turn. Off by default.', provider=PROVIDER)).classes('ll-muted')
         def save_veto():
