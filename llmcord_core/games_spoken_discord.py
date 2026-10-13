@@ -22,7 +22,7 @@ from .spoken import blackjack as spoken_bj
 from .spoken import head as spoken_head
 from .spoken import interpret
 from .spoken import veto as spoken_veto
-from .spoken import veto_client
+from .spoken import veto_client, veto_stats
 from .spoken.veto_limits import VetoLimiter
 from llmcord_core.i18n import N_, discord_locale
 
@@ -53,6 +53,7 @@ class _Check:
     band: str = "sure"
     scores: dict = field(default_factory=dict)
     number: int = 0
+    dropped: tuple | None = None  # shadow mode: the moves the reader would have dropped (None: no shadow reading)
 
 
 @dataclass
@@ -98,6 +99,9 @@ class SpokenMoves:
         self.veto_notice_pending: set[tuple] = set()  # (guild, member) whose notice post is in flight: no second notice, nothing sent meanwhile
         self.veto_notified: set[tuple] = set()  # (guild, member) told that a message may be double-checked by a third party; memory only, so a restart tells again
         self.limiter = VetoLimiter()
+        self.shadow = str((env if env is not None else os.environ).get("LLMCORD_SPOKEN_VETO_SHADOW", "")).lower() in ("1", "true", "yes", "on")  # ask the reader and count, but post e5's own check
+        self.stats = veto_stats.VetoStats(clock=time.monotonic)
+        self._suspicious: set[tuple] = set()  # (guild, day) already warned about
 
     # --- entry points -------------------------------------------------------------------------
 
@@ -137,6 +141,7 @@ class SpokenMoves:
             return
         if turn is None or (turn.round_id, turn.moves) != (check.round_id, check.moves):
             del self.pending[key]
+            self._unpressed(key, check)
             self._spawn(self._delete(check.message))
 
     def forget(self, key) -> None:
@@ -158,6 +163,8 @@ class SpokenMoves:
         close = getattr(self.runtime, "close", None)
         if close is not None:
             close()
+        for line in self.stats.lines():
+            logging.info(line)
         veto, self.veto = self.veto, None
         if veto is not None:
             try:
@@ -182,6 +189,22 @@ class SpokenMoves:
         if text not in self._warned:
             self._warned.add(text)
             logging.warning(text)
+
+    def _count(self, guild, name) -> None:
+        """One counter, count-only. A day change logs the finished days first; a suspicious veto rate is warned about once per server and day."""
+        for line in self.stats.rollover():
+            logging.info(line)
+        day = self.stats.today()
+        self._suspicious = {w for w in self._suspicious if w[1] == day}
+        self.stats.record(guild, name)
+        if (guild, day) not in self._suspicious and self.stats.suspicious(guild, day):
+            self._suspicious.add((guild, day))
+            logging.warning("Spoken-move veto rate looks suspicious (guild=%s day=%s)", guild, day)
+
+    def _unpressed(self, key, check) -> None:
+        """A check of a shadow-vetoed reading that ended without a move press."""
+        if check is not None and check.dropped:
+            self._count(key[0], "unpressed_vetoed")
 
     def _current(self, key, turn, number) -> bool:
         return not self.closed and self.latest.get(key) == number and self.bot.games.turns.get(key) == turn
@@ -232,7 +255,7 @@ class SpokenMoves:
         self.readings[key] = _Reading(turn, text, decision.band, decision.moves, scores, number)
         if decision.band == "silent":
             return
-        band, moves = await self._veto(key, turn, number, message, text, legal, decision)
+        band, moves, dropped = await self._veto(key, turn, number, message, text, legal, decision)
         if band == "silent" or not self._current(key, turn, number):
             return
         cost = snap["view"]["stakes"][seat] // 2
@@ -246,6 +269,7 @@ class SpokenMoves:
             if not self._current(key, turn, number):
                 return
             old = self.pending.pop(key, None)
+        self._unpressed(key, old)
         if old is not None:
             self._spawn(self._delete(old.message))  # a newer phrase replaces the check
         view = discord.ui.View(timeout=None)
@@ -260,23 +284,25 @@ class SpokenMoves:
         if not self._current(key, turn, number):  # the turn moved on or a newer phrase arrived while posting
             await self._delete(posted)
             return
-        self.pending[key] = _Check(posted, turn.member_id, turn.round_id, turn.moves, text, moves, band, scores, number)
+        self.pending[key] = _Check(posted, turn.member_id, turn.round_id, turn.moves, text, moves, band, scores, number, dropped)
 
     async def _veto(self, key, turn, number, message, text, legal, decision):
-        """(band, moves) after the optional decision-model veto; e5's own reading whenever it is off, limited, slow or failing."""
+        """(band, moves, dropped) after the optional decision-model veto; e5's own reading whenever it is off, limited, slow or failing.
+        In shadow mode the reader is asked and counted but e5's reading is returned, with ``dropped`` the moves the reader would have dropped (else None)."""
         veto, store, guild = self.veto, self.bot.store, key[0]
         if (veto is None or veto.breaker_open or not store.spoken_veto_enabled(guild) or not store.spoken_veto_member_on(guild, turn.member_id)
                 or not store.spoken_moves_enabled(guild) or not store.spoken_member_on(guild, turn.member_id)
                 or DISCORD_TOKEN.search(text) or any(getattr(message, a, None) for a in ("raw_mentions", "raw_role_mentions", "raw_channel_mentions"))
                 or not self._current(key, turn, number)):
-            return decision.band, decision.moves
+            return decision.band, decision.moves, None
         member = (guild, turn.member_id)
         if member not in self.veto_notified:  # nothing leaves before the member has been told, and this message is not sent
             if member not in self.veto_notice_pending:
                 await self._notify(message, guild, turn.member_id)
-            return decision.band, decision.moves
+            return decision.band, decision.moves, None
         if not self.limiter.allow(guild):
-            return decision.band, decision.moves
+            return decision.band, decision.moves, None
+        self._count(guild, "offered")
         started = time.monotonic()
         try:
             probs = await asyncio.wait_for(veto.ask(text, [m for m in legal if m in spoken_bj.MOVES]), self.veto_timeout)
@@ -284,10 +310,16 @@ class SpokenMoves:
         except asyncio.CancelledError:
             raise
         except Exception as error:
+            self._count(guild, "errors")
             logging.warning("Spoken-move veto unavailable (%s) after %.0f ms", type(error).__name__, (time.monotonic() - started) * 1000)
-            return decision.band, decision.moves
+            return decision.band, decision.moves, None
         logging.info("Spoken-move veto %s -> %s in %.0f ms", decision.band, result[0], (time.monotonic() - started) * 1000)
-        return result
+        dropped = tuple(m for m in decision.moves if m not in result[1])
+        if dropped:
+            self._count(guild, "vetoed")
+            if result[0] == "silent":
+                self._count(guild, "silenced")
+        return (decision.band, decision.moves, dropped) if self.shadow else (*result, None)
 
     async def _notify(self, message, guild, member_id) -> None:
         """The one-line notice (channel language, rendered now), once per member and server per process; marked only once posted, a failed post is tried again with a later message."""
@@ -402,11 +434,14 @@ class SpokenMoves:
             reading = self.readings.get(key)
             if reading is not None and reading.number == mine.number:
                 del self.readings[key]  # answered: a later table-button move must not also count as a miss for this phrase
+            self._unpressed(key, mine)
             await self._say(interaction, TALK_KEPT)
             await self._delete(mine.message)
             self._keep(key[0], mine.member_id, mine.text, mine.offered, mine.band, mine.scores, "false_positive", "talk")
             return
         refused = await self.bot.games.play_spoken(interaction, table_id, round_id, moves, move)
+        if mine is not None and refused is None and mine.dropped is not None:
+            self._count(key[0], "pressed_vetoed" if move in mine.dropped else "pressed_ok")
         if mine is not None and refused is None and mine.band == "unsure" and move != mine.offered[0]:
             self._keep(key[0], mine.member_id, mine.text, mine.offered, mine.band, mine.scores, "false_positive", move)
         try:
