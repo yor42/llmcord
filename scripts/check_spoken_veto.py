@@ -4,7 +4,7 @@ usage: check_spoken_veto.py --e5 FILE [--phrases CSV] [--tau 0.5] [--yes]
 
 FILE is the output of ``prototypes/decision_eval/cascade.py dump-e5``. Without --yes it only estimates the calls and cost and makes no request.
 With --yes (and LLMCORD_SPOKEN_VETO=openrouter-d1 plus OPENROUTER_API_KEY) it sends each non-silent phrase through the production client,
-applies the cascade policy and prints the metrics next to the baseline. Exit codes: 0 fine or dry run, 1 drift, 2 refused or bad input.
+applies the cascade policy and prints the metrics next to the baseline. Exit codes: 0 fine or dry run, 1 drift, 2 refused, bad input or inconclusive (10% or more of the requests failed).
 Operator CLI text: English and not translated (docs/engineering/i18n-plan.md). Output never holds the key or a response body.
 """
 import argparse
@@ -36,7 +36,9 @@ NEED_KEY = "set OPENROUTER_API_KEY to a printable-ASCII key"
 def refused_dirs(env):
     dirs = [(ROOT / "data").resolve()]
     if env.get("LLMCORD_DATABASE_PATH"):
-        dirs.append(Path(env["LLMCORD_DATABASE_PATH"]).resolve().parent)
+        parent = Path(env["LLMCORD_DATABASE_PATH"]).resolve().parent
+        if parent != ROOT:
+            dirs.append(parent)
     return dirs
 
 
@@ -114,6 +116,9 @@ def main(argv=None, env=None, transport=None) -> int:
     print(f"lost moves: {lost}")
     print(f"errors: {errors}")
     print(BASELINE)
+    if errors and errors * 10 >= len(asked):
+        print(f"INCONCLUSIVE: {errors} of {len(asked)} requests failed, the result below reflects the local reader for those rows")
+        return 2
     drift = (r["talk_n"] and r["talk_silent"] / r["talk_n"] < MIN_CHATTER_SILENT) or lost > MAX_LOST_MOVES
     print(f"DRIFT: silent on chatter under {MIN_CHATTER_SILENT:.0%} or more than {MAX_LOST_MOVES} lost moves" if drift else "OK: no drift against the baseline")
     return 1 if drift else 0

@@ -258,6 +258,83 @@ class RefusalTests(Rig):
         self.refused(code, err.getvalue(), "refusing")
 
 
+class InconclusiveTests(Rig):
+    def test_all_requests_failing_is_inconclusive(self):
+        """FEAT-49c: when 10% or more of the requests fail the run says so instead of OK/DRIFT and exits 2."""
+        self.status = 500
+        code, out, err = self.run_tool()
+        self.assertEqual(code, 2)
+        self.assertEqual(out.rstrip().splitlines()[-1],
+                         f"INCONCLUSIVE: {self.MOVES + self.TALKS} of {self.MOVES + self.TALKS} requests failed, "
+                         "the result below reflects the local reader for those rows")
+        self.assertNotRegex(out, r"(?m)^(OK|DRIFT)")
+        self.assertNotIn(FAKE_KEY, out + err)
+
+    def test_one_failure_in_twenty_keeps_the_normal_verdict(self):
+        """FEAT-49c: under 10% failed requests the verdict is by thresholds and the errors line still shows."""
+        e5 = self.write_e5(lambda label: {"band": "silent", "moves": []} if label == "hit" else {"band": "unsure", "moves": ["hit"]}, "e5d.json")
+        base = self.handler
+
+        def flaky(request):
+            if json.loads(request.content)["state"]["message"] == self.talk_texts[0]:
+                self.requests.append(request)
+                return httpx.Response(500, json={"error": "nope"})
+            return base(request)
+        self.handler = flaky
+        code, out, _ = self.run_tool(e5=e5)
+        self.assertEqual(len(self.requests), self.TALKS)
+        self.assertIn("errors: 1", out)
+        self.assertNotIn("INCONCLUSIVE", out)
+        self.assertIn("silent on chatter: 95% (19/20)", out)
+        self.assertEqual(code, 0, out)
+        self.assertRegex(out, r"(?m)^OK")
+
+
+class RelativeDatabasePathTests(Rig):
+    def run_with_db(self, db_path, phrases):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = tool().main(["--e5", str(self.e5), "--phrases", str(phrases)], env={**ENV, "LLMCORD_DATABASE_PATH": db_path},
+                               transport=httpx.MockTransport(self.handler))
+        return code, err.getvalue()
+
+    def test_relative_database_path_does_not_refuse_the_repo_prototypes(self):
+        """FEAT-49c: a database path with no directory resolves to the repo root, which must not make prototypes/ a data directory."""
+        fixed = tool().PHRASES
+        code, err = self.run_with_db(str(ROOT / "llmcord.db"), fixed)
+        self.assertNotIn("refusing", err)
+        self.assertEqual(code, 2)  # not refused: the synthetic rows have no matching e5 file here
+        self.assertIn("lacks", err)
+
+    def test_data_directories_are_still_refused(self):
+        """FEAT-49c: data/ under the repo and the directory of an absolute database path still refuse."""
+        code, err = self.run_with_db("data/x.sqlite3", self.phrases)
+        self.assertEqual(code, 0)  # a temp phrases file is not under data/
+        code, err = self.run_with_db("data/x.sqlite3", ROOT / "data" / "phrases.csv")
+        self.assertEqual(code, 2)
+        self.assertIn("refusing", err)
+        code, err = self.run_with_db(str(self.tmp / "llmcord.db"), self.phrases)
+        self.assertEqual(code, 2)
+        self.assertIn("refusing", err)
+
+
+class PolicyParityTests(unittest.TestCase):
+    def test_script_policy_matches_the_production_veto(self):
+        """FEAT-49c: cascade.apply_policy (the script's) and spoken.veto.apply_policy give the same band and moves."""
+        from llmcord_core.spoken import veto
+        cascade = tool().cascade
+        probs_grid = [{}, {"hit": 0.9}, {"hit": 0.9, "stand": 0.1}, {"hit": 0.4, "stand": 0.8}, {"hit": 0.5, "stand": 0.5},
+                      {"hit": 0.1, "stand": 0.2, "double": 0.3}, {"stand": 0.95}, {"hit": 0.5}]
+        moves_grid = [[], ["hit"], ["stand"], ["hit", "stand"], ["stand", "hit"], ["hit", "stand", "double"]]
+        for band in ("sure", "unsure", "silent"):
+            for moves in moves_grid:
+                for probs in probs_grid:
+                    for tau in (0.5, 0.95):
+                        with self.subTest(band=band, moves=moves, probs=probs, tau=tau):
+                            final = cascade.apply_policy({"band": band, "moves": moves}, {"probs": probs}, {"cover": "sure+unsure", "tau": tau})
+                            self.assertEqual((final["band"], tuple(final["moves"])), veto.apply_policy(band, moves, probs, tau))
+
+
 class KeyHygieneTests(Rig):
     def test_key_never_appears_in_output_on_any_path(self):
         """FEAT-49c: not on success, drift, provider errors, a dry run or a refusal."""
