@@ -23,7 +23,9 @@ import cascade  # noqa: E402
 from llmcord_core.spoken import veto_client  # noqa: E402
 
 PHRASES = ROOT / "prototypes" / "spoken_moves" / "phrases.csv"
-PER_CALL_USD = 0.0002  # the FEAT-48 estimate for the Decision-1 reader
+# Measured per-call price of the Decision-1 reader (conservative): FEAT-47 full run $0.08 / 3,110 calls, all questions per row included.
+# Cross-check: FEAT-44 cascade replay, Decision-1 noul tau 0.5, $0.005 per 1,000 messages at 72% asked (~$0.0000069 per call).
+PER_CALL_USD = 0.000026
 BASELINE = "baseline (Decision-1, tau 0.5, 195 rows): right move 90%, silent on chatter 100%, lost moves 4"
 MIN_CHATTER_SILENT = 0.95
 MAX_LOST_MOVES = 8
@@ -85,6 +87,8 @@ def main(argv=None, env=None, transport=None) -> int:
     if not a.yes:
         print(f"estimated calls: {len(asked)}")
         print(f"estimated cost: ${cascade.cost_per_1000_messages(len(asked), len(items), PER_CALL_USD):.4f} per 1,000 messages")
+        print(f"estimated cost of this run: ${len(asked) * PER_CALL_USD:.4f}")
+        print("no request is made without --yes")
         return 0
     if env.get(veto_client.ENV_SWITCH) != veto_client.ENV_VALUE:
         print(NEED_SWITCH, file=sys.stderr)
