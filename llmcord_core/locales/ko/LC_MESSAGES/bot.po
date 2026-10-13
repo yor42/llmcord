@@ -759,7 +759,7 @@ msgstr "채팅으로 입력한 행동의 외부 모델 재확인을 껐어요."
 #: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "When on, a message that the local reader takes for a spoken move is sent to {provider}, a third-party service, to double-check it. Only the message text and the legal moves are sent, only for members who turned on spoken moves, and only on their own turn. Off by default."
-msgstr "켜면, 봇 자체 판독기가 채팅으로 입력한 행동으로 판단한 메시지가 확인을 위해 {provider}(외부 서비스)에 전송돼요. 전송되는 것은 메시지 문장과 가능한 행동뿐이고, 채팅에서 행동 읽기를 켠 멤버에 대해서만, 그리고 그 멤버의 차례일 때만 전송돼요. 기본값은 꺼짐이에요."
+msgstr "켜면, 봇 자체 판독기가 행동 입력으로 판단한 메시지는 재확인을 위해 {provider}(외부 서비스)에 전송돼요. 전송되는 것은 메시지 문장과 가능한 행동뿐이고, 채팅에서 행동 읽기를 켠 멤버에 대해서만, 그리고 그 멤버의 차례일 때만 전송돼요. 기본값은 꺼짐이에요."
 
 #: llmcord_core/games_discord.py
 msgid "It has no effect until the operator configures it."
@@ -1051,11 +1051,11 @@ msgstr " (지금 이 서버는 채팅에서 행동 읽기가 꺼져 있어요.)"
 
 #: llmcord_core/games_doubt_discord.py
 msgid "The decision-model check is on for you."
-msgstr "내 메시지에 대한 외부 재확인이 켜져 있어요."
+msgstr "내 메시지의 외부 모델 재확인이 켜져 있어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "The decision-model check is off for you."
-msgstr "내 메시지에 대한 외부 재확인이 꺼져 있어요."
+msgstr "내 메시지의 외부 모델 재확인이 꺼져 있어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "(This server has the decision-model check turned off right now.)"
@@ -2037,7 +2037,7 @@ msgstr "알겠어요. 잡담으로 둘게요. 이 확인이 번거롭다면 /gam
 
 #: llmcord_core/games_spoken_discord.py
 msgid "Heads up: when you type a move at a game table, the message may be sent to a third-party service to double-check it. Turn that off for yourself with /game spoken_veto off."
-msgstr "안내: 게임 테이블에서 행동을 입력하면 그 메시지가 확인을 위해 외부 서비스로 전송될 수 있어요. 나에게만 적용되도록 끄려면 /game spoken_veto off를 입력하세요."
+msgstr "안내: 게임 테이블에서 행동을 입력하면 그 메시지가 재확인을 위해 외부 서비스로 전송될 수 있어요. 나에게만 적용되도록 끄려면 /game spoken_veto off를 입력하세요."
 
 #: llmcord_core/games_spoken_discord.py
 msgctxt "button.blackjack"

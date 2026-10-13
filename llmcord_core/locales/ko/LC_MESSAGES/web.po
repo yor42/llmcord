@@ -2706,7 +2706,7 @@ msgstr "채팅으로 입력한 행동의 외부 모델 재확인 (실험 기능)
 #: llmcord_core/games_ui.py
 #, python-brace-format
 msgid "When on, a message that the local reader takes for a spoken move is sent to {provider}, a third-party service, to double-check it. Only the message text and the legal moves are sent, only for members who turned on spoken moves, and only on their own turn. Off by default."
-msgstr "켜면, 봇 자체 판독기가 채팅으로 입력한 행동으로 판단한 메시지가 확인을 위해 {provider}(외부 서비스)에 전송돼요. 전송되는 것은 메시지 문장과 가능한 행동뿐이고, 채팅에서 행동 읽기를 켠 멤버에 대해서만, 그리고 그 멤버의 차례일 때만 전송돼요. 기본값은 꺼짐이에요."
+msgstr "켜면, 봇 자체 판독기가 행동 입력으로 판단한 메시지는 재확인을 위해 {provider}(외부 서비스)에 전송돼요. 전송되는 것은 메시지 문장과 가능한 행동뿐이고, 채팅에서 행동 읽기를 켠 멤버에 대해서만, 그리고 그 멤버의 차례일 때만 전송돼요. 기본값은 꺼짐이에요."
 
 #: llmcord_core/games_ui.py
 msgid "Decision-model check for spoken moves"

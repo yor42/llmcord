@@ -101,7 +101,7 @@ class MemberCommandTests(tgsd.SpokenCase):
             self.assertIs(click.response.sent[0][1]["ephemeral"], True)
 
     async def test_status_changes_nothing_and_still_carries_the_notice(self):
-        """FEAT-49b3: status reads the member's switch without writing, and the notice line is ALWAYS part of the reply."""
+        """FEAT-49b3: status reads the member's switch without writing, and the notice line is in every reply while the server switch is on (it is omitted, with a server-off sentence, when the switch is off)."""
         for stored in (True, False):
             self.store.set_spoken_veto_member_on(G, ALICE, stored)
             click = await self.switch(ALICE, "status")

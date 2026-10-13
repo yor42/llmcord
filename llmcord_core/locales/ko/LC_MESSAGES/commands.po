@@ -432,7 +432,7 @@ msgstr "내 채팅에 대한 행동 확인 켜기/끄기"
 
 #: llmcord_core/games_doubt_discord.py
 msgid "Turn the decision-model check of your move messages on or off for you"
-msgstr "내 행동 메시지의 외부 모델 재확인 켜기/끄기"
+msgstr "내가 채팅으로 입력한 행동의 외부 모델 재확인 켜기/끄기"
 
 #: llmcord_core/games_doubt_discord.py
 msgid "On, off or status"
