@@ -196,6 +196,7 @@ CREATE TABLE IF NOT EXISTS user_timezones (
 CREATE TABLE IF NOT EXISTS member_settings (
  guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, favorites_mode TEXT NOT NULL DEFAULT 'lean', updated_at REAL NOT NULL,
  spoken_moves INTEGER NOT NULL DEFAULT 1 CHECK(spoken_moves IN (0,1)),
+ spoken_veto INTEGER NOT NULL DEFAULT 1 CHECK(spoken_veto IN (0,1)),
  PRIMARY KEY(guild_id,user_id)
 );
 CREATE TABLE IF NOT EXISTS spoken_phrases (
@@ -586,7 +587,7 @@ class AdminStore:
             'game_tables': {'thread_id': 'INTEGER', 'board_message_id': 'INTEGER', 'turn_message_id': 'INTEGER'},
             'game_seats': {'brought_by': 'INTEGER', 'insurance': 'INTEGER NOT NULL DEFAULT 0', 'stack': 'INTEGER NOT NULL DEFAULT 0 CHECK(stack>=0)'},
             'currency_ledger': {'holder_kind': "TEXT NOT NULL DEFAULT 'member' CHECK(holder_kind IN ('member','character'))"},
-            'member_settings': {'spoken_moves': 'INTEGER NOT NULL DEFAULT 1 CHECK(spoken_moves IN (0,1))'},
+            'member_settings': {'spoken_moves': 'INTEGER NOT NULL DEFAULT 1 CHECK(spoken_moves IN (0,1))', 'spoken_veto': 'INTEGER NOT NULL DEFAULT 1 CHECK(spoken_veto IN (0,1))'},
             'model_usage': {'channel_id': 'INTEGER', 'feature': "TEXT NOT NULL DEFAULT ''"},
         }.items():
             columns = {row[1] for row in self.db.execute(f'PRAGMA table_info({table})')}
@@ -1511,6 +1512,26 @@ class AdminStore:
     def set_spoken_keep_phrases(self, guild_id, on, expected=None):
         purge = lambda: self.db.execute('DELETE FROM spoken_phrases WHERE guild_id=?', (guild_id,)) if not on else None  # noqa: E731
         return self._set_pseudo_flag(guild_id, self._SPOKEN_KEEP_KEY, on, expected, codes.GAME_SPOKEN_KEEP_CHANGED, purge)
+
+    _SPOKEN_VETO_KEY = 'spoken_veto'  # FEAT-49: pseudo game_settings row for the guild switch
+
+    def spoken_veto_enabled(self, guild_id):
+        """Experimental decision-model veto: off by default; the member switch is spoken_veto_member_on."""
+        return self._pseudo_flag(guild_id, self._SPOKEN_VETO_KEY)
+
+    def set_spoken_veto_enabled(self, guild_id, on, expected=None):
+        return self._set_pseudo_flag(guild_id, self._SPOKEN_VETO_KEY, on, expected, codes.GAME_SPOKEN_VETO_CHANGED)
+
+    def spoken_veto_member_on(self, guild_id, user_id):
+        row = self.one('SELECT spoken_veto FROM member_settings WHERE guild_id=? AND user_id=?', (guild_id, user_id))
+        return bool(row['spoken_veto']) if row else True
+
+    def set_spoken_veto_member_on(self, guild_id, user_id, on):
+        if not isinstance(on, bool):
+            raise UserError(codes.SETTINGS_FLAG)
+        with self.write_admin():
+            self.db.execute('INSERT INTO member_settings(guild_id,user_id,updated_at,spoken_veto) VALUES(?,?,?,?) ON CONFLICT(guild_id,user_id) DO UPDATE SET spoken_veto=excluded.spoken_veto,updated_at=excluded.updated_at', (guild_id, user_id, time.time(), int(on)))
+        return on
 
     SPOKEN_PHRASES_MAX, SPOKEN_EXAMPLES_MAX, SPOKEN_TEXT_MAX = 500, 200, 200
     _SPOKEN_REV_KEY = 'spoken_examples_rev'  # pseudo game_settings row: rules_json holds the examples list revision

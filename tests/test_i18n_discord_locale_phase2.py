@@ -79,7 +79,7 @@ class MigrationV22Tests(unittest.TestCase):
             self.assertEqual(len(before), 2)
             self.assertNotIn("language", before[0])
             Store(path).close()
-            self.assertEqual(user_version(path), 22)
+            self.assertEqual(user_version(path), 23)
             after = settings_rows(path)
             self.assertEqual([r["language"] for r in after], ["", ""])
             self.assertEqual([{k: v for k, v in r.items() if k != "language"} for r in after], before)
@@ -99,10 +99,10 @@ class MigrationV22Tests(unittest.TestCase):
             Store(path).close()
             Store(path).close()
             self.assertEqual(settings_rows(path), first)
-            self.assertEqual(user_version(path), 22)
+            self.assertEqual(user_version(path), 23)
             self.assertEqual(len(list(Path(folder).glob("*.pre-v22-*.sqlite3"))), 1)
 
-    def test_fresh_store_is_v22_with_the_same_shape_as_an_upgraded_one(self):
+    def test_fresh_store_is_v23_with_the_same_shape_as_an_upgraded_one(self):
         """FEAT-44: a new file and an upgraded file have the same guild_settings.language column, and a new file needs no backup."""
         with tempfile.TemporaryDirectory() as folder:
             fresh = Path(folder) / "fresh.sqlite3"
@@ -111,17 +111,17 @@ class MigrationV22Tests(unittest.TestCase):
             Store(upgraded).close()
             shapes = []
             for path in (fresh, upgraded):
-                self.assertEqual(user_version(path), 22)
+                self.assertEqual(user_version(path), 23)
                 with closing(sqlite3.connect(path)) as db:
                     shapes.append({r[1]: r[2:5] for r in db.execute("PRAGMA table_info(guild_settings)")})
             self.assertEqual(shapes[0], shapes[1])
             self.assertEqual(list(Path(folder).glob("fresh.sqlite3.pre-*")), [])
 
     def test_in_memory_store_is_v22(self):
-        """FEAT-44: an in-memory store reports user_version 22."""
+        """FEAT-44: an in-memory store reports user_version 23."""
         store = Store()
         try:
-            self.assertEqual(store.one("PRAGMA user_version")[0], 22)
+            self.assertEqual(store.one("PRAGMA user_version")[0], 23)
         finally:
             store.close()
 
@@ -131,7 +131,7 @@ class MigrationV22Tests(unittest.TestCase):
             path = Path(folder) / "new.sqlite3"
             Store(path).close()
             with closing(sqlite3.connect(path)) as db, db:
-                db.execute("PRAGMA user_version=23")
+                db.execute("PRAGMA user_version=24")
             with self.assertRaisesRegex(ValueError, "newer than this application"):
                 Store(path)
 

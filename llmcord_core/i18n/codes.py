@@ -88,6 +88,7 @@ GAME_RULES_CHANGED = E_('game.rules_changed', 'The {noun} rules were changed els
 GAME_SETTING_CHANGED = E_('game.setting_changed', 'The {noun} setting was changed elsewhere. Reload the page and try again.')
 GAME_SPOKEN_MOVES_CHANGED = E_('game.spoken_moves_changed', 'The read moves from chat setting was changed elsewhere. Reload the page and try again.')
 GAME_SPOKEN_DOUBT_CHANGED = E_('game.spoken_doubt_changed', 'The read doubts from chat setting was changed elsewhere. Reload the page and try again.')
+GAME_SPOKEN_VETO_CHANGED = E_('game.spoken_veto_changed', 'The chat veto setting was changed elsewhere. Reload the page and try again.')
 GAME_SPOKEN_KEEP_CHANGED = E_('game.spoken_keep_changed', 'The keep phrases setting was changed elsewhere. Reload the page and try again.')
 GAME_SETTINGS_CHANGED = E_('game.settings_changed', 'The game settings were changed elsewhere. Reload the page and try again.')
 GAME_ANTE_SHORT = E_('game.ante_short', 'You need {stake:,} {name} for that ante but have {balance:,}.')
