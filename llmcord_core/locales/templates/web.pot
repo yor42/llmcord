@@ -2694,6 +2694,23 @@ msgid "Read moves from chat saved"
 msgstr ""
 
 #: llmcord_core/games_ui.py
+msgid "Decision-model check for spoken moves (Experimental)"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "When on, a message that the local reader takes for a spoken move is sent to {provider}, a third-party service, to double-check it. Only the message text and the legal moves are sent, only for members who turned on spoken moves, and only on their own turn. Off by default."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Decision-model check for spoken moves"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Decision-model check for spoken moves saved"
+msgstr ""
+
+#: llmcord_core/games_ui.py
 msgid "Tuning"
 msgstr ""
 

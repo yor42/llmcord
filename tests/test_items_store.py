@@ -31,7 +31,7 @@ class SchemaTests(unittest.TestCase):
     def test_fresh_database_is_v20_with_the_item_tables(self):
         store = Store()
         self.addCleanup(store.close)
-        self.assertEqual(store.one("PRAGMA user_version")[0], 22)
+        self.assertEqual(store.one("PRAGMA user_version")[0], 23)
         names = {r[0] for r in store.all("SELECT name FROM sqlite_master WHERE type='table'")}
         self.assertLessEqual({"shop_items", "inventory", "shop_purchases", "item_uses"}, names)
         self.assertEqual(store.item_hold_cap(G), 10)
@@ -49,7 +49,7 @@ class SchemaTests(unittest.TestCase):
                 db.execute("PRAGMA user_version=17")
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 22)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 23)
                 self.assertEqual(len(list(Path(folder).glob("v17.sqlite3.pre-v18-*.sqlite3"))), 1)
                 self.assertEqual(store.currency_name(G), "gold")
                 self.assertEqual(store.item_hold_cap(G), 10)
@@ -69,7 +69,7 @@ class SchemaTests(unittest.TestCase):
             path = Path(folder) / "new.sqlite3"
             Store(path).close()
             with closing(sqlite3.connect(path)) as db, db:
-                db.execute("PRAGMA user_version=23")
+                db.execute("PRAGMA user_version=24")
             with self.assertRaises(ValueError):
                 Store(path)
 

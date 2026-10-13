@@ -4627,6 +4627,30 @@ class DashboardBrowserTests(unittest.TestCase):
             self.post_hook('/_test/games', {'spoken_doubt': False})
             context.close()
 
+    def test_games_tab_spoken_veto_switch_discloses_saves_and_persists(self):
+        """FEAT-49b3: the Blackjack section shows 'Decision-model check for spoken moves' off by default with the disclosure sentence naming the provider, Save persists with a games.spoken_veto audit row, reload shows it on, and guild 2 is untouched."""
+        from playwright.sync_api import expect
+        other = self.state()['games']['2']
+        context, page, errors = self.open_games()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            switch = page.get_by_role('switch', name='Decision-model check for spoken moves (Experimental)')
+            switch.wait_for(timeout=5000)
+            page.get_by_text('When on, a message that the local reader takes for a spoken move is sent to OpenRouter (Microsoft Decision-1), a third-party service, to double-check it. Only the message text and the legal moves are sent, only for members who turned on spoken moves, and only on their own turn. Off by default.').wait_for(timeout=5000)
+            self.assertEqual(switch.get_attribute('aria-checked'), 'false')
+            switch.click()
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Decision-model check for spoken moves saved', exact=True).wait_for(timeout=5000)
+            self.assertTrue(self.state()['games']['1']['spoken_veto'])
+            self.assertIn('games.spoken_veto', self.audit_actions())
+            self.assertEqual(self.state()['games']['2'], other)
+            page.reload()
+            expect(page.get_by_role('switch', name='Decision-model check for spoken moves (Experimental)')).to_have_attribute('aria-checked', 'true', timeout=5000)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'spoken_veto': False})
+            context.close()
+
     def test_games_tab_keep_phrases_switch_saves_and_persists(self):
         """FEAT-37 F3: the Blackjack section shows 'Keep phrases for tuning' with its help line, Save persists with a games.spoken_keep audit row, reload shows it on, and guild 2 is untouched."""
         from playwright.sync_api import expect

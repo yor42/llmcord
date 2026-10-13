@@ -359,6 +359,18 @@ msgid "The channel (default: this one)"
 msgstr ""
 
 #: llmcord_core/games_discord.py
+msgid "Turn the decision-model check for spoken moves on or off"
+msgstr ""
+
+#: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
+msgid "On"
+msgstr ""
+
+#: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
+msgid "Off"
+msgstr ""
+
+#: llmcord_core/games_discord.py
 msgid "Set the smallest and largest bet"
 msgstr ""
 
@@ -411,11 +423,15 @@ msgid "Turn move checks from your chat on or off for you"
 msgstr ""
 
 #: llmcord_core/games_doubt_discord.py
-msgid "On"
+msgid "Turn the decision-model check of your move messages on or off for you"
 msgstr ""
 
 #: llmcord_core/games_doubt_discord.py
-msgid "Off"
+msgid "On, off or status"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Status"
 msgstr ""
 
 #: llmcord_core/items_discord.py

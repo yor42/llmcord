@@ -367,6 +367,18 @@ msgid "The channel (default: this one)"
 msgstr "채널 (기본: 이 채널)"
 
 #: llmcord_core/games_discord.py
+msgid "Turn the decision-model check for spoken moves on or off"
+msgstr "채팅으로 입력한 행동의 외부 모델 재확인 켜기/끄기"
+
+#: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
+msgid "On"
+msgstr "켜기"
+
+#: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
+msgid "Off"
+msgstr "끄기"
+
+#: llmcord_core/games_discord.py
 msgid "Set the smallest and largest bet"
 msgstr "최소 베팅과 최대 베팅 설정"
 
@@ -419,12 +431,16 @@ msgid "Turn move checks from your chat on or off for you"
 msgstr "내 채팅에 대한 행동 확인 켜기/끄기"
 
 #: llmcord_core/games_doubt_discord.py
-msgid "On"
-msgstr "켜기"
+msgid "Turn the decision-model check of your move messages on or off for you"
+msgstr "내가 채팅으로 입력한 행동의 외부 모델 재확인 켜기/끄기"
 
 #: llmcord_core/games_doubt_discord.py
-msgid "Off"
-msgstr "끄기"
+msgid "On, off or status"
+msgstr "켜기, 끄기 또는 상태"
+
+#: llmcord_core/games_doubt_discord.py
+msgid "Status"
+msgstr "상태"
 
 #: llmcord_core/items_discord.py
 msgid "See what is for sale and buy items"

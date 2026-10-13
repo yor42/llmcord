@@ -746,6 +746,23 @@ msgid "surrendered"
 msgstr ""
 
 #: llmcord_core/games_discord.py
+msgid "The decision-model check for spoken moves is now on."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "The decision-model check for spoken moves is now off."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+#, python-brace-format
+msgid "When on, a message that the local reader takes for a spoken move is sent to {provider}, a third-party service, to double-check it. Only the message text and the legal moves are sent, only for members who turned on spoken moves, and only on their own turn. Off by default."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "It has no effect until the operator configures it."
+msgstr ""
+
+#: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "{outcome} {amount}"
 msgstr ""
@@ -1027,6 +1044,18 @@ msgstr ""
 
 #: llmcord_core/games_doubt_discord.py
 msgid " (This server has Read moves from chat turned off right now.)"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "The decision-model check is on for you."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "The decision-model check is off for you."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "(This server has the decision-model check turned off right now.)"
 msgstr ""
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
@@ -1999,6 +2028,10 @@ msgstr ""
 
 #: llmcord_core/games_spoken_discord.py
 msgid "Got it — left as table talk. Tired of these? Turn them off with /game spoken_moves."
+msgstr ""
+
+#: llmcord_core/games_spoken_discord.py
+msgid "Heads up: when you type a move at a game table, the message may be sent to a third-party service to double-check it. Turn that off for yourself with /game spoken_veto off."
 msgstr ""
 
 #: llmcord_core/games_spoken_discord.py
