@@ -231,3 +231,33 @@ LOG_WORDS = {
     'memory': NP_('turn log part', 'memory'), 'catchup': NP_('turn log part', 'catchup'), 'game': NP_('turn log part', 'game'),
     'playstyle': NP_('turn log part', 'playstyle'), 'dialogue': NP_('turn log part', 'dialogue'), 'director': NP_('turn log part', 'director'),
     'extraction': NP_('turn log part', 'extraction'), 'summary': NP_('turn log part', 'summary'), 'images': NP_('turn log part', 'images')}
+
+# --- MNT-89: One Card rules line and how to play (games/onecard.py). The ante and turn-timeout rules lines reuse the I Doubt It terms above.
+ONECARD_RULE_DEFENSE_ON = NP_('onecard rules line', 'defense on')
+ONECARD_RULE_DEFENSE_OFF = NP_('onecard rules line', 'defense off')
+ONECARD_RULE_KING_SKIPS = NP_('onecard rules line', 'king skips two')
+ONECARD_RULE_KING_NONE = NP_('onecard rules line', 'king has no effect')
+ONECARD_RULE_LAST = {
+    'none': NP_('onecard rules line', 'last card unrestricted'),
+    'no_attack': NP_('onecard rules line', 'no attack as the last card'),
+    'no_attack_or_joker': NP_('onecard rules line', 'no attack or joker as the last card'),
+}
+ONECARD_RULE_ACE_TEN = NP_('onecard rules line', 'spade ace worth 10')
+ONECARD_RULE_ACE_FIVE = NP_('onecard rules line', 'spade ace worth 5')
+ONECARD_RULE_BANKRUPTCY = NP_('onecard rules line', 'bankruptcy at {limit} cards')
+ONECARD_RULE_PENALTY = NP_('onecard rules line', 'call-out penalty {penalty}')
+ONECARD_HOW_TITLE = N_('**One Card in short**')
+ONECARD_HOW_GOAL = N_("Be the first to play your last card. Everyone starts with 7 cards; play a card that matches the top card's suit or rank, or draw one and pass. Jokers play on anything.")
+ONECARD_HOW_ATTACKS_DEFENSE = N_("• Attacks: 2 = 2 cards, A = 3, ♠A = {spade}, black joker = 5, color joker = 7. They add up until someone draws the total and loses the turn. You can answer an attack with a stronger or equal defense: a 2 answers a 2 (or the A of the same suit, or a joker), an A answers an A or a joker, ♠A only a black joker, a joker another joker.")
+ONECARD_HOW_ATTACKS_NO_DEFENSE = N_("• Attacks: 2 = 2 cards, A = 3, ♠A = {spade}, black joker = 5, color joker = 7. They add up until someone draws the total and loses the turn. Defenses are off: you can only draw.")
+ONECARD_HOW_FACE_KING = N_('• J skips the next player. Q reverses the direction (with two players you go again). K skips two players (with four or more).')
+ONECARD_HOW_FACE_NO_KING = N_('• J skips the next player. Q reverses the direction (with two players you go again). K has no special effect.')
+ONECARD_HOW_SEVEN = N_('• 7 lets you name the suit the next play must follow.')
+# i18n: the quoted phrases are the default declaration words (a server setting) and an example call-out the chat reader understands; keep a Korean example the reader recognizes (it reads 안 했).
+ONECARD_HOW_DECLARE = N_('• At one card, say it in the thread ("원카드" or "One Card"); say it while you hold two cards and it counts when your play leaves one. A player who didn\'t can be called out ("Alice forgot one card", or reply to their message), and the caller makes them draw {penalty}. A wrong call-out costs the caller the same.')
+ONECARD_HOW_LAST = N_("• You can't finish on an attack card.")
+ONECARD_HOW_LAST_JOKER = N_("• You can't finish on an attack card or a joker.")
+ONECARD_HOW_BANKRUPTCY = N_('• Reach {limit} cards and you go bankrupt: you are out and your cards go back to the pile.')
+ONECARD_HOW_TIMEOUT = N_('• Take longer than {seconds} s and you draw and lose the turn; miss two turns in a row and you forfeit your seat.')
+ONECARD_HOW_WIN = N_('• The last player standing, or whoever plays their last card, takes the pot.')
+ONECARD_HOW_WIN_POT = N_('• The last player standing, or whoever plays their last card, takes the pot ({ante} each).')

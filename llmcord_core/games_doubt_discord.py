@@ -1610,7 +1610,7 @@ def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
             text = bot.holdem.rules_text(interaction.guild_id, t=t)
         elif game == "onecard":
             rules = bot.store.game_rules(interaction.guild_id, "onecard")
-            text = onecard.how_to_play(rules) + "\n" + onecard.rules_text(rules)
+            text = "\n".join(t.render(p) for p in onecard.how_to_play_phrases(rules)) + "\n" + " · ".join(t.render(p) for p in onecard.rules_phrases(rules))
         else:
             rules = bot.store.blackjack_rules(interaction.guild_id)
             text = bot.games.how_to_play(rules, t=t) + "\n" + " · ".join(t.render(p) for p in blackjack.rules_phrases(rules))

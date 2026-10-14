@@ -22,18 +22,30 @@ import discord
 from . import game_chooser
 from .admin_store import ConflictError, GameError
 from .game_talk import TalkBudget
-from .games import onecard, playstyle
-from .games_discord import NO_CHARACTER_SEATS, NO_MENTIONS, NOT_SEATED, NOT_YOUR_TURN, OFF_HERE, STALE, GameTables, _sign
-from .games_doubt_discord import MOVED_ON, NO_TABLE, THREAD_FAILED, THREAD_FORBIDDEN, THREAD_NOT_READY
+from .games import doubt, onecard, playstyle
+from .games_discord import NO_CHARACTER_SEATS, NO_MENTIONS, NOT_SEATED, NOT_YOUR_TURN, OFF_HERE, STALE, GameTables, _sign, words
+from .games_doubt_discord import (GAME_OVER, JOINED, JOINED_ANTE, LEFT_CLOSED, LEFT_REFUNDED, MOVED_ON, NO_TABLE, NOT_STARTED, ONLY_HOST_START, THREAD_FAILED,
+                                  THREAD_FORBIDDEN, THREAD_NOT_READY)
 from .spoken.onecard import read_onecard
 from .table_runtime import TableRuntime
 from llmcord_core import i18n
-from llmcord_core.i18n import discord_locale
+from llmcord_core.i18n import N_, NP_, Phrase, discord_locale, terms
 
 PREFIX = "llmcord:onecard"
-ONECARD_OFF = "One Card is off on this server."
-NOT_A_MOVE = "Pick a card to play, or draw."
-SUIT_NAMES = {"♠": "Spades", "♥": "Hearts", "♦": "Diamonds", "♣": "Clubs"}
+ONECARD_OFF = N_("One Card is off on this server.")
+NOT_A_MOVE = N_("Pick a card to play, or draw.")
+NAME_SUIT = N_("Name the suit for your {card}. The next play must follow it.")
+OUT_OF_GAME = N_("You are out of this game.")
+LEFT_TABLE = N_("You left the table.")
+NEEDS_SEATS = N_("One Card needs at least {count} seats to start.")
+YOU_DRAW = N_("You draw.")
+YOU_DRAW_MANY = N_("You draw {count} cards.")
+YOU_PLAY = N_("You play {card}.")
+YOU_PLAY_NAME = N_("You play {card} and name {suit}.")
+SUIT_NAMES = {"♠": NP_("suit", "Spades"), "♥": NP_("suit", "Hearts"), "♦": NP_("suit", "Diamonds"), "♣": NP_("suit", "Clubs")}
+ANY_SUIT = NP_("suit", "any")
+CLOCKWISE = NP_("direction", "clockwise")
+COUNTER_CLOCKWISE = NP_("direction", "counter-clockwise")
 _STALE = object()  # the table moved on while a decision was made: drop it
 BIG_PILE = 5  # drawing an attack's pile of this many cards or more is a key moment
 MAX_FORGET = 0.30  # the most a character ever forgets to declare (scaled down by its Play style)
@@ -44,8 +56,12 @@ def _cards(n: int) -> str:
     return f"{n} card" + ("" if n == 1 else "s")
 
 
-def _suit_text(view) -> str:
-    return view["suit"] or "any"
+def _suit_text(view):
+    return view["suit"] or ANY_SUIT
+
+
+def _direction(view):
+    return CLOCKWISE if view["direction"] > 0 else COUNTER_CLOCKWISE
 
 
 class OneCardButton(discord.ui.DynamicItem[discord.ui.Button], template=PREFIX + r":(?P<action>[a-z_]+):(?P<table>\d+):(?P<round>\d+):(?P<moves>\d+)"):
@@ -64,13 +80,14 @@ class OneCardButton(discord.ui.DynamicItem[discord.ui.Button], template=PREFIX +
 
 
 class _CardSelect(discord.ui.Select):
-    def __init__(self, options: list):
-        super().__init__(placeholder="Card to play", min_values=1, max_values=1, options=options)
+    def __init__(self, options: list, *, t=None):
+        t = t or i18n.english()
+        super().__init__(placeholder=t.p("select.onecard", "Card to play"), min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         picker, card = self.view, self.values[0]
         if card.startswith("7"):  # a 7 names the next suit: a second private step
-            await interaction.client.onecard.ask_suit(interaction, _SuitView(picker.table_id, picker.round_id, picker.moves, card))
+            await interaction.client.onecard.ask_suit(interaction, _SuitView(picker.table_id, picker.round_id, picker.moves, card, t=discord_locale.invoker_t(interaction)))
             return
         await interaction.client.onecard.play_from_picker(interaction, picker.table_id, picker.round_id, picker.moves, f"play:{card}")
 
@@ -82,16 +99,21 @@ class _Picker(discord.ui.View):
         super().__init__(timeout=600)
         t = t or i18n.english()
         self.table_id, self.round_id, self.moves = table_id, round_id, moves
-        options = [discord.SelectOption(label=self._label(card), value=card) for card in cards]
+        options = [discord.SelectOption(label=self._label(card, t), value=card) for card in cards]
         for start in range(0, len(options), 25):
-            self.add_item(_CardSelect(options[start:start + 25]))
+            self.add_item(_CardSelect(options[start:start + 25], t=t))
         draw = discord.ui.Button(label=t("Draw {count}", count=pending) if pending else t("Draw"), style=discord.ButtonStyle.danger if pending else discord.ButtonStyle.secondary)
         draw.callback = self.draw
         self.add_item(draw)
 
     @staticmethod
-    def _label(card: str) -> str:
-        return {"JKb": "Black joker (JKb)", "JKc": "Color joker (JKc)"}.get(card, card + (" (then name a suit)" if card.startswith("7") else ""))
+    def _label(card: str, t=None) -> str:
+        t = t or i18n.english()
+        if card == "JKb":
+            return t("Black joker ({card})", card=card)
+        if card == "JKc":
+            return t("Color joker ({card})", card=card)
+        return t("{card} (then name a suit)", card=card) if card.startswith("7") else card
 
     async def draw(self, interaction: discord.Interaction):
         await interaction.client.onecard.play_from_picker(interaction, self.table_id, self.round_id, self.moves, "draw")
@@ -100,11 +122,12 @@ class _Picker(discord.ui.View):
 class _SuitView(discord.ui.View):
     """The second step of a 7: the suit the next play must follow."""
 
-    def __init__(self, table_id: int, round_id: int, moves: int, card: str):
+    def __init__(self, table_id: int, round_id: int, moves: int, card: str, *, t=None):
         super().__init__(timeout=600)
+        t = t or i18n.english()
         self.table_id, self.round_id, self.moves, self.card = table_id, round_id, moves, card
         for suit, name in SUIT_NAMES.items():
-            item = discord.ui.Button(label=f"{suit} {name}", style=discord.ButtonStyle.primary)
+            item = discord.ui.Button(label=f"{suit} {t.render(name)}", style=discord.ButtonStyle.primary)
             item.callback = self._pick(suit)
             self.add_item(item)
 
@@ -269,16 +292,16 @@ class OneCardTables:
             self._release(key)
             self.tables.pop(key, None)
             return None
-        guild_id = key[0]
+        guild_id, t = key[0], self._t(key[0])
         if not self.store.game_enabled(guild_id, "onecard"):
-            reason = "One Card was turned off on this server."
+            reason = t("Table closed: One Card was turned off on this server.")
         elif row["channel_id"] not in self.store.game_channels(guild_id):
-            reason = "games were turned off here."
+            reason = t("Table closed: games were turned off here.")
         else:
-            reason = "the table was closed."
+            reason = t("Table closed: the table was closed.")
         self._forget(key)
         self.arm(key, "archive", self.ARCHIVE_SECONDS)
-        text = f"Table closed: {reason}" + self._refunded(key)
+        text = reason + self._refunded(key, t=t)
         return self._seal(key, _Out(lobby=(text, None), closing=text, closed=True))
 
     async def close_for_channel(self, guild_id, channel_id, table_id) -> int | None:
@@ -373,8 +396,9 @@ class OneCardTables:
             logging.exception("Could not post to One Card thread %s", channel_id)
         return None
 
-    async def _say(self, interaction, text: str, **kwargs) -> None:
+    async def _say(self, interaction, text, **kwargs) -> None:
         """An ephemeral reply: the first response, or a followup once the interaction was acknowledged."""
+        text = words(discord_locale.invoker_t(interaction), text)
         try:
             if interaction.response.is_done():
                 await interaction.followup.send(text, ephemeral=True, allowed_mentions=NO_MENTIONS, **kwargs)
@@ -385,6 +409,7 @@ class OneCardTables:
 
     async def answer(self, interaction, text: str, done: bool = False) -> None:
         """A reply to the picker: ``done`` replaces the picker message, anything else is a new private message (the picker stays)."""
+        text = words(discord_locale.invoker_t(interaction), text)
         if done and not interaction.response.is_done() and getattr(interaction, "message", None) is not None:
             try:
                 await interaction.response.edit_message(content=text, view=None, allowed_mentions=NO_MENTIONS)
@@ -394,8 +419,7 @@ class OneCardTables:
         await self._say(interaction, text)
 
     async def ask_suit(self, interaction, view) -> None:
-        card = view.card
-        await self._say(interaction, f"Name the suit for your {card}. The next play must follow it.", view=view)
+        await self._say(interaction, Phrase(NAME_SUIT, card=view.card), view=view)
 
     async def _ack(self, interaction) -> None:
         try:
@@ -403,13 +427,14 @@ class OneCardTables:
         except discord.HTTPException as error:
             logging.warning("One Card could not acknowledge the press: %s", type(error).__name__)
 
-    def _refunded(self, key, past: bool = False) -> str:
+    def _refunded(self, key, past: bool = False, *, t=None) -> str:
         """" The antes are refunded." (``past``: "were") when the table's round had an ante, else nothing."""
+        t = t or i18n.english()
         try:
             ante = (self.store.latest_round(*key)["rules"] or {}).get("ante", 0)
         except GameError:
             ante = 0
-        return (" The antes were refunded." if past else " The antes are refunded.") if ante else ""
+        return (" " + (t("The antes were refunded.") if past else t("The antes are refunded."))) if ante else ""
 
     def _host(self, row, snap) -> int:
         """The table's host: the opener while seated, else the first seated member."""
@@ -426,8 +451,8 @@ class OneCardTables:
     # --- rendering --------------------------------------------------------------------------
 
     @staticmethod
-    def _who(snap, index) -> str:
-        return GameTables._who({**snap["seats"][index], "brought_by": None})
+    def _who(snap, index, *, t=None) -> str:
+        return GameTables._who({**snap["seats"][index], "brought_by": None}, t=t)
 
     def _stamp(self, key, kind) -> str:
         deadline = self.table(key).deadlines.get(kind)
@@ -442,102 +467,110 @@ class OneCardTables:
         t = t or self._t(key[0])
         rules = snap["rules"] or onecard.normalize_rules(None)
         name, pot, ante = self.store.currency_name(key[0]), sum(s["stake"] for s in snap["seats"]), rules["ante"]
-        lines = [f"**One Card** · table {key[1]}", f"Ante: {ante:,} {name} · Pot: {pot:,} {name}" if ante else f"No ante · Pot: {pot:,} {name}",
-                 *([f"Host: <@{self._host(row, snap)}>"] if any(s["kind"] == "member" for s in snap["seats"]) else []), ""]
+        lines = [t("**{game}** · table {number}", game=terms.GAME_ONECARD, number=key[1]),
+                 t("Ante: {ante:,} {currency} · Pot: {pot:,} {currency}", ante=ante, pot=pot, currency=name) if ante else t("No ante · Pot: {pot:,} {currency}", pot=pot, currency=name),
+                 *([t("Host: {host}", host=f"<@{self._host(row, snap)}>")] if any(s["kind"] == "member" for s in snap["seats"]) else []), ""]
         for seat in snap["seats"]:
             tag = " " + t("(house)") if seat["kind"] == "character" and not seat["brought_by"] else ""
-            lines.append(f"{seat['index'] + 1}. {GameTables._who(seat)}{tag}")
+            lines.append(f"{seat['index'] + 1}. {GameTables._who(seat, t=t)}{tag}")
         stamp = self._stamp(key, "lobby")
         lines.append("")
-        lines.append(f"Join with the button. The host starts the game with {onecard.MIN_SEATS} to {onecard.MAX_SEATS} seats"
-                     + (f"; the table closes {stamp} if it hasn't started." if stamp else "."))
-        lines.append("-# " + onecard.rules_text(rules))
+        if stamp:
+            lines.append(t("Join with the button. The host starts the game with {low} to {high} seats; the table closes {stamp} if it hasn't started.", low=onecard.MIN_SEATS, high=onecard.MAX_SEATS, stamp=stamp))
+        else:
+            lines.append(t("Join with the button. The host starts the game with {low} to {high} seats.", low=onecard.MIN_SEATS, high=onecard.MAX_SEATS))
+        lines.append("-# " + " · ".join(t.render(p) for p in onecard.rules_phrases(rules)))
         view, tid, rid = discord.ui.View(timeout=None), key[1], snap["round_id"]
-        spec = [("join", "Join", discord.ButtonStyle.primary, False), ("leave", "Leave", discord.ButtonStyle.secondary, False),
-                ("start", "Start", discord.ButtonStyle.success, len(snap["seats"]) < onecard.MIN_SEATS or row["thread_id"] is None),
-                ("help", "How to play", discord.ButtonStyle.secondary, False)]
+        spec = [("join", t.p("button.onecard", "Join"), discord.ButtonStyle.primary, False), ("leave", t.p("button.onecard", "Leave"), discord.ButtonStyle.secondary, False),
+                ("start", t.p("button.onecard", "Start"), discord.ButtonStyle.success, len(snap["seats"]) < onecard.MIN_SEATS or row["thread_id"] is None),
+                ("help", t.p("button.onecard", "How to play"), discord.ButtonStyle.secondary, False)]
         for action, label, style, disabled in spec:
             view.add_item(OneCardButton(action, tid, rid, 0, label, style, disabled))
         return "\n".join(lines), view
 
-    def _in_play_view(self, key, snap) -> discord.ui.View:
+    def _in_play_view(self, key, snap, *, t=None) -> discord.ui.View:
+        t = t or self._t(key[0])
         view = discord.ui.View(timeout=None)
-        view.add_item(OneCardButton("help", key[1], snap["round_id"], 0, "How to play"))
+        view.add_item(OneCardButton("help", key[1], snap["round_id"], 0, t.p("button.onecard", "How to play")))
         return view
 
-    def render_board(self, key, snap) -> str:
+    def render_board(self, key, snap, *, t=None) -> str:
+        t = t or self._t(key[0])
         view, rules, name = snap["view"], snap["rules"] or {}, self.store.currency_name(key[0])
         pot = sum(s["stake"] for s in snap["seats"])
-        lines = [f"**One Card** · table {key[1]}" + (f" · pot {pot:,} {name} (ante {rules.get('ante', 0):,})" if pot else "")]
+        lines = [t("**{game}** · table {number}", game=terms.GAME_ONECARD, number=key[1]) + (" · " + t("pot {pot:,} {currency} (ante {ante:,})", pot=pot, currency=name, ante=rules.get('ante', 0)) if pot else "")]
         for seat in snap["seats"]:
             i = seat["index"]
             marks = ""
             if not view["active"][i]:
-                state = "out"
+                state = t.p("seat state", "out")
             else:
-                state = _cards(view["counts"][i])
+                state = t.render(doubt.cards_phrase(view["counts"][i]))
                 if view["finished"] and view["winner"] == i:
-                    marks = " · winner"
+                    marks = " · " + t.p("seat mark", "winner")
                 else:
-                    marks = (" · on turn" if view["turn"] == i else "") + (" · exposed" if i in view["exposed"] else "") \
-                        + (" · declared" if view["declared"][i] else "")
-            lines.append(f"{i + 1}. {GameTables._who(seat)} — {state}{marks}")
+                    marks = (" · " + t.p("seat mark", "on turn") if view["turn"] == i else "") + (" · " + t.p("seat mark", "exposed") if i in view["exposed"] else "") \
+                        + (" · " + t.p("seat mark", "declared") if view["declared"][i] else "")
+            lines.append(f"{i + 1}. {GameTables._who(seat, t=t)} — {state}{marks}")
         if view["finished"]:
-            lines.append("Game over.")
+            lines.append(t("Game over."))
         else:
-            lines.append(f"Top card: {onecard.card_text(view['top'])} · Suit: {_suit_text(view)} · {'clockwise' if view['direction'] > 0 else 'counter-clockwise'}")
+            lines.append(t("Top card: {card} · Suit: {suit} · {direction}", card=onecard.card_text(view['top']), suit=_suit_text(view), direction=_direction(view)))
             if view["pending"]:
-                lines.append(f"Pending attack: {view['pending']}")
-            lines.append(f"-# Draw pile {view['draw']} · discard pile {view['discard']}")
-        lines.append("-# " + onecard.rules_text(snap["rules"]))
-        lines.append(f"-# Seed: {snap['seed']} (hash {snap['seed_hash'][:12]})" if snap["seed"] else f"-# Seed hash: {snap['seed_hash'][:12]}")
+                lines.append(t("Pending attack: {count}", count=view['pending']))
+            lines.append("-# " + t("Draw pile {draw} · discard pile {discard}", draw=view['draw'], discard=view['discard']))
+        lines.append("-# " + " · ".join(t.render(p) for p in onecard.rules_phrases(snap["rules"])))
+        lines.append("-# " + t("Seed: {seed} (hash {hash})", seed=snap['seed'], hash=snap['seed_hash'][:12]) if snap["seed"] else "-# " + t("Seed hash: {hash}", hash=snap['seed_hash'][:12]))
         return "\n".join(lines)
 
-    def _happened(self, snap) -> str:
+    def _happened(self, snap, *, t=None) -> str:
         """The line for the last thing that happened (a play, a draw, an exit); hands are never named."""
+        t = t or i18n.english()
         view = snap["view"]
         last = next((e for e in reversed(view["history"]) if e["kind"] in ("play", "draw", "forfeit", "bankrupt")), None)
         if last is None:
-            return "The game has started."
+            return t("The game has started.")
+        who = self._who(snap, last["seat"], t=t)
         if last["kind"] == "play":
-            text = f"{self._who(snap, last['seat'])} played {onecard.card_text(last['card'])}"
-            return text + (f" and named {last['suit']}." if last["suit"] else ".")
+            card = onecard.card_text(last["card"])
+            return t("{who} played {card} and named {suit}.", who=who, card=card, suit=last["suit"]) if last["suit"] else t("{who} played {card}.", who=who, card=card)
         if last["kind"] == "draw":
             count = last["count"]
-            taken = "a card" if count == 1 else f"{count} cards" if count else "nothing"
-            return f"{self._who(snap, last['seat'])} drew {taken}."
+            return t("{who} drew a card.", who=who) if count == 1 else t("{who} drew {count} cards.", who=who, count=count) if count else t("{who} drew nothing.", who=who)
         if last["kind"] == "forfeit":
-            return f"{self._who(snap, last['seat'])} forfeited and is out."
-        return f"{self._who(snap, last['seat'])} went bankrupt and is out."
+            return t("{who} forfeited and is out.", who=who)
+        return t("{who} went bankrupt and is out.", who=who)
 
-    def render_turn(self, key, snap) -> tuple[str, discord.ui.View]:
+    def render_turn(self, key, snap, *, t=None) -> tuple[str, discord.ui.View]:
+        t = t or self._t(key[0])
         view, seats = snap["view"], snap["seats"]
-        lines = [self._happened(snap), f"Top card: {onecard.card_text(view['top'])} · Suit: {_suit_text(view)}."]
+        lines = [self._happened(snap, t=t), t("Top card: {card} · Suit: {suit}.", card=onecard.card_text(view['top']), suit=_suit_text(view))]
         if view["pending"]:
-            lines.append(f"Attack pending: draw {view['pending']} or defend.")
+            lines.append(t("Attack pending: draw {count} or defend.", count=view['pending']))
         turn = view["turn"]
         if turn is not None:
-            stamp = self._stamp(key, "turn")
-            lines.append(f"Next: {self._who(snap, turn)}" + (f" — {stamp}." if stamp and seats[turn]["kind"] == "member" else "."))
+            stamp, who = self._stamp(key, "turn"), self._who(snap, turn, t=t)
+            lines.append(t("Next: {who} — {stamp}.", who=who, stamp=stamp) if stamp and seats[turn]["kind"] == "member" else t("Next: {who}.", who=who))
         buttons = discord.ui.View(timeout=None)
-        buttons.add_item(OneCardButton("hand", key[1], snap["round_id"], snap["moves"], "My hand", discord.ButtonStyle.primary))
+        buttons.add_item(OneCardButton("hand", key[1], snap["round_id"], snap["moves"], t.p("button.onecard", "My hand"), discord.ButtonStyle.primary))
         return "\n".join(lines), buttons
 
-    def _result(self, key, snap) -> tuple[str, str, str]:
+    def _result(self, key, snap, *, t=None) -> tuple[str, str, str]:
         """(thread result, one-line lobby text, final turn text) for a settled round."""
+        t = t or self._t(key[0])
         name, seats, win = self.store.currency_name(key[0]), snap["seats"], snap["view"]["winner"]
-        pot, who = sum(s["stake"] for s in seats), self._who(snap, win)
-        head = f"**{who} wins the game" + (f" and takes the pot of {pot:,} {name}.**" if pot else ".**")
-        lines = [head]
+        pot, who = sum(s["stake"] for s in seats), self._who(snap, win, t=t)
+        lines = [t("**{who} wins the game and takes the pot of {pot:,} {currency}.**", who=who, pot=pot, currency=name) if pot else t("**{who} wins the game.**", who=who)]
         broke = {e["seat"] for e in snap["view"]["history"] if e["kind"] == "bankrupt"}
+        even = t.p("round net", "even")
         for index, seat in enumerate(seats):
             net = (seat["payout"] or 0) - seat["stake"]
-            note = " (bankrupt)" if index in broke else " (forfeited)" if seat["outcome"] == "forfeit" else ""
-            lines.append(f"• {GameTables._who(seat)}: {_sign(net) or 'even'}{note}")
+            note = " " + t("(bankrupt)") if index in broke else " " + t("(forfeited)") if seat["outcome"] == "forfeit" else ""
+            lines.append(f"• {GameTables._who(seat, t=t)}: {_sign(net) or even}{note}")
         if snap["seed"]:
-            lines.append(f"-# Seed: {snap['seed']} (hash {snap['seed_hash'][:12]})")
-        lobby = f"{who} won One Card" + (f" and took the pot of {pot:,} {name}" if pot else "") + ". Table closed."
-        return "\n".join(lines), lobby, f"Game over — {who} won."
+            lines.append("-# " + t("Seed: {seed} (hash {hash})", seed=snap['seed'], hash=snap['seed_hash'][:12]))
+        lobby = t("{who} won One Card and took the pot of {pot:,} {currency}. Table closed.", who=who, pot=pot, currency=name) if pot else t("{who} won One Card. Table closed.", who=who)
+        return "\n".join(lines), lobby, t("Game over — {who} won.", who=who)
 
     # --- the common step machinery ----------------------------------------------------------
 
@@ -577,6 +610,7 @@ class OneCardTables:
     def _apply(self, key, snap, seat, move, actor, note=None) -> _Out:
         """Makes one move under the table lock; raises ConflictError / GameError from the store."""
         before, new = snap, self.store.play(key[0], snap["round_id"], seat, move, actor, snap["moves"])
+        t = self._t(key[0])
         out = _Out(advanced=True)
         keep = move == "declare" or move.startswith("call_out:")
         new = self._declared_after(key, new, seat, move, actor, out)
@@ -584,11 +618,11 @@ class OneCardTables:
             out.events.append(note)
         for event in new["view"]["history"][len(before["view"]["history"]):]:
             if event["kind"] == "forfeit":
-                out.events.append(f"{self._who(before, event['seat'])} forfeits and is out of the game.")
+                out.events.append(t("{who} forfeits and is out of the game.", who=self._who(before, event["seat"], t=t)))
             elif event["kind"] == "bankrupt":
-                out.events.append(f"{self._who(before, event['seat'])} went bankrupt and is out of the game.")
+                out.events.append(t("{who} went bankrupt and is out of the game.", who=self._who(before, event["seat"], t=t)))
         if new["status"] == "settled":
-            out.final = self._result(key, new)
+            out.final = self._result(key, new, t=t)
             if self.talk_allowed(key[0]):
                 out.talk = (f"Game over — {self._talk_names(key[0], new)[new['view']['winner']]} won the game.", True)
             self.store.close_table(*key)
@@ -600,7 +634,7 @@ class OneCardTables:
             keep = keep and before["view"]["turn"] == new["view"]["turn"]
             out.advanced = not keep
             self._after(key, new, keep)
-            out.turn = self.render_turn(key, new)
+            out.turn = self.render_turn(key, new, t=t)
             out.board = True
             if self.clock() - self.event_at.get(key, float("-inf")) >= self.EVENT_COOLDOWN_SECONDS and self.talk_allowed(key[0]):
                 text = self._moment(key, before, new)
@@ -740,7 +774,7 @@ class OneCardTables:
             if out.closing:
                 if out.seq > table.sent.get("turn", 0):
                     table.sent["turn"] = out.seq
-                    await self._edit(thread_id, row["turn_message_id"], content="Table closed.", view=None)
+                    await self._edit(thread_id, row["turn_message_id"], content=self._t(key[0])("Table closed."), view=None)
                 await self._post(thread_id, out.closing)
             if out.lobby and out.seq > table.sent.get("lobby", 0):
                 table.sent["lobby"] = out.seq
@@ -793,12 +827,13 @@ class OneCardTables:
         board = await self._post(thread_id, out.start)
         turn = await self._post(thread_id, *out.turn) if board is not None else None
         if board is None or turn is None:
+            t = self._t(key[0])
             async with self.runtime.lock(key):
-                refunded = self._refunded(key)
+                refunded = self._refunded(key, t=t)
                 if (current := self._row(key)) is not None and current["status"] == "open":
                     self.store.close_table(*key)
                 self._forget(key)
-            await self._edit(row["channel_id"], row["message_id"], content="Table closed: I couldn't post in the table thread." + refunded, view=None)
+            await self._edit(row["channel_id"], row["message_id"], content=t("Table closed: I couldn't post in the table thread.") + refunded, view=None)
             self.arm(key, "archive", self.ARCHIVE_SECONDS)
             return False
         try:
@@ -847,7 +882,7 @@ class OneCardTables:
         channel_id = getattr(interaction, "channel_id", None) or interaction.channel.id
         user = interaction.user
         if user.bot:
-            await self._say(interaction, "Bots cannot play One Card.")
+            await self._say(interaction, discord_locale.invoker_t(interaction)("Bots cannot play {game}.", game=terms.GAME_ONECARD))
             return
         if not self.store.game_enabled(guild_id, "onecard"):
             await self._say(interaction, ONECARD_OFF)
@@ -862,7 +897,7 @@ class OneCardTables:
         try:
             opened = self.store.open_table(guild_id, channel_id, "onecard", user.id)
         except GameError as error:
-            await self._say(interaction, str(error))
+            await self._say(interaction, error)
             return
         key, round_id = (guild_id, opened["table_id"]), opened["round_id"]
         self.table(key)
@@ -871,14 +906,14 @@ class OneCardTables:
             try:
                 if favorites and space_id is not None:
                     result = self.store.join_with_favorites(guild_id, round_id, user.id, 0, space_id)
-                    snap, note = result["snapshot"], self.bot.games._favorites_note(result, note)
+                    snap, note = result["snapshot"], self.bot.games._favorites_note(result, note, t=discord_locale.invoker_t(interaction))
                 else:
                     snap = self.store.join_round(guild_id, round_id, user.id, 0)
             except GameError as error:
                 self.store.close_table(*key)
                 self._release(key)
                 self.tables.pop(key, None)
-                refusal = str(error)
+                refusal = discord_locale.invoker_t(interaction).error(error)
             else:
                 refusal = None
                 self.table(key).deadlines["lobby"] = self.clock() + self.LOBBY_SECONDS
@@ -908,7 +943,7 @@ class OneCardTables:
         await self._publish(key, fresh)
         try:
             partial = await self._channel(channel_id)
-            thread = await partial.get_partial_message(message.id).create_thread(name=f"One Card · table {key[1]}", auto_archive_duration=1440)
+            thread = await partial.get_partial_message(message.id).create_thread(name=self._t(guild_id)("{game} · table {number}", game=terms.GAME_ONECARD, number=key[1]), auto_archive_duration=1440)
         except discord.HTTPException as error:
             logging.warning("Could not open the One Card thread (%s)", type(error).__name__)
             await self._thread_failed(interaction, key, isinstance(error, discord.Forbidden))
@@ -930,21 +965,23 @@ class OneCardTables:
             await self._say(interaction, note)
 
     async def _thread_failed(self, interaction, key, forbidden: bool) -> None:
+        t, ct = discord_locale.invoker_t(interaction), self._t(key[0])
         async with self.runtime.lock(key):
-            refunded = self._refunded(key)
+            refunded, refunded_say = self._refunded(key, t=ct), self._refunded(key, t=t)
             row = self._row(key)
             if row is not None and row["status"] == "open":
                 self.store.close_table(*key)
             self._forget(key)
-            out = self._seal(key, _Out(lobby=("Table closed: I couldn't open a thread here." + refunded, None), closed=True))
+            out = self._seal(key, _Out(lobby=(ct("Table closed: I couldn't open a thread here.") + refunded, None), closed=True))
         await self._publish(key, out)
         self.tables.pop(key, None)
         self.ended.discard(key)
-        await self._say(interaction, (THREAD_FORBIDDEN if forbidden else THREAD_FAILED) + refunded)
+        await self._say(interaction, (t(THREAD_FORBIDDEN) if forbidden else t(THREAD_FAILED)) + refunded_say)
 
     # --- buttons ----------------------------------------------------------------------------
 
-    def _help_text(self, guild_id, table_id, round_id) -> str:
+    def _help_text(self, guild_id, table_id, round_id, *, t=None) -> str:
+        t = t or i18n.english()
         rules = None
         if guild_id is not None:
             row = self._row((guild_id, table_id))
@@ -956,11 +993,11 @@ class OneCardTables:
             except GameError:
                 pass
             rules = rules or self.store.game_rules(guild_id, "onecard")
-        return onecard.how_to_play(rules)
+        return "\n".join(t.render(p) for p in onecard.how_to_play_phrases(rules))
 
     async def press(self, interaction: discord.Interaction, action: str, table_id: int, round_id: int, moves: int) -> None:
         if action == "help":  # a guide, not a move: no state, no seat needed, works on old messages
-            await self._say(interaction, self._help_text(interaction.guild_id, table_id, round_id))
+            await self._say(interaction, self._help_text(interaction.guild_id, table_id, round_id, t=discord_locale.invoker_t(interaction)))
             return
         guild_id = interaction.guild_id
         if guild_id is None or interaction.user.bot:
@@ -995,7 +1032,7 @@ class OneCardTables:
         except ConflictError:
             return _Out(MOVED_ON)
         except GameError as error:
-            return _Out(str(error))
+            return _Out(error)
 
     def _touch_lobby(self, key, round_id) -> None:
         """A join restarts the idle clock of the lobby."""
@@ -1006,7 +1043,7 @@ class OneCardTables:
         snap = self.store.join_round(key[0], snap["round_id"], user_id, 0)
         self._touch_lobby(key, snap["round_id"])
         ante, name = (snap["rules"] or {}).get("ante", 0), self.store.currency_name(key[0])
-        say = "You joined the table." + (f" Your ante of {ante:,} {name} is in the pot." if ante else "")
+        say = Phrase(JOINED_ANTE, ante=ante, currency=name) if ante else JOINED
         return self._seal(key, _Out(say, lobby=self.render_lobby(key, snap, row)))
 
     def _leave(self, key, row, snap, user_id) -> _Out:
@@ -1015,21 +1052,21 @@ class OneCardTables:
             self.store.close_table(*key)
             self._forget(key)
             self.arm(key, "archive", self.ARCHIVE_SECONDS)
-            return self._seal(key, _Out("You left the table. It is closed.", lobby=("Table closed: everyone left.", None), closed=True))
+            return self._seal(key, _Out(LEFT_CLOSED, lobby=(self._t(key[0])("Table closed: everyone left."), None), closed=True))
         ante = (snap["rules"] or {}).get("ante", 0)
-        return self._seal(key, _Out("You left the table." + (" Your ante is refunded." if ante else ""), lobby=self.render_lobby(key, snap, row)))
+        return self._seal(key, _Out(LEFT_REFUNDED if ante else LEFT_TABLE, lobby=self.render_lobby(key, snap, row)))
 
     def _start(self, key, row, snap, user_id) -> _Out:
         if not self._is_host(row, snap, user_id):
-            return _Out("Only the host can start the game.")
+            return _Out(ONLY_HOST_START)
         if row["thread_id"] is None:
             return _Out(THREAD_NOT_READY)
         if len(snap["seats"]) < onecard.MIN_SEATS:
-            return _Out(f"One Card needs at least {onecard.MIN_SEATS} seats to start.")
+            return _Out(Phrase(NEEDS_SEATS, count=onecard.MIN_SEATS))
         snap = self.store.deal(key[0], snap["round_id"])
         self._after(key, snap)
         out = _Out(start=self.render_board(key, snap), turn=self.render_turn(key, snap))
-        out.lobby = ("In play — see the thread.", self._in_play_view(key, snap))
+        out.lobby = (self._t(key[0])("In play — see the thread."), self._in_play_view(key, snap))
         return self._seal(key, out)
 
     # --- the hand and the picker ------------------------------------------------------------
@@ -1044,8 +1081,10 @@ class OneCardTables:
 
     async def _show_hand(self, interaction, key, round_id) -> None:
         async with self.runtime.lock(key):
-            text, picker = self._hand(key, round_id, interaction.user.id)
-        kwargs = {"view": _Picker(*picker, t=discord_locale.invoker_t(interaction))} if picker else {}
+            t = discord_locale.invoker_t(interaction)
+            text, picker = self._hand(key, round_id, interaction.user.id, t=t)
+        text = words(t, text)
+        kwargs = {"view": _Picker(*picker, t=t)} if picker else {}
         try:
             if interaction.response.is_done():
                 await interaction.followup.send(text, ephemeral=True, allowed_mentions=NO_MENTIONS, **kwargs)
@@ -1054,8 +1093,9 @@ class OneCardTables:
         except discord.HTTPException as error:
             logging.warning("One Card hand reply failed: %s", type(error).__name__)
 
-    def _hand(self, key, round_id, user_id):
+    def _hand(self, key, round_id, user_id, *, t=None):
         """(private text, picker arguments or None): the presser's own hand only; the picker only on their turn."""
+        t = t or i18n.english()
         guild_id = key[0]
         row = self._row(key)
         if row is None or row["game"] != "onecard":
@@ -1070,21 +1110,21 @@ class OneCardTables:
         if seat is None:
             return NOT_SEATED, None
         if snap["status"] == "joining":
-            return "The game hasn't started yet.", None
+            return NOT_STARTED, None
         if snap["status"] != "playing":
-            return "This game is over.", None
+            return GAME_OVER, None
         view = self.store.seat_view(guild_id, snap["round_id"], seat)
         if not view.active[seat]:
-            return "You are out of this game.", None
-        lines = [f"**Your hand** ({_cards(len(view.hand))})", " ".join(onecard.card_text(c) for c in view.hand),
-                 f"Top card: {onecard.card_text(view.top)} · Suit: {view.suit or 'any'}"]
+            return OUT_OF_GAME, None
+        lines = [t("**Your hand** ({cards})", cards=doubt.cards_phrase(len(view.hand))), " ".join(onecard.card_text(c) for c in view.hand),
+                 t("Top card: {card} · Suit: {suit}", card=onecard.card_text(view.top), suit=view.suit or ANY_SUIT)]
         playable = onecard.playable_cards(view, snap["rules"])
         if view.pending and view.turn == seat:
-            lines.append(f"Attack pending: draw {view.pending}" + (" or defend." if playable else "."))
+            lines.append(t("Attack pending: draw {count} or defend.", count=view.pending) if playable else t("Attack pending: draw {count}.", count=view.pending))
         if view.turn == seat:
-            lines.append("\nYour turn: " + ("choose a card to play, or draw." if playable else "nothing can be played, so draw."))
+            lines.append("\n" + (t("Your turn: choose a card to play, or draw.") if playable else t("Your turn: nothing can be played, so draw.")))
         elif view.turn is not None:
-            lines.append(f"\nOn turn: {self._who(snap, view.turn)}.")
+            lines.append("\n" + t("On turn: {who}.", who=self._who(snap, view.turn, t=t)))
         return "\n".join(lines), ((key[1], snap["round_id"], snap["moves"], list(playable), view.pending) if view.turn == seat else None)
 
     async def play_from_picker(self, interaction: discord.Interaction, table_id: int, round_id: int, moves: int, move: str) -> None:
@@ -1119,12 +1159,12 @@ class OneCardTables:
         except ConflictError:
             return _Out(MOVED_ON)
         except GameError as error:
-            return _Out(str(error))
+            return _Out(error)
         if move == "draw":
-            out.say = "You draw." if not snap["view"]["pending"] else f"You draw {snap['view']['pending']} cards."
+            out.say = YOU_DRAW if not snap["view"]["pending"] else Phrase(YOU_DRAW_MANY, count=snap["view"]["pending"])
         else:
             card, _, named = move[5:].partition("=")
-            out.say = f"You play {card}" + (f" and name {named}." if named else ".")
+            out.say = Phrase(YOU_PLAY_NAME, card=card, suit=named) if named else Phrase(YOU_PLAY, card=card)
         out.ok = True
         return out
 
@@ -1146,7 +1186,8 @@ class OneCardTables:
             self.store.close_table(*key)
             self._forget(key)
             self.arm(key, "archive", self.ARCHIVE_SECONDS)
-            out = self._seal(key, _Out(lobby=("Table closed: nobody started the game." + self._refunded(key), None), closed=True))
+            t = self._t(guild_id)
+            out = self._seal(key, _Out(lobby=(t("Table closed: nobody started the game.") + self._refunded(key, t=t), None), closed=True))
         await self._publish(key, out)
 
     def _missed_turns(self, guild_id, round_id, seat) -> int:
@@ -1170,12 +1211,13 @@ class OneCardTables:
             seat = snap["view"]["turn"]
             if seat is None or snap["seats"][seat]["kind"] != "member":
                 return
-            who = self._who(snap, seat)
+            t = self._t(guild_id)
+            who = self._who(snap, seat, t=t)
             try:
                 if self._missed_turns(guild_id, round_id, seat) >= 1:
-                    out = self._apply(key, snap, seat, "forfeit", "timeout", note=f"{who} missed two turns in a row.")
+                    out = self._apply(key, snap, seat, "forfeit", "timeout", note=t("{who} missed two turns in a row.", who=who))
                 else:
-                    out = self._apply(key, snap, seat, "timeout", "timeout", note=f"{who} ran out of time and had to draw.")
+                    out = self._apply(key, snap, seat, "timeout", "timeout", note=t("{who} ran out of time and had to draw.", who=who))
             except (ConflictError, GameError) as error:
                 logging.info("One Card turn timeout refused (%s)", type(error).__name__)
                 return
@@ -1499,7 +1541,7 @@ class OneCardTables:
             tables.setdefault((row["guild_id"], row["id"]), (row["channel_id"], row["message_id"], row["thread_id"]))
         # tables that closed just before the restart: their archive timer never fired (closed_at is updated_at; no schema change)
         earlier = [r["thread_id"] for r in store.all("SELECT thread_id FROM game_tables WHERE game='onecard' AND status='closed' AND thread_id IS NOT NULL AND updated_at>=?", (time.time() - self.ARCHIVE_SECONDS,))]
-        notes = {(r["guild_id"], r["table_id"]): self._refunded((r["guild_id"], r["table_id"]), past=True) for r in rounds}
+        notes = {(r["guild_id"], r["table_id"]): self._refunded((r["guild_id"], r["table_id"]), past=True, t=self._t(r["guild_id"])) for r in rounds}
         for r in rounds:
             try:
                 store.cancel_round(r["guild_id"], r["round_id"], "bot restarted")
@@ -1518,7 +1560,7 @@ class OneCardTables:
             self._release((guild_id, table_id))
             self.tables.pop((guild_id, table_id), None)
             self.banter = {thread: k for thread, k in self.banter.items() if k != (guild_id, table_id)}
-            text = "This table closed when the bot restarted." + notes.get((guild_id, table_id), "")
+            text = self._t(guild_id)("This table closed when the bot restarted.") + notes.get((guild_id, table_id), "")
             await self._edit(channel_id, message_id, content=text, view=None)
             await self._post(thread_id, text)
             await self._archive_thread(thread_id)  # the old process's archive timer died with it

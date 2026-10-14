@@ -9,7 +9,7 @@ import json
 from dataclasses import dataclass, field, replace
 from typing import Optional, Sequence
 
-from ..i18n import UserError, codes
+from ..i18n import Phrase, UserError, codes, terms
 from . import playstyle
 from .base import IllegalMove, Seat, shuffled
 
@@ -482,40 +482,48 @@ def _play(state, seat, card, named):
     return replace(state, direction=direction, pending=pending, turn=_next(state.active, seat, direction, steps))
 
 
-def rules_text(rules=None):
-    """The table's rules in plain words (display only), one line. No card symbols: the line is shown in public messages."""
+def rules_phrases(rules=None):
+    """The table's rules in plain words, one Phrase per part (display only); join with " · ". No card symbols: the line is shown in public messages."""
     r = normalize_rules(rules)
-    bits = [f"Ante {r['ante']}" if r["ante"] else "No ante", f"{r['turn_timeout']} s per turn",
-            "defense on" if r["defense"] else "defense off", "king skips two" if r["king_skips_two"] else "king has no effect",
-            {"none": "last card unrestricted", "no_attack": "no attack as the last card", "no_attack_or_joker": "no attack or joker as the last card"}[r["last_card"]],
-            "spade ace worth 10" if r["spade_ace_ten"] else "spade ace worth 5"]
+    bits = [Phrase(terms.DOUBT_RULE_ANTE, ante=r["ante"]) if r["ante"] else Phrase(terms.DOUBT_RULE_NO_ANTE), Phrase(terms.DOUBT_RULE_TIMEOUT, seconds=r["turn_timeout"]),
+            Phrase(terms.ONECARD_RULE_DEFENSE_ON if r["defense"] else terms.ONECARD_RULE_DEFENSE_OFF),
+            Phrase(terms.ONECARD_RULE_KING_SKIPS if r["king_skips_two"] else terms.ONECARD_RULE_KING_NONE),
+            Phrase(terms.ONECARD_RULE_LAST[r["last_card"]]),
+            Phrase(terms.ONECARD_RULE_ACE_TEN if r["spade_ace_ten"] else terms.ONECARD_RULE_ACE_FIVE)]
     if r["bankruptcy"]:
-        bits.append(f"bankruptcy at {r['bankruptcy_limit']} cards")
-    bits.append(f"call-out penalty {r['call_out_penalty']}")
-    return " · ".join(bits)
+        bits.append(Phrase(terms.ONECARD_RULE_BANKRUPTCY, limit=r["bankruptcy_limit"]))
+    bits.append(Phrase(terms.ONECARD_RULE_PENALTY, penalty=r["call_out_penalty"]))
+    return bits
+
+
+def rules_text(rules=None):
+    """The table's rules in plain words (display only), one line."""
+    return " · ".join(str(p) for p in rules_phrases(rules))
+
+
+def how_to_play_phrases(rules=None):
+    """The how-to-play lines, one Phrase per line (display only); join with a newline."""
+    r = normalize_rules(rules)
+    spade = 10 if r["spade_ace_ten"] else 5
+    lines = [
+        Phrase(terms.ONECARD_HOW_TITLE),
+        Phrase(terms.ONECARD_HOW_GOAL),
+        Phrase(terms.ONECARD_HOW_ATTACKS_DEFENSE if r["defense"] else terms.ONECARD_HOW_ATTACKS_NO_DEFENSE, spade=spade),
+        Phrase(terms.ONECARD_HOW_FACE_KING if r["king_skips_two"] else terms.ONECARD_HOW_FACE_NO_KING),
+        Phrase(terms.ONECARD_HOW_SEVEN),
+        Phrase(terms.ONECARD_HOW_DECLARE, penalty=r["call_out_penalty"]),
+    ]
+    if r["last_card"] != "none":
+        lines.append(Phrase(terms.ONECARD_HOW_LAST_JOKER if r["last_card"] == "no_attack_or_joker" else terms.ONECARD_HOW_LAST))
+    if r["bankruptcy"]:
+        lines.append(Phrase(terms.ONECARD_HOW_BANKRUPTCY, limit=r["bankruptcy_limit"]))
+    lines.append(Phrase(terms.ONECARD_HOW_TIMEOUT, seconds=r["turn_timeout"]))
+    lines.append(Phrase(terms.ONECARD_HOW_WIN_POT, ante=r["ante"]) if r["ante"] else Phrase(terms.ONECARD_HOW_WIN))
+    return lines
 
 
 def how_to_play(rules=None):
-    r = normalize_rules(rules)
-    lines = [
-        "**One Card in short**",
-        "Be the first to play your last card. Everyone starts with 7 cards; play a card that matches the top card's suit or rank, or draw one and pass. Jokers play on anything.",
-        "• Attacks: 2 = 2 cards, A = 3, ♠A = " + ("10" if r["spade_ace_ten"] else "5") + ", black joker = 5, color joker = 7. They add up until someone draws the total and loses the turn."
-        + (" You can answer an attack with a stronger or equal defense: a 2 answers a 2 (or the A of the same suit, or a joker), an A answers an A or a joker, ♠A only a black joker, a joker another joker." if r["defense"] else " Defenses are off: you can only draw."),
-        "• J skips the next player. Q reverses the direction (with two players you go again). "
-        + ("K skips two players (with four or more)." if r["king_skips_two"] else "K has no special effect."),
-        "• 7 lets you name the suit the next play must follow.",
-        "• At one card, say it in the thread (\"원카드\" or \"One Card\"); say it while you hold two cards and it counts when your play leaves one. A player who didn't can be called out "
-        "(\"Alice forgot one card\", or reply to their message), and the caller makes them draw "
-        + f"{r['call_out_penalty']}. A wrong call-out costs the caller the same.",
-    ]
-    if r["last_card"] != "none":
-        lines.append("• You can't finish on an attack card" + (" or a joker" if r["last_card"] == "no_attack_or_joker" else "") + ".")
-    if r["bankruptcy"]:
-        lines.append(f"• Reach {r['bankruptcy_limit']} cards and you go bankrupt: you are out and your cards go back to the pile.")
-    lines.append(f"• Take longer than {r['turn_timeout']} s and you draw and lose the turn; miss two turns in a row and you forfeit your seat.")
-    lines.append("• The last player standing, or whoever plays their last card, takes the pot" + (f" ({r['ante']} each)." if r["ante"] else "."))
-    return "\n".join(lines)
+    return "\n".join(str(p) for p in how_to_play_phrases(rules))
 
 
 def replay(seed, seats, moves, rules=None):

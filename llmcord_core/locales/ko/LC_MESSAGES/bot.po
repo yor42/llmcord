@@ -1,10 +1,18 @@
+
 msgid ""
 msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2026-10-15 08:15+0900\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: ko\n"
-"MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=UTF-8\n"
-"Content-Transfer-Encoding: 8bit\n"
+"Language-Team: ko <LL@li.org>\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
 
 #: llmcord_core/catchup.py
 msgid "Nothing new here since you last spoke."
@@ -668,7 +676,7 @@ msgstr "라운드가 진행 중이에요. 끝나면 /blackjack으로 다음 라�
 msgid "You can leave when this round ends."
 msgstr "이번 라운드가 끝나면 나갈 수 있어요."
 
-#: llmcord_core/games_discord.py
+#: llmcord_core/games_discord.py llmcord_core/games_onecard_discord.py
 msgid "You left the table."
 msgstr "테이블에서 나갔어요."
 
@@ -709,7 +717,7 @@ msgid "archived"
 msgstr "보관됨"
 
 #: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
-#: llmcord_core/games_holdem_discord.py
+#: llmcord_core/games_holdem_discord.py llmcord_core/games_onecard_discord.py
 msgid "Table closed: games were turned off here."
 msgstr "테이블 닫힘: 이곳에서 게임이 꺼졌어요."
 
@@ -808,6 +816,7 @@ msgid "Round {number}: dealer {total} —"
 msgstr "{number}라운드: 딜러 {total} —"
 
 #: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_onecard_discord.py
 msgctxt "round net"
 msgid "even"
 msgstr "본전"
@@ -883,7 +892,7 @@ msgstr "베팅: {low:,}~{high:,} {currency}."
 msgid "Dealer shows an ace. Insurance?"
 msgstr "딜러의 보이는 카드가 에이스예요. 인슈어런스를 걸까요?"
 
-#: llmcord_core/games_discord.py
+#: llmcord_core/games_discord.py llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "On turn: {who}."
 msgstr "차례: {who}."
@@ -911,12 +920,13 @@ msgid "Dealer plays."
 msgstr "딜러 차례예요."
 
 #: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "Seed: {seed} (hash {hash})"
 msgstr "시드: {seed} (해시 {hash})"
 
 #: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
-#: llmcord_core/games_holdem_discord.py
+#: llmcord_core/games_holdem_discord.py llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "Seed hash: {hash}"
 msgstr "시드 해시: {hash}"
@@ -1215,33 +1225,36 @@ msgid "Table closed: I Doubt It was turned off on this server."
 msgstr "테이블 닫힘: 이 서버에서 다우트가 꺼졌어요."
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+#: llmcord_core/games_onecard_discord.py
 msgid "Table closed: the table was closed."
 msgstr "테이블 닫힘: 테이블이 닫혔어요."
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 msgid "The antes were refunded."
 msgstr "판돈을 환불했어요."
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 msgid "The antes are refunded."
 msgstr "판돈은 환불돼요."
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+#: llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "**{game}** · table {number}"
 msgstr "**{game}** · 테이블 {number}"
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "Ante: {ante:,} {currency} · Pot: {pot:,} {currency}"
 msgstr "판돈: {ante:,} {currency} · 팟: {pot:,} {currency}"
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "No ante · Pot: {pot:,} {currency}"
 msgstr "판돈 없음 · 팟: {pot:,} {currency}"
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+#: llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "Host: {host}"
 msgstr "호스트: {host}"
@@ -1286,7 +1299,7 @@ msgctxt "button.doubt"
 msgid "How to play"
 msgstr "게임 방법"
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "pot {pot:,} {currency} (ante {ante:,})"
 msgstr "팟 {pot:,} {currency} (판돈 {ante:,})"
@@ -1306,7 +1319,7 @@ msgstr "{cards} · 승리"
 msgid "{cards} · on turn"
 msgstr "{cards} · 차례"
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 msgid "Game over."
 msgstr "게임이 끝났어요."
 
@@ -1315,7 +1328,7 @@ msgstr "게임이 끝났어요."
 msgid "Pile: {cards} · Rank to claim: {rank}"
 msgstr "더미: {cards} · 선언할 숫자: {rank}"
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 msgid "The game has started."
 msgstr "게임이 시작됐어요."
 
@@ -1373,17 +1386,17 @@ msgstr "다우트! {doubter:이/가} {claimer}의 {claim} 선언에 다우트했
 msgid "Doubt! {doubter} doubted {claimer}'s {claim}. They were {cards} — {taker} takes the pile ({pile})."
 msgstr "다우트! {doubter:이/가} {claimer}의 {claim} 선언에 다우트했어요. 낸 카드: {cards} — {taker:이/가} 더미({pile})를 가져가요."
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "**{who} wins the game and takes the pot of {pot:,} {currency}.**"
 msgstr "**{who:이/가} 게임에서 이겨 팟 {pot:,} {currency:을/를} 가져가요.**"
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "**{who} wins the game.**"
 msgstr "**{who:이/가} 게임에서 이겼어요.**"
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 msgid "(forfeited)"
 msgstr "(기권)"
 
@@ -1397,17 +1410,18 @@ msgstr "{who:이/가} 다우트에서 이겨 팟 {pot:,} {currency:을/를} 가�
 msgid "{who} won I Doubt It. Table closed."
 msgstr "{who:이/가} 다우트에서 이겼어요. 테이블이 닫혔어요."
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "Game over — {who} won."
 msgstr "게임 종료 — {who:이/가} 이겼어요."
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "{who} forfeits and is out of the game."
 msgstr "{who:이/가} 기권해서 게임에서 빠졌어요."
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+#: llmcord_core/games_onecard_discord.py
 msgid "Table closed: I couldn't post in the table thread."
 msgstr "테이블 닫힘: 테이블 스레드에 글을 올릴 수 없었어요."
 
@@ -1419,7 +1433,7 @@ msgstr "봇은 다우트를 할 수 없어요."
 msgid "In play — see the thread."
 msgstr "진행 중 — 스레드를 확인해 주세요."
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "**Your hand** ({cards})"
 msgstr "**내 패** ({cards})"
@@ -1435,6 +1449,7 @@ msgid "On turn: {who}, claiming {rank}."
 msgstr "차례: {who}, {rank} 선언 중."
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+#: llmcord_core/games_onecard_discord.py
 msgid "Table closed: nobody started the game."
 msgstr "테이블 닫힘: 아무도 게임을 시작하지 않았어요."
 
@@ -2041,6 +2056,87 @@ msgid "{who} shows {cards}."
 msgstr "{who:이/가} 카드를 공개했어요: {cards}"
 
 #: llmcord_core/games_onecard_discord.py
+msgid "One Card is off on this server."
+msgstr "이 서버에서는 원카드가 꺼져 있어요."
+
+#: llmcord_core/games_onecard_discord.py
+msgid "Pick a card to play, or draw."
+msgstr "낼 카드를 고르거나 카드를 받아 주세요."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Name the suit for your {card}. The next play must follow it."
+msgstr "{card}의 무늬를 정해 주세요. 다음 카드는 그 무늬를 따라야 해요."
+
+#: llmcord_core/games_onecard_discord.py
+msgid "You are out of this game."
+msgstr "이 게임에서는 이미 빠졌어요."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "One Card needs at least {count} seats to start."
+msgstr "원카드는 최소 {count}명이 있어야 시작할 수 있어요."
+
+#: llmcord_core/games_onecard_discord.py
+msgid "You draw."
+msgstr "카드를 한 장 받았어요."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "You draw {count} cards."
+msgstr "카드를 {count}장 받았어요."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "You play {card}."
+msgstr "{card} 카드를 냈어요."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "You play {card} and name {suit}."
+msgstr "{card} 카드를 내고 무늬를 정했어요: {suit}"
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "suit"
+msgid "Spades"
+msgstr "스페이드"
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "suit"
+msgid "Hearts"
+msgstr "하트"
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "suit"
+msgid "Diamonds"
+msgstr "다이아몬드"
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "suit"
+msgid "Clubs"
+msgstr "클로버"
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "suit"
+msgid "any"
+msgstr "아무 무늬"
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "direction"
+msgid "clockwise"
+msgstr "시계 방향"
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "direction"
+msgid "counter-clockwise"
+msgstr "반시계 방향"
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "select.onecard"
+msgid "Card to play"
+msgstr "낼 카드"
+
+#: llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "Draw {count}"
 msgstr "{count}장 받기"
@@ -2048,6 +2144,202 @@ msgstr "{count}장 받기"
 #: llmcord_core/games_onecard_discord.py
 msgid "Draw"
 msgstr "카드 받기"
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Black joker ({card})"
+msgstr "흑백 조커 ({card})"
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Color joker ({card})"
+msgstr "컬러 조커 ({card})"
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{card} (then name a suit)"
+msgstr "{card} (이후 무늬 지정)"
+
+#: llmcord_core/games_onecard_discord.py
+msgid "Table closed: One Card was turned off on this server."
+msgstr "테이블 닫힘: 이 서버에서 원카드가 꺼졌어요."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Join with the button. The host starts the game with {low} to {high} seats; the table closes {stamp} if it hasn't started."
+msgstr "버튼을 눌러 참가해 주세요. 호스트가 {low}~{high}명으로 게임을 시작해요. 시작하지 않으면 테이블이 {stamp} 닫혀요."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Join with the button. The host starts the game with {low} to {high} seats."
+msgstr "버튼을 눌러 참가해 주세요. 호스트가 {low}~{high}명으로 게임을 시작해요."
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "button.onecard"
+msgid "Join"
+msgstr "참가"
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "button.onecard"
+msgid "Leave"
+msgstr "나가기"
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "button.onecard"
+msgid "Start"
+msgstr "시작"
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "button.onecard"
+msgid "How to play"
+msgstr "게임 방법"
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "seat state"
+msgid "out"
+msgstr "탈락"
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "seat mark"
+msgid "winner"
+msgstr "승리"
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "seat mark"
+msgid "on turn"
+msgstr "차례"
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "seat mark"
+msgid "exposed"
+msgstr "노출"
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "seat mark"
+msgid "declared"
+msgstr "선언"
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Top card: {card} · Suit: {suit} · {direction}"
+msgstr "맨 위 카드: {card} · 무늬: {suit} · {direction}"
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Pending attack: {count}"
+msgstr "쌓인 공격: {count}장"
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Draw pile {draw} · discard pile {discard}"
+msgstr "뽑는 더미 {draw}장 · 버린 더미 {discard}장"
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} played {card} and named {suit}."
+msgstr "{who:이/가} {card} 카드를 내고 무늬를 정했어요: {suit}"
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} played {card}."
+msgstr "{who:이/가} {card} 카드를 냈어요."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} drew a card."
+msgstr "{who:이/가} 카드를 한 장 받았어요."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} drew {count} cards."
+msgstr "{who:이/가} 카드를 {count}장 받았어요."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} drew nothing."
+msgstr "{who:이/가} 받을 카드가 없었어요."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} forfeited and is out."
+msgstr "{who:이/가} 기권해서 탈락했어요."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} went bankrupt and is out."
+msgstr "{who:이/가} 파산해서 탈락했어요."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Top card: {card} · Suit: {suit}."
+msgstr "맨 위 카드: {card} · 무늬: {suit}."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Attack pending: draw {count} or defend."
+msgstr "공격이 쌓여 있어요: {count}장을 받거나 막아야 해요."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Next: {who} — {stamp}."
+msgstr "다음: {who} — {stamp}."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Next: {who}."
+msgstr "다음: {who}."
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "button.onecard"
+msgid "My hand"
+msgstr "내 패"
+
+#: llmcord_core/games_onecard_discord.py
+msgid "(bankrupt)"
+msgstr "(파산)"
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} won One Card and took the pot of {pot:,} {currency}. Table closed."
+msgstr "{who:이/가} 원카드에서 이겨 팟 {pot:,} {currency:을/를} 가져갔어요. 테이블이 닫혔어요."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} won One Card. Table closed."
+msgstr "{who:이/가} 원카드에서 이겼어요. 테이블이 닫혔어요."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} went bankrupt and is out of the game."
+msgstr "{who:이/가} 파산해서 게임에서 빠졌어요."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Top card: {card} · Suit: {suit}"
+msgstr "맨 위 카드: {card} · 무늬: {suit}"
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Attack pending: draw {count}."
+msgstr "공격이 쌓여 있어요: {count}장을 받아야 해요."
+
+#: llmcord_core/games_onecard_discord.py
+msgid "Your turn: choose a card to play, or draw."
+msgstr "내 차례예요: 낼 카드를 고르거나 카드를 받아 주세요."
+
+#: llmcord_core/games_onecard_discord.py
+msgid "Your turn: nothing can be played, so draw."
+msgstr "내 차례예요: 낼 수 있는 카드가 없으니 카드를 받아 주세요."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} missed two turns in a row."
+msgstr "{who:이/가} 두 번 연속으로 차례를 놓쳤어요."
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} ran out of time and had to draw."
+msgstr "{who:이/가} 시간을 초과해서 카드를 받았어요."
 
 #: llmcord_core/games_spoken_discord.py
 msgid "This isn't your move check."

@@ -1016,3 +1016,125 @@ msgctxt "turn log part"
 msgid "images"
 msgstr ""
 
+#: llmcord_core/i18n/terms.py
+msgctxt "onecard rules line"
+msgid "defense on"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "onecard rules line"
+msgid "defense off"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "onecard rules line"
+msgid "king skips two"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "onecard rules line"
+msgid "king has no effect"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "onecard rules line"
+msgid "last card unrestricted"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "onecard rules line"
+msgid "no attack as the last card"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "onecard rules line"
+msgid "no attack or joker as the last card"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "onecard rules line"
+msgid "spade ace worth 10"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "onecard rules line"
+msgid "spade ace worth 5"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "onecard rules line"
+msgid "bankruptcy at {limit} cards"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "onecard rules line"
+msgid "call-out penalty {penalty}"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "**One Card in short**"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "Be the first to play your last card. Everyone starts with 7 cards; play a card that matches the top card's suit or rank, or draw one and pass. Jokers play on anything."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "• Attacks: 2 = 2 cards, A = 3, ♠A = {spade}, black joker = 5, color joker = 7. They add up until someone draws the total and loses the turn. You can answer an attack with a stronger or equal defense: a 2 answers a 2 (or the A of the same suit, or a joker), an A answers an A or a joker, ♠A only a black joker, a joker another joker."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "• Attacks: 2 = 2 cards, A = 3, ♠A = {spade}, black joker = 5, color joker = 7. They add up until someone draws the total and loses the turn. Defenses are off: you can only draw."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• J skips the next player. Q reverses the direction (with two players you go again). K skips two players (with four or more)."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• J skips the next player. Q reverses the direction (with two players you go again). K has no special effect."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• 7 lets you name the suit the next play must follow."
+msgstr ""
+
+#. i18n: the quoted phrases are the default declaration words (a server
+#. setting) and an example call-out the chat reader understands; keep a Korean
+#. example the reader recognizes (it reads 안 했).
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "• At one card, say it in the thread (\"원카드\" or \"One Card\"); say it while you hold two cards and it counts when your play leaves one. A player who didn't can be called out (\"Alice forgot one card\", or reply to their message), and the caller makes them draw {penalty}. A wrong call-out costs the caller the same."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• You can't finish on an attack card."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• You can't finish on an attack card or a joker."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "• Reach {limit} cards and you go bankrupt: you are out and your cards go back to the pile."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "• Take longer than {seconds} s and you draw and lose the turn; miss two turns in a row and you forfeit your seat."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• The last player standing, or whoever plays their last card, takes the pot."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "• The last player standing, or whoever plays their last card, takes the pot ({ante} each)."
+msgstr ""
+

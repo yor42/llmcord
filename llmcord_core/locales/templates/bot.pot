@@ -665,7 +665,7 @@ msgstr ""
 msgid "You can leave when this round ends."
 msgstr ""
 
-#: llmcord_core/games_discord.py
+#: llmcord_core/games_discord.py llmcord_core/games_onecard_discord.py
 msgid "You left the table."
 msgstr ""
 
@@ -706,7 +706,7 @@ msgid "archived"
 msgstr ""
 
 #: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
-#: llmcord_core/games_holdem_discord.py
+#: llmcord_core/games_holdem_discord.py llmcord_core/games_onecard_discord.py
 msgid "Table closed: games were turned off here."
 msgstr ""
 
@@ -805,6 +805,7 @@ msgid "Round {number}: dealer {total} —"
 msgstr ""
 
 #: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_onecard_discord.py
 msgctxt "round net"
 msgid "even"
 msgstr ""
@@ -880,7 +881,7 @@ msgstr ""
 msgid "Dealer shows an ace. Insurance?"
 msgstr ""
 
-#: llmcord_core/games_discord.py
+#: llmcord_core/games_discord.py llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "On turn: {who}."
 msgstr ""
@@ -908,12 +909,13 @@ msgid "Dealer plays."
 msgstr ""
 
 #: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "Seed: {seed} (hash {hash})"
 msgstr ""
 
 #: llmcord_core/games_discord.py llmcord_core/games_doubt_discord.py
-#: llmcord_core/games_holdem_discord.py
+#: llmcord_core/games_holdem_discord.py llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "Seed hash: {hash}"
 msgstr ""
@@ -1212,33 +1214,36 @@ msgid "Table closed: I Doubt It was turned off on this server."
 msgstr ""
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+#: llmcord_core/games_onecard_discord.py
 msgid "Table closed: the table was closed."
 msgstr ""
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 msgid "The antes were refunded."
 msgstr ""
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 msgid "The antes are refunded."
 msgstr ""
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+#: llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "**{game}** · table {number}"
 msgstr ""
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "Ante: {ante:,} {currency} · Pot: {pot:,} {currency}"
 msgstr ""
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "No ante · Pot: {pot:,} {currency}"
 msgstr ""
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+#: llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "Host: {host}"
 msgstr ""
@@ -1283,7 +1288,7 @@ msgctxt "button.doubt"
 msgid "How to play"
 msgstr ""
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "pot {pot:,} {currency} (ante {ante:,})"
 msgstr ""
@@ -1303,7 +1308,7 @@ msgstr ""
 msgid "{cards} · on turn"
 msgstr ""
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 msgid "Game over."
 msgstr ""
 
@@ -1312,7 +1317,7 @@ msgstr ""
 msgid "Pile: {cards} · Rank to claim: {rank}"
 msgstr ""
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 msgid "The game has started."
 msgstr ""
 
@@ -1370,17 +1375,17 @@ msgstr ""
 msgid "Doubt! {doubter} doubted {claimer}'s {claim}. They were {cards} — {taker} takes the pile ({pile})."
 msgstr ""
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "**{who} wins the game and takes the pot of {pot:,} {currency}.**"
 msgstr ""
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "**{who} wins the game.**"
 msgstr ""
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 msgid "(forfeited)"
 msgstr ""
 
@@ -1394,17 +1399,18 @@ msgstr ""
 msgid "{who} won I Doubt It. Table closed."
 msgstr ""
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "Game over — {who} won."
 msgstr ""
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "{who} forfeits and is out of the game."
 msgstr ""
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+#: llmcord_core/games_onecard_discord.py
 msgid "Table closed: I couldn't post in the table thread."
 msgstr ""
 
@@ -1416,7 +1422,7 @@ msgstr ""
 msgid "In play — see the thread."
 msgstr ""
 
-#: llmcord_core/games_doubt_discord.py
+#: llmcord_core/games_doubt_discord.py llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "**Your hand** ({cards})"
 msgstr ""
@@ -1432,6 +1438,7 @@ msgid "On turn: {who}, claiming {rank}."
 msgstr ""
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+#: llmcord_core/games_onecard_discord.py
 msgid "Table closed: nobody started the game."
 msgstr ""
 
@@ -2036,12 +2043,289 @@ msgid "{who} shows {cards}."
 msgstr ""
 
 #: llmcord_core/games_onecard_discord.py
+msgid "One Card is off on this server."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgid "Pick a card to play, or draw."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Name the suit for your {card}. The next play must follow it."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgid "You are out of this game."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "One Card needs at least {count} seats to start."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgid "You draw."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "You draw {count} cards."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "You play {card}."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "You play {card} and name {suit}."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "suit"
+msgid "Spades"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "suit"
+msgid "Hearts"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "suit"
+msgid "Diamonds"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "suit"
+msgid "Clubs"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "suit"
+msgid "any"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "direction"
+msgid "clockwise"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "direction"
+msgid "counter-clockwise"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "select.onecard"
+msgid "Card to play"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
 #, python-brace-format
 msgid "Draw {count}"
 msgstr ""
 
 #: llmcord_core/games_onecard_discord.py
 msgid "Draw"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Black joker ({card})"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Color joker ({card})"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{card} (then name a suit)"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgid "Table closed: One Card was turned off on this server."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Join with the button. The host starts the game with {low} to {high} seats; the table closes {stamp} if it hasn't started."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Join with the button. The host starts the game with {low} to {high} seats."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "button.onecard"
+msgid "Join"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "button.onecard"
+msgid "Leave"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "button.onecard"
+msgid "Start"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "button.onecard"
+msgid "How to play"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "seat state"
+msgid "out"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "seat mark"
+msgid "winner"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "seat mark"
+msgid "on turn"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "seat mark"
+msgid "exposed"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "seat mark"
+msgid "declared"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Top card: {card} · Suit: {suit} · {direction}"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Pending attack: {count}"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Draw pile {draw} · discard pile {discard}"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} played {card} and named {suit}."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} played {card}."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} drew a card."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} drew {count} cards."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} drew nothing."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} forfeited and is out."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} went bankrupt and is out."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Top card: {card} · Suit: {suit}."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Attack pending: draw {count} or defend."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Next: {who} — {stamp}."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Next: {who}."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgctxt "button.onecard"
+msgid "My hand"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgid "(bankrupt)"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} won One Card and took the pot of {pot:,} {currency}. Table closed."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} won One Card. Table closed."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} went bankrupt and is out of the game."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Top card: {card} · Suit: {suit}"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Attack pending: draw {count}."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgid "Your turn: choose a card to play, or draw."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgid "Your turn: nothing can be played, so draw."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} missed two turns in a row."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "{who} ran out of time and had to draw."
 msgstr ""
 
 #: llmcord_core/games_spoken_discord.py
