@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from types import ModuleType
 from typing import Any, Callable, Optional
 
-from . import blackjack, doubt, holdem
+from . import blackjack, doubt, holdem, onecard
 
 
 @dataclass(frozen=True)
@@ -74,6 +74,16 @@ def _holdem_illegal(state, seat, move):
     return "It's not your turn." if state.turn != seat else "That move isn't allowed right now."
 
 
+def _onecard_settlements(state, ledger_label, label):
+    return [(res.seat, res.outcome, state.seats[res.seat].stake, res.payout, f'{ledger_label} payout ({label})') for res in onecard.result(state).seats]
+
+
+def _onecard_illegal(state, seat, move):
+    if state.finished:
+        return 'This game is over.'
+    return "It's not your turn." if state.turn != seat else "That move isn't allowed right now."
+
+
 _GAMES = {
     "blackjack": Game("blackjack", "Blackjack", blackjack, blackjack.normalize_rules, blackjack.MAX_SEATS, True, "Blackjack", noun="blackjack",
                       public_legal=_bj_legal, summary=lambda state: blackjack.result(state).summary, settlements=_bj_settlements,
@@ -89,6 +99,11 @@ _GAMES = {
                    public_legal=lambda state, can_double, can_insure: {state.turn: holdem.legal_moves(state, state.turn)} if state.turn is not None else {},
                    summary=lambda state: None, round_facts=_holdem_facts, fact_keys=('pot', 'winners', 'hand'),
                    apply_move=lambda state, seat, move, can_double: holdem.apply(state, seat, move), illegal_text=_holdem_illegal),
+    "onecard": Game("onecard", "One Card", onecard, onecard.normalize_rules, onecard.MAX_SEATS, True, "One Card", noun="One Card",
+                    min_seats=onecard.MIN_SEATS, ante=True,
+                    public_legal=lambda state, can_double, can_insure: {}, summary=lambda state: None, settlements=_onecard_settlements,
+                    round_facts=lambda state: {'winner': state.winner, 'pot': sum(s.stake for s in state.seats)}, fact_keys=('winner', 'pot'),
+                    apply_move=lambda state, seat, move, can_double: onecard.apply(state, seat, move), illegal_text=_onecard_illegal),
 }
 
 
