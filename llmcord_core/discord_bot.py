@@ -172,6 +172,7 @@ class SkitBot(commands.Bot):
         self.webhook_locks = LockPool()
         self.webhooks = LruDict()
         self.webhook_defaults = LruDict()
+        self.table_event_nodes = LruDict()  # MNT-87: thread id -> (text, node id) of the last seated event turn, reused by its spectator turn
         self.checked_avatar_assets = LruDict()
         self.cleanup_task: asyncio.Task | None = None
         self.tree.allowed_contexts = app_commands.AppCommandContext(guild=True)
@@ -408,7 +409,8 @@ class SkitBot(commands.Bot):
         """One ambient character turn in a table thread after a public game event (a reveal, a seat down to one card, the game's end).
         Never waits: skipped when the thread is busy or the table's characters may not talk. The event is saved as a user node
         by the table (a synthetic negative message id, author = the bot) so it sits in the scene history like a narration line.
-        spectators=True (FEAT-55): one speaker chosen among the non-seated cast instead of the seated characters."""
+        spectators=True (FEAT-55): one speaker chosen among the non-seated cast instead of the seated characters; it reuses
+        the seated turn's event node for the same text (MNT-87), so the narration is saved once."""
         guild = getattr(thread, 'guild', None)
         if guild is None or not isinstance(thread, discord.Thread):
             return
@@ -436,7 +438,11 @@ class SkitBot(commands.Bot):
             fields = {**self._table_fields(table, watchers), 'allowed_ids': tuple(watchers), 'max_speakers': 1} if watchers else self._table_fields(table)
             if speaker_hint is not None and not watchers and speaker_hint in fields.get('allowed_ids', ()):
                 fields = {**fields, 'forced_character_id': speaker_hint, 'max_speakers': 1}
-            scene = SceneContext(guild.id, thread.id, parent_id, binding["space_id"], self.user.id if self.user else 0, _event_id(), text,
+            prior = self.table_event_nodes.pop(thread.id, None) if watchers else None
+            event_id = prior[1] if prior and prior[0] == text else _event_id()
+            if not watchers:
+                self.table_event_nodes[thread.id] = (text, event_id)
+            scene = SceneContext(guild.id, thread.id, parent_id, binding["space_id"], self.user.id if self.user else 0, event_id, text,
                 None, recent, [], ambient=True, user_label='Table events', event=True, created_at=time.time(), **fields)
             await self.run_scene(scene, thread)
 
@@ -679,7 +685,8 @@ class SkitBot(commands.Bot):
             image_description = await self.engine.describe_images(scene)
             stored_text = scene.text + (f"\n[Image description: {image_description}]" if image_description else "")
             stage.name = 'saving scene input'
-            root_id = self.engine.record_user(scene, stored_text)
+            existing = self.store.node(scene.user_message_id) if scene.event else None  # MNT-87: a spectator turn reuses the seated turn's event node
+            root_id = existing['root_id'] if existing else self.engine.record_user(scene, stored_text)
             preceding: list[tuple[str, str]] = []
             parent_message_id = scene.user_message_id
             completed = []

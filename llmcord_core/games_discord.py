@@ -499,6 +499,11 @@ class GameTables:
         names, view, name = self._talk_names(key[0], snap), snap["view"], self.store.currency_name(key[0])
         lines = ["A table of Blackjack (players try to beat the dealer by getting closer to 21 without going over)."]
         status = snap["status"]
+        sender = self.senders.get(key)
+        # MNT-87: while the channel still animates the dealer's draws, the settled result is not public yet.
+        dealing = status == "settled" and sender is not None and sender.sent < sender.issued and bool(self._frames(snap))
+        if dealing:
+            status, view = "dealing", {**view, "dealer": view["dealer"][:1], "dealer_hidden": True}
         for seat in snap["seats"]:
             i = seat["index"]
             line = f"- {names[i]}: bet {(view['stakes'][i] if view else seat['stake']):,} {name}"
@@ -513,7 +518,9 @@ class GameTables:
             lines.append(line)
         if view:
             dealer = view["dealer"]
-            if view["dealer_hidden"]:
+            if dealing:
+                lines.append(f"Dealer shows {blackjack.hand_str(dealer)}; the dealer is playing, and the results are not known yet.")
+            elif view["dealer_hidden"]:
                 lines.append(f"Dealer shows {blackjack.hand_str(dealer)}; the hole card is face down.")
             else:
                 lines.append(f"Dealer: {blackjack.hand_str(dealer)} ({blackjack.total_str(dealer)})" + (" bust" if blackjack.hand_total(dealer)[0] > 21 else ""))

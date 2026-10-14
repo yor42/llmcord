@@ -135,6 +135,17 @@ class Spectators:
         self.assertNotIn(self.eve, ids)
         self.assertEqual(self.spoke(), [self.gus])
 
+    async def test_an_archived_favorite_is_never_a_spectator(self):
+        """Characterization (MNT-87 c): spectators come from eligible_characters, so an archived favorite stays out even with archived favorites allowed."""
+        self.store.set_cast_watches_games(G, True)
+        self.store.set_archived_favorites(G, True)
+        self.store.archive_character(G, self.eve, True)
+        await self.open_table()
+        self.models.pick = [self.eve, self.dee]
+        await self.chat("Eve, are you watching?")
+        self.assertNotIn(self.eve, self.cast_ids())
+        self.assertNotIn(self.eve, self.spoke())
+
     async def test_a_reply_to_a_spectators_message_wakes_the_spectators_again(self):
         """FEAT-55: replying to a character's node is explicit too (no mention needed)."""
         self.store.set_cast_watches_games(G, True)
@@ -376,6 +387,21 @@ class Spectators:
         self.assertEqual(self.spoke().count(self.ann), 1)
         self.assertEqual(len([cid for cid in self.spoke() if cid in (self.bo, self.cy, self.dee)]), 1)
 
+    async def test_one_key_moment_saves_one_event_node_for_both_turns(self):
+        """MNT-87 (a): the spectator turn reuses the seated turn's event node, so the narration is saved (and shown in history) once."""
+        self.store.set_cast_watches_games(G, True)
+        await self.open_table()
+        self.models.pick = [self.ann, self.dee]
+        await self.key_moment()
+        await self.settle()
+        await drain_memory_tasks(self.bot)
+        thread_id = self.game_thread().id
+        user_nodes = self.store.all("SELECT message_id,content FROM nodes WHERE channel_id=? AND character_id IS NULL", (thread_id,))
+        self.assertEqual(len(user_nodes), 1, [row["content"] for row in user_nodes])
+        replies = self.store.all("SELECT parent_id FROM nodes WHERE channel_id=? AND character_id IS NOT NULL", (thread_id,))
+        self.assertEqual(len(replies), 2)
+        self.assertEqual({row["parent_id"] for row in replies}, {user_nodes[0]["message_id"]})
+
 
 class DoubtSpectators(Spectators, dt.TalkCase):
     EVENT = "Doubt! A claim was doubted and the pile changed hands."
@@ -476,13 +502,20 @@ class HoldemSpectators(Spectators, ht.TalkCase):
     def advance(self, seconds):
         self.now_t[0] += seconds
 
+    def assert_still_open(self):
+        """MNT-87 (d): these tests rely on seed mnt57-b keeping every seat in play; say so plainly if the table ended instead."""
+        self.assertIsNotNone(self.holdem.table_talk_context(G, self.th.id),
+                             "the Hold'em table is no longer open after this hand: seed mnt57-b now busts a seat, pick another seed for open_table")
+
     async def key_moment(self):
         await self.play_hand(ht.call_down_chooser)
+        self.assert_still_open()
 
     async def another_moment(self):
         await self.next_hand()
         self.remember()
         await self.play_hand(ht.call_down_chooser)
+        self.assert_still_open()
 
 
 class BlackjackSpectators(gd.GameCase):

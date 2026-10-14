@@ -242,6 +242,7 @@ class BlackjackView(bjseats.SeatCase):
         self.assertEqual((found["game"], found["table_id"], found["thread_id"], found["status"], found["seated_character_ids"]),
                          ("blackjack", self.latest()["table_id"], None, "playing", [self.ann]))
         self.assertEqual(self.view(9999, CH), found)  # a thread under the table's channel sees the channel's table
+        self.assertIsNone(found["moment"])  # MNT-87 (e): reserved, always None until FEAT-51 fills it
 
     async def test_only_the_dealer_upcard_is_shown_and_the_hole_card_is_face_down(self):
         await self.deal()
@@ -268,6 +269,26 @@ class BlackjackView(bjseats.SeatCase):
         found = self.view()
         self.assertEqual((found["game"], found["status"], found["seated_character_ids"]), ("blackjack", "joining", []))
         self.assertNotIn("<@", found["text"])
+
+    async def test_settled_round_reads_as_dealer_playing_until_the_reveal_ends(self):
+        """MNT-87 (b): while the channel still animates the dealer's draws, the view shows no result and no hole card; after the last frame it does."""
+        self.games.DEALER_STEP_SECONDS = 1.5
+        during = []
+
+        async def pause(seconds):
+            during.append(self.view()["text"])
+        self.games._pause = pause
+        await self.deal()
+        await self.fire()  # Ann stands: the round settles and the dealer's play is paced
+        self.assertEqual(self.latest()["status"], "settled")
+        self.assertTrue(during)
+        for text in during:
+            self.assertIn("the dealer is playing", text)
+            self.assertNotIn(HOLE, text)
+            self.assertNotRegex(text, r"(?i)\b(wins?|loses?|lost|push)\b")
+        after = self.view()["text"]
+        self.assertNotIn("the dealer is playing", after)
+        self.assertIn(HOLE, after)
 
     async def test_table_talk_context_has_the_shared_shape(self):
         await self.deal()

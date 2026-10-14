@@ -7,6 +7,7 @@ def _tables(bot):
 
 
 def _view(game, tables, guild_id, key, thread_id, context):
+    """``moment`` is a reserved key, always None for now (MNT-87): no caller reads it; FEAT-51 may fill it with the latest key moment."""
     text = tables[game].public_block(guild_id, key)
     if text is None:
         return None
