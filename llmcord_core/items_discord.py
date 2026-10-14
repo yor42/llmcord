@@ -200,7 +200,8 @@ def register_items_commands(bot, ctx: SimpleNamespace) -> None:
 
     async def use_and_post(interaction: discord.Interaction, guild_id: int, key: str, name: str, via_channel: bool = False) -> bool:
         """Uses the item and posts the result publicly: through the slash response, or (from a menu button) with a channel message.
-        Refusals and send failures are shown only to the member. True when the item was used."""
+        Refusals and send failures are shown only to the member. True when the item was used.
+        Only a posted use gets a post row; a use whose post or marking failed stays hidden from the cast's Recent happenings (MNT-84/86)."""
         t = invoker_t(interaction)
         channel = channel_t(interaction.guild)
         name = shown_name({'key': key, 'name': name}, t)

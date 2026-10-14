@@ -208,6 +208,18 @@ class BuilderTests(unittest.TestCase):
         self.store.mark_use_posted(G, use_id)
         self.assertEqual([r["text"] for r in self.rows()], ["SHOWN", "PENDING"])
 
+    def test_query_plan_uses_the_channel_index_without_a_scan(self):
+        """MNT-86 (d): the happenings query searches item_uses by the (guild_id, channel_id, used_at) index and looks up item_use_posts by key; no table scan."""
+        seen = []
+        original = self.store.all
+        self.store.all = lambda sql, params=(): seen.append((sql, params)) or original(sql, params)
+        self.rows()
+        self.assertEqual(len(seen), 1)
+        plan = [row[3] for row in self.store.db.execute("EXPLAIN QUERY PLAN " + seen[0][0], seen[0][1])]
+        self.assertTrue(any("item_uses USING INDEX item_uses_channel_time" in line for line in plan), plan)
+        self.assertFalse(any(line.startswith("SCAN") for line in plan), plan)
+        self.assertTrue(any("item_use_posts" in line for line in plan), plan)
+
     def test_only_unposted_uses_render_nothing(self):
         use(self.store, text="PENDING", posted=False)
         self.assertEqual(self.rows(), [])

@@ -59,7 +59,7 @@ class SceneContext:
     spectator: bool = False  # FEAT-55: allowed_ids also holds non-seated spectators, who get the public table view
     max_speakers: int | None = None  # FEAT-55: caps the turn's speakers below the configured limit
     rewind: bool = False  # a reply to a non-latest character node
-    happenings_now: float | None = None  # MNT-84: fixed at the turn's first dialogue prompt; every speaker then gets the same happenings rows
+    happenings_now: float | None = None  # MNT-84: fixed at the first dialogue prompt that gets the block (switch on, eligible world); every later speaker gets the same rows
     happenings_rows: list | None = field(default=None, compare=False)
     history_now: float | None = field(default=None, compare=False)  # MNT-85: the turn's clock for message ages, fixed at the first dialogue history
     watch_cache: tuple | None = field(default=None, compare=False)  # FEAT-55: (view or None,) from the turn's first dialogue prompt; a 1-tuple so a None lookup is cached too
@@ -289,6 +289,7 @@ class Engine:
             return ''
         before = parent['created_at'] if scene.rewind and parent else None
         if scene.happenings_rows is None:
+            # SceneContext is frozen, but this per-turn cache must be set lazily: only a speaker passing the checks above reads item_uses, once per turn (MNT-84/86).
             if scene.happenings_now is None:
                 object.__setattr__(scene, 'happenings_now', before if before is not None else time.time())
             object.__setattr__(scene, 'happenings_rows', recent_happenings(self.store, scene.guild_id, scene.channel_id, now=scene.happenings_now, before=before))
@@ -400,7 +401,7 @@ class Engine:
             "personal": [row["id"] for row in personal[-6:]] if "personal" in included else [],
             "encounters": [row["id"] for row in encounters[-6:]] if "encounters" in included else [],
             "recent": [part.get("message_id") for part in scene.recent if part.get('message_id') in used_history_ids]}
-        if values['happenings']:
+        if 'happenings' in included:
             sources['happenings'] = True
         if values['watching'].strip():
             sources['watching'] = True

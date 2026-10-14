@@ -346,6 +346,21 @@ class UseTests(ItemsBase):
         self.assertEqual(len(self.store.item_use_log(G)), 1)
         self.assertEqual(self.post_rows(), [])
 
+    async def test_failed_marking_is_logged_and_the_use_still_counts(self):
+        """MNT-86: mark_use_posted raising logs a warning, the use stays (True path, public post sent) and no post row is written."""
+        self.store.buy_item(G, U, COOKIE)
+
+        def broken(guild_id, use_id):
+            raise RuntimeError('database is locked')
+        self.store.mark_use_posted = broken
+        with self.assertLogs(level='WARNING') as logs:
+            result = await self.run_cmd('use', 'Fortune cookie')
+        self.assertTrue(any('Could not record that use' in line for line in logs.output))
+        self.assertIn('embed', result.response.sent[0][1])
+        self.assertEqual(self.store.item_qty(G, U, COOKIE), 0)
+        self.assertEqual(len(self.store.item_use_log(G)), 1)
+        self.assertEqual(self.post_rows(), [])
+
     async def test_refused_use_creates_no_use_and_no_post_row(self):
         """MNT-84: a refusal (not held) writes neither a use nor a post row."""
         await self.run_cmd('use', 'dice')
