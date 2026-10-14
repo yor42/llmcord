@@ -1471,6 +1471,15 @@ class AdminStore:
                 after()
         return on
 
+    _HAPPENINGS_KEY = 'cast_sees_item_results'  # FEAT-47: same kind of pseudo row
+
+    def cast_sees_item_results(self, guild_id):
+        """D40: the cast's dialogue prompt may carry recent item results from the channel; off by default."""
+        return self._pseudo_flag(guild_id, self._HAPPENINGS_KEY)
+
+    def set_cast_sees_item_results(self, guild_id, on, expected=None):
+        return self._set_pseudo_flag(guild_id, self._HAPPENINGS_KEY, on, expected, 'cast sees item results')
+
     def spoken_moves_enabled(self, guild_id):
         """Experimental "Read moves from chat" (D34): off by default."""
         return self._pseudo_flag(guild_id, self._SPOKEN_KEY)

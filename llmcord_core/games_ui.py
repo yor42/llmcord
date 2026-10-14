@@ -113,6 +113,18 @@ def all_games_section(ctx):
                           dirty=lambda: rounds_field.value != rounds['value'],
                           reset=lambda: rounds_field.set_value(rounds['value']))
 
+        sees = {'value': store.cast_sees_item_results(gid)}
+        sees_switch = ui.switch('Cast sees item results (Experimental)', value=sees['value'])
+        ui.label('When on, characters in a channel can see the last few results (8-ball, fortune cookie, dice, tarot\u2026) used there in the past 30 minutes, so they can mention them when asked. '
+                 'Results are already public in the channel; the cast sees only the item name and result.').classes('ll-muted')
+        def save_sees():
+            sees['value'] = store.set_cast_sees_item_results(gid, bool(sees_switch.value), sees['value'])
+            return sees['value']
+        ctx.savebar.track('Cast sees item results', {sees_switch: sees['value']}, save=save_sees, action='games.cast_sees_item_results',
+                          detail=lambda result: {'enabled': result}, success='Cast sees item results saved',
+                          dirty=lambda: bool(sees_switch.value) != sees['value'],
+                          reset=lambda: sees_switch.set_value(sees['value']))
+
 
 def blackjack_section(ctx):
     from nicegui import ui

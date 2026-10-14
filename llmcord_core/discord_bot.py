@@ -323,7 +323,7 @@ class SkitBot(commands.Bot):
             return
         scene = SceneContext(message.guild.id, message.channel.id, parent_id,
             binding["space_id"], message.author.id, message.id, text,
-            reference_id if referenced else None, recent, images, ambient=not explicit, user_label=message.author.display_name,
+            reference_id if referenced else None, recent, images, ambient=not explicit, user_label=message.author.display_name, rewind=is_rewind,
             mentioned_users=[discord_identity(user) for user in message.mentions if not user.bot], **self._table_fields(table))
         async with self.channel_locks.lock(message.channel.id):
             await self.run_scene(scene, message.channel)

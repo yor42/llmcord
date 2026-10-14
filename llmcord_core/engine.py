@@ -16,6 +16,7 @@ from .prompts import compile_prompt, time_values
 from .errors import error_detail
 from .usage import log_purpose, mask_for_log
 from .identity import speaker_context, user_line
+from .happenings import recent_happenings, render_happenings
 
 
 def tail_tokens(text: str, budget: int) -> str:
@@ -54,6 +55,7 @@ class SceneContext:
     usage_feature: str | None = None  # overrides the ambient/summon/reply usage label of the turn
     event: bool = False  # a table event turn: the ambient cheap gate never silences it
     created_at: float | None = None  # unix time of the turn when the message id is not a snowflake (table events)
+    rewind: bool = False  # a reply to a non-latest character node
 
 
 class Engine:
@@ -261,6 +263,20 @@ class Engine:
             history[-1] = TurnMessage(history[-1].role, history[-1].text, scene.images)
         return summary, history, [row["message_id"] for row in nodes], history_ids
 
+    def happenings_block(self, scene, character, space, parent):
+        """FEAT-47: recent item results in this channel, for a speaker whose world is this space or linked into this hub; a rewind anchors at the replied-to node."""
+        if not self.store.cast_sees_item_results(scene.guild_id):
+            return ''
+        if character['world_id'] != scene.space_id and not (space['kind'] == 'hub' and character['world_id'] in self.store.allowed_worlds(scene.space_id)):
+            return ''
+        before = parent['created_at'] if scene.rewind and parent else None
+        rows = recent_happenings(self.store, scene.guild_id, scene.channel_id, now=before if before is not None else time.time(), before=before)
+        names = {scene.user_id: scene.user_label}
+        for part in [*scene.recent, *scene.mentioned_users]:
+            if part.get('author_id') is not None:
+                names.setdefault(part['author_id'], part.get('author_label', ''))
+        return render_happenings(rows, names) or ''
+
     async def prepare_dialogue(self, scene: SceneContext, character, preceding_lines: list[tuple[str, str]]):
         card = json.loads(character["card"])
         space = self.store.space_by_id(scene.space_id)
@@ -319,6 +335,7 @@ class Engine:
             'speaker_identity': self.identities(scene, self.store.ancestors(scene.user_message_id)),
             # Table thread only: this speaker's own view of the game (public state + own hand), never saved or sent anywhere else.
             'table_state': (self.table_block(scene.guild_id, scene.channel_id, character['id']) or '') if scene.allowed_ids is not None and self.table_block else ''}
+        values['happenings'] = self.happenings_block(scene, character, space, parent)
         guidelines = scene.guidelines if scene.guidelines is not None else self.store.scene_guidelines(scene.guild_id, scene.space_id, scene.parent_channel_id or scene.channel_id)
         values.update({key: row['content'] for key, row in guidelines.items()})
         zone, _ = self.store.resolve_timezone(scene.guild_id, scene.user_id)
