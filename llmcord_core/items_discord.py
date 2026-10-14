@@ -172,6 +172,11 @@ def register_items_commands(bot, ctx: SimpleNamespace) -> None:
                 await send_private(interaction, SEND_FAILED.format(name=name))
             except Exception as again:
                 logging.warning('Could not tell the member about use %s either: %s', outcome['use_id'], error_detail(again))
+        else:
+            try:
+                store.mark_use_posted(guild_id, outcome['use_id'])
+            except Exception as error:
+                logging.warning('Could not record that use %s was posted: %s', outcome['use_id'], error_detail(error))
         return True
 
     class OwnedView(discord.ui.View):

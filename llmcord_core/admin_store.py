@@ -187,6 +187,14 @@ CREATE TRIGGER IF NOT EXISTS item_uses_no_update BEFORE UPDATE ON item_uses
 BEGIN SELECT RAISE(ABORT, 'The item use log is append-only.'); END;
 CREATE TRIGGER IF NOT EXISTS item_uses_no_delete BEFORE DELETE ON item_uses
 BEGIN SELECT RAISE(ABORT, 'The item use log is append-only.'); END;
+CREATE INDEX IF NOT EXISTS item_uses_channel_time ON item_uses(guild_id,channel_id,used_at);
+CREATE TABLE IF NOT EXISTS item_use_posts (
+ use_id INTEGER PRIMARY KEY REFERENCES item_uses(id), posted_at REAL NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS item_use_posts_no_update BEFORE UPDATE ON item_use_posts
+BEGIN SELECT RAISE(ABORT, 'The item use post log is append-only.'); END;
+CREATE TRIGGER IF NOT EXISTS item_use_posts_no_delete BEFORE DELETE ON item_use_posts
+BEGIN SELECT RAISE(ABORT, 'The item use post log is append-only.'); END;
 CREATE TABLE IF NOT EXISTS user_timezones (
  guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, timezone TEXT NOT NULL, updated_at REAL NOT NULL,
  PRIMARY KEY(guild_id,user_id)

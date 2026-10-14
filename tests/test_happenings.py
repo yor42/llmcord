@@ -30,12 +30,17 @@ G, G2, CH, CH2, MINA, BO = 1, 2, 100, 101, 7, 8
 NOW = 1_000_000.0
 
 
-def use(store, *, guild=G, channel=CH, user=MINA, item="8ball", text="Yes.", at=NOW, seed="SEED-123", footer="", raw=None):
-    """Append one item use (the log is append-only, so tests insert rows instead of rolling)."""
+def use(store, *, guild=G, channel=CH, user=MINA, item="8ball", text="Yes.", at=NOW, seed="SEED-123", footer="", raw=None, posted=True):
+    """Append one item use (the log is append-only, so tests insert rows instead of rolling).
+
+    MNT-66: only posted uses reach the cast, so by default the use also gets its ``item_use_posts`` row; ``posted=False`` leaves it unposted."""
     result = raw if raw is not None else json.dumps({"text": text, "fields": [], "footer_note": footer})
-    store.db.execute("INSERT INTO item_uses(guild_id,user_id,channel_id,item_key,seed,result,used_at) VALUES(?,?,?,?,?,?,?)",
-                     (guild, user, channel, item, seed, result, at))
+    use_id = store.db.execute("INSERT INTO item_uses(guild_id,user_id,channel_id,item_key,seed,result,used_at) VALUES(?,?,?,?,?,?,?)",
+                              (guild, user, channel, item, seed, result, at)).lastrowid
+    if posted:
+        store.db.execute("INSERT INTO item_use_posts(use_id,posted_at) VALUES(?,?)", (use_id, at))
     store.db.commit()
+    return use_id
 
 
 def happenings():
@@ -177,6 +182,45 @@ class BuilderTests(unittest.TestCase):
         self.assertEqual(self.rows(), [])
         use(self.store, text="FRESH", at=NOW - 5)
         self.assertEqual([r["text"] for r in self.rows()], ["FRESH"])
+
+    def test_selection_is_by_used_at_not_by_id_order(self):
+        """MNT-66: ids out of order relative to used_at; the newest three by used_at in the window, oldest first, are returned."""
+        use(self.store, text="A", at=NOW - 10)
+        use(self.store, text="B", at=NOW - 500)
+        use(self.store, text="C", at=NOW - 400)
+        use(self.store, text="D", at=NOW - 300)
+        use(self.store, text="E", at=NOW - 200)
+        use(self.store, text="OUTSIDE", at=NOW - 5000)  # the highest id, but long before the window
+        self.assertEqual([r["text"] for r in self.rows()], ["D", "E", "A"])
+
+    def test_before_anchor_still_orders_by_used_at(self):
+        use(self.store, text="NEWER-LOW-ID", at=NOW - 100)
+        use(self.store, text="OLDER-HIGH-ID", at=NOW - 200)
+        self.assertEqual([r["text"] for r in self.rows(before=NOW - 50)], ["OLDER-HIGH-ID", "NEWER-LOW-ID"])
+
+    def test_unposted_use_is_absent_until_marked_posted(self):
+        """MNT-66: a use without a post row is not shown; mark_use_posted makes it appear."""
+        use_id = use(self.store, text="PENDING", at=NOW - 5, posted=False)
+        use(self.store, text="SHOWN", at=NOW - 6)
+        text = self.render()
+        self.assertNotIn("PENDING", text)
+        self.assertIn("SHOWN", text)
+        self.store.mark_use_posted(G, use_id)
+        self.assertEqual([r["text"] for r in self.rows()], ["SHOWN", "PENDING"])
+
+    def test_only_unposted_uses_render_nothing(self):
+        use(self.store, text="PENDING", posted=False)
+        self.assertEqual(self.rows(), [])
+        self.assertIsNone(self.render())
+
+    def test_mark_use_posted_is_scoped_to_the_guild_and_repeatable(self):
+        """MNT-66 (assumed): a wrong guild marks nothing; marking twice does not raise."""
+        use_id = use(self.store, text="PENDING", posted=False)
+        self.store.mark_use_posted(G2, use_id)
+        self.assertEqual(self.rows(), [])
+        self.store.mark_use_posted(G, use_id)
+        self.store.mark_use_posted(G, use_id)
+        self.assertEqual(len(self.rows()), 1)
 
 
 class SwitchTests(unittest.TestCase):
@@ -359,7 +403,7 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("FRESH-USE", text)
 
     async def test_two_speakers_in_one_turn_get_the_same_block(self):
-        """FEAT-47: every speaker of the turn is shown the same happenings text."""
+        """MNT-66: the block is fixed at the turn's first prepare_dialogue; a use inserted before the second speaker is not shown to them."""
         self.store.set_cast_sees_item_results(G, True)
         bea = self.store.add_character(G, self.world, "Bea", {"name": "Bea"}, None, [])
         t = time.time()
@@ -367,12 +411,59 @@ class EngineTests(unittest.IsolatedAsyncioTestCase):
         scene = SceneContext(G, CH, None, self.world, 111, 9100, "Hello", None, [], [], user_label="Sam")
         self.engine.record_user(scene)
         blocks = []
-        for cid in (self.ann, bea):
+        for index, cid in enumerate((self.ann, bea)):
+            if index == 1:
+                use(self.store, text="LATE-RESULT", at=time.time() - 1)  # a /use lands between the two speakers
             request, _ = await self.engine.prepare_dialogue(scene, self.store.character_by_id(cid), [])
             text = "\n".join(m.text for m in request.messages)
             self.assertIn("SHARED-RESULT", text)
+            self.assertNotIn("LATE-RESULT", text)
             blocks.append([line for line in text.splitlines() if "SHARED-RESULT" in line])
         self.assertEqual(blocks[0], blocks[1])
+        # The next turn (a fresh scene) does see it.
+        fresh = SceneContext(G, CH, None, self.world, 111, 9101, "Again", None, [], [], user_label="Sam")
+        self.engine.record_user(fresh)
+        request, _ = await self.engine.prepare_dialogue(fresh, self.store.character_by_id(self.ann), [])
+        self.assertIn("LATE-RESULT", "\n".join(m.text for m in request.messages))
+
+    async def test_block_is_computed_once_per_turn_even_if_the_first_speaker_had_none(self):
+        """MNT-66: an empty block at the first speaker stays empty for the second (same block for everyone in the turn)."""
+        self.store.set_cast_sees_item_results(G, True)
+        bea = self.store.add_character(G, self.world, "Bea", {"name": "Bea"}, None, [])
+        scene = SceneContext(G, CH, None, self.world, 111, 9200, "Hello", None, [], [], user_label="Sam")
+        self.engine.record_user(scene)
+        request, _ = await self.engine.prepare_dialogue(scene, self.store.character_by_id(self.ann), [])
+        self.assertNotIn("Recent happenings", "\n".join(m.text for m in request.messages))
+        use(self.store, text="MID-TURN", at=time.time() - 1)
+        request, _ = await self.engine.prepare_dialogue(scene, self.store.character_by_id(bea), [])
+        self.assertNotIn("MID-TURN", "\n".join(m.text for m in request.messages))
+
+    async def test_sources_flag_is_true_only_when_the_block_was_included(self):
+        """MNT-66: the saved reply sources say happenings: true (a flag, never text) only for a prompt that carried the block."""
+        use(self.store, text="SECRET-RESULT-TEXT", at=time.time() - 5)
+        scene = SceneContext(G, CH, None, self.world, 111, 9300, "Hello", None, [], [], user_label="Sam")
+        self.engine.record_user(scene)
+        _, off = await self.engine.prepare_dialogue(scene, self.store.character_by_id(self.ann), [])
+        self.assertFalse(off.get("happenings"))
+        self.store.set_cast_sees_item_results(G, True)
+        scene = SceneContext(G, CH, None, self.world, 111, 9301, "Hello", None, [], [], user_label="Sam")
+        self.engine.record_user(scene)
+        request, on = await self.engine.prepare_dialogue(scene, self.store.character_by_id(self.ann), [])
+        self.assertIn("SECRET-RESULT-TEXT", "\n".join(m.text for m in request.messages))
+        self.assertIs(on["happenings"], True)
+        self.assertNotIn("SECRET-RESULT-TEXT", json.dumps(on))
+        stranger_scene = SceneContext(G, CH, None, self.world, 111, 9302, "Hello", None, [], [], user_label="Sam")
+        self.engine.record_user(stranger_scene)
+        _, other = await self.engine.prepare_dialogue(stranger_scene, self.store.character_by_id(self.stranger), [])
+        self.assertFalse(other.get("happenings"))
+
+    async def test_sources_flag_false_when_no_use_is_in_the_window(self):
+        """MNT-66: switch on but nothing to show means the block is absent, so the flag is not set."""
+        self.store.set_cast_sees_item_results(G, True)
+        scene = SceneContext(G, CH, None, self.world, 111, 9400, "Hello", None, [], [], user_label="Sam")
+        self.engine.record_user(scene)
+        _, sources = await self.engine.prepare_dialogue(scene, self.store.character_by_id(self.ann), [])
+        self.assertFalse(sources.get("happenings"))
 
     async def test_plain_mention_without_parent_shows_recent_use(self):
         self.store.set_cast_sees_item_results(G, True)

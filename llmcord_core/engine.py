@@ -56,6 +56,8 @@ class SceneContext:
     event: bool = False  # a table event turn: the ambient cheap gate never silences it
     created_at: float | None = None  # unix time of the turn when the message id is not a snowflake (table events)
     rewind: bool = False  # a reply to a non-latest character node
+    happenings_now: float | None = None  # MNT-66: fixed at the turn's first dialogue prompt; every speaker then gets the same happenings rows
+    happenings_rows: list | None = field(default=None, compare=False)
 
 
 class Engine:
@@ -270,7 +272,11 @@ class Engine:
         if character['world_id'] != scene.space_id and not (space['kind'] == 'hub' and character['world_id'] in self.store.allowed_worlds(scene.space_id)):
             return ''
         before = parent['created_at'] if scene.rewind and parent else None
-        rows = recent_happenings(self.store, scene.guild_id, scene.channel_id, now=before if before is not None else time.time(), before=before)
+        if scene.happenings_rows is None:
+            if scene.happenings_now is None:
+                object.__setattr__(scene, 'happenings_now', before if before is not None else time.time())
+            object.__setattr__(scene, 'happenings_rows', recent_happenings(self.store, scene.guild_id, scene.channel_id, now=scene.happenings_now, before=before))
+        rows = scene.happenings_rows
         names = {scene.user_id: scene.user_label}
         for part in [*scene.recent, *scene.mentioned_users]:
             if part.get('author_id') is not None:
@@ -363,6 +369,8 @@ class Engine:
             "personal": [row["id"] for row in personal[-6:]] if "personal" in included else [],
             "encounters": [row["id"] for row in encounters[-6:]] if "encounters" in included else [],
             "recent": [part.get("message_id") for part in scene.recent if part.get('message_id') in used_history_ids]}
+        if values['happenings']:
+            sources['happenings'] = True
         sources['preset'] = {'id': snapshot['id'], 'revision': snapshot['revision'], **request.trace()}
         sources['guidelines'] = {key: {field: row[field] for field in ('kind', 'owner_id', 'revision')} for key, row in guidelines.items() if key in included}
         return request, sources

@@ -199,16 +199,16 @@ class Store(ItemsStore, HoldemStore, AdminStore):
 
     def _upgrade(self, path: str | Path, existing: bool) -> None:
         """The whole schema upgrade, backup included, in one write-locked transaction: a failure leaves the old file as it was,
-        and a second process opening the same file waits, then finds version 21 and does nothing. executescript commits, so scripts run per statement."""
+        and a second process opening the same file waits, then finds version 22 and does nothing. executescript commits, so scripts run per statement."""
         self.db.execute("BEGIN IMMEDIATE")
         try:
             old_version = self.db.execute("PRAGMA user_version").fetchone()[0]
-            if old_version > 21:
+            if old_version > 22:
                 raise ValueError('The database is newer than this application. Update the application.')
             node_columns = {row[1] for row in self.db.execute('PRAGMA table_info(nodes)')}
             needs_identities = bool(node_columns) and not {'author_label', 'mentions_json'} <= node_columns
-            if existing and (old_version < 21 or needs_identities):
-                upgrade = 'v3' if old_version < 3 else 'identities' if needs_identities else 'v4' if old_version == 3 else 'v5' if old_version == 4 else 'v6' if old_version == 5 else 'v7' if old_version == 6 else 'v8' if old_version == 7 else 'v9' if old_version == 8 else 'v10' if old_version == 9 else 'v11' if old_version == 10 else 'v12' if old_version == 11 else 'v13' if old_version == 12 else 'v14' if old_version == 13 else 'v15' if old_version == 14 else 'v16' if old_version == 15 else 'v17' if old_version == 16 else 'v18' if old_version == 17 else 'v19' if old_version == 18 else 'v20' if old_version == 19 else 'v21'
+            if existing and (old_version < 22 or needs_identities):
+                upgrade = 'v3' if old_version < 3 else 'identities' if needs_identities else 'v4' if old_version == 3 else 'v5' if old_version == 4 else 'v6' if old_version == 5 else 'v7' if old_version == 6 else 'v8' if old_version == 7 else 'v9' if old_version == 8 else 'v10' if old_version == 9 else 'v11' if old_version == 10 else 'v12' if old_version == 11 else 'v13' if old_version == 12 else 'v14' if old_version == 13 else 'v15' if old_version == 14 else 'v16' if old_version == 15 else 'v17' if old_version == 16 else 'v18' if old_version == 17 else 'v19' if old_version == 18 else 'v20' if old_version == 19 else 'v21' if old_version == 20 else 'v22'
                 backup = Path(str(path) + f".pre-{upgrade}-{time.time_ns()}.sqlite3")
                 # Connection.backup from the connection holding the write lock never finishes; a second reader sees the committed file (the lock excludes other writers).
                 with closing(sqlite3.connect(path, timeout=30)) as reader, closing(sqlite3.connect(backup)) as target:
@@ -243,7 +243,9 @@ class Store(ItemsStore, HoldemStore, AdminStore):
                 self.db.execute('ALTER TABLE avatar_slots ADD COLUMN image_hash TEXT')
             if added or old_version < 11:
                 self._backfill_avatar_hashes()
-            self.db.execute("PRAGMA user_version=21")
+            if old_version < 22:
+                self.db.execute('INSERT OR IGNORE INTO item_use_posts(use_id,posted_at) SELECT id,used_at FROM item_uses')
+            self.db.execute("PRAGMA user_version=22")
             self.db.commit()
         except BaseException:
             self.db.rollback()

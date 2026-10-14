@@ -16,10 +16,8 @@ def recent_happenings(store, guild_id, channel_id, *, now, before=None, limit=3,
     """The newest ``limit`` item uses in this guild and channel within the window (oldest first); rows with unreadable results are skipped."""
     high = now if before is None else min(now, before)
     out = []
-    for row in store.all('SELECT user_id,item_key,result,used_at FROM item_uses WHERE guild_id=? AND channel_id=? AND used_at<=? ORDER BY id DESC LIMIT 50',
-                         (guild_id, channel_id, high)):
-        if row['used_at'] < now - window_seconds:
-            break
+    for row in store.all('SELECT user_id,item_key,result,used_at FROM item_uses WHERE guild_id=? AND channel_id=? AND used_at>=? AND used_at<=? '
+                         'AND id IN (SELECT use_id FROM item_use_posts) ORDER BY used_at DESC,id DESC LIMIT 50', (guild_id, channel_id, now - window_seconds, high)):
         try:
             text = json.loads(row['result']).get('text')
         except (ValueError, AttributeError, RecursionError):
