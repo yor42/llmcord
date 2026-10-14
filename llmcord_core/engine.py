@@ -12,7 +12,7 @@ from .lore import estimate_tokens, lore_scopes
 from .world_info import evaluate
 from .models import DIRECTOR_SCHEMA, MEMORY_SCHEMA, ImageInput, ModelGateway, TurnMessage
 from .store import Store
-from .prompts import compile_prompt, time_values
+from .prompts import age_label, compile_prompt, time_values
 from .errors import error_detail
 from .usage import log_purpose, mask_for_log
 from .identity import speaker_context, user_line
@@ -60,6 +60,7 @@ class SceneContext:
     rewind: bool = False  # a reply to a non-latest character node
     happenings_now: float | None = None  # MNT-66: fixed at the turn's first dialogue prompt; every speaker then gets the same happenings rows
     happenings_rows: list | None = field(default=None, compare=False)
+    history_now: float | None = field(default=None, compare=False)  # MNT-67: the turn's clock for message ages, fixed at the first dialogue history
     watch_cache: tuple | None = field(default=None, compare=False)  # FEAT-48: (view or None,) from the turn's first dialogue prompt; a 1-tuple so a None lookup is cached too
 
 
@@ -215,8 +216,14 @@ class Engine:
             logging.error("Image description failed: %s", error_detail(error))
             return "Image attached; description unavailable."
 
-    def history_messages(self, nodes, target_character_id):
+    def history_messages(self, nodes, target_character_id, now=None):
+        """MNT-67: with ``now``, user-role lines (never the target's own) are prefixed with their relative age."""
         history, ids, seen = [], [], {row['message_id'] for row in nodes}
+        def aged(role, text, then):
+            if now is None or role != 'user':
+                return TurnMessage(role, text)
+            label = age_label(now, then)
+            return TurnMessage(role, f'{label} {text}' if label else text)
         for row in nodes:
             # Recent human chat was observed with this ancestor, so belongs to
             # this branch even on later turns. Avoid duplicate saved messages.
@@ -225,15 +232,15 @@ class Engine:
                 if ident in seen:
                     continue
                 seen.add(ident)
-                history.append(TurnMessage('user', user_line(part.get('author_id'), part.get('author_label', ''), part.get('text', ''))))
+                history.append(aged('user', user_line(part.get('author_id'), part.get('author_label', ''), part.get('text', '')), ((ident >> 22) + 1420070400000) / 1000 if type(ident) is int else row['created_at']))
                 ids.append(ident)
             if row['character_id']:
                 speaker = self.store.character_by_id(row['character_id'])
                 label = speaker['name'] if speaker else f"Character {row['character_id']}"
                 role = 'assistant' if row['character_id'] == target_character_id else 'user'
-                history.append(TurnMessage(role, f"{label}: {row['content']}"))
+                history.append(aged(role, f"{label}: {row['content']}", row['created_at']))
             else:
-                history.append(TurnMessage('user', user_line(row['author_id'], row['author_label'], row['content'])))
+                history.append(aged('user', user_line(row['author_id'], row['author_label'], row['content']), row['created_at']))
             ids.append(row['message_id'])
         return history, ids
 
@@ -264,7 +271,11 @@ class Engine:
             except Exception as error:
                 logging.error("Branch summarization failed: %s", error_detail(error))
                 summary = (summary + "\n" + older_text)[-2000:]
-        history, history_ids = self.history_messages(unsummarized, target_character_id)
+        if scene.history_now is None:
+            # SceneContext is frozen; like happenings_now (MNT-66) the clock is set around it so every speaker of the turn reads the same ages. A rewind uses the replied-to node's time.
+            parent = self.store.node(scene.parent_message_id) if scene.rewind else None
+            object.__setattr__(scene, 'history_now', parent['created_at'] if parent else time.time())
+        history, history_ids = self.history_messages(unsummarized, target_character_id, now=scene.history_now)
         if scene.images and history:
             history[-1] = TurnMessage(history[-1].role, history[-1].text, scene.images)
         return summary, history, [row["message_id"] for row in nodes], history_ids

@@ -69,6 +69,20 @@ MONTHS = ('January', 'February', 'March', 'April', 'May', 'June', 'July', 'Augus
 WEEKDAYS = ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')
 
 
+def age_label(now, then):
+    """MNT-67: coarse relative age for a history line; empty when under 90 s or in the future."""
+    seconds = now - then
+    if seconds < 90:
+        return ''
+    if seconds < 300:
+        return f'[{int(seconds // 60)} min ago]'
+    if seconds < 3600:
+        return f'[{int(seconds // 300) * 5} min ago]'
+    if seconds < 48 * 3600:
+        return f'[{int(seconds // 3600)} h ago]'
+    return f'[{int(seconds // 86400)} d ago]'
+
+
 def time_values(message_id, zone_name, created_at=None):
     zone = zone_name or 'UTC'
     seconds = created_at if created_at is not None else ((message_id >> 22) + 1420070400000) / 1000
