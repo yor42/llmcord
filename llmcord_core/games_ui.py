@@ -438,7 +438,7 @@ def onecard_section(ctx):
         phrases = ui.textarea(t('Declaration phrases (one per line)'), value='\n'.join(value['declare_phrases'])).classes('ll-wide')
         ui.label(t('Ante: each player pays this into the pot when joining; the winner takes the pot. 0 = no ante. Turn timeout: a player who runs out of time draws automatically. '
                    'Call-out penalty: cards drawn by a player called out for not declaring. Last card restriction: what cannot be played as the final card. '
-                   'Bankruptcy: a player holding the limit or more cards is out. Declaration phrases: what a player writes in chat to declare One Card (up to 8). Changes apply to tables opened afterwards.')).classes('ll-muted')
+                   'Bankruptcy: a player holding the limit or more cards is out. Declaration phrases: what a player writes in chat to declare One Card (up to 8 phrases, each up to 30 characters). Changes apply to tables opened afterwards.')).classes('ll-muted')
         controls = (ante, timeout, penalty, last_card, spade, defense, king, bankruptcy, limit, phrases)
         keys = ('ante', 'turn_timeout', 'call_out_penalty', 'last_card', 'spade_ace_ten', 'defense', 'king_skips_two', 'bankruptcy', 'bankruptcy_limit', 'declare_phrases')
         def shown(key, v):

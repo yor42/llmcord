@@ -1244,6 +1244,7 @@ msgid "Host: {host}"
 msgstr ""
 
 #: llmcord_core/games_doubt_discord.py llmcord_core/games_holdem_discord.py
+#: llmcord_core/games_onecard_discord.py
 msgid "(house)"
 msgstr ""
 

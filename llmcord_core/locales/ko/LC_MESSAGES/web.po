@@ -2943,8 +2943,8 @@ msgid "Declaration phrases (one per line)"
 msgstr "선언 문구 (한 줄에 하나)"
 
 #: llmcord_core/games_ui.py
-msgid "Ante: each player pays this into the pot when joining; the winner takes the pot. 0 = no ante. Turn timeout: a player who runs out of time draws automatically. Call-out penalty: cards drawn by a player called out for not declaring. Last card restriction: what cannot be played as the final card. Bankruptcy: a player holding the limit or more cards is out. Declaration phrases: what a player writes in chat to declare One Card (up to 8). Changes apply to tables opened afterwards."
-msgstr "판돈: 참가할 때 각자 이만큼 팟에 넣고, 승자가 팟을 가져가요. 0이면 판돈 없음. 차례 제한 시간: 시간이 다 된 플레이어는 자동으로 카드를 받아요. 지적 벌칙: 선언하지 않아 지적당한 플레이어가 받는 카드 수. 마지막 카드 제한: 마지막 카드로 낼 수 없는 카드. 파산: 한도 이상의 카드를 든 플레이어는 탈락해요. 선언 문구: 원카드를 선언할 때 채팅에 쓰는 말(최대 8개). 바뀐 설정은 이후에 여는 테이블부터 적용돼요."
+msgid "Ante: each player pays this into the pot when joining; the winner takes the pot. 0 = no ante. Turn timeout: a player who runs out of time draws automatically. Call-out penalty: cards drawn by a player called out for not declaring. Last card restriction: what cannot be played as the final card. Bankruptcy: a player holding the limit or more cards is out. Declaration phrases: what a player writes in chat to declare One Card (up to 8 phrases, each up to 30 characters). Changes apply to tables opened afterwards."
+msgstr "판돈: 참가할 때 각자 이만큼 팟에 넣고, 승자가 팟을 가져가요. 0이면 판돈 없음. 차례 제한 시간: 시간이 다 된 플레이어는 자동으로 카드를 받아요. 지적 벌칙: 선언하지 않아 지적당한 플레이어가 받는 카드 수. 마지막 카드 제한: 마지막 카드로 낼 수 없는 카드. 파산: 한도 이상의 카드를 든 플레이어는 탈락해요. 선언 문구: 원카드를 선언할 때 채팅에 쓰는 말(최대 8개, 각각 30자까지). 바뀐 설정은 이후에 여는 테이블부터 적용돼요."
 
 #: llmcord_core/games_ui.py
 msgid "Off: /game start refuses Texas Hold'em, and open Hold'em tables close with every stack cashed out."

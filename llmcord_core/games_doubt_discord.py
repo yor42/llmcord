@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import time
 from dataclasses import dataclass, field
 from types import SimpleNamespace
@@ -1429,7 +1428,7 @@ class DoubtTables:
                 players += 1
                 member = guild.get_member(seat["ref_id"]) if guild is not None else None
                 name = getattr(member, "display_name", None) or f"Player {players}"
-            names.append(re.sub(r"[*_~`|>@<\\]", "", name).strip() or f"Player {len(names) + 1}")
+            names.append(game_chooser.clean_name(name) or f"Player {len(names) + 1}")
         return names
 
     def talk_allowed(self, guild_id) -> bool:

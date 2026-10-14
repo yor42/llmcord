@@ -51,6 +51,7 @@ from test_onecard_chooser import FULL_DECK, c
 from test_table_view import KEYS, MESSY, CLEAN, lookup, rename
 from test_onecard_discord import ALICE, ANTE, ANTE_REASON, BOB, CH, CH2, G, HTTP, PAYOUT_REASON, OneCardCase, pick_move
 
+from llmcord_core import game_chooser
 from llmcord_core.admin_store import GameError
 from llmcord_core.budget import BudgetExceeded
 from llmcord_core.games import onecard
@@ -1503,6 +1504,84 @@ class SpectatorTalkTests(CharCase):
         for call in models.calls:
             for card in hidden:
                 self.assertNotIn(card, call["text"], f"a hidden card leaked into a {call['kind']} request")
+
+
+class MnT88Tests(ModelCase):
+    """MNT-88: the model's table line is posted, a dropped good answer counts, prompt names are One Card's own, the lobby tags house seats."""
+
+    async def hook(self):
+        hook = FakeWebhook(70000)
+
+        async def webhook(channel, character):
+            return hook
+        self.bot._webhook = webhook
+        return hook
+
+    async def test_the_model_line_is_posted_by_the_character_cleaned(self):
+        hook = await self.hook()
+        await self.ann_on_turn()
+        self.answers["move"] = {"move": "play:9♣", "line": "  Nice\ntry,   @everyone  "}
+        await self.fire()
+        self.assertEqual(self.moves()[-1], (1, "play:9♣", "character"))
+        self.assertEqual([m.content for m in hook.posts], ["Nice try, @everyone"])
+
+    async def test_a_failed_line_post_never_blocks_the_move(self):
+        await self.ann_on_turn()
+
+        async def broken(channel, character):
+            raise RuntimeError("no webhook")
+        self.bot._webhook = broken
+        self.answers["move"] = {"move": "play:9♣", "line": "hi"}
+        await self.fire()
+        self.assertEqual(self.moves()[-1], (1, "play:9♣", "character"))
+
+    async def test_an_empty_line_posts_nothing(self):
+        hook = await self.hook()
+        await self.ann_on_turn()
+        self.answers["move"] = {"move": "play:9♣", "line": ""}
+        await self.fire()
+        self.assertEqual(hook.posts, [])
+    async def test_a_good_answer_dropped_because_the_table_moved_on_counts_toward_the_limit(self):
+        hook = await self.hook()
+        await self.ann_on_turn()
+        started, release = asyncio.Event(), asyncio.Event()
+
+        async def blocked(name, schema):
+            started.set()
+            await release.wait()
+            return {"move": "play:9♣", "line": "too late"}
+        self.answers["move"] = blocked
+        task = asyncio.create_task(self.fire())
+        await asyncio.wait_for(started.wait(), 1)
+        self.store_play(2, "forfeit", "member")
+        release.set()
+        await task
+        self.assertEqual(self.failures(), 1)
+        self.assertEqual(hook.posts, [])
+
+    async def test_prompt_names_are_one_card_s_own_and_the_shared_sanitiser_is_one_line_without_colons(self):
+        snap = {"seats": [{"kind": "character", "name": "A*n\nn: <@1>"}, {"kind": "member", "name": "x"}, {"kind": "character", "name": "::"}]}
+        self.assertEqual(game_chooser.onecard_names(snap), ["A n n 1", "Player 1", "Seat 3"])
+        self.assertEqual(game_chooser.onecard_names(snap), game_chooser.holdem_names(snap))
+        self.assertEqual(game_chooser.clean_name("A*n\nn: <@1>"), "An n 1")
+        self.assertEqual(game_chooser.clean_name("x" * 60), "x" * 40)
+
+    async def test_talk_names_collapse_newlines_and_strip_colons(self):
+        await self.ann_on_turn()
+        self.store.db.execute("UPDATE characters SET name=? WHERE id=?", ("An\nn: Ann", self.ann))
+        self.store.db.commit()
+        snap = self.snap()
+        snap = {**snap, "seats": [{**seat, "name": "An\nn: Ann"} if seat["kind"] == "character" else seat for seat in snap["seats"]]}
+        self.assertEqual(self.onecard._talk_names(G, snap)[1], "An n Ann")
+
+    async def test_the_lobby_tags_house_character_seats_but_not_brought_ones(self):
+        await self.start(favorites=True)
+        snap = self.snap()
+        key = (G, snap["table_id"])
+        lobby = self.onecard.render_lobby(key, snap, self.table())[0]
+        self.assertNotIn("(house)", lobby)
+        house = {**snap, "seats": [{**seat, "brought_by": None} if seat["kind"] == "character" else seat for seat in snap["seats"]]}
+        self.assertEqual(self.onecard.render_lobby(key, house, self.table())[0].count("(house)"), 1)
 
 
 if __name__ == "__main__":  # pragma: no cover

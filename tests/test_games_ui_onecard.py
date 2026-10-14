@@ -51,5 +51,14 @@ class OneCardSettings(TableCase):
         self.assertEqual(self.store.game_rules(G, 'onecard')['declare_phrases'], ['a', 'b'])
 
 
+class ParsePhrases(unittest.TestCase):
+    def test_trims_drops_blanks_and_repeats_case_sensitively(self):
+        """MNT-88: one phrase per line, trimmed, blank lines dropped, exact repeats dropped (first kept); case differences are different phrases."""
+        from llmcord_core.games_ui import parse_phrases
+        self.assertEqual(parse_phrases('  One Card \n\n원카드\none card\nOne Card\r\n   \n원카드'), ['One Card', '원카드', 'one card'])
+        self.assertEqual(parse_phrases(None), [])
+        self.assertEqual(parse_phrases(''), [])
+
+
 if __name__ == '__main__':
     unittest.main()

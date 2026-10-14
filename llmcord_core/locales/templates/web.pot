@@ -2938,7 +2938,7 @@ msgid "Declaration phrases (one per line)"
 msgstr ""
 
 #: llmcord_core/games_ui.py
-msgid "Ante: each player pays this into the pot when joining; the winner takes the pot. 0 = no ante. Turn timeout: a player who runs out of time draws automatically. Call-out penalty: cards drawn by a player called out for not declaring. Last card restriction: what cannot be played as the final card. Bankruptcy: a player holding the limit or more cards is out. Declaration phrases: what a player writes in chat to declare One Card (up to 8). Changes apply to tables opened afterwards."
+msgid "Ante: each player pays this into the pot when joining; the winner takes the pot. 0 = no ante. Turn timeout: a player who runs out of time draws automatically. Call-out penalty: cards drawn by a player called out for not declaring. Last card restriction: what cannot be played as the final card. Bankruptcy: a player holding the limit or more cards is out. Declaration phrases: what a player writes in chat to declare One Card (up to 8 phrases, each up to 30 characters). Changes apply to tables opened afterwards."
 msgstr ""
 
 #: llmcord_core/games_ui.py

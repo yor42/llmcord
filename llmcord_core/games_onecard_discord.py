@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import time
 from dataclasses import dataclass, field
 
@@ -142,6 +141,7 @@ class _Out:
     closing: str | None = None  # the table was closed from outside: this line goes to the thread and the turn message loses its buttons
     closed: bool = False  # the table is over: forget it once this is delivered
     react: list = field(default_factory=list)  # member messages that got applied: one reaction each
+    line: tuple | None = None  # (character, text): the model's table line, posted by the character's webhook after the move lines
     speak: tuple | None = None  # (character id, line): said through the table talk path as that character
 
 
@@ -153,6 +153,7 @@ class OneCardTables:
     RETRY_SECONDS = 5  # read once at construction (TableRuntime.retry_seconds); tests set runtime.retry_seconds
     BUMP_AFTER = 8
     MODEL_SECONDS = 20
+    POST_SECONDS = 10
     EVENT_COOLDOWN_SECONDS = 20
     SWEEP_SECONDS = 30
     CALLOUT_SECONDS = 3
@@ -432,13 +433,20 @@ class OneCardTables:
         deadline = self.table(key).deadlines.get(kind)
         return f"<t:{int(deadline)}:R>" if deadline else ""
 
-    def render_lobby(self, key, snap, row) -> tuple[str, discord.ui.View]:
+    def _t(self, guild_id):
+        """The channel's translator for a table message: resolved at each render, never kept."""
+        get_guild = getattr(self.bot, "get_guild", None)
+        return discord_locale.channel_t(get_guild(guild_id) if get_guild else None)
+
+    def render_lobby(self, key, snap, row, *, t=None) -> tuple[str, discord.ui.View]:
+        t = t or self._t(key[0])
         rules = snap["rules"] or onecard.normalize_rules(None)
         name, pot, ante = self.store.currency_name(key[0]), sum(s["stake"] for s in snap["seats"]), rules["ante"]
         lines = [f"**One Card** · table {key[1]}", f"Ante: {ante:,} {name} · Pot: {pot:,} {name}" if ante else f"No ante · Pot: {pot:,} {name}",
                  *([f"Host: <@{self._host(row, snap)}>"] if any(s["kind"] == "member" for s in snap["seats"]) else []), ""]
         for seat in snap["seats"]:
-            lines.append(f"{seat['index'] + 1}. {GameTables._who(seat)}")
+            tag = " " + t("(house)") if seat["kind"] == "character" and not seat["brought_by"] else ""
+            lines.append(f"{seat['index'] + 1}. {GameTables._who(seat)}{tag}")
         stamp = self._stamp(key, "lobby")
         lines.append("")
         lines.append(f"Join with the button. The host starts the game with {onecard.MIN_SEATS} to {onecard.MAX_SEATS} seats"
@@ -669,8 +677,27 @@ class OneCardTables:
                 await message.add_reaction(REACTION)
             except Exception as error:
                 logging.info("Could not react to a One Card declaration (%s)", type(error).__name__)
+        if out.line is not None:
+            await self._post_line(key, *out.line)
         if out.speak is not None:
             await self._speak(key, *out.speak)
+
+    async def _post_line(self, key, character, line) -> None:
+        """Best effort, outside the table lock: the character says its line in the table thread through its webhook. Nothing is saved to scene history."""
+        try:
+            row = self._row(key)
+            if row is None or row["thread_id"] is None:
+                return
+            channel = await self._channel(row["thread_id"])
+            webhook = await self.bot._webhook(channel, character)
+            slots = {r["slot_key"]: r for r in self.store.usable_avatars(key[0], character["id"])}
+            avatar = (await self.bot.resolve_avatar(slots["neutral"]))["url"] if "neutral" in slots else None
+            thread = {"thread": channel} if isinstance(channel, discord.Thread) else {}
+            await asyncio.wait_for(webhook.send(line, **thread, username=character["name"], avatar_url=avatar, allowed_mentions=NO_MENTIONS), self.POST_SECONDS)
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            logging.warning("One Card character line not posted (%s)", type(error).__name__)
 
     async def _speak(self, key, character_id, text) -> None:
         """Best effort, outside the table lock: one line from this character through the table talk path."""
@@ -1235,7 +1262,7 @@ class OneCardTables:
             if budget <= 0:
                 out = self._apply_chain(key, snap, self._fallback_moves(guild_id, snap, turn, seen))
             else:
-                plan = turn, self._character(guild_id, snap["seats"][turn]), seen, game_chooser.holdem_names(snap), onecard.legal_moves_for_view(seen, snap["rules"])
+                plan = turn, self._character(guild_id, snap["seats"][turn]), seen, game_chooser.onecard_names(snap), onecard.legal_moves_for_view(seen, snap["rules"])
         if plan is not None:
             out = await self._decide(key, snap, plan)
         await self._publish(key, None if out is _STALE else out)
@@ -1243,14 +1270,16 @@ class OneCardTables:
     async def _decide(self, key, snap, plan):
         guild_id, round_id, moves = key[0], snap["round_id"], snap["moves"]
         turn, character, seen, names, legal = plan
-        tried = []
+        tried, line, asked = [], "", False
         if character is not None:
             style = self.store.character_play_style(guild_id, character["id"])
             try:
                 result = await asyncio.wait_for(game_chooser.ask_onecard(self.bot, guild_id, snap["channel_id"], character, seen, names, legal, style), self.MODEL_SECONDS)
                 move = game_chooser.holdem_move(result, legal)
                 if move is not None:
+                    asked = True
                     tried.append((turn, move))
+                    line = game_chooser.clean_line(result.get("line"))
             except asyncio.CancelledError:
                 self._note_failure(guild_id)  # an attempt that was cut short still counts toward the limit
                 raise
@@ -1260,7 +1289,12 @@ class OneCardTables:
             if move is None:
                 self._note_failure(guild_id)
         tried += self._fallback_moves(guild_id, snap, turn, seen)
-        return await self._apply_fresh(key, round_id, moves, tried)
+        out = await self._apply_fresh(key, round_id, moves, tried)
+        if out is _STALE and asked:
+            self._note_failure(guild_id)  # a good answer dropped because the table moved on still counts toward the limit
+        elif asked and line and out is not None and out is not _STALE:
+            out.line = character, line
+        return out
 
     # --- table talk -------------------------------------------------------------------------
 
@@ -1279,7 +1313,7 @@ class OneCardTables:
                 players += 1
                 member = guild.get_member(seat["ref_id"]) if guild is not None else None
                 name = getattr(member, "display_name", None) or f"Player {players}"
-            names.append(re.sub(r"[*_~`|>@<\\]", "", name).strip() or f"Player {len(names) + 1}")
+            names.append(game_chooser.clean_name(name) or f"Player {len(names) + 1}")
         return names
 
     def talk_allowed(self, guild_id) -> bool:

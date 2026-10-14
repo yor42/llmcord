@@ -162,17 +162,31 @@ def holdem_schema(legal) -> dict:
     return schema(legal)
 
 
-def holdem_names(snap) -> list:
+def clean_name(value, sep="") -> str:
+    """The one name sanitiser: one line, no markup, mention or colon characters (each replaced by ``sep``), at most 40 characters."""
+    return " ".join(re.sub(r"[*_~`|>@<\\:]", sep, str(value)).split())[:40]
+
+
+def _seat_names(snap) -> list:
     """Prompt-safe names by seat: characters by name (one line, no markup or colons), members as Player 1, 2, ... (never member names or ids)."""
     names, players = [], 0
     for seat in snap["seats"]:
         if seat["kind"] == "character":
-            name = " ".join(re.sub(r"[*_~`|>@<\\:]", " ", str(seat["name"])).split())[:40]
+            name = clean_name(seat["name"], " ")
         else:
             players += 1
             name = f"Player {players}"
         names.append(name or f"Seat {len(names) + 1}")
     return names
+
+
+def holdem_names(snap) -> list:
+    return _seat_names(snap)
+
+
+def onecard_names(snap) -> list:
+    """One Card prompt names: the same shape, but its own entry point (not Hold'em's)."""
+    return _seat_names(snap)
 
 
 def _cards(cards) -> str:
