@@ -422,7 +422,7 @@ class HoldemTables:
                 await self._post(thread_id, out.summary)
             for post in out.seeds:
                 await self._post(thread_id, post)
-            self._talk_event(thread_id, out)
+            self._talk_event(thread_id, out, key[0])
             if out.turn and out.start is None and out.seq > table.sent.get("turn", 0):
                 table.sent["turn"] = out.seq
                 await self._turn_message(key, out, row)
@@ -435,7 +435,7 @@ class HoldemTables:
             elif out.board:
                 self._mark_board(key)
 
-    def _talk_event(self, thread_id, out) -> None:
+    def _talk_event(self, thread_id, out, guild_id=None) -> None:
         """Fire and forget: the characters at the table react to a public event. A move never waits for it."""
         if out.talk is None or thread_id is None or self.closed:
             return
@@ -443,7 +443,10 @@ class HoldemTables:
 
         async def run():
             try:
-                await self.bot.run_table_event(await self._channel(thread_id), text)
+                thread = await self._channel(thread_id)
+                await self.bot.run_table_event(thread, text)
+                if guild_id is not None and self.bot.store.cast_watches_games(guild_id):
+                    await self.bot.run_table_event(thread, text, spectators=True)  # FEAT-48: after the seated turn, not under it
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -1354,6 +1357,15 @@ class HoldemTables:
         return {"table_id": key[1], "round_id": snap["round_id"], "status": snap["status"],
                 "seated_character_ids": [s["ref_id"] for s in snap["seats"] if s["kind"] == "character"]}
 
+    def public_block(self, guild_id, key) -> str | None:
+        """FEAT-48: the third-person public view of the table (board, stacks, bets, turn, recent moves), never a hole card, odds or the seed."""
+        try:
+            snap = self.store.latest_round(*key)
+        except GameError:
+            return None
+        head = f"A table of {NAME} (no-limit poker: each seat holds two secret hole cards, five shared cards come on the board, the best five-card hand wins the pot)."
+        return "\n".join(self._public_lines(key, snap, None, head)[0])
+
     def table_block(self, guild_id, thread_id, character_id) -> str | None:
         """What one seated character may know of the table: the public state and, while a hand is played, its own two hole cards.
         Never another seat's cards, the Assist odds or the seed."""
@@ -1367,9 +1379,23 @@ class HoldemTables:
         mine = next((s for s in snap["seats"] if s["kind"] == "character" and s["ref_id"] == character_id), None)
         if mine is None:
             return None
-        names, view, me = self._talk_names(key[0], snap), snap["view"], mine["index"]
+        me = mine["index"]
+        head = f"You are sitting at a table of {NAME} (no-limit poker: each seat holds two secret hole cards, five shared cards come on the board, the best five-card hand wins the pot)."
+        lines, hand_played = self._public_lines(key, snap, me, head)
+        if hand_played:
+            try:
+                hole = self.store.seat_view(key[0], snap["round_id"], me).hole or ()
+            except GameError:
+                hole = ()
+            if hole:
+                lines.append("Your hole cards (keep them secret unless you choose to bluff about them): " + self._cards(hole))
+        return "\n".join(lines)
+
+    def _public_lines(self, key, snap, me, head) -> tuple[list, bool]:
+        """(lines, a hand is being played); ``me`` marks the viewer's seat, None for the public view."""
+        names, view = self._talk_names(key[0], snap), snap["view"]
         who = lambda i: names[i] + (" (you)" if i == me else "")
-        lines = [f"You are sitting at a table of {NAME} (no-limit poker: each seat holds two secret hole cards, five shared cards come on the board, the best five-card hand wins the pot)."]
+        lines = [head]
         row = self._row(key)
         if row is None or row["status"] != "open":
             lines.append("The table is closed; the chips were cashed out.")
@@ -1384,20 +1410,14 @@ class HoldemTables:
             recent = [self._talk_move(names, i, move) for i, move in view["history"][-8:]]
             if recent:
                 lines.append("Recent play: " + "; ".join(recent) + ".")
-            try:
-                hole = self.store.seat_view(key[0], snap["round_id"], me).hole or ()
-            except GameError:
-                hole = ()
-            if hole:
-                lines.append("Your hole cards (keep them secret unless you choose to bluff about them): " + self._cards(hole))
-            return "\n".join(lines)
+            return lines, True
         if snap["status"] == "joining":
             lines.append("No hand has been dealt yet." if snap["number"] == 1 else "Between hands; the next hand is dealt soon.")
         for seat in snap["seats"]:
             lines.append(f"- {who(seat['index'])}: stack {(seat['end'] if snap['status'] == 'settled' else seat['stack']):,}")
         if (last := self._last_hand_text(key, snap)) is not None:
             lines.append(last)
-        return "\n".join(lines)
+        return lines, False
 
     @staticmethod
     def _talk_move(names, seat, move) -> str:

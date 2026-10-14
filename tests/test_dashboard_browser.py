@@ -4654,6 +4654,35 @@ class DashboardBrowserTests(unittest.TestCase):
             self.post_hook('/_test/games', {'cast_sees_item_results': False})
             context.close()
 
+    def test_games_tab_cast_watches_games_switch_saves_and_persists(self):
+        """FEAT-48: the Games tab shows 'Cast watches games (Experimental)' after 'Cast sees item results (Experimental)', toggling shows the save bar, Save shows the toast and persists with a games.cast_watches_games audit row (enabled flag only), reload shows it on, the item-results switch and guild 2 are untouched."""
+        import json
+        from playwright.sync_api import expect
+        other = self.state()['games']['2']
+        context, page, errors = self.open_games()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            sees = page.get_by_role('switch', name='Cast sees item results (Experimental)')
+            switch = page.get_by_role('switch', name='Cast watches games (Experimental)')
+            switch.wait_for(timeout=5000)
+            self.assertLess(sees.bounding_box()['y'], switch.bounding_box()['y'])
+            self.assertEqual(switch.get_attribute('aria-checked'), 'false')
+            switch.click()
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Cast watches games saved', exact=True).wait_for(timeout=5000)
+            self.assertTrue(self.state()['games']['1']['cast_watches_games'])
+            self.assertFalse(self.state()['games']['1']['cast_sees_item_results'])
+            rows = [r for r in self.state()['audit'] if r['action'] == 'games.cast_watches_games']
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(json.loads(rows[0]['detail_json']), {'enabled': True})
+            self.assertEqual(self.state()['games']['2'], other)
+            page.reload()
+            expect(page.get_by_role('switch', name='Cast watches games (Experimental)')).to_have_attribute('aria-checked', 'true', timeout=5000)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'cast_watches_games': False})
+            context.close()
+
     def test_games_tab_keep_phrases_switch_saves_and_persists(self):
         """FEAT-37 F3: the Blackjack section shows 'Keep phrases for tuning' with its help line, Save persists with a games.spoken_keep audit row, reload shows it on, and guild 2 is untouched."""
         from playwright.sync_api import expect

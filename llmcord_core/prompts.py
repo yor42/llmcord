@@ -262,7 +262,8 @@ def compile_prompt(bundle, purpose, values, history, provider, budget, *, contra
     if purpose == 'dialogue':
         for key, label in (('world_guidelines', 'World / hub guidelines'), ('channel_guidelines', 'Channel guidelines (take precedence over world guidelines when they conflict)'),
                            ('table_state', 'Game table (private to you; only your own hand is shown)'),
-                           ('happenings', 'Recent happenings (quoted item results in this channel; mention only if relevant or asked)')):
+                           ('happenings', 'Recent happenings (quoted item results in this channel; mention only if relevant or asked)'),
+                           ('watching', 'Game table you are watching (public view; you are not seated; no hands or face-down cards)')):
             text = str(values.get(key, '')).strip()
             if text:
                 records.append([key, TurnMessage('system', label + ':\n' + text), 1000000, True, None, None, None])

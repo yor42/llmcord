@@ -55,9 +55,12 @@ class SceneContext:
     usage_feature: str | None = None  # overrides the ambient/summon/reply usage label of the turn
     event: bool = False  # a table event turn: the ambient cheap gate never silences it
     created_at: float | None = None  # unix time of the turn when the message id is not a snowflake (table events)
+    spectator: bool = False  # FEAT-48: allowed_ids also holds non-seated spectators, who get the public table view
+    max_speakers: int | None = None  # FEAT-48: caps the turn's speakers below the configured limit
     rewind: bool = False  # a reply to a non-latest character node
     happenings_now: float | None = None  # MNT-66: fixed at the turn's first dialogue prompt; every speaker then gets the same happenings rows
     happenings_rows: list | None = field(default=None, compare=False)
+    watch_cache: tuple | None = field(default=None, compare=False)  # FEAT-48: (view or None,) from the turn's first dialogue prompt; a 1-tuple so a None lookup is cached too
 
 
 class Engine:
@@ -66,6 +69,7 @@ class Engine:
         self.source = settings_source(settings)
         self.talk_failed = None  # (guild_id) -> counts a failed table-talk attempt toward the daily limit; set by the bot
         self.table_block = None  # (guild_id, thread_id, character_id) -> per-speaker table text or None; set by the bot
+        self.watch_lookup = None  # FEAT-48: (guild_id, channel_id, parent_channel_id) -> public table view dict or None; set by the bot
 
     @property
     def settings(self) -> Settings:
@@ -190,7 +194,7 @@ class Engine:
                 ids = [options_rows[ask.named[0]]["id"] if ask.named else (favorite_rows or options_rows)[0]["id"]]
             elif not ids and not scene.ambient:
                 ids = [options_rows[0]["id"]]
-            return [pool[ident] for ident in ids[:self.settings.limits["max_speakers"]]]
+            return [pool[ident] for ident in ids[:min(self.settings.limits["max_speakers"], scene.max_speakers or 99)]]
         except Exception as error:
             logging.error("Director failed: %s", error_detail(error))
             if scene.usage_feature == 'game' and self.talk_failed:
@@ -283,6 +287,20 @@ class Engine:
                 names.setdefault(part['author_id'], part.get('author_label', ''))
         return render_happenings(rows, names) or ''
 
+    def watch_block(self, scene, character, space):
+        """FEAT-48: public text of an open game table for a non-seated speaker in a normal channel; the lookup is fixed at the turn's first prompt."""
+        if not self.watch_lookup or not self.store.cast_watches_games(scene.guild_id) or (scene.allowed_ids is not None and not scene.spectator) or scene.rewind:
+            return ''
+        if scene.watch_cache is None:
+            # SceneContext is frozen; like happenings_rows (MNT-66) the cache is set around it so every speaker of the turn sees one view, even a seated first speaker.
+            object.__setattr__(scene, 'watch_cache', (self.watch_lookup(scene.guild_id, scene.channel_id, scene.parent_channel_id),))
+        view = scene.watch_cache[0]
+        if not view or character['world_id'] != scene.space_id and not (space['kind'] == 'hub' and character['world_id'] in self.store.allowed_worlds(scene.space_id)):
+            return ''
+        if character['id'] in view.get('seated_character_ids', ()):
+            return ''
+        return str(view.get('text') or '')
+
     async def prepare_dialogue(self, scene: SceneContext, character, preceding_lines: list[tuple[str, str]]):
         card = json.loads(character["card"])
         space = self.store.space_by_id(scene.space_id)
@@ -342,6 +360,7 @@ class Engine:
             # Table thread only: this speaker's own view of the game (public state + own hand), never saved or sent anywhere else.
             'table_state': (self.table_block(scene.guild_id, scene.channel_id, character['id']) or '') if scene.allowed_ids is not None and self.table_block else ''}
         values['happenings'] = self.happenings_block(scene, character, space, parent)
+        values['watching'] = self.watch_block(scene, character, space)
         guidelines = scene.guidelines if scene.guidelines is not None else self.store.scene_guidelines(scene.guild_id, scene.space_id, scene.parent_channel_id or scene.channel_id)
         values.update({key: row['content'] for key, row in guidelines.items()})
         zone, _ = self.store.resolve_timezone(scene.guild_id, scene.user_id)
@@ -371,6 +390,8 @@ class Engine:
             "recent": [part.get("message_id") for part in scene.recent if part.get('message_id') in used_history_ids]}
         if values['happenings']:
             sources['happenings'] = True
+        if values['watching'].strip():
+            sources['watching'] = True
         sources['preset'] = {'id': snapshot['id'], 'revision': snapshot['revision'], **request.trace()}
         sources['guidelines'] = {key: {field: row[field] for field in ('kind', 'owner_id', 'revision')} for key, row in guidelines.items() if key in included}
         return request, sources

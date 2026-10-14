@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 import weakref
 from dataclasses import dataclass, field
@@ -423,6 +424,65 @@ class GameTables:
             return f"<@{seat['ref_id']}>"
         who = f"**{discord.utils.escape_markdown(discord.utils.escape_mentions(seat['name']))}**"
         return who + (f" (with <@{seat['brought_by']}>)" if seat["brought_by"] else "")
+
+    def table_talk_context(self, guild_id, channel_id) -> dict | None:
+        """FEAT-48: the open blackjack table of this channel in the Doubt/Hold'em shape (blackjack has no thread, so the key is the channel), else None."""
+        row = self.store.open_table_for(guild_id, channel_id)
+        if row is None or row["game"] != "blackjack":
+            return None
+        try:
+            snap = self.store.latest_round(guild_id, row["id"])
+        except GameError:
+            return None
+        return {"table_id": row["id"], "round_id": snap["round_id"], "status": snap["status"],
+                "seated_character_ids": [s["ref_id"] for s in snap["seats"] if s["kind"] == "character"]}
+
+    def _talk_names(self, guild_id, snap) -> list:
+        """One prompt-safe name per seat: characters by name, members by guild display name (Player N when unknown); no mentions, ids or markdown."""
+        guild, names, players = self.bot.get_guild(guild_id), [], 0
+        for seat in snap["seats"]:
+            if seat["kind"] == "character":
+                name = seat["name"]
+            else:
+                players += 1
+                member = guild.get_member(seat["ref_id"]) if guild is not None else None
+                name = getattr(member, "display_name", None) or f"Player {players}"
+            names.append(re.sub(r"[*_~`|>@<\\]", "", name).strip() or f"Player {len(names) + 1}")
+        return names
+
+    def public_block(self, guild_id, key) -> str | None:
+        """FEAT-48: the third-person public view of a table: bets, visible cards, the dealer's up card (the hole card stays face down), turn.
+        Never the seed, its hash or a mention."""
+        try:
+            snap = self.store.latest_round(*key)
+        except GameError:
+            return None
+        names, view, name = self._talk_names(key[0], snap), snap["view"], self.store.currency_name(key[0])
+        lines = ["A table of Blackjack (players try to beat the dealer by getting closer to 21 without going over)."]
+        status = snap["status"]
+        for seat in snap["seats"]:
+            i = seat["index"]
+            line = f"- {names[i]}: bet {(view['stakes'][i] if view else seat['stake']):,} {name}"
+            if view:
+                cards = view["hands"][i]
+                line += f", {blackjack.hand_str(cards)} ({blackjack.total_str(cards)})"
+                word = {"stand": "stands", "bust": "bust", "blackjack": "blackjack", "surrender": "surrendered"}.get(view["status"][i])
+                line += f", {word}" if word and status == "playing" else ""
+                line += " (on turn)" if status == "playing" and view["turn"] == i else ""
+            if status == "settled":
+                line += f", {_outcome(seat, bool(view) and blackjack.is_natural(view['dealer']))}"
+            lines.append(line)
+        if view:
+            dealer = view["dealer"]
+            if view["dealer_hidden"]:
+                lines.append(f"Dealer shows {blackjack.hand_str(dealer)}; the hole card is face down.")
+            else:
+                lines.append(f"Dealer: {blackjack.hand_str(dealer)} ({blackjack.total_str(dealer)})" + (" bust" if blackjack.hand_total(dealer)[0] > 21 else ""))
+        elif status == "joining":
+            lines.append("No cards have been dealt yet.")
+        if status == "cancelled":
+            lines.append("The round was cancelled; bets were refunded.")
+        return "\n".join(lines)
 
     def render(self, snap, shown=None) -> str:
         """``shown``: a frame of the dealer's play with that many dealer cards, before the results."""

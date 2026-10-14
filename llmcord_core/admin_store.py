@@ -1488,6 +1488,15 @@ class AdminStore:
     def set_cast_sees_item_results(self, guild_id, on, expected=None):
         return self._set_pseudo_flag(guild_id, self._HAPPENINGS_KEY, on, expected, 'cast sees item results')
 
+    _WATCHES_KEY = 'cast_watches_games'  # FEAT-48: same kind of pseudo row
+
+    def cast_watches_games(self, guild_id):
+        """D40: non-seated cast members get the public table summary and may speak as spectators; off by default."""
+        return self._pseudo_flag(guild_id, self._WATCHES_KEY)
+
+    def set_cast_watches_games(self, guild_id, on, expected=None):
+        return self._set_pseudo_flag(guild_id, self._WATCHES_KEY, on, expected, 'cast watches games')
+
     def spoken_moves_enabled(self, guild_id):
         """Experimental "Read moves from chat" (D34): off by default."""
         return self._pseudo_flag(guild_id, self._SPOKEN_KEY)

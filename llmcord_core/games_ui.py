@@ -125,6 +125,17 @@ def all_games_section(ctx):
                           dirty=lambda: bool(sees_switch.value) != sees['value'],
                           reset=lambda: sees_switch.set_value(sees['value']))
 
+        watches = {'value': store.cast_watches_games(gid)}
+        watches_switch = ui.switch('Cast watches games (Experimental)', value=watches['value'])
+        ui.label('Characters who are not seated can see the public state of an open game table in normal chat and answer when addressed. Never shows hands or face-down cards.').classes('ll-muted')
+        def save_watches():
+            watches['value'] = store.set_cast_watches_games(gid, bool(watches_switch.value), watches['value'])
+            return watches['value']
+        ctx.savebar.track('Cast watches games', {watches_switch: watches['value']}, save=save_watches, action='games.cast_watches_games',
+                          detail=lambda result: {'enabled': result}, success='Cast watches games saved',
+                          dirty=lambda: bool(watches_switch.value) != watches['value'],
+                          reset=lambda: watches_switch.set_value(watches['value']))
+
 
 def blackjack_section(ctx):
     from nicegui import ui
