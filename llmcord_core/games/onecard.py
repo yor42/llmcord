@@ -9,6 +9,7 @@ import json
 from dataclasses import dataclass, field, replace
 from typing import Optional, Sequence
 
+from . import playstyle
 from .base import IllegalMove, Seat, shuffled
 
 RANKS = ("A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K")
@@ -253,13 +254,71 @@ def _playable(hand, top, named, pending, rules):
     return out
 
 
+def _moves(hand, top, named, pending, rules):
+    """The legal moves of a hand (in the view's sorted order): each playable card, a 7 once per suit it may name, then ``draw``."""
+    out = []
+    for card in _playable(sorted(hand, key=_sort_key), top, named, pending, rules):
+        out.extend([play_move(card, s) for s in SUITS] if card[0] == "7" else [play_move(card)])
+    return tuple(out) + ("draw",)
+
+
 def legal_moves(state, seat):
     if not _can_act(state, seat):
         return ()
-    out = []
-    for card in _playable(state.hands[seat], state.discard[-1], state.suit, state.pending, state.rules):
-        out.extend([play_move(card, s) for s in SUITS] if card[0] == "7" else [play_move(card)])
-    return tuple(out) + ("draw",)
+    return _moves(state.hands[seat], state.discard[-1], state.suit, state.pending, state.rules)
+
+
+def _named(view):
+    """The suit a 7 named, as a view shows it: the last play's, else (no play yet) the view's suit when it differs from the top card's."""
+    for e in reversed(view.history):
+        if e.kind == "play":
+            return e.suit
+    return view.suit if view.suit != view.top[1] else None
+
+
+def legal_moves_for_view(view, rules):
+    """``legal_moves`` for the viewing seat from its own view and the round's rules (same moves, same order); empty off turn, when out or finished."""
+    if view.hand is None or view.finished or view.turn != view.seat or not view.active[view.seat]:
+        return ()
+    return _moves(view.hand, view.top, _named(view), view.pending, normalize_rules(rules))
+
+
+_SPECIAL = ("J", "Q", "K", "7")
+
+
+def _steady_move(view, rules, plays, seed):
+    cards = list(dict.fromkeys(_parse_card(m[5:].partition("=")[0]) for m in plays))
+    if not cards:
+        return "draw"
+    if len(view.hand) == 1:
+        card = cards[0]
+    elif view.pending:
+        card = max(cards, key=lambda c: _value(c, rules))
+    else:
+        attacks = [c for c in cards if _value(c, rules)]
+        special = [c for c in cards if c[0] in _SPECIAL]
+        card = max(attacks, key=lambda c: _value(c, rules)) if attacks else min(special, key=lambda c: _SPECIAL.index(c[0])) if special else cards[0]
+    if card[0] != "7":
+        return play_move(card)
+    rest = list(view.hand)
+    rest.remove(card)
+    counts = {s: sum(1 for c in rest if c[1] == s) for s in SUITS}
+    best = [s for s in SUITS if counts[s] == max(counts.values())]
+    return play_move(card, best[int(playstyle.roll(seed, "suit") * len(best))])
+
+
+def policy_move(view, rules, style, seed):
+    """One legal move for the viewing seat from its own view only (no other hand, no draw pile): finish when it can, defend an attack, hit with an attack,
+    dump a special card before a plain one, name the suit it holds most after a 7, draw when nothing plays. A saved ``style`` may add an erratic
+    (but legal) deviation, drawn from ``seed``; none plays steadily."""
+    legal = legal_moves_for_view(view, rules)
+    if not legal:
+        raise IllegalMove("it is not this seat's turn")
+    move = _steady_move(view, normalize_rules(rules), [m for m in legal if m != "draw"], seed)
+    if style is not None and len(legal) > 1 and playstyle.erratic(style, seed, "move"):
+        others = [m for m in legal if m != move]
+        move = others[int(playstyle.roll(seed, "pick") * len(others))]
+    return move
 
 
 def playable_cards(view, rules):

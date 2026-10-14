@@ -344,15 +344,18 @@ class SkitBot(commands.Bot):
 
     def _table_game(self, guild_id, thread_id):
         """(the game's tables object, its table talk context) for the table that owns this thread, else (None, None)."""
-        for game in (self.doubt, self.holdem):
+        for game in (self.doubt, self.holdem, self.onecard):
             table = game.table_talk_context(guild_id, thread_id)
             if table is not None:
                 return game, table
         return None, None
 
     def _table_block(self, guild_id, thread_id, character_id):
-        block = self.doubt.table_block(guild_id, thread_id, character_id)
-        return block if block is not None else self.holdem.table_block(guild_id, thread_id, character_id)
+        for game in (self.doubt, self.holdem, self.onecard):
+            block = game.table_block(guild_id, thread_id, character_id)
+            if block is not None:
+                return block
+        return None
 
     def _note_talk_failure(self, guild_id) -> None:
         """A failed table talk attempt counts toward the guild's daily table-talk limit, which every table game shares."""

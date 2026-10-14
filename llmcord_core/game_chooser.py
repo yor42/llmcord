@@ -9,7 +9,7 @@ import json
 import re
 from types import SimpleNamespace
 
-from .games import blackjack, doubt, playstyle
+from .games import blackjack, doubt, onecard, playstyle
 from .models import TurnMessage
 from .usage import capture_usage, log_purpose, log_scope
 
@@ -206,3 +206,53 @@ async def ask_holdem(bot, guild_id, channel_id, character, view, names, legal, s
                                         TurnMessage("user", holdem_table_text(view, names, legal))])
     with bot.backend.pin(), capture_usage(guild_id, channel_id, "game"), log_scope(None), log_purpose("game"):
         return await bot.models.structured_compiled(ROLE, request, "holdem_move", holdem_schema(legal))
+
+
+# --- One Card (FEAT-44 B): a seat's move from its own view; no seed, other hands or draw pile cards, member identities ---
+
+ONECARD_SYSTEM = ("You are {name}, playing One Card at a table in a roleplay server. Stay in character.\n"
+                  "{persona}\n"
+                  "Rules: be the first to play your last card. Play a card that matches the top card's suit or rank (or the named suit), or draw one. "
+                  "Jokers play on anything. Attacks (a 2, an ace, a joker) make the next player draw unless they defend with another attack. "
+                  "A jack skips a player, a queen reverses the direction, a 7 lets you name the next suit (play:<7>=<suit>). "
+                  "Choose your move from the legal moves. "
+                  f"You may also say one short line in character, at most {MAX_LINE} characters, or leave it empty. Do not mention anyone with @. Return only JSON.")
+
+
+def onecard_schema(legal) -> dict:
+    return schema(legal)
+
+
+def _n_cards(n) -> str:
+    return f"{n} card" + ("" if n == 1 else "s")
+
+
+def onecard_table_text(view, names, legal) -> str:
+    lines = ["Your hand: " + ", ".join(onecard.card_text(card) for card in view.hand), f"Top card: {onecard.card_text(view.top)}"]
+    if view.suit:
+        lines.append(f"Suit: {view.suit}")
+    lines.append("Direction: " + ("clockwise" if view.direction > 0 else "counter-clockwise"))
+    if view.pending:
+        lines.append(f"Pending attack: {view.pending}")
+    for i, count in enumerate(view.counts):
+        if i != view.seat:
+            lines.append(f"{names[i]}: {_n_cards(count)}" + ("" if view.active[i] else " (out of the game)"))
+    lines.append(f"Draw pile: {_n_cards(view.draw)}")
+    for item in view.history[-HOLDEM_RECENT:]:
+        if item.kind == "play":
+            lines.append(f"{names[item.seat]} played {onecard.card_text(item.card)}" + (f" and named {item.suit}" if item.suit else ""))
+        elif item.kind == "draw":
+            lines.append(f"{names[item.seat]} drew " + ("a card" if item.count == 1 else _n_cards(item.count)))
+        elif item.kind in ("forfeit", "bankrupt"):
+            lines.append(f"{names[item.seat]} " + ("left the game" if item.kind == "forfeit" else "went bankrupt and is out"))
+    lines.append("Legal moves: " + ", ".join(legal))
+    return "\n".join(lines)
+
+
+async def ask_onecard(bot, guild_id, channel_id, character, view, names, legal, style=None) -> dict:
+    """One call on the seat's own view; returns the raw answer (the caller validates it). Raises on any failure."""
+    legal = tuple(legal)
+    request = SimpleNamespace(messages=[TurnMessage("system", ONECARD_SYSTEM.format(name=character["name"], persona=with_style(persona(character), style))),
+                                        TurnMessage("user", onecard_table_text(view, names, legal))])
+    with bot.backend.pin(), capture_usage(guild_id, channel_id, "game"), log_scope(None), log_purpose("game"):
+        return await bot.models.structured_compiled(ROLE, request, "onecard_move", onecard_schema(legal))

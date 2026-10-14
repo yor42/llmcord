@@ -1,4 +1,4 @@
-"""FEAT-44 step A: One Card on Discord, human seats only (`/game start game:onecard`, lobby, table thread, hand picker, turns, timers, settlement).
+"""FEAT-44 step A: One Card on Discord (`/game start game:onecard`, lobby, table thread, hand picker, turns, timers, settlement).
 
 TDD-red tests written before the implementation. Offline: fake channels, threads and interactions from ``helpers``, a fixed seed, the
 pure engine (``games.onecard``) used as an oracle, an in-memory store. Timers are driven by calling their hooks, never by waiting.
@@ -9,7 +9,7 @@ Assumed API (pinned here, to be created in ``llmcord_core/games_onecard_discord.
   ``bot.onecard = OneCardTables(bot, clock=time.time)``, built next to ``bot.doubt``; same attributes as DoubtTables: ``runtime``
   (``TableRuntime``: ``locks``, ``timers`` keyed ``((guild_id, table_id), kind)`` with kind in ``lobby turn archive``, ``retry_seconds``,
   ``sweeper``), ``tables``, ``threads``, ``clock``, class constants ``LOBBY_SECONDS=300 ARCHIVE_SECONDS=600 BOARD_DEBOUNCE_SECONDS=1
-  BUMP_AFTER=8`` (there is no doubt window and no character timer in step A). The turn timeout is the round's rule ``turn_timeout``.
+  BUMP_AFTER=8`` (there is no doubt window; the character timer and the character seats of step B are covered in ``test_onecard_characters.py``). The turn timeout is the round's rule ``turn_timeout``.
   Wiring: ``SkitBot.setup_hook`` awaits ``onecard.recover()`` and registers ``OneCardButton``; ``SkitBot.close`` awaits ``onecard.close()``;
   ``SkitBot.on_message`` calls ``onecard.note_thread_message(message)``; ``/game start`` offers the choice ``("One Card", "onecard")`` after
   the existing three and starts it with ``onecard.start_command(interaction, favorites)``; ``/game rules game:onecard`` answers privately with the
@@ -17,11 +17,10 @@ Assumed API (pinned here, to be created in ``llmcord_core/games_onecard_discord.
   One Card table to ``onecard.close_for_channel(guild_id, channel_id, table_id)``.
   Component: ``OneCardButton(action, table_id, round_id, moves, label="", style=..., disabled=False)``, a DynamicItem with custom id
     ``llmcord:onecard:<action>:<table>:<round>:<moves>`` (no seat in it); its callback calls ``interaction.client.onecard.press(interaction, action,
-    table_id, round_id, moves)``. Lobby buttons: Join, Leave, Start, How to play (no "Fill seats": step A seats humans only, characters come in
-    step B). The turn message has one button, "My hand" (not "Doubt"). The in-play lobby message keeps only "How to play" and says "In play".
+    table_id, round_id, moves)``. Lobby buttons: Join, Leave, Start, How to play (no "Fill seats": favorites are the only way characters sit, see step B). The turn message has one button, "My hand" (not "Doubt"). The in-play lobby message keeps only "How to play" and says "In play".
   ``start_command(interaction, favorites=False)``: lobby of 2 to 8 seats (``onecard.MIN_SEATS`` / ``MAX_SEATS``) with the round's ante and pot, the
-    host, the lobby deadline as ``<t:N:R>``; a table thread named ``One Card · table N``. ``favorites=True`` still seats humans only and says,
-    privately, that characters cannot sit at One Card tables yet (the word "character").
+    host, the lobby deadline as ``<t:N:R>``; a table thread named ``One Card · table N``. ``favorites=True`` seats the starter's favorites
+    (step B, ``test_onecard_characters.py``).
   ``press(interaction, action, table_id, round_id, moves)``: actions ``join leave start help hand``.
   ``hand_command(interaction)`` and the "My hand" button reply privately with the presser's own cards only. The reply to a seat on turn carries
     the picker (a ``discord.ui.View``): ONE ``Select`` whose option ``value`` is the card text (``onecard.card_text``, e.g. ``9♥``, ``JKb``)
@@ -370,11 +369,8 @@ class LobbyTests(OneCardCase):
         self.assertIsNone(self.table())
         self.assertEqual(self.balance(ALICE), 100)
 
-    async def test_favorites_still_seat_humans_only_and_say_so(self):
-        click = await self.start(favorites=True)
-        self.assertEqual(self.seats(), [("member", ALICE, None)])
-        self.assertTrue(any("character" in text.lower() for text in says(click)))
-        self.assertEqual(self.store.character_balance(G, self.ann), 100)
+    async def test_the_lobby_has_no_fill_seats_button_even_with_favorites(self):
+        await self.start(favorites=True)
         self.assertNotIn("Fill seats", labels(self.lobby()))
 
     async def test_another_games_table_blocks_the_channel_both_ways(self):

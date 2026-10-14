@@ -1,30 +1,35 @@
-"""One Card on Discord, human seats only (FEAT-44 step A, D39): `/game start game:One Card`, lobby, table thread, hand picker, turns, timers, settlement, recovery.
+"""One Card on Discord (FEAT-44, D39): `/game start game:One Card`, lobby, table thread, hand picker, turns, character seats, table talk, timers, settlement, recovery.
 
 Rules, money and persistence live in ``games.onecard`` and the store. The machinery mirrors ``games_doubt_discord``: every table runs
 under its own lock (store work only; no Discord call is made under it), a handler decides under the lock and builds an ``_Out`` that is
 delivered afterwards one table at a time, and timers re-check the stored state under the lock so a stale timer does nothing.
-Characters at the table, chat declarations and call-outs come in later steps.
+Characters (favorites) play by the Play style policy or, with Character moves on "model", by a structured model call on their own view
+made outside the lock; any failure falls back to the policy. Chat declarations and call-outs come in a later step.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 
 import discord
 
+from . import game_chooser
 from .admin_store import ConflictError, GameError
+from .game_talk import TalkBudget
 from .games import onecard
-from .games_discord import NO_MENTIONS, NOT_SEATED, NOT_YOUR_TURN, OFF_HERE, STALE, GameTables, _sign
+from .games_discord import NO_CHARACTER_SEATS, NO_MENTIONS, NOT_SEATED, NOT_YOUR_TURN, OFF_HERE, STALE, GameTables, _sign
 from .games_doubt_discord import MOVED_ON, NO_TABLE, THREAD_FAILED, THREAD_FORBIDDEN, THREAD_NOT_READY
 from .table_runtime import TableRuntime
 
 PREFIX = "llmcord:onecard"
 ONECARD_OFF = "One Card is off on this server."
-CHARACTERS_LATER = "Characters can't sit at One Card tables yet; only players take seats."
 NOT_A_MOVE = "Pick a card to play, or draw."
 SUIT_NAMES = {"♠": "Spades", "♥": "Hearts", "♦": "Diamonds", "♣": "Clubs"}
+_STALE = object()  # the table moved on while a decision was made: drop it
+BIG_PILE = 5  # drawing an attack's pile of this many cards or more is a key moment
 
 
 def _cards(n: int) -> str:
@@ -123,16 +128,20 @@ class _Out:
     final: tuple | None = None  # (result text, lobby text, turn text)
     advanced: bool = False  # a move was made: the turn message may be moved to the bottom
     seq: int = 0
+    talk: tuple | None = None  # (public text, is the game's end): the event turn for the characters at the table
     closing: str | None = None  # the table was closed from outside: this line goes to the thread and the turn message loses its buttons
     closed: bool = False  # the table is over: forget it once this is delivered
 
 
 class OneCardTables:
     LOBBY_SECONDS = 300
+    CHARACTER_SECONDS = 2
     ARCHIVE_SECONDS = 600
     BOARD_DEBOUNCE_SECONDS = 1
     RETRY_SECONDS = 5  # read once at construction (TableRuntime.retry_seconds); tests set runtime.retry_seconds
     BUMP_AFTER = 8
+    MODEL_SECONDS = 20
+    EVENT_COOLDOWN_SECONDS = 20
     SWEEP_SECONDS = 30
 
     def __init__(self, bot, clock=time.time):
@@ -140,9 +149,17 @@ class OneCardTables:
         self.runtime = TableRuntime(label="One Card", retry_seconds=self.RETRY_SECONDS)
         self.tables: dict[tuple[int, int], _Table] = {}
         self.threads: dict[int, tuple[int, int]] = {}  # thread id -> (guild, table) of the tables being played
+        self.banter: dict[int, tuple[int, int]] = {}  # thread id -> (guild, table) of finished games, until the archive timer
+        self.event_at: dict[tuple[int, int], float] = {}  # table -> clock time of its last event turn
+        self.event_tasks: set[asyncio.Task] = set()
         self.dirty: set[tuple[int, int]] = set()
         self.board_tasks: dict[tuple[int, int], asyncio.Task] = {}
         self.ended: set[tuple[int, int]] = set()  # tables this object closed itself (settled, timed out, left): the sweeper leaves them alone
+        self.talk = getattr(bot, 'talk_budget', None) or TalkBudget(lambda: bot.store)  # failed attempts, shared by every table game
+
+    @property
+    def talk_failed(self):
+        return self.talk.failed
 
     @property
     def store(self):
@@ -167,7 +184,7 @@ class OneCardTables:
     def arm(self, key, kind: str, delay: float, *args) -> None:
         if self.closed:
             return
-        hook = {"lobby": self.on_lobby_timer, "turn": self.on_turn_timer, "archive": self.on_archive_timer}[kind]
+        hook = {"lobby": self.on_lobby_timer, "turn": self.on_turn_timer, "character": self.on_character_timer, "archive": self.on_archive_timer}[kind]
         self.runtime.arm(key, kind, delay, self._run, kind, hook, key, args, name=f"onecard-{kind}-{key[1]}")
 
     async def _run(self, kind, hook, key, args) -> None:
@@ -176,7 +193,7 @@ class OneCardTables:
             await self._reap(key)  # the hook may have found the table closed from outside
 
     async def close(self) -> None:
-        tasks = list(self.board_tasks.values())
+        tasks = [*self.board_tasks.values(), *self.event_tasks]
         self.board_tasks.clear()
         for task in tasks:
             task.cancel()
@@ -185,9 +202,10 @@ class OneCardTables:
 
     def _release(self, key) -> None:
         """Stops the table's play timers and drops its thread. The archive timer is armed separately."""
-        for kind in ("lobby", "turn"):
+        for kind in ("lobby", "turn", "character"):
             self.runtime.disarm(key, kind)
         self.threads = {thread: k for thread, k in self.threads.items() if k != key}
+        self.event_at.pop(key, None)
         self.dirty.discard(key)
 
     def _forget(self, key) -> None:
@@ -265,15 +283,18 @@ class OneCardTables:
         table, view = self.table(key), snap["view"]
         self.runtime.disarm(key, "lobby")
         if snap["status"] != "playing" or not view or view["turn"] is None:
-            self.runtime.disarm(key, "turn")
+            for kind in ("turn", "character"):
+                self.runtime.disarm(key, kind)
             return
         if snap["seats"][view["turn"]]["kind"] == "member":
             delay = (snap["rules"] or {}).get("turn_timeout", 60)
             table.deadlines["turn"] = self.clock() + delay
             self.arm(key, "turn", delay, snap["round_id"], snap["moves"])
+            self.runtime.disarm(key, "character")
         else:
             table.deadlines.pop("turn", None)
             self.runtime.disarm(key, "turn")
+            self.arm(key, "character", self.CHARACTER_SECONDS, snap["round_id"], snap["moves"])
 
     # --- messages ---------------------------------------------------------------------------
 
@@ -528,14 +549,44 @@ class OneCardTables:
                 out.events.append(f"{self._who(before, event['seat'])} went bankrupt and is out of the game.")
         if new["status"] == "settled":
             out.final = self._result(key, new)
+            if self.talk_allowed(key[0]):
+                out.talk = (f"Game over — {self._talk_names(key[0], new)[new['view']['winner']]} won the game.", True)
             self.store.close_table(*key)
             self._forget(key)
+            if (row := self._row(key)) is not None and row["thread_id"] is not None:
+                self.banter[row["thread_id"]] = key
             self.arm(key, "archive", self.ARCHIVE_SECONDS)
         else:
             self._after(key, new)
             out.turn = self.render_turn(key, new)
             out.board = True
+            if self.clock() - self.event_at.get(key, float("-inf")) >= self.EVENT_COOLDOWN_SECONDS and self.talk_allowed(key[0]):
+                text = self._moment(key, before, new)
+                if text is not None:
+                    self.event_at[key] = self.clock()
+                    out.talk = (text, False)
         return self._seal(key, out)
+
+    def _moment(self, key, before, new) -> str | None:
+        """The public line for a key moment of the move just made (an attack, a skip or reverse, a big pile drawn, a seat down to one card), else None.
+        Names and the card played only: no hand, no markdown, no mention."""
+        old, view = before["view"], new["view"]
+        fresh = view["history"][len(old["history"]):]
+        names = self._talk_names(key[0], new)
+        play = next((e for e in fresh if e["kind"] == "play"), None)
+        drew = next((e for e in fresh if e["kind"] == "draw"), None)
+        if play is not None:
+            card, who = onecard.card_text(play["card"]), names[play["seat"]]
+            if view["pending"] and play["card"][0] in ("2", "A", "JK"):
+                return f"{who} played {card}: an attack of {view['pending']} cards."
+            if play["card"][0] == "J":
+                return f"{who} played {card} and skipped a player."
+            if play["card"][0] == "Q":
+                return f"{who} played {card} and reversed the direction."
+        if drew is not None and drew["count"] >= BIG_PILE:
+            return f"{names[drew['seat']]} drew {drew['count']} cards."
+        low = [i for i, n in enumerate(view["counts"]) if n == 1 and view["active"][i] and old["counts"][i] != 1]
+        return f"{names[low[0]]} is down to one card." if low else None
 
     async def _publish(self, key, out: _Out | None) -> None:
         """After the table lock is released: the thread lines, then the edits (an edit older than the last one sent is dropped)."""
@@ -562,11 +613,13 @@ class OneCardTables:
             if out.final:
                 result, lobby, turn = out.final
                 await self._post(thread_id, result)
+                self._talk_event(thread_id, out, key[0])
                 await self._edit(thread_id, row["turn_message_id"], content=turn, view=None)
                 self.dirty.discard(key)
                 await self._edit_board(key)
                 await self._edit(channel_id, row["message_id"], content=lobby, view=None)
                 return
+            self._talk_event(thread_id, out, key[0])
             if out.closing:
                 if out.seq > table.sent.get("turn", 0):
                     table.sent["turn"] = out.seq
@@ -580,6 +633,28 @@ class OneCardTables:
                 await self._turn_message(key, out, row)
             if out.board:
                 self._mark_board(key)
+
+    def _talk_event(self, thread_id, out, guild_id=None) -> None:
+        """Fire and forget: the characters at the table react to a public event. A move never waits for it."""
+        if out.talk is None or thread_id is None or self.closed:
+            return
+        text = out.talk[0]
+        out.talk = None
+
+        async def run():
+            try:
+                thread = await self._channel(thread_id)
+                await self.bot.run_table_event(thread, text)
+                if guild_id is not None and self.bot.store.cast_watches_games(guild_id):
+                    await self.bot.run_table_event(thread, text, spectators=True)  # FEAT-48: after the seated turn, not under it
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logging.exception("One Card event turn failed (thread %s)", thread_id)
+
+        task = asyncio.create_task(run(), name=f"onecard-event-{thread_id}")
+        self.event_tasks.add(task)
+        task.add_done_callback(self.event_tasks.discard)
 
     async def _turn_message(self, key, out, row) -> None:
         table, thread_id, old = self.table(key), row["thread_id"], row["turn_message_id"]
@@ -663,7 +738,10 @@ class OneCardTables:
         if channel_id not in self.store.game_channels(guild_id):
             await self._say(interaction, OFF_HERE)
             return
-        note = CHARACTERS_LATER if favorites else ""
+        _, binding = self.bot.location(interaction.channel)
+        space_id, note = (binding["space_id"] if binding else None), ""
+        if favorites and not binding:
+            note = NO_CHARACTER_SEATS
         try:
             opened = self.store.open_table(guild_id, channel_id, "onecard", user.id)
         except GameError as error:
@@ -674,7 +752,11 @@ class OneCardTables:
         self._ensure_sweeper()
         async with self.runtime.lock(key):
             try:
-                snap = self.store.join_round(guild_id, round_id, user.id, 0)
+                if favorites and space_id is not None:
+                    result = self.store.join_with_favorites(guild_id, round_id, user.id, 0, space_id)
+                    snap, note = result["snapshot"], self.bot.games._favorites_note(result, note)
+                else:
+                    snap = self.store.join_round(guild_id, round_id, user.id, 0)
             except GameError as error:
                 self.store.close_table(*key)
                 self._release(key)
@@ -982,9 +1064,194 @@ class OneCardTables:
                 return
         await self._publish(key, out)
 
+    # --- characters -------------------------------------------------------------------------
+
+    def _talk_budget(self, guild_id) -> int:
+        """How many model calls the table-talk daily limit still allows (0 when character table talk is off). Failed attempts count."""
+        if not self.store.game_character_talk(guild_id):
+            return 0
+        return self.talk.remaining(guild_id)
+
+    def _note_failure(self, guild_id) -> None:
+        self.talk.note_failure(guild_id)  # one counter for every table game
+
+    def _character(self, guild_id, seat):
+        character = self.store.character_by_id(seat["ref_id"])
+        return character if character is not None and character["guild_id"] == guild_id else None
+
+    def _fallback_moves(self, guild_id, snap, seat, seen) -> list:
+        """The seat's policy move, then a plain draw, then forfeit: the order the store is asked to accept them in."""
+        tried = []
+        try:
+            style = self.store.character_play_style(guild_id, snap["seats"][seat]["ref_id"])
+            tried.append((seat, onecard.policy_move(seen, snap["rules"], style, self.store.policy_seed(guild_id, snap["round_id"], f"{snap['moves']}/{seat}/character"))))
+        except Exception as error:
+            logging.warning("One Card policy move failed (%s)", type(error).__name__)
+        return [*tried, (seat, "draw"), (seat, "forfeit")]
+
+    def _apply_chain(self, key, snap, tried):
+        """Under the table lock: the first move the store accepts (a refusal falls back to the next; the last resort frees the table).
+        _STALE when the state moved on, None when nothing was accepted."""
+        for seat, move in tried:
+            try:
+                return self._apply(key, snap, seat, move, "character" if move != "forfeit" else "timeout")
+            except ConflictError:
+                return _STALE
+            except GameError as error:
+                logging.warning("One Card character move refused (%s)", type(error).__name__)
+        return None
+
+    async def _apply_fresh(self, key, round_id, moves, tried):
+        """Applies only if the table is still at the move count the decision was made for; else _STALE (dropped silently)."""
+        async with self.runtime.lock(key):
+            snap = self._timer_snap(key, round_id, moves)
+            return _STALE if snap is None else self._apply_chain(key, snap, tried)
+
+    async def on_character_timer(self, guild_id, table_id, round_id, moves) -> None:
+        """The character on turn plays. With Character moves "model", character table talk on and the daily limit not reached, the move is a model
+        call on the seat's own view made outside the table lock and applied only if the table is still at the same move count; the policy plays
+        otherwise and after any failure."""
+        key, out, plan = (guild_id, table_id), None, None
+        async with self.runtime.lock(key):
+            snap = self._timer_snap(key, round_id, moves)
+            if snap is None:
+                return
+            turn = snap["view"]["turn"]
+            if turn is None or snap["seats"][turn]["kind"] != "character":
+                return
+            seen = self.store.seat_view(guild_id, round_id, turn)
+            budget = 0 if self.store.game_character_moves(guild_id) == "style" else self._talk_budget(guild_id)  # style only: the policy plays; table talk keeps its own budget
+            if budget <= 0:
+                out = self._apply_chain(key, snap, self._fallback_moves(guild_id, snap, turn, seen))
+            else:
+                plan = turn, self._character(guild_id, snap["seats"][turn]), seen, game_chooser.holdem_names(snap), onecard.legal_moves_for_view(seen, snap["rules"])
+        if plan is not None:
+            out = await self._decide(key, snap, plan)
+        await self._publish(key, None if out is _STALE else out)
+
+    async def _decide(self, key, snap, plan):
+        guild_id, round_id, moves = key[0], snap["round_id"], snap["moves"]
+        turn, character, seen, names, legal = plan
+        tried = []
+        if character is not None:
+            style = self.store.character_play_style(guild_id, character["id"])
+            try:
+                result = await asyncio.wait_for(game_chooser.ask_onecard(self.bot, guild_id, snap["channel_id"], character, seen, names, legal, style), self.MODEL_SECONDS)
+                move = game_chooser.holdem_move(result, legal)
+                if move is not None:
+                    tried.append((turn, move))
+            except asyncio.CancelledError:
+                self._note_failure(guild_id)  # an attempt that was cut short still counts toward the limit
+                raise
+            except Exception as error:
+                move = None
+                logging.warning("One Card character move fell back to the policy (%s)", type(error).__name__)
+            if move is None:
+                self._note_failure(guild_id)
+        tried += self._fallback_moves(guild_id, snap, turn, seen)
+        return await self._apply_fresh(key, round_id, moves, tried)
+
+    # --- table talk -------------------------------------------------------------------------
+
+    def _talk_key(self, guild_id, thread_id):
+        key = self.threads.get(thread_id) or self.banter.get(thread_id)
+        return key if key is not None and key[0] == guild_id else None
+
+    def _talk_names(self, guild_id, snap) -> list:
+        """One prompt-safe name per seat, shared by the table block and the event texts: characters by name, members by their guild
+        display name (Player N when unknown); no mentions, no ids, no markdown."""
+        guild, names, players = self.bot.get_guild(guild_id), [], 0
+        for seat in snap["seats"]:
+            if seat["kind"] == "character":
+                name = seat["name"]
+            else:
+                players += 1
+                member = guild.get_member(seat["ref_id"]) if guild is not None else None
+                name = getattr(member, "display_name", None) or f"Player {players}"
+            names.append(re.sub(r"[*_~`|>@<\\]", "", name).strip() or f"Player {len(names) + 1}")
+        return names
+
+    def talk_allowed(self, guild_id) -> bool:
+        """Table talk is on and the daily limit (model calls plus failed move attempts) is not reached."""
+        return self._talk_budget(guild_id) > 0
+
+    def table_talk_context(self, guild_id, thread_id) -> dict | None:
+        """The table whose thread this is (while it is joining or played, and during the banter after the game until it is archived), else None."""
+        key = self._talk_key(guild_id, thread_id)
+        if key is None:
+            return None
+        try:
+            snap = self.store.latest_round(*key)
+        except GameError:
+            return None
+        return {"table_id": key[1], "round_id": snap["round_id"], "status": snap["status"],
+                "seated_character_ids": [s["ref_id"] for s in snap["seats"] if s["kind"] == "character"]}
+
+    def public_block(self, guild_id, key) -> str | None:
+        """FEAT-48: the third-person public view of the table (hand sizes only), for anyone not seated."""
+        try:
+            snap = self.store.latest_round(*key)
+        except GameError:
+            return None
+        return "\n".join(["A table of One Card (a card game: play a card that matches the top card's suit or rank, or draw; the first to play their last card wins).",
+                          *self._public_lines(key, snap, None)])
+
+    def table_block(self, guild_id, thread_id, character_id) -> str | None:
+        """What one seated character may know of the table: the public state and its own hand, never another seat's cards."""
+        key = self._talk_key(guild_id, thread_id)
+        if key is None:
+            return None
+        try:
+            snap = self.store.latest_round(*key)
+        except GameError:
+            return None
+        mine = next((s for s in snap["seats"] if s["kind"] == "character" and s["ref_id"] == character_id), None)
+        if mine is None:
+            return None
+        view = snap["view"]
+        lines = ["You are sitting at a table of One Card (a card game: play a card that matches the top card's suit or rank, or draw; the first to play their last card wins).",
+                 *self._public_lines(key, snap, mine["index"])]
+        if view and snap["status"] == "playing" and view["active"][mine["index"]]:
+            try:
+                hand = self.store.seat_view(key[0], snap["round_id"], mine["index"]).hand or ()
+            except GameError:
+                hand = ()
+            lines.append("Keep your hand secret unless you choose to reveal it.")
+            lines.append("Your hand: " + (", ".join(onecard.card_text(c) for c in hand) or "(no cards)"))
+        return "\n".join(lines)
+
+    def _public_lines(self, key, snap, me) -> list:
+        names, view = self._talk_names(key[0], snap), snap["view"]
+        if not view:
+            return ["The game has not started yet. Seated: " + ", ".join(names) + "."]
+
+        def who(i):
+            return names[i] + (" (you)" if i == me else "")
+        lines = []
+        if view["finished"]:
+            lines.append(f"The game is over. {who(view['winner'])} won.")
+        else:
+            lines.append(f"Top card: {onecard.card_text(view['top'])}. Suit: {_suit_text(view)}. Direction: {'clockwise' if view['direction'] > 0 else 'counter-clockwise'}.")
+            if view["pending"]:
+                lines.append(f"Pending attack: {view['pending']} cards to draw.")
+        for i, n in enumerate(view["counts"]):
+            lines.append(f"- {who(i)}: {_cards(n)}" + ("" if view["active"][i] else " (out of the game)") + (" (on turn)" if view["turn"] == i and not view["finished"] else ""))
+        recent = []
+        for item in view["history"][-6:]:
+            if item["kind"] == "play":
+                recent.append(f"{names[item['seat']]} played {onecard.card_text(item['card'])}" + (f" and named {item['suit']}" if item["suit"] else ""))
+            elif item["kind"] == "draw":
+                recent.append(f"{names[item['seat']]} drew " + ("a card" if item["count"] == 1 else f"{item['count']} cards"))
+            elif item["kind"] in ("forfeit", "bankrupt"):
+                recent.append(f"{names[item['seat']]} " + ("left the game" if item["kind"] == "forfeit" else "went bankrupt"))
+        if recent:
+            lines.append("Recent play: " + "; ".join(recent) + ".")
+        return lines
+
     async def on_archive_timer(self, guild_id, table_id) -> None:
         self.ended.discard((guild_id, table_id))
         self.tables.pop((guild_id, table_id), None)
+        self.banter = {thread: k for thread, k in self.banter.items() if k != (guild_id, table_id)}
         row = self._row((guild_id, table_id))
         if row is None or row["status"] == "open":
             return
@@ -1038,6 +1305,7 @@ class OneCardTables:
                 continue
             self._release((guild_id, table_id))
             self.tables.pop((guild_id, table_id), None)
+            self.banter = {thread: k for thread, k in self.banter.items() if k != (guild_id, table_id)}
             text = "This table closed when the bot restarted." + notes.get((guild_id, table_id), "")
             await self._edit(channel_id, message_id, content=text, view=None)
             await self._post(thread_id, text)
