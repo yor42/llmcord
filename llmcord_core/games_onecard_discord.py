@@ -4,7 +4,11 @@ Rules, money and persistence live in ``games.onecard`` and the store. The machin
 under its own lock (store work only; no Discord call is made under it), a handler decides under the lock and builds an ``_Out`` that is
 delivered afterwards one table at a time, and timers re-check the stored state under the lock so a stale timer does nothing.
 Characters (favorites) play by the Play style policy or, with Character moves on "model", by a structured model call on their own view
-made outside the lock; any failure falls back to the policy. Chat declarations and call-outs come in a later step.
+made outside the lock; any failure falls back to the policy.
+Chat declarations and call-outs (FEAT-45, D39): ``on_thread_message`` reads a seated member's message with ``spoken.onecard.read_onecard``
+(always on while a round is playing; the game's own switch is the consent) and applies a sure reading through the normal step. A declaration
+at two cards is held for the seat's next play (``DECLARE_WINDOW``). Characters declare after playing down to one card (they may forget) and
+call out exposed members after ``CALLOUT_SECONDS``, speaking through ``bot.run_table_event``.
 """
 from __future__ import annotations
 
@@ -19,9 +23,10 @@ import discord
 from . import game_chooser
 from .admin_store import ConflictError, GameError
 from .game_talk import TalkBudget
-from .games import onecard
+from .games import onecard, playstyle
 from .games_discord import NO_CHARACTER_SEATS, NO_MENTIONS, NOT_SEATED, NOT_YOUR_TURN, OFF_HERE, STALE, GameTables, _sign
 from .games_doubt_discord import MOVED_ON, NO_TABLE, THREAD_FAILED, THREAD_FORBIDDEN, THREAD_NOT_READY
+from .spoken.onecard import read_onecard
 from .table_runtime import TableRuntime
 
 PREFIX = "llmcord:onecard"
@@ -30,6 +35,8 @@ NOT_A_MOVE = "Pick a card to play, or draw."
 SUIT_NAMES = {"♠": "Spades", "♥": "Hearts", "♦": "Diamonds", "♣": "Clubs"}
 _STALE = object()  # the table moved on while a decision was made: drop it
 BIG_PILE = 5  # drawing an attack's pile of this many cards or more is a key moment
+MAX_FORGET = 0.30  # the most a character ever forgets to declare (scaled down by its Play style)
+REACTION = "✅"
 
 
 def _cards(n: int) -> str:
@@ -131,6 +138,8 @@ class _Out:
     talk: tuple | None = None  # (public text, is the game's end): the event turn for the characters at the table
     closing: str | None = None  # the table was closed from outside: this line goes to the thread and the turn message loses its buttons
     closed: bool = False  # the table is over: forget it once this is delivered
+    react: list = field(default_factory=list)  # member messages that got applied: one reaction each
+    speak: tuple | None = None  # (character id, line): said through the table talk path as that character
 
 
 class OneCardTables:
@@ -143,6 +152,8 @@ class OneCardTables:
     MODEL_SECONDS = 20
     EVENT_COOLDOWN_SECONDS = 20
     SWEEP_SECONDS = 30
+    CALLOUT_SECONDS = 3
+    DECLARE_WINDOW = 10
 
     def __init__(self, bot, clock=time.time):
         self.bot, self.clock = bot, clock
@@ -153,6 +164,7 @@ class OneCardTables:
         self.event_at: dict[tuple[int, int], float] = {}  # table -> clock time of its last event turn
         self.event_tasks: set[asyncio.Task] = set()
         self.dirty: set[tuple[int, int]] = set()
+        self.held: dict[tuple[int, int], dict] = {}  # table -> {seat: (clock time, round id, message)} of declarations made at two cards
         self.board_tasks: dict[tuple[int, int], asyncio.Task] = {}
         self.ended: set[tuple[int, int]] = set()  # tables this object closed itself (settled, timed out, left): the sweeper leaves them alone
         self.talk = getattr(bot, 'talk_budget', None) or TalkBudget(lambda: bot.store)  # failed attempts, shared by every table game
@@ -184,7 +196,7 @@ class OneCardTables:
     def arm(self, key, kind: str, delay: float, *args) -> None:
         if self.closed:
             return
-        hook = {"lobby": self.on_lobby_timer, "turn": self.on_turn_timer, "character": self.on_character_timer, "archive": self.on_archive_timer}[kind]
+        hook = {"lobby": self.on_lobby_timer, "turn": self.on_turn_timer, "character": self.on_character_timer, "callout": self.on_callout_timer, "archive": self.on_archive_timer}[kind]
         self.runtime.arm(key, kind, delay, self._run, kind, hook, key, args, name=f"onecard-{kind}-{key[1]}")
 
     async def _run(self, kind, hook, key, args) -> None:
@@ -202,8 +214,9 @@ class OneCardTables:
 
     def _release(self, key) -> None:
         """Stops the table's play timers and drops its thread. The archive timer is armed separately."""
-        for kind in ("lobby", "turn", "character"):
+        for kind in ("lobby", "turn", "character", "callout"):
             self.runtime.disarm(key, kind)
+        self.held.pop(key, None)
         self.threads = {thread: k for thread, k in self.threads.items() if k != key}
         self.event_at.pop(key, None)
         self.dirty.discard(key)
@@ -278,23 +291,37 @@ class OneCardTables:
                 await self.sweep()
         return closed
 
-    def _after(self, key, snap) -> None:
-        """Arms the timers the new state needs. Call under the table lock."""
+    def _after(self, key, snap, keep: bool = False) -> None:
+        """Arms the timers the new state needs. Call under the table lock. ``keep``: the move did not change whose turn it is (a declaration or
+        call-out), so the running turn or character timer continues with the time it had left instead of starting over."""
         table, view = self.table(key), snap["view"]
         self.runtime.disarm(key, "lobby")
         if snap["status"] != "playing" or not view or view["turn"] is None:
-            for kind in ("turn", "character"):
+            for kind in ("turn", "character", "callout"):
                 self.runtime.disarm(key, kind)
             return
+        exposed = any(snap["seats"][i]["kind"] == "member" for i in view["exposed"])
+        if exposed and any(s["kind"] == "character" and view["active"][s["index"]] for s in snap["seats"]):
+            self.arm(key, "callout", self.CALLOUT_SECONDS, snap["round_id"], snap["moves"])
+        else:
+            self.runtime.disarm(key, "callout")
         if snap["seats"][view["turn"]]["kind"] == "member":
             delay = (snap["rules"] or {}).get("turn_timeout", 60)
-            table.deadlines["turn"] = self.clock() + delay
+            if keep and "turn" in table.deadlines:
+                delay = max(0.0, table.deadlines["turn"] - self.clock())
+            else:
+                table.deadlines["turn"] = self.clock() + delay
             self.arm(key, "turn", delay, snap["round_id"], snap["moves"])
             self.runtime.disarm(key, "character")
         else:
             table.deadlines.pop("turn", None)
             self.runtime.disarm(key, "turn")
-            self.arm(key, "character", self.CHARACTER_SECONDS, snap["round_id"], snap["moves"])
+            delay = self.CHARACTER_SECONDS
+            if keep and "character" in table.deadlines:
+                delay = max(0.0, table.deadlines["character"] - self.clock())
+            else:
+                table.deadlines["character"] = self.clock() + delay
+            self.arm(key, "character", delay, snap["round_id"], snap["moves"])
 
     # --- messages ---------------------------------------------------------------------------
 
@@ -540,6 +567,8 @@ class OneCardTables:
         """Makes one move under the table lock; raises ConflictError / GameError from the store."""
         before, new = snap, self.store.play(key[0], snap["round_id"], seat, move, actor, snap["moves"])
         out = _Out(advanced=True)
+        keep = move == "declare" or move.startswith("call_out:")
+        new = self._declared_after(key, new, seat, move, actor, out)
         if note:
             out.events.append(note)
         for event in new["view"]["history"][len(before["view"]["history"]):]:
@@ -557,15 +586,54 @@ class OneCardTables:
                 self.banter[row["thread_id"]] = key
             self.arm(key, "archive", self.ARCHIVE_SECONDS)
         else:
-            self._after(key, new)
+            keep = keep and before["view"]["turn"] == new["view"]["turn"]
+            out.advanced = not keep
+            self._after(key, new, keep)
             out.turn = self.render_turn(key, new)
             out.board = True
             if self.clock() - self.event_at.get(key, float("-inf")) >= self.EVENT_COOLDOWN_SECONDS and self.talk_allowed(key[0]):
                 text = self._moment(key, before, new)
-                if text is not None:
+                if text is not None and not (out.speak and text.endswith("is down to one card.")):
                     self.event_at[key] = self.clock()
                     out.talk = (text, False)
         return self._seal(key, out)
+
+    def _declared_after(self, key, new, seat, move, actor, out):
+        """After a move: a member's held declaration (made at two cards) that this play fulfils, and a character's declaration (or slip) at one
+        card. Returns the newest snapshot. Any other move drops the held declaration."""
+        held = self.held.pop(key, None)
+        view = new["view"]
+        if not move.startswith("play:") or new["status"] != "playing" or not view or view["counts"][seat] != 1 or not view["active"][seat] or view["declared"][seat]:
+            return new
+        declare = None
+        if actor == "member":
+            hold = (held or {}).get(seat)
+            if hold and hold[1] == new["round_id"] and self.clock() - hold[0] <= self.DECLARE_WINDOW:
+                declare = "member"
+        elif actor == "character" and seat in view["exposed"]:
+            declare = "character" if self._remembers(key, new, seat) else None
+        if declare is None:
+            return new
+        try:
+            after = self.store.play(key[0], new["round_id"], seat, "declare", declare, new["moves"])
+        except (ConflictError, GameError) as error:
+            logging.info("One Card declaration refused (%s)", type(error).__name__)
+            return new
+        if declare == "member":
+            out.react.append(hold[2])
+        elif self.talk_allowed(key[0]):
+            out.speak = (new["seats"][seat]["ref_id"], f"{self._talk_names(key[0], new)[seat]} is down to one card and declares it: One card!")
+        return after
+
+    def _remembers(self, key, snap, seat) -> bool:
+        """A character at one card declares unless a seeded roll says it forgot; the chance is at most MAX_FORGET, higher for foolish, unpredictable styles."""
+        try:
+            style = self.store.resolved_play_style(key[0], snap["seats"][seat]["ref_id"])
+            chance = MAX_FORGET * (0.1 + 0.9 * (style.unit("unpredictability") + 1 - style.unit("judgment")) / 2)
+            return playstyle.roll(self.store.policy_seed(key[0], snap["round_id"], f"{snap['moves']}/{seat}/declare"), "declare") >= min(chance, MAX_FORGET)
+        except Exception as error:
+            logging.warning("One Card declaration roll failed (%s)", type(error).__name__)
+            return True
 
     def _moment(self, key, before, new) -> str | None:
         """The public line for a key moment of the move just made (an attack, a skip or reverse, a big pile drawn, a seat down to one card), else None.
@@ -593,6 +661,25 @@ class OneCardTables:
         if out is None:
             return
         await self._send(key, out)
+        for message in out.react:
+            try:
+                await message.add_reaction(REACTION)
+            except Exception as error:
+                logging.info("Could not react to a One Card declaration (%s)", type(error).__name__)
+        if out.speak is not None:
+            await self._speak(key, *out.speak)
+
+    async def _speak(self, key, character_id, text) -> None:
+        """Best effort, outside the table lock: one line from this character through the table talk path."""
+        try:
+            row = self._row(key)
+            if row is None or row["thread_id"] is None:
+                return
+            await self.bot.run_table_event(await self._channel(row["thread_id"]), text, speaker_hint=character_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logging.exception("One Card character line failed (table %s)", key[1])
 
     async def _send(self, key, out: _Out) -> None:
         table = self.tables.get(key)
@@ -1064,6 +1151,27 @@ class OneCardTables:
                 return
         await self._publish(key, out)
 
+    async def on_callout_timer(self, guild_id, table_id, round_id, moves) -> None:
+        """No human called out the exposed member in time: the first active character seat does, and says so (table talk must be allowed)."""
+        key, out = (guild_id, table_id), None
+        async with self.runtime.lock(key):
+            snap = self._timer_snap(key, round_id, moves)
+            if snap is None or not self.talk_allowed(guild_id):
+                return
+            view, seats = snap["view"], snap["seats"]
+            target = next((i for i in view["exposed"] if seats[i]["kind"] == "member" and view["active"][i]), None)
+            caller = next((s for s in seats if s["kind"] == "character" and view["active"][s["index"]]), None)
+            if target is None or caller is None:
+                return
+            names = self._talk_names(guild_id, snap)
+            try:
+                out = self._apply(key, snap, caller["index"], f"call_out:{target}", "character")
+            except (ConflictError, GameError) as error:
+                logging.info("One Card character call-out refused (%s)", type(error).__name__)
+                return
+            out.speak = (caller["ref_id"], f"{names[target]} had one card left and did not say One card. {names[caller['index']]} calls it out.")
+        await self._publish(key, out)
+
     # --- characters -------------------------------------------------------------------------
 
     def _talk_budget(self, guild_id) -> int:
@@ -1275,6 +1383,73 @@ class OneCardTables:
         key = self.threads.get(message.channel.id)
         if key is not None and message.guild is not None and message.guild.id == key[0]:
             self.table(key).talk += 1
+
+    def _reply_seat(self, message, snap, key):
+        """The seat a reply points at: a member's message maps to that member, a character's webhook message to the character of that name;
+        anything else (the table's own messages) is no target."""
+        replied = getattr(getattr(message, "reference", None), "resolved", None)
+        author = getattr(replied, "author", None)
+        if author is None:
+            return None
+        if getattr(replied, "webhook_id", None):
+            name = getattr(author, "name", None)
+            return next((s["index"] for s in snap["seats"] if s["kind"] == "character" and s["name"] == name), None)
+        if getattr(author, "bot", False):
+            return None
+        return self.store.member_seat_index(key[0], snap["round_id"], author.id)
+
+    async def on_thread_message(self, message) -> None:
+        """Reads a seated member's message in a table thread: "원카드" declares (held at two cards), a call-out makes the named (or only exposed)
+        seat's slip count. Only a sure reading acts, silently apart from one reaction; a refused move is dropped."""
+        try:
+            await self._read_message(message)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logging.exception("Reading a One Card thread message failed")
+
+    async def _read_message(self, message) -> None:
+        author = message.author
+        if author.bot or getattr(message, "webhook_id", None) or message.guild is None or not isinstance(getattr(message, "content", None), str):
+            return
+        key = self.threads.get(message.channel.id)
+        if key is None or key[0] != message.guild.id or self.closed:
+            return
+        out = None
+        async with self.runtime.lock(key):
+            if not self._open(self._row(key)) or not self.store.game_enabled(key[0], "onecard"):
+                return
+            snap = self.store.latest_round(*key)
+            view = snap["view"]
+            if snap["status"] != "playing" or not view:
+                return
+            seat = self.store.member_seat_index(key[0], snap["round_id"], author.id)
+            if seat is None or not view["active"][seat]:
+                return
+            names = self._talk_names(key[0], snap)
+            reading = read_onecard(message.content, [(i, [name]) for i, name in enumerate(names) if i != seat], self._reply_seat(message, snap, key),
+                                   (snap["rules"] or {}).get("declare_phrases"))
+            if reading.outcome != "sure":
+                return
+            try:
+                if reading.kind == "declaration":
+                    count = view["counts"][seat]
+                    if count == 2 and not view["declared"][seat]:
+                        self.held.setdefault(key, {})[seat] = (self.clock(), snap["round_id"], message)
+                        return
+                    if count != 1:
+                        return
+                    out = self._apply(key, snap, seat, "declare", "member")
+                else:
+                    target = reading.target_seat if reading.target_kind != "none" else (view["exposed"][0] if len(view["exposed"]) == 1 else None)
+                    if target is None or target == seat:
+                        return
+                    out = self._apply(key, snap, seat, f"call_out:{target}", "member")
+            except (ConflictError, GameError) as error:
+                logging.info("One Card chat move refused (%s)", type(error).__name__)
+                return
+            out.react.append(message)
+        await self._publish(key, out)
 
     # --- restart ----------------------------------------------------------------------------
 

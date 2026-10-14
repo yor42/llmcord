@@ -268,6 +268,10 @@ class SkitBot(commands.Bot):
         except Exception:
             logging.exception("Counting a One Card thread message failed")
         try:
+            await self.onecard.on_thread_message(message)
+        except Exception:
+            logging.exception("Reading a One Card declaration failed")
+        try:
             self.spoken.note_message(message)  # only schedules a background check; the message carries on to the characters
         except Exception:
             logging.exception("Scheduling a spoken-move check failed")
@@ -416,6 +420,8 @@ class SkitBot(commands.Bot):
             except Exception as error:
                 logging.warning('Table event could not read recent chat: %s', error_detail(error))
             fields = {**self._table_fields(table, watchers), 'allowed_ids': tuple(watchers), 'max_speakers': 1} if watchers else self._table_fields(table)
+            if speaker_hint is not None and not watchers and speaker_hint in fields.get('allowed_ids', ()):
+                fields = {**fields, 'forced_character_id': speaker_hint, 'max_speakers': 1}
             scene = SceneContext(guild.id, thread.id, parent_id, binding["space_id"], self.user.id if self.user else 0, _event_id(), text,
                 None, recent, [], ambient=True, user_label='Table events', event=True, created_at=time.time(), **fields)
             await self.run_scene(scene, thread)

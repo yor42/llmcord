@@ -222,7 +222,7 @@ class RulesTests(unittest.TestCase):
     def test_defaults(self):
         self.assertEqual(onecard.normalize_rules(), {
             "spade_ace_ten": False, "defense": True, "king_skips_two": True, "last_card": "none", "bankruptcy": False,
-            "bankruptcy_limit": 20, "call_out_penalty": 1, "ante": 0, "turn_timeout": 60})
+            "bankruptcy_limit": 20, "call_out_penalty": 1, "ante": 0, "turn_timeout": 60, "declare_phrases": ["원카드", "One Card"]})
         self.assertEqual(onecard.normalize_rules({}), onecard.normalize_rules(None))
         self.assertEqual(onecard.normalize_rules(onecard.DEFAULT_RULES), onecard.normalize_rules())
 

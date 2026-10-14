@@ -20,8 +20,9 @@ MIN_SEATS = 2
 MAX_SEATS = 8
 HAND = 7
 DEFAULT_RULES = {"spade_ace_ten": False, "defense": True, "king_skips_two": True, "last_card": "none", "bankruptcy": False,
-                 "bankruptcy_limit": 20, "call_out_penalty": 1, "ante": 0, "turn_timeout": 60}
+                 "bankruptcy_limit": 20, "call_out_penalty": 1, "ante": 0, "turn_timeout": 60, "declare_phrases": ["원카드", "One Card"]}
 ANTE_MAX = 10 ** 9
+PHRASES_MAX, PHRASE_LEN = 8, 30
 TIMEOUT_RANGE = (15, 300)
 BANKRUPTCY_RANGE = (15, 30)
 PENALTY_RANGE = (1, 3)
@@ -50,6 +51,10 @@ def normalize_rules(value=None):
             raise ValueError(f"{label} must be a whole number from {lo} to {hi}.")
     if type(r["ante"]) is not int or not 0 <= r["ante"] <= ANTE_MAX:
         raise ValueError(f"The ante must be a whole number from 0 to {ANTE_MAX}.")
+    phrases = r["declare_phrases"]
+    if not isinstance(phrases, (list, tuple)) or not 1 <= len(phrases) <= PHRASES_MAX or not all(isinstance(p, str) and 1 <= len(p.strip()) <= PHRASE_LEN for p in phrases):
+        raise ValueError(f"The declaration phrases must be 1 to {PHRASES_MAX} words of up to {PHRASE_LEN} characters.")
+    r["declare_phrases"] = [p.strip() for p in phrases]
     return {k: r[k] for k in DEFAULT_RULES}
 
 
@@ -499,7 +504,8 @@ def how_to_play(rules=None):
         "• J skips the next player. Q reverses the direction (with two players you go again). "
         + ("K skips two players (with four or more)." if r["king_skips_two"] else "K has no special effect."),
         "• 7 lets you name the suit the next play must follow.",
-        "• At one card, declare it (chat declarations are coming); a player who didn't can be called out, and the caller makes them draw "
+        "• At one card, say it in the thread (\"원카드\" or \"One Card\"); say it while you hold two cards and it counts when your play leaves one. A player who didn't can be called out "
+        "(\"Alice forgot one card\", or reply to their message), and the caller makes them draw "
         + f"{r['call_out_penalty']}. A wrong call-out costs the caller the same.",
     ]
     if r["last_card"] != "none":
