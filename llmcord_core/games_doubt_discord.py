@@ -21,7 +21,7 @@ from discord import app_commands
 
 from . import game_chooser
 from .admin_store import ConflictError, GameError
-from .games import blackjack, doubt
+from .games import blackjack, doubt, onecard
 from .games_discord import MAX_BET, NO_CHARACTER_SEATS, NO_MENTIONS, NOT_SEATED, NOT_YOUR_TURN, OFF_HERE, STALE, GameTables, _sign
 from .games_holdem_discord import BET_NOTE
 from .game_talk import TalkBudget
@@ -30,6 +30,7 @@ from .table_runtime import TableRuntime
 PREFIX = "llmcord:doubt"
 DOUBT_OFF = "I Doubt It is off on this server."
 ANTE_NOTE = "I Doubt It uses the server's ante; no bet needed."
+ONECARD_ANTE_NOTE = "One Card uses the server's ante; no bet needed."
 BET_NEEDED = "Blackjack needs a bet: /game start game:Blackjack bet:<amount>."
 MOVED_ON = "The table moved on — open My hand again."
 DOUBTED_FIRST = "Someone doubted first."
@@ -1498,7 +1499,7 @@ class DoubtTables:
 def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
     require_guild = ctx.require_guild
     group = app_commands.Group(name="game", description="Open a table and play")
-    choices = [app_commands.Choice(name="Blackjack", value="blackjack"), app_commands.Choice(name="I Doubt It", value="doubt"), app_commands.Choice(name="Texas Hold'em", value="holdem")]
+    choices = [app_commands.Choice(name="Blackjack", value="blackjack"), app_commands.Choice(name="I Doubt It", value="doubt"), app_commands.Choice(name="Texas Hold'em", value="holdem"), app_commands.Choice(name="One Card", value="onecard")]
 
     @group.command(name="start", description="Open a table in this channel")
     @app_commands.describe(game="Which game", bet="Blackjack only: how much to bet", favorites="Bring your favorite characters to the table")
@@ -1517,6 +1518,12 @@ def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
                 return
             await bot.holdem.start_command(interaction, favorites)
             return
+        if game == "onecard":
+            if bet is not None:
+                await bot.onecard._say(interaction, ONECARD_ANTE_NOTE)
+                return
+            await bot.onecard.start_command(interaction, favorites)
+            return
         if bet is not None:
             await bot.doubt._say(interaction, ANTE_NOTE)
             return
@@ -1526,7 +1533,7 @@ def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
     async def game_hand(interaction: discord.Interaction):
         require_guild(interaction)
         table = bot.store.table_for_thread(interaction.guild_id, interaction.channel.id) if interaction.channel else None
-        await (bot.holdem if table and table["game"] == "holdem" else bot.doubt).hand_command(interaction)
+        await {"holdem": bot.holdem, "onecard": bot.onecard}.get(table["game"] if table else None, bot.doubt).hand_command(interaction)
 
     @group.command(name="rules", description="How a game is played and the rules this server uses")
     @app_commands.describe(game="Which game")
@@ -1538,6 +1545,9 @@ def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
             text = doubt.how_to_play(rules) + "\n" + doubt.rules_text(rules)
         elif game == "holdem":
             text = bot.holdem.rules_text(interaction.guild_id)
+        elif game == "onecard":
+            rules = bot.store.game_rules(interaction.guild_id, "onecard")
+            text = onecard.how_to_play(rules) + "\n" + onecard.rules_text(rules)
         else:
             rules = bot.store.blackjack_rules(interaction.guild_id)
             text = bot.games.how_to_play(rules) + "\n" + blackjack.rules_text(rules)

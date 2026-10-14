@@ -862,6 +862,74 @@ class FlowTests(unittest.TestCase):
             onecard.replay("rp", seats(3), [(1, "draw")])
 
 
+class ForfeitTests(unittest.TestCase):
+    """FEAT-44: ``forfeit`` takes an active seat out like bankruptcy (any time, on or off turn); outcome "forfeit"."""
+
+    def test_the_turn_seat_forfeits_and_the_turn_passes_on(self):
+        s = stage(hands=[("9♣", "5♦"), ("3♠",), ("4♠",)])
+        t = onecard.apply(s, 0, "forfeit")
+        self.assertEqual((t.active, t.hands[0], t.turn, t.finished), ((False, True, True), (), 1, False))
+        self.assertEqual(len(t.draw), len(s.draw) + 2)
+        self.assertEqual(all_cards(t), all_cards(s))
+        self.assertEqual([e.kind for e in new_events(s, t)], ["forfeit"])
+        self.assertEqual(onecard.result(t).seats[0].outcome, "forfeit")
+        self.assertEqual(t, onecard.apply(s, 0, "forfeit"))
+
+    def test_a_seat_off_turn_can_forfeit_without_moving_the_turn(self):
+        s = stage(turn=1)
+        t = onecard.apply(s, 2, "forfeit")
+        self.assertEqual((t.active, t.turn, t.hands[2]), ((True, True, False), 1, ()))
+        t = onecard.apply(t, 1, "draw")
+        self.assertEqual(t.turn, 0)
+
+    def test_the_last_active_seat_wins(self):
+        s = stage(n=2)
+        t = onecard.apply(s, 0, "forfeit")
+        self.assertEqual((t.finished, t.winner, t.turn), (True, 1, None))
+        self.assertEqual([r.outcome for r in onecard.result(t).seats], ["forfeit", "win"])
+        s = stage(n=3, stake=10)
+        t = onecard.apply(onecard.apply(s, 0, "forfeit"), 1, "forfeit")
+        self.assertEqual((t.finished, t.winner), (True, 2))
+        self.assertEqual([(r.outcome, r.payout) for r in onecard.result(t).seats], [("forfeit", 0), ("forfeit", 0), ("win", 30)])
+
+    def test_a_pending_attack_goes_to_the_next_seat(self):
+        s = dataclasses.replace(stage(n=3, hands=[("9♣",), ("3♠",), ("4♠",)], top="2♥"), pending=2)
+        t = onecard.apply(s, 0, "forfeit")
+        self.assertEqual((t.turn, t.pending), (1, 2))
+        off = onecard.apply(s, 2, "forfeit")
+        self.assertEqual((off.turn, off.pending), (0, 2))
+
+    def test_a_forfeited_seat_has_no_more_moves_and_is_skipped(self):
+        s = stage()
+        t = onecard.apply(s, 1, "forfeit")
+        for move in ("forfeit", "draw", "declare"):
+            with self.assertRaises(IllegalMove):
+                onecard.apply(t, 1, move)
+        self.assertEqual(onecard.legal_moves(t, 1), ())
+        self.assertEqual(onecard.apply(t, 0, "draw").turn, 2)
+
+    def test_the_cards_go_under_the_pile_and_the_marks_clear(self):
+        s = dataclasses.replace(stage(hands=[("5♥",), ("9♣", "5♦"), None], turn=1), exposed=(0,), declared=(True, False, False))
+        t = onecard.apply(s, 0, "forfeit")
+        self.assertEqual((t.exposed, t.declared[0]), ((), False))
+        self.assertEqual(t.draw[-1:], s.hands[0])
+
+    def test_it_is_deterministic_and_replays_and_serializes(self):
+        s = mk(4, "forfeit-seed")
+        moves = [(0, "draw"), (1, "forfeit"), (2, "draw")]
+        a, b = onecard.replay("forfeit-seed", seats(4), moves), onecard.replay("forfeit-seed", seats(4), moves)
+        self.assertEqual(a, b)
+        self.assertEqual((a.active, a.turn), ((True, False, True, True), 3))
+        self.assertEqual(onecard.from_json(onecard.to_json(a)), a)
+        self.assertIn("forfeit", [e.kind for e in a.history])
+        self.assertEqual(all_cards(a), all_cards(s))
+
+    def test_a_finished_game_takes_no_forfeit(self):
+        t = onecard.apply(stage(n=2), 0, "forfeit")
+        with self.assertRaises(IllegalMove):
+            onecard.apply(t, 1, "forfeit")
+
+
 class RegistryTests(unittest.TestCase):
     def test_onecard_entry(self):
         self.assertIn("onecard", registry.keys())

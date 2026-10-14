@@ -3,7 +3,7 @@
 Pure functions over an immutable ``State``. Cards are (rank, suit) tuples; jokers are ("JK", "black") and ("JK", "color").
 A game is fully determined by (seed, seats, rules, moves). Moves: ``play:<card>`` (``play:7<suit>=<named suit>`` for a 7),
 ``draw``, ``timeout`` (the turn seat's missed turn, draws like ``draw``), ``declare`` and ``call_out:<seat>`` (any active
-seat, on or off turn; neither advances the turn).
+seat, on or off turn; neither advances the turn), ``forfeit`` (any active seat, on or off turn: it leaves the game).
 """
 import json
 from dataclasses import dataclass, field, replace
@@ -90,6 +90,12 @@ class Bankrupt:
 
 
 @dataclass(frozen=True)
+class Forfeit:
+    seat: int
+    kind: str = "forfeit"
+
+
+@dataclass(frozen=True)
 class Reshuffle:
     kind: str = "reshuffle"
 
@@ -100,7 +106,7 @@ class Win:
     kind: str = "win"
 
 
-_EVENTS = {c.__dataclass_fields__["kind"].default: c for c in (Play, Draw, Declare, Callout, Bankrupt, Reshuffle, Win)}
+_EVENTS = {c.__dataclass_fields__["kind"].default: c for c in (Play, Draw, Declare, Callout, Bankrupt, Forfeit, Reshuffle, Win)}
 
 
 @dataclass(frozen=True)
@@ -218,17 +224,16 @@ def _defends(top, card):
     return card[0] in ("2", "JK") or (card[0] == "A" and card[1] == top[1])
 
 
-def _matches(state, card):
-    top = state.discard[-1]
+def _matches(top, named, card):
     if card[0] == "JK" or top[0] == "JK":
         return True
-    if state.suit is not None:
-        return card[1] == state.suit
+    if named is not None:
+        return card[1] == named
     return card[1] == top[1] or card[0] == top[0]
 
 
-def _banned_last(state, card):
-    rule = state.rules["last_card"]
+def _banned_last(rules, card):
+    rule = rules["last_card"]
     if rule == "none":
         return False
     return card[0] in ("2", "A") or (rule == "no_attack_or_joker" and card[0] == "JK")
@@ -238,20 +243,31 @@ def _can_act(state, seat):
     return not state.finished and state.turn == seat and state.active[seat]
 
 
+def _playable(hand, top, named, pending, rules):
+    """The distinct cards of a hand that may be played now (a last card may be banned by the rules)."""
+    out = []
+    for card in dict.fromkeys(hand):
+        ok = rules["defense"] and _defends(top, card) if pending else _matches(top, named, card)
+        if ok and not (len(hand) == 1 and _banned_last(rules, card)):
+            out.append(card)
+    return out
+
+
 def legal_moves(state, seat):
     if not _can_act(state, seat):
         return ()
-    hand = state.hands[seat]
     out = []
-    for card in dict.fromkeys(hand):
-        if state.pending:
-            ok = state.rules["defense"] and _defends(state.discard[-1], card)
-        else:
-            ok = _matches(state, card)
-        if not ok or (len(hand) == 1 and _banned_last(state, card)):
-            continue
+    for card in _playable(state.hands[seat], state.discard[-1], state.suit, state.pending, state.rules):
         out.extend([play_move(card, s) for s in SUITS] if card[0] == "7" else [play_move(card)])
     return tuple(out) + ("draw",)
+
+
+def playable_cards(view, rules):
+    """The distinct cards a seat's own view could play now, as card texts (empty off turn); the named suit is the last play's."""
+    if view.hand is None or view.finished or view.turn != view.seat or not view.active[view.seat]:
+        return ()
+    named = next((e.suit for e in reversed(view.history) if e.kind == "play"), None)
+    return tuple(card_text(c) for c in _playable(view.hand, view.top, named, view.pending, normalize_rules(rules)))
 
 
 def _next(active, pos, direction, steps):
@@ -290,18 +306,31 @@ def _finish(state, winner):
     return replace(state, finished=True, winner=winner, turn=None, history=state.history + (Win(winner),))
 
 
+def _eliminate(state, seat, event, tag):
+    """Take a seat out: its hand goes under the draw pile (seed-shuffled); the lone seat left wins."""
+    back = tuple(shuffled(state.hands[seat], f"{state.seed}/{tag}/{seat}"))
+    state = replace(
+        state, active=_set(state.active, seat, False), hands=_set(state.hands, seat, ()), draw=state.draw + back,
+        declared=_set(state.declared, seat, False), exposed=tuple(x for x in state.exposed if x != seat),
+        history=state.history + (event,))
+    left = [i for i, a in enumerate(state.active) if a]
+    return _finish(state, left[0]) if len(left) == 1 else state
+
+
 def _bust(state, seat):
     """Eliminate a seat that reached the bankruptcy limit; the lone seat left wins."""
     r = state.rules
     if not r["bankruptcy"] or not state.active[seat] or len(state.hands[seat]) < r["bankruptcy_limit"]:
         return state
-    back = tuple(shuffled(state.hands[seat], f"{state.seed}/bankrupt/{seat}"))
-    state = replace(
-        state, active=_set(state.active, seat, False), hands=_set(state.hands, seat, ()), draw=state.draw + back,
-        declared=_set(state.declared, seat, False), exposed=tuple(x for x in state.exposed if x != seat),
-        history=state.history + (Bankrupt(seat),))
-    left = [i for i, a in enumerate(state.active) if a]
-    return _finish(state, left[0]) if len(left) == 1 else state
+    return _eliminate(state, seat, Bankrupt(seat), "bankrupt")
+
+
+def _forfeit(state, seat):
+    on_turn = state.turn == seat
+    state = _eliminate(state, seat, Forfeit(seat), "forfeit")
+    if not state.finished and on_turn:  # `pending` is kept, as after a bust: the next seat inherits an unanswered attack
+        state = replace(state, turn=_next(state.active, seat, state.direction, 1))
+    return state
 
 
 def _parse_target(text):
@@ -319,6 +348,8 @@ def apply(state, seat, move):
         raise IllegalMove("the game is over")
     if not state.active[seat]:
         raise IllegalMove("that seat is out of the game")
+    if move == "forfeit":
+        return _forfeit(state, seat)
     if move == "declare":
         return _declare(state, seat)
     if move.startswith("call_out:"):
@@ -384,6 +415,41 @@ def _play(state, seat, card, named):
     elif rank == "K" and state.rules["king_skips_two"] and sum(state.active) >= 4:
         steps = 3
     return replace(state, direction=direction, pending=pending, turn=_next(state.active, seat, direction, steps))
+
+
+def rules_text(rules=None):
+    """The table's rules in plain words (display only), one line. No card symbols: the line is shown in public messages."""
+    r = normalize_rules(rules)
+    bits = [f"Ante {r['ante']}" if r["ante"] else "No ante", f"{r['turn_timeout']} s per turn",
+            "defense on" if r["defense"] else "defense off", "king skips two" if r["king_skips_two"] else "king has no effect",
+            {"none": "last card unrestricted", "no_attack": "no attack as the last card", "no_attack_or_joker": "no attack or joker as the last card"}[r["last_card"]],
+            "spade ace worth 10" if r["spade_ace_ten"] else "spade ace worth 5"]
+    if r["bankruptcy"]:
+        bits.append(f"bankruptcy at {r['bankruptcy_limit']} cards")
+    bits.append(f"call-out penalty {r['call_out_penalty']}")
+    return " · ".join(bits)
+
+
+def how_to_play(rules=None):
+    r = normalize_rules(rules)
+    lines = [
+        "**One Card in short**",
+        "Be the first to play your last card. Everyone starts with 7 cards; play a card that matches the top card's suit or rank, or draw one and pass. Jokers play on anything.",
+        "• Attacks: 2 = 2 cards, A = 3, ♠A = " + ("10" if r["spade_ace_ten"] else "5") + ", black joker = 5, color joker = 7. They add up until someone draws the total and loses the turn."
+        + (" You can answer an attack with a stronger or equal defense: a 2 answers a 2 (or the A of the same suit, or a joker), an A answers an A or a joker, ♠A only a black joker, a joker another joker." if r["defense"] else " Defenses are off: you can only draw."),
+        "• J skips the next player. Q reverses the direction (with two players you go again). "
+        + ("K skips two players (with four or more)." if r["king_skips_two"] else "K has no special effect."),
+        "• 7 lets you name the suit the next play must follow.",
+        "• At one card, declare it (chat declarations are coming); a player who didn't can be called out, and the caller makes them draw "
+        + f"{r['call_out_penalty']}. A wrong call-out costs the caller the same.",
+    ]
+    if r["last_card"] != "none":
+        lines.append("• You can't finish on an attack card" + (" or a joker" if r["last_card"] == "no_attack_or_joker" else "") + ".")
+    if r["bankruptcy"]:
+        lines.append(f"• Reach {r['bankruptcy_limit']} cards and you go bankrupt: you are out and your cards go back to the pile.")
+    lines.append(f"• Take longer than {r['turn_timeout']} s and you draw and lose the turn; miss two turns in a row and you forfeit your seat.")
+    lines.append("• The last player standing, or whoever plays their last card, takes the pot" + (f" ({r['ante']} each)." if r["ante"] else "."))
+    return "\n".join(lines)
 
 
 def replay(seed, seats, moves, rules=None):

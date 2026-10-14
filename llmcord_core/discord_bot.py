@@ -42,6 +42,7 @@ from .games_spoken_discord import SpokenButton, SpokenMoves
 from .games_spoken_doubt import SpokenDoubtButton, SpokenDoubts
 from .games_doubt_discord import DoubtButton, DoubtTables, register_doubt_commands
 from .games_holdem_discord import HoldemButton, HoldemTables
+from .games_onecard_discord import OneCardButton, OneCardTables
 from .table_view import public_table_view
 from .items_discord import register_items_commands
 
@@ -170,6 +171,7 @@ class SkitBot(commands.Bot):
         self.spoken_doubt = SpokenDoubts(self)
         self.doubt = DoubtTables(self)
         self.holdem = HoldemTables(self)
+        self.onecard = OneCardTables(self)
         self.engine.table_block = self._table_block
         self.engine.talk_failed = self._note_talk_failure
         self.engine.watch_lookup = lambda guild_id, channel_id, parent_channel_id=None: public_table_view(self, guild_id, channel_id, parent_channel_id)
@@ -185,7 +187,8 @@ class SkitBot(commands.Bot):
         await self.games.recover()
         await self.doubt.recover()
         await self.holdem.recover()
-        self.add_dynamic_items(GameButton, SpokenButton, SpokenDoubtButton, DoubtButton, HoldemButton)
+        await self.onecard.recover()
+        self.add_dynamic_items(GameButton, SpokenButton, SpokenDoubtButton, DoubtButton, HoldemButton, OneCardButton)
         self.cleanup_task = asyncio.create_task(self._cleanup_loop())
 
     async def on_ready(self):
@@ -228,6 +231,10 @@ class SkitBot(commands.Bot):
         except Exception:
             logging.exception("Closing the Texas Hold'em timers failed")
         try:
+            await self.onecard.close()
+        except Exception:
+            logging.exception('Closing the One Card timers failed')
+        try:
             pending = [task for task in self.memory_tasks.values() if not task.done()]
             if pending:
                 _, pending = await asyncio.wait(pending, timeout=MEMORY_CLOSE_SECONDS)
@@ -256,6 +263,10 @@ class SkitBot(commands.Bot):
             await self.doubt.note_thread_message(message)
         except Exception:
             logging.exception("Counting a table thread message failed")
+        try:
+            await self.onecard.note_thread_message(message)
+        except Exception:
+            logging.exception("Counting a One Card thread message failed")
         try:
             self.spoken.note_message(message)  # only schedules a background check; the message carries on to the characters
         except Exception:

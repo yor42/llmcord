@@ -26,7 +26,7 @@ from discord import app_commands
 
 from .admin_store import ConflictError, GameError
 from . import game_chooser
-from .games import DefaultPolicy, blackjack
+from .games import DefaultPolicy, blackjack, registry
 from .game_talk import TalkBudget
 from .table_runtime import TableRuntime
 
@@ -638,6 +638,10 @@ class GameTables:
                 if closed is not None:  # a table opened since the look: if it was an I Doubt It one, clean it up (blackjack's own sweep covers its tables)
                     await self.bot.doubt.sweep()
                     await self.bot.holdem.sweep()
+                    await self.bot.onecard.sweep()
+                break
+            if table["game"] == "onecard":
+                closed = await self.bot.onecard.close_for_channel(guild_id, channel_id, table["id"])
                 break
             if table["game"] == "holdem":
                 closed = await self.bot.holdem.close_for_channel(guild_id, channel_id, table["id"])
@@ -656,6 +660,7 @@ class GameTables:
             if closed is not None and paint is None:  # another game's table (opened meanwhile): its own sweep says so
                 await self.bot.doubt.sweep()
                 await self.bot.holdem.sweep()
+                await self.bot.onecard.sweep()
             break
         return closed is not None, paint
 
@@ -686,7 +691,8 @@ class GameTables:
         opened = None
         table = self.store.open_table_for(guild_id, channel_id)
         if table is not None and table["game"] != "blackjack":
-            await self._say(interaction, "An I Doubt It table is open in this channel.")
+            name = registry.get(table["game"]).name
+            await self._say(interaction, f"{'An' if name[0] in 'AEIOU' else 'A'} {name} table is open in this channel.")
             return
         if table is None:
             try:
