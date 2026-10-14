@@ -9,13 +9,10 @@ from llmcord_core.admin_store import ConflictError
 from llmcord_core.games import holdem, registry
 
 
-PENDING_SECTION = ('onecard',)  # FEAT-46 adds the section; remove then
-
-
 class GamesTabSections(unittest.TestCase):
     def test_every_registered_game_has_a_section_in_registry_order(self):
-        self.assertEqual(tuple(games_ui.GAME_SECTIONS), tuple(k for k in registry.keys() if k not in PENDING_SECTION))
-        self.assertEqual(tuple(games_ui.GAME_SECTIONS), ('blackjack', 'doubt', 'holdem'))
+        self.assertEqual(tuple(games_ui.GAME_SECTIONS), tuple(registry.keys()))
+        self.assertEqual(tuple(games_ui.GAME_SECTIONS), ('blackjack', 'doubt', 'holdem', 'onecard'))
         self.assertTrue(all(callable(f) for f in games_ui.GAME_SECTIONS.values()))
 
 

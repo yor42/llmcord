@@ -23,6 +23,7 @@
 - [Blackjack](Blackjack)
 - [I Doubt It](I-Doubt-It)
 - [Texas Hold'em](Texas-Holdem)
+- [One Card](One-Card)
 
 **Admin dashboard**
 - [Overview](Dashboard-Overview)

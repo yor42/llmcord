@@ -354,6 +354,77 @@ def doubt_section(ctx):
                           reset=lambda: spoken_switch.set_value(spoken['value']))
 
 
+def parse_phrases(text):
+    """Declaration phrases from a textarea: one per line, trimmed, blank lines dropped, repeats dropped (first kept)."""
+    return list(dict.fromkeys(line.strip() for line in str(text or '').splitlines() if line.strip()))
+
+
+ONECARD_LAST_CARD = {'none': 'No restriction', 'no_attack': 'No attack cards', 'no_attack_or_joker': 'No attack cards or Jokers'}
+
+
+def onecard_section(ctx):
+    from nicegui import ui
+    from .dashboard import section
+    from .games import onecard
+    store, gid = ctx.store, ctx.guild_id
+    with section('One Card'):
+        on = {'value': store.game_enabled(gid, 'onecard')}
+        switch = ui.switch('Enabled', value=on['value'])
+        ui.label('Off: /game start refuses One Card, and open One Card tables close with every ante refunded.').classes('ll-muted')
+        def save_on():
+            result = store.set_game_enabled(gid, 'onecard', bool(switch.value), on['value'])
+            on['value'] = result['enabled']
+            return result
+        def toast(result):
+            closed = len(result['closed_tables'])
+            if closed:
+                ui.notify(f"One Card is off. Closed {closed} open {'table' if closed == 1 else 'tables'}.", type='positive')
+        ctx.savebar.track('One Card', {switch: on['value']}, save=save_on, action='games.onecard_enabled',
+                          detail=lambda result: dict(result), success='One Card setting saved',
+                          dirty=lambda: bool(switch.value) != on['value'],
+                          reset=lambda: switch.set_value(on['value']),
+                          then=toast)
+
+        rules = {'value': store.game_rules(gid, 'onecard')}
+        value = rules['value']
+        with ui.element('div').classes('ll-form-row ll-field-row'):
+            ante = ui.number('Ante', value=value['ante'], min=0, max=onecard.ANTE_MAX, precision=0, format='%d').classes('ll-wide')
+            timeout = ui.number('Turn timeout (seconds)', value=value['turn_timeout'], min=onecard.TIMEOUT_RANGE[0], max=onecard.TIMEOUT_RANGE[1], precision=0, format='%d').classes('ll-wide')
+            penalty = ui.number('Call-out penalty', value=value['call_out_penalty'], min=onecard.PENALTY_RANGE[0], max=onecard.PENALTY_RANGE[1], precision=0, format='%d').classes('ll-wide')
+            last_card = ui.select(ONECARD_LAST_CARD, label='Last card restriction', value=value['last_card']).classes('ll-wide')
+        spade = ui.switch('Spade Ace counts +10', value=value['spade_ace_ten'])
+        defense = ui.switch('Defense chain', value=value['defense'])
+        king = ui.switch('King skips two seats', value=value['king_skips_two'])
+        bankruptcy = ui.switch('Bankruptcy', value=value['bankruptcy'])
+        limit = ui.number('Bankruptcy limit', value=value['bankruptcy_limit'], min=onecard.BANKRUPTCY_RANGE[0], max=onecard.BANKRUPTCY_RANGE[1], precision=0, format='%d').classes('ll-wide')
+        limit.bind_enabled_from(bankruptcy, 'value')
+        phrases = ui.textarea('Declaration phrases (one per line)', value='\n'.join(value['declare_phrases'])).classes('ll-wide')
+        ui.label('Ante: each player pays this into the pot when joining; the winner takes the pot. 0 = no ante. Turn timeout: a player who runs out of time draws automatically. '
+                 'Call-out penalty: cards drawn by a player called out for not declaring. Last card restriction: what cannot be played as the final card. '
+                 'Bankruptcy: a player holding the limit or more cards is out. Declaration phrases: what a player writes in chat to declare One Card (up to 8). Changes apply to tables opened afterwards.').classes('ll-muted')
+        controls = (ante, timeout, penalty, last_card, spade, defense, king, bankruptcy, limit, phrases)
+        keys = ('ante', 'turn_timeout', 'call_out_penalty', 'last_card', 'spade_ace_ten', 'defense', 'king_skips_two', 'bankruptcy', 'bankruptcy_limit', 'declare_phrases')
+        def shown(key, v):
+            return '\n'.join(v) if key == 'declare_phrases' else v
+        def current():
+            return {'ante': _whole(ante.value), 'turn_timeout': _whole(timeout.value), 'call_out_penalty': _whole(penalty.value), 'last_card': last_card.value,
+                    'spade_ace_ten': bool(spade.value), 'defense': bool(defense.value), 'king_skips_two': bool(king.value), 'bankruptcy': bool(bankruptcy.value),
+                    'bankruptcy_limit': _whole(limit.value), 'declare_phrases': parse_phrases(phrases.value)}
+        def save_rules():
+            found = parse_phrases(phrases.value)
+            if not found:
+                raise ValueError('Add at least one declaration phrase.')
+            if len(found) > onecard.PHRASES_MAX:
+                raise ValueError(f'Use at most {onecard.PHRASES_MAX} declaration phrases.')
+            result = store.set_game_rules(gid, 'onecard', current(), expected=rules['value'])
+            rules['value'] = result
+            return result
+        ctx.savebar.track('One Card rules', {c: shown(k, rules['value'][k]) for c, k in zip(controls, keys)},
+                          save=save_rules, action='games.onecard_rules', detail=lambda result: dict(result), success='One Card rules saved',
+                          dirty=lambda: current() != rules['value'],
+                          reset=lambda: [c.set_value(shown(k, rules['value'][k])) for c, k in zip(controls, keys)])
+
+
 def holdem_section(ctx):
     from nicegui import ui
     from .dashboard import section
@@ -399,7 +470,7 @@ def holdem_section(ctx):
                           reset=lambda: [c.set_value(rules['value'][k]) for c, k in zip(controls, keys)])
 
 
-GAME_SECTIONS = {'blackjack': blackjack_section, 'doubt': doubt_section, 'holdem': holdem_section}
+GAME_SECTIONS = {'blackjack': blackjack_section, 'doubt': doubt_section, 'holdem': holdem_section, 'onecard': onecard_section}
 
 
 async def games_panel(ctx):
