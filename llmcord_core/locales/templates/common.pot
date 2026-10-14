@@ -66,6 +66,12 @@ msgctxt "game name"
 msgid "Texas Hold'em"
 msgstr ""
 
+#. i18n: Korean: 원카드.
+#: llmcord_core/i18n/terms.py
+msgctxt "game name"
+msgid "One Card"
+msgstr ""
+
 #: llmcord_core/i18n/terms.py
 msgctxt "game noun"
 msgid "blackjack"
@@ -82,6 +88,11 @@ msgstr ""
 #: llmcord_core/i18n/terms.py
 msgctxt "game noun"
 msgid "Texas Hold'em"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "game noun"
+msgid "One Card"
 msgstr ""
 
 #: llmcord_core/i18n/terms.py

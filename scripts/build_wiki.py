@@ -45,6 +45,7 @@ PAGES = {
     'Blackjack': [('server-guide.md', 'Blackjack')],
     'I-Doubt-It': [('server-guide.md', 'I Doubt It')],
     'Texas-Holdem': [('server-guide.md', "Texas Hold'em")],
+    'One-Card': [('server-guide.md', 'One Card')],
     'Dashboard-Overview': [('admin-console.md', '__intro__'), ('server-guide.md', 'Admin dashboard'),
                            ('admin-console.md', 'Server setup and characters'), ('admin-console.md', 'Language')],
     'Dashboard-Lore-and-Imports': [('admin-console.md', 'Lore workspace'), ('admin-console.md', 'Imports')],

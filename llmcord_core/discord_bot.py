@@ -42,6 +42,8 @@ from .games_spoken_discord import SpokenButton, SpokenMoves
 from .games_spoken_doubt import SpokenDoubtButton, SpokenDoubts
 from .games_doubt_discord import DoubtButton, DoubtTables, register_doubt_commands
 from .games_holdem_discord import HoldemButton, HoldemTables
+from .games_onecard_discord import OneCardButton, OneCardTables
+from .table_view import public_table_view
 from .items_discord import register_items_commands
 from llmcord_core import i18n
 from llmcord_core.i18n import N_, UserError, codes
@@ -181,8 +183,10 @@ class SkitBot(commands.Bot):
         self.spoken_doubt = SpokenDoubts(self)
         self.doubt = DoubtTables(self)
         self.holdem = HoldemTables(self)
+        self.onecard = OneCardTables(self)
         self.engine.table_block = self._table_block
         self.engine.talk_failed = self._note_talk_failure
+        self.engine.watch_lookup = lambda guild_id, channel_id, parent_channel_id=None: public_table_view(self, guild_id, channel_id, parent_channel_id)
         register_commands(self)
 
     async def setup_hook(self):
@@ -197,7 +201,8 @@ class SkitBot(commands.Bot):
         await self.games.recover()
         await self.doubt.recover()
         await self.holdem.recover()
-        self.add_dynamic_items(GameButton, SpokenButton, SpokenDoubtButton, DoubtButton, HoldemButton)
+        await self.onecard.recover()
+        self.add_dynamic_items(GameButton, SpokenButton, SpokenDoubtButton, DoubtButton, HoldemButton, OneCardButton)
         self.cleanup_task = asyncio.create_task(self._cleanup_loop())
 
     async def on_ready(self):
@@ -240,6 +245,10 @@ class SkitBot(commands.Bot):
         except Exception:
             logging.exception("Closing the Texas Hold'em timers failed")
         try:
+            await self.onecard.close()
+        except Exception:
+            logging.exception('Closing the One Card timers failed')
+        try:
             pending = [task for task in self.memory_tasks.values() if not task.done()]
             if pending:
                 _, pending = await asyncio.wait(pending, timeout=MEMORY_CLOSE_SECONDS)
@@ -269,6 +278,14 @@ class SkitBot(commands.Bot):
         except Exception:
             logging.exception("Counting a table thread message failed")
         try:
+            await self.onecard.note_thread_message(message)
+        except Exception:
+            logging.exception("Counting a One Card thread message failed")
+        try:
+            await self.onecard.on_thread_message(message)
+        except Exception:
+            logging.exception("Reading a One Card declaration failed")
+        try:
             self.spoken.note_message(message)  # only schedules a background check; the message carries on to the characters
         except Exception:
             logging.exception("Scheduling a spoken-move check failed")
@@ -280,8 +297,6 @@ class SkitBot(commands.Bot):
         if not binding:
             return
         game, table = self._table_game(message.guild.id, message.channel.id)
-        if table is not None and not self._table_talk_open(message.guild.id, table, game):
-            return  # the table's characters are silent (talk off, daily limit, spending cap); members still chat
         reference_id = message.reference.message_id if message.reference else None
         referenced = self.store.node(reference_id)
         if referenced and (referenced["guild_id"] != message.guild.id or referenced["channel_id"] != message.channel.id):
@@ -289,6 +304,9 @@ class SkitBot(commands.Bot):
         explicit_reply = bool(referenced and referenced["character_id"])
         mentioned = self.user in message.mentions if self.user else False
         explicit = explicit_reply or mentioned
+        spectators = self._spectator_ids(message.guild.id, table, binding["space_id"], message.channel.id, parent_id, message.author.id) if explicit else None
+        if table is not None and not self._table_talk_open(message.guild.id, table, game, bool(spectators)):
+            return  # the table's characters are silent (talk off, daily limit, spending cap); members still chat
         if not explicit and not binding["ambient"]:
             return
         if not explicit:
@@ -337,50 +355,73 @@ class SkitBot(commands.Bot):
             return
         scene = SceneContext(message.guild.id, message.channel.id, parent_id,
             binding["space_id"], message.author.id, message.id, text,
-            reference_id if referenced else None, recent, images, ambient=not explicit, user_label=message.author.display_name,
-            mentioned_users=[discord_identity(user) for user in message.mentions if not user.bot], **self._table_fields(table))
+            reference_id if referenced else None, recent, images, ambient=not explicit, user_label=message.author.display_name, rewind=is_rewind,
+            mentioned_users=[discord_identity(user) for user in message.mentions if not user.bot], **self._table_fields(table, spectators))
         async with self.channel_locks.lock(message.channel.id):
             await self.run_scene(scene, message.channel)
 
     def _table_game(self, guild_id, thread_id):
         """(the game's tables object, its table talk context) for the table that owns this thread, else (None, None)."""
-        for game in (self.doubt, self.holdem):
+        for game in (self.doubt, self.holdem, self.onecard):
             table = game.table_talk_context(guild_id, thread_id)
             if table is not None:
                 return game, table
         return None, None
 
     def _table_block(self, guild_id, thread_id, character_id):
-        block = self.doubt.table_block(guild_id, thread_id, character_id)
-        return block if block is not None else self.holdem.table_block(guild_id, thread_id, character_id)
+        for game in (self.doubt, self.holdem, self.onecard):
+            block = game.table_block(guild_id, thread_id, character_id)
+            if block is not None:
+                return block
+        return None
 
     def _note_talk_failure(self, guild_id) -> None:
         """A failed table talk attempt counts toward the guild's daily table-talk limit, which every table game shares."""
         self.talk_budget.note_failure(guild_id)
 
-    def _table_talk_open(self, guild_id, table, game) -> bool:
-        """May the characters of this table thread speak: someone is seated, table talk is on, the daily limit and the spending cap allow it."""
+    def _table_talk_open(self, guild_id, table, game, spectators=False) -> bool:
+        """May the characters of this table thread speak: someone is seated (or spectators were asked), table talk is on, the daily limit and the spending cap allow it."""
         # The limit is checked once per turn: a turn that passes with one call left may use up to 1 + max_speakers calls
         # (the director plus one dialogue per speaker). The overshoot is bounded and accepted.
-        if not table['seated_character_ids'] or not game.talk_allowed(guild_id):
+        if not (table['seated_character_ids'] or spectators) or not game.talk_allowed(guild_id):
             return False
         state = self._budget_check()
         return not (state and state.hard_reached)
 
-    @staticmethod
-    def _table_fields(table) -> dict:
-        return {} if table is None else {'allowed_ids': tuple(table['seated_character_ids']), 'usage_feature': 'game'}
+    def _spectator_ids(self, guild_id, table, space_id, channel_id, parent_id, user_id=None) -> tuple | None:
+        """FEAT-55: non-seated cast members (and the asking member's same-world favorites) who may speak in a table thread; None when the switch is off."""
+        if table is None or not self.store.cast_watches_games(guild_id):
+            return None
+        pool = [*self.store.get_cast(channel_id, parent_id), *([f['character_id'] for f in self.store.eligible_favorites(guild_id, user_id, space_id)] if user_id else [])]
+        eligible = {row['id'] for row in self.store.eligible_characters(guild_id, space_id)}
+        seated = set(table['seated_character_ids'])
+        return tuple(dict.fromkeys(ident for ident in pool if ident in eligible and ident not in seated))
 
-    async def run_table_event(self, thread, text, speaker_hint=None):
+    @staticmethod
+    def _table_fields(table, spectators=None) -> dict:
+        if table is None:
+            return {}
+        fields = {'allowed_ids': (*table['seated_character_ids'], *(spectators or ())), 'usage_feature': 'game'}
+        return {**fields, 'spectator': True} if spectators else fields
+
+    async def run_table_event(self, thread, text, speaker_hint=None, spectators=False):
         """One ambient character turn in a table thread after a public game event (a reveal, a seat down to one card, the game's end).
         Never waits: skipped when the thread is busy or the table's characters may not talk. The event is saved as a user node
-        by the table (a synthetic negative message id, author = the bot) so it sits in the scene history like a narration line."""
+        by the table (a synthetic negative message id, author = the bot) so it sits in the scene history like a narration line.
+        spectators=True (FEAT-55): one speaker chosen among the non-seated cast instead of the seated characters."""
         guild = getattr(thread, 'guild', None)
         if guild is None or not isinstance(thread, discord.Thread):
             return
         game, table = self._table_game(guild.id, thread.id)
         parent_id, binding = self.location(thread)
-        if table is None or not binding or not self._table_talk_open(guild.id, table, game):
+        if table is None or not binding:
+            return
+        watchers = None
+        if spectators:
+            watchers = self._spectator_ids(guild.id, table, binding["space_id"], thread.id, parent_id)
+            if not watchers:
+                return
+        if not self._table_talk_open(guild.id, table, game, bool(watchers)):
             return
         lock = self.channel_locks.lock(thread.id)
         if lock.locked():
@@ -392,8 +433,11 @@ class SkitBot(commands.Bot):
                 recent = await recent_human_lines(thread, self.base_settings.limits, cutoff, self.store.scene_reset_at(thread.id))
             except Exception as error:
                 logging.warning('Table event could not read recent chat: %s', error_detail(error))
+            fields = {**self._table_fields(table, watchers), 'allowed_ids': tuple(watchers), 'max_speakers': 1} if watchers else self._table_fields(table)
+            if speaker_hint is not None and not watchers and speaker_hint in fields.get('allowed_ids', ()):
+                fields = {**fields, 'forced_character_id': speaker_hint, 'max_speakers': 1}
             scene = SceneContext(guild.id, thread.id, parent_id, binding["space_id"], self.user.id if self.user else 0, _event_id(), text,
-                None, recent, [], ambient=True, user_label='Table events', event=True, created_at=time.time(), **self._table_fields(table))
+                None, recent, [], ambient=True, user_label='Table events', event=True, created_at=time.time(), **fields)
             await self.run_scene(scene, thread)
 
     @staticmethod

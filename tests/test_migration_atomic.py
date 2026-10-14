@@ -91,7 +91,7 @@ class AtomicUpgradeTests(unittest.TestCase):
             self.assertEqual(len(backups(folder)), 1)
             Store(path).close()
             after = snapshot(path)
-            self.assertEqual(after["version"], 23)
+            self.assertEqual(after["version"], 24)
             self.assertIn("catchup_anywhere", [c[1] for c in after["columns"]["guild_settings"]])
             self.assertEqual(len(backups(folder)), 2)
 
@@ -111,10 +111,10 @@ class AtomicUpgradeTests(unittest.TestCase):
                     Store(path)
             self.assertEqual(snapshot(path), before)
             Store(path).close()
-            self.assertEqual(snapshot(path)["version"], 23)
+            self.assertEqual(snapshot(path)["version"], 24)
 
     def test_two_stores_upgrading_one_file_make_one_backup(self):
-        """MNT-19: the second opener waits for the lock, sees version 23, and neither backs up nor re-adds a column."""
+        """MNT-19: the second opener waits for the lock, sees version 24, and neither backs up nor re-adds a column."""
         with tempfile.TemporaryDirectory() as folder:
             path = legacy_file(folder)
             real = Store._backfill_thread_cast_guilds
@@ -144,7 +144,7 @@ class AtomicUpgradeTests(unittest.TestCase):
             self.assertEqual(errors, [])
             self.assertEqual(len(stores), 2)
             self.assertEqual(len(backups(folder)), 1)
-            self.assertEqual(snapshot(path)["version"], 23)
+            self.assertEqual(snapshot(path)["version"], 24)
 
     def test_busy_timeout_is_restored_after_upgrade(self):
         """MNT-19: the long upgrade wait does not stay on the connection."""
@@ -169,11 +169,11 @@ class AtomicUpgradeTests(unittest.TestCase):
                              {t: sorted(tuple(c[1:]) for c in cols) for t, cols in new["columns"].items()})
 
     def test_newer_file_is_still_refused_without_a_backup(self):
-        """MNT-19: a newer file (user_version 24) raises and writes nothing."""
+        """MNT-19: a newer file (user_version 25) raises and writes nothing."""
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "new.sqlite3"
             with closing(sqlite3.connect(path)) as db, db:
-                db.execute("PRAGMA user_version=24")
+                db.execute("PRAGMA user_version=25")
             with self.assertRaisesRegex(ValueError, "newer than this application"):
                 Store(path)
             self.assertEqual(backups(folder), [])

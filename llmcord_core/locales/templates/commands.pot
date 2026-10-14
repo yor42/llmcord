@@ -399,6 +399,10 @@ msgid "Texas Hold'em"
 msgstr ""
 
 #: llmcord_core/games_doubt_discord.py
+msgid "One Card"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
 msgid "Open a table in this channel"
 msgstr ""
 

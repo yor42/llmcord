@@ -1,0 +1,18 @@
+{
+  "callout": {
+    "en": ["didn'?t (?:he |she |they |you |i )?(?:say|declare|call|shout|yell)", "did not (?:say|declare|call|shout)", "forgot(?: to (?:say|declare|call|shout))?", "failed to (?:say|declare|call|shout)"],
+    "ko": ["안\\s?(?:했|외쳤|외쳐쓰|불렀|말했)", "왜\\s?안\\s?(?:해|하|외쳐|외치|불러|부르)", "깜빡", "잊었"]
+  },
+  "callout_alone": {
+    "en": ["call ?out", "didn'?t (?:he |she |they )?declare", "did not declare", "forgot to declare"],
+    "ko": []
+  },
+  "negation": {
+    "en": [],
+    "ko": ["아(?:니|님|냐|닌)", "아직"]
+  },
+  "mention": {
+    "en": ["game", "rules?", "deck", "left", "at a time", "like", "what is", "play", "said", "says", "how to"],
+    "ko": ["게임", "규칙", "룰", "좋아", "만들", "라고", "라는", "이라", "알려", "남았"]
+  }
+}

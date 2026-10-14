@@ -21,7 +21,7 @@ from discord import app_commands
 
 from . import game_chooser
 from .admin_store import ConflictError, GameError
-from .games import blackjack, doubt
+from .games import blackjack, doubt, onecard
 from .games_discord import MAX_BET, NO_CHARACTER_SEATS, NO_MENTIONS, NOT_SEATED, NOT_YOUR_TURN, OFF_HERE, STALE, GameTables, _sign, words
 from .games_holdem_discord import BET_NOTE
 from .games_spoken_discord import VETO_NOTICE
@@ -34,6 +34,7 @@ from llmcord_core.i18n.discord_locale import C_
 PREFIX = "llmcord:doubt"
 DOUBT_OFF = N_("I Doubt It is off on this server.")
 ANTE_NOTE = N_("I Doubt It uses the server's ante; no bet needed.")
+ONECARD_ANTE_NOTE = N_("One Card uses the server's ante; no bet needed.")
 BET_NEEDED = N_("Blackjack needs a bet: /game start game:Blackjack bet:<amount>.")
 MOVED_ON = N_("The table moved on — open My hand again.")
 DOUBTED_FIRST = N_("Someone doubted first.")
@@ -667,13 +668,13 @@ class DoubtTables:
             if out.final:
                 result, lobby, turn = out.final
                 await self._post(thread_id, result)
-                self._talk_event(thread_id, out)
+                self._talk_event(thread_id, out, key[0])
                 await self._edit(thread_id, row["turn_message_id"], content=turn, view=None)
                 self.dirty.discard(key)
                 await self._edit_board(key)
                 await self._edit(channel_id, row["message_id"], content=lobby, view=None)
                 return
-            self._talk_event(thread_id, out)
+            self._talk_event(thread_id, out, key[0])
             if out.closing:
                 if out.seq > table.sent.get("turn", 0):
                     table.sent["turn"] = out.seq
@@ -688,7 +689,7 @@ class DoubtTables:
             if out.board:
                 self._mark_board(key)
 
-    def _talk_event(self, thread_id, out) -> None:
+    def _talk_event(self, thread_id, out, guild_id=None) -> None:
         """Fire and forget: the characters at the table react to a public event. A move never waits for it."""
         if out.talk is None or thread_id is None or self.closed:
             return
@@ -697,7 +698,10 @@ class DoubtTables:
 
         async def run():
             try:
-                await self.bot.run_table_event(await self._channel(thread_id), text)
+                thread = await self._channel(thread_id)
+                await self.bot.run_table_event(thread, text)
+                if guild_id is not None and self.bot.store.cast_watches_games(guild_id):
+                    await self.bot.run_table_event(thread, text, spectators=True)  # FEAT-55: after the seated turn, not under it
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -1444,6 +1448,15 @@ class DoubtTables:
         return {"table_id": key[1], "round_id": snap["round_id"], "status": snap["status"],
                 "seated_character_ids": [s["ref_id"] for s in snap["seats"] if s["kind"] == "character"]}
 
+    def public_block(self, guild_id, key) -> str | None:
+        """FEAT-55: the third-person public view of the table (face-down counts only), for anyone not seated."""
+        try:
+            snap = self.store.latest_round(*key)
+        except GameError:
+            return None
+        return "\n".join(["A table of I Doubt It (a card game of bluffing: players claim the rank to play, add cards face down, and anyone may doubt).",
+                          *self._public_lines(key, snap, None)])
+
     def table_block(self, guild_id, thread_id, character_id) -> str | None:
         """What one seated character may know of the table: the public state and its own hand, never another seat's cards."""
         key = self._talk_key(guild_id, thread_id)
@@ -1456,14 +1469,26 @@ class DoubtTables:
         mine = next((s for s in snap["seats"] if s["kind"] == "character" and s["ref_id"] == character_id), None)
         if mine is None:
             return None
+        view = snap["view"]
+        lines = ["You are sitting at a table of I Doubt It (a card game of bluffing: players claim the rank to play, add cards face down, and anyone may doubt).",
+                 *self._public_lines(key, snap, mine["index"])]
+        if view and snap["status"] == "playing" and view["active"][mine["index"]]:
+            try:
+                hand = self.store.seat_view(key[0], snap["round_id"], mine["index"]).hand or ()
+            except GameError:
+                hand = ()
+            lines.append("Keep your hand secret unless you choose to bluff about it.")
+            lines.append("Your hand: " + (", ".join(f"{r}{su}" for r, su in hand) or "(no cards)"))
+        return "\n".join(lines)
+
+    def _public_lines(self, key, snap, me) -> list:
         names, view = self._talk_names(key[0], snap), snap["view"]
-        lines = ["You are sitting at a table of I Doubt It (a card game of bluffing: players claim the rank to play, add cards face down, and anyone may doubt)."]
         if not view:
-            lines.append("The game has not started yet. Seated: " + ", ".join(names) + ".")
-            return "\n".join(lines)
+            return ["The game has not started yet. Seated: " + ", ".join(names) + "."]
 
         def who(i):
-            return names[i] + (" (you)" if i == mine["index"] else "")
+            return names[i] + (" (you)" if i == me else "")
+        lines = []
         if view["finished"]:
             lines.append(f"The game is over. {who(view['winner'])} won.")
         else:
@@ -1482,14 +1507,7 @@ class DoubtTables:
                 recent.append(f"{names[item['seat']]} claimed {_claim(item['count'], item['rank'])}")
         if recent:
             lines.append("Recent play: " + "; ".join(recent) + ".")
-        if snap["status"] == "playing" and view["active"][mine["index"]]:
-            try:
-                hand = self.store.seat_view(key[0], snap["round_id"], mine["index"]).hand or ()
-            except GameError:
-                hand = ()
-            lines.append("Keep your hand secret unless you choose to bluff about it.")
-            lines.append("Your hand: " + (", ".join(f"{r}{su}" for r, su in hand) or "(no cards)"))
-        return "\n".join(lines)
+        return lines
 
     # --- thread chat ------------------------------------------------------------------------
 
@@ -1544,7 +1562,7 @@ class DoubtTables:
 def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
     require_guild = ctx.require_guild
     group = app_commands.Group(name="game", description=C_("Open a table and play"))
-    choices = [app_commands.Choice(name=C_("Blackjack"), value="blackjack"), app_commands.Choice(name=C_("I Doubt It"), value="doubt"), app_commands.Choice(name=C_("Texas Hold'em"), value="holdem")]
+    choices = [app_commands.Choice(name=C_("Blackjack"), value="blackjack"), app_commands.Choice(name=C_("I Doubt It"), value="doubt"), app_commands.Choice(name=C_("Texas Hold'em"), value="holdem"), app_commands.Choice(name=C_("One Card"), value="onecard")]
 
     @group.command(name="start", description=C_("Open a table in this channel"))
     @app_commands.describe(game=C_("Which game"), bet=C_("Blackjack only: how much to bet"), favorites=C_("Bring your favorite characters to the table"))
@@ -1563,6 +1581,12 @@ def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
                 return
             await bot.holdem.start_command(interaction, favorites)
             return
+        if game == "onecard":
+            if bet is not None:
+                await bot.onecard._say(interaction, ONECARD_ANTE_NOTE)
+                return
+            await bot.onecard.start_command(interaction, favorites)
+            return
         if bet is not None:
             await bot.doubt._say(interaction, ANTE_NOTE)
             return
@@ -1572,7 +1596,7 @@ def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
     async def game_hand(interaction: discord.Interaction):
         require_guild(interaction)
         table = bot.store.table_for_thread(interaction.guild_id, interaction.channel.id) if interaction.channel else None
-        await (bot.holdem if table and table["game"] == "holdem" else bot.doubt).hand_command(interaction)
+        await {"holdem": bot.holdem, "onecard": bot.onecard}.get(table["game"] if table else None, bot.doubt).hand_command(interaction)
 
     @group.command(name="rules", description=C_("How a game is played and the rules this server uses"))
     @app_commands.describe(game=C_("Which game"))
@@ -1585,6 +1609,9 @@ def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
             text = "\n".join(t.render(p) for p in doubt.how_to_play_phrases(rules)) + "\n" + " · ".join(t.render(p) for p in doubt.rules_phrases(rules))
         elif game == "holdem":
             text = bot.holdem.rules_text(interaction.guild_id, t=t)
+        elif game == "onecard":
+            rules = bot.store.game_rules(interaction.guild_id, "onecard")
+            text = onecard.how_to_play(rules) + "\n" + onecard.rules_text(rules)
         else:
             rules = bot.store.blackjack_rules(interaction.guild_id)
             text = bot.games.how_to_play(rules, t=t) + "\n" + " · ".join(t.render(p) for p in blackjack.rules_phrases(rules))

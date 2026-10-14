@@ -4651,6 +4651,62 @@ class DashboardBrowserTests(unittest.TestCase):
             self.post_hook('/_test/games', {'spoken_veto': False})
             context.close()
 
+    def test_games_tab_cast_sees_item_results_switch_saves_and_persists(self):
+        """FEAT-54 B: the Games tab shows 'Cast sees item results (Experimental)' with its help line, toggling shows the save bar, Save shows the toast and persists with a games.cast_sees_item_results audit row (enabled flag only, no result text), reload shows it on, and guild 2 is untouched."""
+        import json
+        from playwright.sync_api import expect
+        other = self.state()['games']['2']
+        context, page, errors = self.open_games()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            switch = page.get_by_role('switch', name='Cast sees item results (Experimental)')
+            switch.wait_for(timeout=5000)
+            page.get_by_text('When on, characters in a channel can see the last few results (8-ball, fortune cookie, dice, tarot\u2026) used there in the past 30 minutes, so they can mention them when asked. Results are already public in the channel; the cast sees only the item name and result.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(switch.get_attribute('aria-checked'), 'false')
+            switch.click()
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Cast sees item results saved', exact=True).wait_for(timeout=5000)
+            self.assertTrue(self.state()['games']['1']['cast_sees_item_results'])
+            rows = [r for r in self.state()['audit'] if r['action'] == 'games.cast_sees_item_results']
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(json.loads(rows[0]['detail_json']), {'enabled': True})
+            self.assertEqual(self.state()['games']['2'], other)
+            page.reload()
+            expect(page.get_by_role('switch', name='Cast sees item results (Experimental)')).to_have_attribute('aria-checked', 'true', timeout=5000)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'cast_sees_item_results': False})
+            context.close()
+
+    def test_games_tab_cast_watches_games_switch_saves_and_persists(self):
+        """FEAT-55: the Games tab shows 'Cast watches games (Experimental)' after 'Cast sees item results (Experimental)', toggling shows the save bar, Save shows the toast and persists with a games.cast_watches_games audit row (enabled flag only), reload shows it on, the item-results switch and guild 2 are untouched."""
+        import json
+        from playwright.sync_api import expect
+        other = self.state()['games']['2']
+        context, page, errors = self.open_games()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            sees = page.get_by_role('switch', name='Cast sees item results (Experimental)')
+            switch = page.get_by_role('switch', name='Cast watches games (Experimental)')
+            switch.wait_for(timeout=5000)
+            self.assertLess(sees.bounding_box()['y'], switch.bounding_box()['y'])
+            self.assertEqual(switch.get_attribute('aria-checked'), 'false')
+            switch.click()
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Cast watches games saved', exact=True).wait_for(timeout=5000)
+            self.assertTrue(self.state()['games']['1']['cast_watches_games'])
+            self.assertFalse(self.state()['games']['1']['cast_sees_item_results'])
+            rows = [r for r in self.state()['audit'] if r['action'] == 'games.cast_watches_games']
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(json.loads(rows[0]['detail_json']), {'enabled': True})
+            self.assertEqual(self.state()['games']['2'], other)
+            page.reload()
+            expect(page.get_by_role('switch', name='Cast watches games (Experimental)')).to_have_attribute('aria-checked', 'true', timeout=5000)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'cast_watches_games': False})
+            context.close()
+
     def test_games_tab_keep_phrases_switch_saves_and_persists(self):
         """FEAT-37 F3: the Blackjack section shows 'Keep phrases for tuning' with its help line, Save persists with a games.spoken_keep audit row, reload shows it on, and guild 2 is untouched."""
         from playwright.sync_api import expect
@@ -4794,12 +4850,13 @@ class DashboardBrowserTests(unittest.TestCase):
         context, page, errors = self.open_games()
         try:
             bar = page.get_by_role('region', name='Unsaved changes')
+            card = page.locator('.ll-section').filter(has=page.get_by_text('I Doubt It', exact=True))  # FEAT-53: Ante and Turn timeout also exist in the One Card section
             switch = page.get_by_role('switch', name='I Doubt It is on')
             switch.wait_for(timeout=5000)
             expect(page.get_by_label('Claim rule', exact=True)).to_be_disabled()
             self.assertEqual(page.get_by_label('Claim rule', exact=True).input_value(), 'Sequence')
-            page.get_by_label('Ante', exact=True).fill('250')
-            page.get_by_label('Turn timeout (seconds)', exact=True).fill('90')
+            card.get_by_label('Ante', exact=True).fill('250')
+            card.get_by_label('Turn timeout (seconds)', exact=True).fill('90')
             bar.get_by_role('button', name='Save changes', exact=True).click()
             page.get_by_text('I Doubt It rules saved', exact=True).wait_for(timeout=5000)
             self.assertEqual(self.state()['games']['1']['doubt_rules'], {'claim_rule': 'sequence', 'ante': 250, 'turn_timeout': 90})
@@ -4813,8 +4870,8 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertEqual(self.state()['games']['2'], other)
             page.reload()
             expect(page.get_by_role('switch', name='I Doubt It is on')).to_have_attribute('aria-checked', 'false', timeout=5000)
-            expect(page.get_by_label('Ante', exact=True)).to_have_value('250', timeout=5000)
-            page.get_by_label('Ante', exact=True).fill('300')
+            expect(card.get_by_label('Ante', exact=True)).to_have_value('250', timeout=5000)
+            card.get_by_label('Ante', exact=True).fill('300')
             self.post_hook('/_test/games', {'doubt_rules': {'ante': 10}})
             bar.get_by_role('button', name='Save changes', exact=True).click()
             page.get_by_text('The I Doubt It rules were changed elsewhere. Reload the page and try again.', exact=True).wait_for(timeout=5000)
@@ -4822,6 +4879,98 @@ class DashboardBrowserTests(unittest.TestCase):
             self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
         finally:
             self.post_hook('/_test/games', {'doubt_rules': default, 'doubt_enabled': True})
+            context.close()
+
+    # FEAT-53 One Card section, exact UI text.
+    #   Section title "One Card"; switch "Enabled"; numbers "Ante", "Turn timeout (seconds)", "Bankruptcy limit", "Call-out penalty";
+    #   select "Last card restriction" with options "No restriction", "No attack cards", "No attack cards or Jokers"
+    #   (rules last_card none / no_attack / no_attack_or_joker); switches "Spade Ace counts +10", "Defense chain", "King skips two seats", "Bankruptcy";
+    #   textarea "Declaration phrases (one per line)".
+    #   Toasts "One Card setting saved" / "One Card rules saved"; audit games.onecard_enabled / games.onecard_rules (detail = the rules dict).
+    #   Phrase errors: "Add at least one declaration phrase." and "Use at most 8 declaration phrases."
+    def onecard_card(self, page):
+        return page.locator('.ll-section').filter(has=page.get_by_text('One Card', exact=True))
+
+    def test_games_tab_onecard_section_saves_rules_and_switch_persists_and_isolates_guilds(self):
+        """FEAT-53: the One Card section saves the call-out penalty, last card restriction, bankruptcy, phrases (one per line, trimmed, de-duplicated) and the Enabled switch with games.onecard_rules / games.onecard_enabled audit rows, persists after reload and leaves guild 2 alone."""
+        import json
+        from llmcord_core.games import onecard
+        from playwright.sync_api import expect
+        default = onecard.normalize_rules({})
+        other = self.state()['games']['2']
+        context, page, errors = self.open_games()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            card = self.onecard_card(page)
+            card.get_by_role('switch', name='Enabled', exact=True).wait_for(timeout=5000)
+            self.assertEqual(card.get_by_label('Call-out penalty', exact=True).input_value(), '1')
+            self.assertEqual(card.get_by_label('Declaration phrases (one per line)', exact=True).input_value(), '원카드\nOne Card')
+            card.get_by_label('Call-out penalty', exact=True).fill('2')
+            card.get_by_label('Last card restriction', exact=True).click()
+            page.get_by_role('option', name='No attack cards or Jokers', exact=True).click()
+            card.get_by_role('switch', name='Bankruptcy', exact=True).click()
+            card.get_by_label('Bankruptcy limit', exact=True).fill('25')
+            card.get_by_label('Declaration phrases (one per line)', exact=True).fill('  One Card!  \n\nWon Kadeu\nOne Card!\n')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('One Card rules saved', exact=True).wait_for(timeout=5000)
+            saved = self.state()['games']['1']['onecard_rules']
+            self.assertEqual(saved, {**default, 'call_out_penalty': 2, 'last_card': 'no_attack_or_joker', 'bankruptcy': True,
+                                     'bankruptcy_limit': 25, 'declare_phrases': ['One Card!', 'Won Kadeu']})
+            rows = [r for r in self.state()['audit'] if r['action'] == 'games.onecard_rules']
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(json.loads(rows[0]['detail_json']), saved)
+            card.get_by_role('switch', name='Enabled', exact=True).click()
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('One Card setting saved', exact=True).wait_for(timeout=5000)
+            self.assertFalse(self.state()['games']['1']['onecard_enabled'])
+            self.assertTrue(self.state()['games']['1']['doubt_enabled'])
+            self.assertIn('games.onecard_enabled', self.audit_actions())
+            self.assertEqual(self.state()['games']['2'], other)
+            page.reload()
+            card = self.onecard_card(page)
+            expect(card.get_by_role('switch', name='Enabled', exact=True)).to_have_attribute('aria-checked', 'false', timeout=5000)
+            expect(card.get_by_label('Call-out penalty', exact=True)).to_have_value('2', timeout=5000)
+            expect(card.get_by_label('Declaration phrases (one per line)', exact=True)).to_have_value('One Card!\nWon Kadeu', timeout=5000)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'onecard_rules': default, 'onecard_enabled': True})
+            context.close()
+
+    def test_games_tab_onecard_refuses_bad_values_and_stale_saves(self):
+        """FEAT-53: an out-of-range bankruptcy limit or call-out penalty, an empty phrase list and more than 8 phrases are refused with a clear message and save nothing; a stale save shows the conflict message."""
+        from llmcord_core.games import onecard
+        default = onecard.normalize_rules({})
+        context, page, errors = self.open_games()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            card = self.onecard_card(page)
+            phrases = card.get_by_label('Declaration phrases (one per line)', exact=True)
+            phrases.wait_for(timeout=5000)
+            card.get_by_role('switch', name='Bankruptcy', exact=True).click()
+            card.get_by_label('Bankruptcy limit', exact=True).fill('40')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The bankruptcy limit must be a whole number from 15 to 30.', exact=True).wait_for(timeout=5000)
+            card.get_by_label('Bankruptcy limit', exact=True).fill('20')
+            card.get_by_label('Call-out penalty', exact=True).fill('4')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The call-out penalty must be a whole number from 1 to 3.', exact=True).wait_for(timeout=5000)
+            card.get_by_label('Call-out penalty', exact=True).fill('1')
+            phrases.fill('  \n \n')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Add at least one declaration phrase.', exact=True).wait_for(timeout=5000)
+            phrases.fill('\n'.join(f'phrase {n}' for n in range(9)))
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Use at most 8 declaration phrases.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['onecard_rules'], default)
+            self.assertNotIn('games.onecard_rules', self.audit_actions())
+            phrases.fill('one phrase')
+            self.post_hook('/_test/games', {'onecard_rules': {'ante': 10}})
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The One Card rules were changed elsewhere. Reload the page and try again.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['onecard_rules']['declare_phrases'], default['declare_phrases'])
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'onecard_rules': default})
             context.close()
 
     def test_games_tab_holdem_switch_and_rules_save_persist_validate_and_conflict(self):

@@ -12,11 +12,12 @@ from .lore import estimate_tokens, lore_scopes
 from .world_info import evaluate
 from .models import DIRECTOR_SCHEMA, MEMORY_SCHEMA, ImageInput, ModelGateway, TurnMessage
 from .store import Store
-from .prompts import compile_prompt, time_values
+from .prompts import age_label, compile_prompt, time_values
 from .errors import error_detail
 from .i18n import UserError, codes
 from .usage import log_purpose, mask_for_log
 from .identity import speaker_context, user_line
+from .happenings import recent_happenings, render_happenings
 
 
 def tail_tokens(text: str, budget: int) -> str:
@@ -55,6 +56,13 @@ class SceneContext:
     usage_feature: str | None = None  # overrides the ambient/summon/reply usage label of the turn
     event: bool = False  # a table event turn: the ambient cheap gate never silences it
     created_at: float | None = None  # unix time of the turn when the message id is not a snowflake (table events)
+    spectator: bool = False  # FEAT-55: allowed_ids also holds non-seated spectators, who get the public table view
+    max_speakers: int | None = None  # FEAT-55: caps the turn's speakers below the configured limit
+    rewind: bool = False  # a reply to a non-latest character node
+    happenings_now: float | None = None  # MNT-84: fixed at the turn's first dialogue prompt; every speaker then gets the same happenings rows
+    happenings_rows: list | None = field(default=None, compare=False)
+    history_now: float | None = field(default=None, compare=False)  # MNT-85: the turn's clock for message ages, fixed at the first dialogue history
+    watch_cache: tuple | None = field(default=None, compare=False)  # FEAT-55: (view or None,) from the turn's first dialogue prompt; a 1-tuple so a None lookup is cached too
 
 
 class Engine:
@@ -63,6 +71,7 @@ class Engine:
         self.source = settings_source(settings)
         self.talk_failed = None  # (guild_id) -> counts a failed table-talk attempt toward the daily limit; set by the bot
         self.table_block = None  # (guild_id, thread_id, character_id) -> per-speaker table text or None; set by the bot
+        self.watch_lookup = None  # FEAT-55: (guild_id, channel_id, parent_channel_id) -> public table view dict or None; set by the bot
 
     @property
     def settings(self) -> Settings:
@@ -187,7 +196,7 @@ class Engine:
                 ids = [options_rows[ask.named[0]]["id"] if ask.named else (favorite_rows or options_rows)[0]["id"]]
             elif not ids and not scene.ambient:
                 ids = [options_rows[0]["id"]]
-            return [pool[ident] for ident in ids[:self.settings.limits["max_speakers"]]]
+            return [pool[ident] for ident in ids[:min(self.settings.limits["max_speakers"], scene.max_speakers or 99)]]
         except Exception as error:
             logging.error("Director failed: %s", error_detail(error))
             if scene.usage_feature == 'game' and self.talk_failed:
@@ -208,8 +217,14 @@ class Engine:
             logging.error("Image description failed: %s", error_detail(error))
             return "Image attached; description unavailable."
 
-    def history_messages(self, nodes, target_character_id):
+    def history_messages(self, nodes, target_character_id, now=None):
+        """MNT-85: with ``now``, user-role lines (never the target's own) are prefixed with their relative age."""
         history, ids, seen = [], [], {row['message_id'] for row in nodes}
+        def aged(role, text, then):
+            if now is None or role != 'user':
+                return TurnMessage(role, text)
+            label = age_label(now, then)
+            return TurnMessage(role, f'{label} {text}' if label else text)
         for row in nodes:
             # Recent human chat was observed with this ancestor, so belongs to
             # this branch even on later turns. Avoid duplicate saved messages.
@@ -218,15 +233,15 @@ class Engine:
                 if ident in seen:
                     continue
                 seen.add(ident)
-                history.append(TurnMessage('user', user_line(part.get('author_id'), part.get('author_label', ''), part.get('text', ''))))
+                history.append(aged('user', user_line(part.get('author_id'), part.get('author_label', ''), part.get('text', '')), ((ident >> 22) + 1420070400000) / 1000 if type(ident) is int else row['created_at']))
                 ids.append(ident)
             if row['character_id']:
                 speaker = self.store.character_by_id(row['character_id'])
                 label = speaker['name'] if speaker else f"Character {row['character_id']}"
                 role = 'assistant' if row['character_id'] == target_character_id else 'user'
-                history.append(TurnMessage(role, f"{label}: {row['content']}"))
+                history.append(aged(role, f"{label}: {row['content']}", row['created_at']))
             else:
-                history.append(TurnMessage('user', user_line(row['author_id'], row['author_label'], row['content'])))
+                history.append(aged('user', user_line(row['author_id'], row['author_label'], row['content']), row['created_at']))
             ids.append(row['message_id'])
         return history, ids
 
@@ -257,10 +272,46 @@ class Engine:
             except Exception as error:
                 logging.error("Branch summarization failed: %s", error_detail(error))
                 summary = (summary + "\n" + older_text)[-2000:]
-        history, history_ids = self.history_messages(unsummarized, target_character_id)
+        if scene.history_now is None:
+            # SceneContext is frozen; like happenings_now (MNT-84) the clock is set around it so every speaker of the turn reads the same ages. A rewind uses the replied-to node's time.
+            parent = self.store.node(scene.parent_message_id) if scene.rewind else None
+            object.__setattr__(scene, 'history_now', parent['created_at'] if parent else time.time())
+        history, history_ids = self.history_messages(unsummarized, target_character_id, now=scene.history_now)
         if scene.images and history:
             history[-1] = TurnMessage(history[-1].role, history[-1].text, scene.images)
         return summary, history, [row["message_id"] for row in nodes], history_ids
+
+    def happenings_block(self, scene, character, space, parent):
+        """FEAT-54: recent item results in this channel, for a speaker whose world is this space or linked into this hub; a rewind anchors at the replied-to node."""
+        if not self.store.cast_sees_item_results(scene.guild_id):
+            return ''
+        if character['world_id'] != scene.space_id and not (space['kind'] == 'hub' and character['world_id'] in self.store.allowed_worlds(scene.space_id)):
+            return ''
+        before = parent['created_at'] if scene.rewind and parent else None
+        if scene.happenings_rows is None:
+            if scene.happenings_now is None:
+                object.__setattr__(scene, 'happenings_now', before if before is not None else time.time())
+            object.__setattr__(scene, 'happenings_rows', recent_happenings(self.store, scene.guild_id, scene.channel_id, now=scene.happenings_now, before=before))
+        rows = scene.happenings_rows
+        names = {scene.user_id: scene.user_label}
+        for part in [*scene.recent, *scene.mentioned_users]:
+            if part.get('author_id') is not None:
+                names.setdefault(part['author_id'], part.get('author_label', ''))
+        return render_happenings(rows, names) or ''
+
+    def watch_block(self, scene, character, space):
+        """FEAT-55: public text of an open game table for a non-seated speaker in a normal channel; the lookup is fixed at the turn's first prompt."""
+        if not self.watch_lookup or not self.store.cast_watches_games(scene.guild_id) or (scene.allowed_ids is not None and not scene.spectator) or scene.rewind:
+            return ''
+        if scene.watch_cache is None:
+            # SceneContext is frozen; like happenings_rows (MNT-84) the cache is set around it so every speaker of the turn sees one view, even a seated first speaker.
+            object.__setattr__(scene, 'watch_cache', (self.watch_lookup(scene.guild_id, scene.channel_id, scene.parent_channel_id),))
+        view = scene.watch_cache[0]
+        if not view or character['world_id'] != scene.space_id and not (space['kind'] == 'hub' and character['world_id'] in self.store.allowed_worlds(scene.space_id)):
+            return ''
+        if character['id'] in view.get('seated_character_ids', ()):
+            return ''
+        return str(view.get('text') or '')
 
     async def prepare_dialogue(self, scene: SceneContext, character, preceding_lines: list[tuple[str, str]]):
         card = json.loads(character["card"])
@@ -320,6 +371,8 @@ class Engine:
             'speaker_identity': self.identities(scene, self.store.ancestors(scene.user_message_id)),
             # Table thread only: this speaker's own view of the game (public state + own hand), never saved or sent anywhere else.
             'table_state': (self.table_block(scene.guild_id, scene.channel_id, character['id']) or '') if scene.allowed_ids is not None and self.table_block else ''}
+        values['happenings'] = self.happenings_block(scene, character, space, parent)
+        values['watching'] = self.watch_block(scene, character, space)
         guidelines = scene.guidelines if scene.guidelines is not None else self.store.scene_guidelines(scene.guild_id, scene.space_id, scene.parent_channel_id or scene.channel_id)
         values.update({key: row['content'] for key, row in guidelines.items()})
         zone, _ = self.store.resolve_timezone(scene.guild_id, scene.user_id)
@@ -347,6 +400,10 @@ class Engine:
             "personal": [row["id"] for row in personal[-6:]] if "personal" in included else [],
             "encounters": [row["id"] for row in encounters[-6:]] if "encounters" in included else [],
             "recent": [part.get("message_id") for part in scene.recent if part.get('message_id') in used_history_ids]}
+        if values['happenings']:
+            sources['happenings'] = True
+        if values['watching'].strip():
+            sources['watching'] = True
         sources['preset'] = {'id': snapshot['id'], 'revision': snapshot['revision'], **request.trace()}
         sources['guidelines'] = {key: {field: row[field] for field in ('kind', 'owner_id', 'revision')} for key, row in guidelines.items() if key in included}
         return request, sources

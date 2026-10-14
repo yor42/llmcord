@@ -2605,6 +2605,38 @@ msgid "Summary rounds saved"
 msgstr ""
 
 #: llmcord_core/games_ui.py
+msgid "Cast sees item results (Experimental)"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "When on, characters in a channel can see the last few results (8-ball, fortune cookie, dice, tarot…) used there in the past 30 minutes, so they can mention them when asked. Results are already public in the channel; the cast sees only the item name and result."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Cast sees item results"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Cast sees item results saved"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Cast watches games (Experimental)"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Characters who are not seated can see the public state of an open game table in normal chat and answer when addressed. Never shows hands or face-down cards."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Cast watches games"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Cast watches games saved"
+msgstr ""
+
+#: llmcord_core/games_ui.py
 #, python-brace-format
 msgid "{game} is on"
 msgstr ""
@@ -2851,6 +2883,62 @@ msgstr ""
 
 #: llmcord_core/games_ui.py
 msgid "Read doubts from chat saved"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "No restriction"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "No attack cards"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "No attack cards or Jokers"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Enabled"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Off: /game start refuses One Card, and open One Card tables close with every ante refunded."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Call-out penalty"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Last card restriction"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Spade Ace counts +10"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Defense chain"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "King skips two seats"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Bankruptcy"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Bankruptcy limit"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Declaration phrases (one per line)"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Ante: each player pays this into the pot when joining; the winner takes the pot. 0 = no ante. Turn timeout: a player who runs out of time draws automatically. Call-out penalty: cards drawn by a player called out for not declaring. Last card restriction: what cannot be played as the final card. Bankruptcy: a player holding the limit or more cards is out. Declaration phrases: what a player writes in chat to declare One Card (up to 8). Changes apply to tables opened afterwards."
 msgstr ""
 
 #: llmcord_core/games_ui.py

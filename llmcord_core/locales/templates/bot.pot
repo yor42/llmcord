@@ -682,6 +682,18 @@ msgid "Characters can't sit at tables in this channel."
 msgstr ""
 
 #: llmcord_core/games_discord.py
+msgid "An I Doubt It table is open in this channel."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "A Texas Hold'em table is open in this channel."
+msgstr ""
+
+#: llmcord_core/games_discord.py
+msgid "A One Card table is open in this channel."
+msgstr ""
+
+#: llmcord_core/games_discord.py
 msgid "already at the table"
 msgstr ""
 
@@ -967,10 +979,6 @@ msgid "Bots cannot play blackjack."
 msgstr ""
 
 #: llmcord_core/games_discord.py
-msgid "An I Doubt It table is open in this channel."
-msgstr ""
-
-#: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "{name} ({stake:,})"
 msgstr ""
@@ -1020,6 +1028,10 @@ msgstr ""
 
 #: llmcord_core/games_doubt_discord.py
 msgid "I Doubt It uses the server's ante; no bet needed."
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
+msgid "One Card uses the server's ante; no bet needed."
 msgstr ""
 
 #: llmcord_core/games_doubt_discord.py
@@ -2020,6 +2032,15 @@ msgstr ""
 #: llmcord_core/games_holdem_discord.py
 #, python-brace-format
 msgid "{who} shows {cards}."
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Draw {count}"
+msgstr ""
+
+#: llmcord_core/games_onecard_discord.py
+msgid "Draw"
 msgstr ""
 
 #: llmcord_core/games_spoken_discord.py

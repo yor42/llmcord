@@ -321,6 +321,60 @@ class UseTests(ItemsBase):
         self.assertEqual(self.store.item_qty(G, U, COOKIE), 0)
         self.assertEqual(len(self.store.item_use_log(G)), 1)
 
+    def post_rows(self):
+        return [row['use_id'] for row in self.store.all('SELECT use_id FROM item_use_posts')]
+
+    async def test_slash_use_marks_the_use_posted_after_the_public_send(self):
+        """MNT-84: a use whose public post succeeded gets a post row (so the cast may see it)."""
+        self.store.buy_item(G, U, COOKIE)
+        await self.run_cmd('use', 'Fortune cookie')
+        use_id = self.store.item_use_log(G)[0]['id']
+        self.assertEqual(self.post_rows(), [use_id])
+
+    async def test_slash_use_with_failed_public_send_leaves_no_post_row(self):
+        """MNT-84: a failed public send leaves the use unposted, so the cast never sees a result nobody read."""
+        self.store.buy_item(G, U, COOKIE)
+        interaction = FakeInteraction()
+
+        async def failing(content=None, **kw):
+            if 'embed' in kw:
+                raise discord.HTTPException(SimpleNamespace(status=500, reason='x'), 'boom')
+            interaction.response.sent.append((content, kw))
+        interaction.response.send_message = failing
+        with self.assertLogs(level='WARNING'):
+            await invoke(self.bot, 'use', interaction, 'Fortune cookie')
+        self.assertEqual(len(self.store.item_use_log(G)), 1)
+        self.assertEqual(self.post_rows(), [])
+
+    async def test_refused_use_creates_no_use_and_no_post_row(self):
+        """MNT-84: a refusal (not held) writes neither a use nor a post row."""
+        await self.run_cmd('use', 'dice')
+        self.assertEqual(self.store.item_use_log(G), [])
+        self.assertEqual(self.post_rows(), [])
+
+    async def test_button_use_marks_posted_after_the_channel_message(self):
+        """MNT-84: the menu-button (via_channel) path also records the post."""
+        self.store.buy_item(G, U, COOKIE)
+        inv = await self.run_cmd('inventory')
+        click = FakeButtonInteraction()
+        await self.button(inv.response.sent[0][1]['view'], 'Fortune cookie').callback(click)
+        self.assertEqual(len(click.posts), 1)
+        self.assertEqual(self.post_rows(), [self.store.item_use_log(G)[0]['id']])
+
+    async def test_button_use_with_failed_channel_send_leaves_no_post_row(self):
+        """MNT-84: the via_channel path marks nothing when the channel send raises."""
+        self.store.buy_item(G, U, COOKIE)
+        inv = await self.run_cmd('inventory')
+        click = FakeButtonInteraction()
+
+        async def boom(**kw):
+            raise discord.Forbidden(SimpleNamespace(status=403, reason='x'), 'no')
+        click.channel.send = boom
+        with self.assertLogs(level='WARNING'):
+            await self.button(inv.response.sent[0][1]['view'], 'Fortune cookie').callback(click)
+        self.assertEqual(len(self.store.item_use_log(G)), 1)
+        self.assertEqual(self.post_rows(), [])
+
     async def test_autocomplete_held_only_and_guild_scoped(self):
         self.store.buy_item(G, U, BALL)
         self.store.buy_item(G, U, DICE)

@@ -1714,3 +1714,46 @@ msgstr "봇 환경에 {env:이/가} 설정되지 않았어요 (프로필 {profil
 msgid "{env} is not set in the dashboard's environment (profile {profile})"
 msgstr "대시보드 환경에 {env:이/가} 설정되지 않았어요 (프로필 {profile})"
 
+#: llmcord_core/i18n/codes.py
+msgid "The One Card rules must be a set of options."
+msgstr "원카드 규칙은 옵션 묶음이어야 해요."
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The option {name} must be on or off."
+msgstr "{name} 설정은 켜짐 또는 꺼짐이어야 해요."
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The last card rule must be one of {choices}."
+msgstr "마지막 카드 규칙은 {choices} 중 하나여야 해요."
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The bankruptcy limit must be a whole number from {low} to {high}."
+msgstr "파산 한도는 {low}부터 {high}까지의 정수여야 해요."
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The call-out penalty must be a whole number from {low} to {high}."
+msgstr "지적 벌칙은 {low}부터 {high}까지의 정수여야 해요."
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The turn timeout must be a whole number from {low} to {high}."
+msgstr "차례 제한 시간은 {low}부터 {high}까지의 정수여야 해요."
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The declaration phrases must be 1 to {limit} words of up to {length} characters."
+msgstr "선언 문구는 1~{limit}개, 각각 {length}자 이하여야 해요."
+
+#: llmcord_core/i18n/codes.py
+msgid "Add at least one declaration phrase."
+msgstr "선언 문구를 하나 이상 추가하세요."
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Use at most {limit} declaration phrases."
+msgstr "선언 문구는 최대 {limit}개까지 쓸 수 있어요."
+

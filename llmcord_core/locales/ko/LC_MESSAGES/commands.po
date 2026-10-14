@@ -407,6 +407,10 @@ msgid "Texas Hold'em"
 msgstr "텍사스 홀덤"
 
 #: llmcord_core/games_doubt_discord.py
+msgid "One Card"
+msgstr "원카드"
+
+#: llmcord_core/games_doubt_discord.py
 msgid "Open a table in this channel"
 msgstr "이 채널에 테이블 열기"
 

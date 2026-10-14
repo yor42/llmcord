@@ -43,7 +43,7 @@ class V16UpgradeTests(unittest.TestCase):
             path = self.v16_file(folder)
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 23)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 24)
                 self.assertEqual(len(list(Path(folder).glob("v16.sqlite3.pre-v17-*.sqlite3"))), 1)
                 self.assertFalse(store.blackjack_enabled(1))
                 self.assertTrue(store.blackjack_enabled(2))
@@ -110,7 +110,7 @@ class RegistryTests(unittest.TestCase):
         self.store.set_game_channel(G, CH, True)
 
     def test_registry_entries(self):
-        self.assertEqual(registry.keys(), ("blackjack", "doubt", "holdem"))
+        self.assertEqual(registry.keys(), ("blackjack", "doubt", "holdem", "onecard"))
         game = registry.get("blackjack")
         self.assertEqual((game.name, game.ledger_label, game.max_seats, game.default_enabled), ("Blackjack", "Blackjack", 7, True))
         with self.assertRaises(KeyError):

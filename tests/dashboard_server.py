@@ -277,6 +277,10 @@ def main():
             store.set_game_summary_rounds(body.get('guild', 1), body['summary_rounds'])
         if 'character_moves' in body:
             store.set_game_character_moves(body.get('guild', 1), body['character_moves'])
+        if 'cast_sees_item_results' in body:
+            store.set_cast_sees_item_results(body.get('guild', 1), body['cast_sees_item_results'])
+        if 'cast_watches_games' in body:
+            store.set_cast_watches_games(body.get('guild', 1), body['cast_watches_games'])
         if 'spoken_doubt' in body:
             store.set_spoken_doubt_enabled(body.get('guild', 1), body['spoken_doubt'])
         if 'spoken_moves' in body:
@@ -306,6 +310,10 @@ def main():
             store.set_game_enabled(body.get('guild', 1), 'holdem', body['holdem_enabled'])
         if 'holdem_rules' in body:
             store.set_game_rules(body.get('guild', 1), 'holdem', body['holdem_rules'])
+        if 'onecard_enabled' in body:
+            store.set_game_enabled(body.get('guild', 1), 'onecard', body['onecard_enabled'])
+        if 'onecard_rules' in body:
+            store.set_game_rules(body.get('guild', 1), 'onecard', body['onecard_rules'])
         return {}
 
     @app.post('/_test/game-table')
@@ -381,7 +389,7 @@ def main():
             'books': [dict(r) for r in store.all('SELECT * FROM lorebook_entries')],
             'presets': [dict(r) for r in store.list_presets(1)], 'active': store.active_preset(1)['id'],
             'active_bundle': store.active_preset(1)['bundle'], 'assets': [dict(r) for r in store.all('SELECT * FROM avatar_assets')],
-            'guild2_spaces': [dict(r) for r in originals['list_spaces'](2)], 'cast_limits': {g: store.cast_limits(g) for g in (1, 2)}, 'archived_favorites': {g: store.archived_favorites(g) for g in (1, 2)}, 'daily': {g: store.daily_settings(g) for g in (1, 2)}, 'refill_cap': {g: store.refill_cap(g) for g in (1, 2)}, 'games': {g: {**store.game_settings(g), 'channels': sorted(store.game_channels(g)), 'character_talk': store.game_character_talk(g), 'character_moves': store.game_character_moves(g), 'talk_limit': store.game_talk_daily_limit(g), 'summary_rounds': store.game_summary_rounds(g), 'blackjack_enabled': store.blackjack_enabled(g), 'spoken_moves': store.spoken_moves_enabled(g), 'spoken_doubt': store.spoken_doubt_enabled(g), 'spoken_keep': store.spoken_keep_phrases(g), 'spoken_veto': store.spoken_veto_enabled(g), 'kept_phrases': [p['text'] for p in store.spoken_phrases(g)], 'examples': [(e['text'], e['label']) for e in store.spoken_examples(g, 'blackjack')], 'blackjack_rules': store.blackjack_rules(g), 'doubt_enabled': store.game_enabled(g, 'doubt'), 'doubt_rules': store.game_rules(g, 'doubt'), 'holdem_enabled': store.game_enabled(g, 'holdem'), 'holdem_rules': store.game_rules(g, 'holdem')} for g in (1, 2)}, 'shop': {g: {'hold_cap': store.item_hold_cap(g), 'items': {e['key']: e for e in store.shop_catalog(g)}} for g in (1, 2)}, 'guild_timezone': store.guild_timezone(1), 'guild_language': store.server_language(1), 'catchup_anywhere': store.catchup_anywhere(1), 'turn_log': store.turn_log_settings(1), 'audit': [dict(r) for r in store.all('SELECT * FROM admin_audit ORDER BY id')],
+            'guild2_spaces': [dict(r) for r in originals['list_spaces'](2)], 'cast_limits': {g: store.cast_limits(g) for g in (1, 2)}, 'archived_favorites': {g: store.archived_favorites(g) for g in (1, 2)}, 'daily': {g: store.daily_settings(g) for g in (1, 2)}, 'refill_cap': {g: store.refill_cap(g) for g in (1, 2)}, 'games': {g: {**store.game_settings(g), 'channels': sorted(store.game_channels(g)), 'character_talk': store.game_character_talk(g), 'character_moves': store.game_character_moves(g), 'talk_limit': store.game_talk_daily_limit(g), 'summary_rounds': store.game_summary_rounds(g), 'blackjack_enabled': store.blackjack_enabled(g), 'spoken_moves': store.spoken_moves_enabled(g), 'spoken_doubt': store.spoken_doubt_enabled(g), 'cast_sees_item_results': store.cast_sees_item_results(g), 'cast_watches_games': store.cast_watches_games(g), 'spoken_keep': store.spoken_keep_phrases(g), 'spoken_veto': store.spoken_veto_enabled(g), 'kept_phrases': [p['text'] for p in store.spoken_phrases(g)], 'examples': [(e['text'], e['label']) for e in store.spoken_examples(g, 'blackjack')], 'blackjack_rules': store.blackjack_rules(g), 'doubt_enabled': store.game_enabled(g, 'doubt'), 'doubt_rules': store.game_rules(g, 'doubt'), 'holdem_enabled': store.game_enabled(g, 'holdem'), 'holdem_rules': store.game_rules(g, 'holdem'), 'onecard_enabled': store.game_enabled(g, 'onecard'), 'onecard_rules': store.game_rules(g, 'onecard')} for g in (1, 2)}, 'shop': {g: {'hold_cap': store.item_hold_cap(g), 'items': {e['key']: e for e in store.shop_catalog(g)}} for g in (1, 2)}, 'guild_timezone': store.guild_timezone(1), 'guild_language': store.server_language(1), 'catchup_anywhere': store.catchup_anywhere(1), 'turn_log': store.turn_log_settings(1), 'audit': [dict(r) for r in store.all('SELECT * FROM admin_audit ORDER BY id')],
             'play_styles': {r['id']: (dataclasses.asdict(style) if (style := store.character_play_style(r['guild_id'], r['id'])) else None) for r in store.all('SELECT id,guild_id FROM characters')},
             'model_profiles': [dict(r) for r in store.model_profile_rows()], 'model_roles': dict(store.model_roles()),
             'slots': [{'character_id': r['character_id'], 'slot_key': r['slot_key'], 'label': r['label'], 'has_image': bool(r['image'])} for r in store.all('SELECT * FROM avatar_slots')]}

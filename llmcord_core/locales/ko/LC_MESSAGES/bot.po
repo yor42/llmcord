@@ -685,6 +685,18 @@ msgid "Characters can't sit at tables in this channel."
 msgstr "이 채널에서는 캐릭터가 테이블에 앉을 수 없어요."
 
 #: llmcord_core/games_discord.py
+msgid "An I Doubt It table is open in this channel."
+msgstr "이 채널에 다우트 테이블이 열려 있어요."
+
+#: llmcord_core/games_discord.py
+msgid "A Texas Hold'em table is open in this channel."
+msgstr "이 채널에 텍사스 홀덤 테이블이 열려 있어요."
+
+#: llmcord_core/games_discord.py
+msgid "A One Card table is open in this channel."
+msgstr "이 채널에 원카드 테이블이 열려 있어요."
+
+#: llmcord_core/games_discord.py
 msgid "already at the table"
 msgstr "이미 테이블에 있음"
 
@@ -970,10 +982,6 @@ msgid "Bots cannot play blackjack."
 msgstr "봇은 블랙잭을 할 수 없어요."
 
 #: llmcord_core/games_discord.py
-msgid "An I Doubt It table is open in this channel."
-msgstr "이 채널에 다우트 테이블이 열려 있어요."
-
-#: llmcord_core/games_discord.py
 #, python-brace-format
 msgid "{name} ({stake:,})"
 msgstr "{name} ({stake:,})"
@@ -1024,6 +1032,10 @@ msgstr "이 서버에서는 다우트가 꺼져 있어요."
 #: llmcord_core/games_doubt_discord.py
 msgid "I Doubt It uses the server's ante; no bet needed."
 msgstr "다우트는 서버의 판돈 설정을 사용해서 베팅이 필요 없어요."
+
+#: llmcord_core/games_doubt_discord.py
+msgid "One Card uses the server's ante; no bet needed."
+msgstr "원카드는 서버의 판돈 설정을 사용해서 베팅이 필요 없어요."
 
 #: llmcord_core/games_doubt_discord.py
 msgid "Blackjack needs a bet: /game start game:Blackjack bet:<amount>."
@@ -2026,6 +2038,15 @@ msgstr "총 베팅액 (예: 35)"
 #, python-brace-format
 msgid "{who} shows {cards}."
 msgstr "{who:이/가} 카드를 공개했어요: {cards}"
+
+#: llmcord_core/games_onecard_discord.py
+#, python-brace-format
+msgid "Draw {count}"
+msgstr "{count}장 받기"
+
+#: llmcord_core/games_onecard_discord.py
+msgid "Draw"
+msgstr "카드 받기"
 
 #: llmcord_core/games_spoken_discord.py
 msgid "This isn't your move check."

@@ -29,10 +29,13 @@ GAME_BLACKJACK = NP_('game name', 'Blackjack')
 # i18n: Korean: 다우트 (카드게임), or 다우트(Doubt) if the glossary picks it. 다우트 alone reads as the word "doubt"; the suffix marks the card game. See i18n-plan.md section 5.
 GAME_DOUBT = NP_('game name', 'I Doubt It')
 GAME_HOLDEM = NP_('game name', "Texas Hold'em")
+# i18n: Korean: 원카드.
+GAME_ONECARD = NP_('game name', 'One Card')
 NOUN_BLACKJACK = NP_('game noun', 'blackjack')
 # i18n: Korean: plain 다우트, without (카드게임). It sits inside a sentence and takes particles ({game:이/가}); a closing parenthesis would break the particle choice.
 NOUN_DOUBT = NP_('game noun', 'I Doubt It')
 NOUN_HOLDEM = NP_('game noun', "Texas Hold'em")
+NOUN_ONECARD = NP_('game noun', 'One Card')
 
 # Poker ranks by card value (2..14), singular and plural, and the nine hand categories (index = category).
 POKER_RANK = {

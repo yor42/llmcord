@@ -37,7 +37,7 @@ class Control:
 
 class FakeUi:
     def __getattr__(self, name):
-        if name in {'number', 'switch', 'select', 'input'}:
+        if name in {'number', 'switch', 'select', 'input', 'textarea'}:
             return lambda *args, value=None, **kwargs: Control(value)
         if name == 'refreshable':
             return _Refreshable

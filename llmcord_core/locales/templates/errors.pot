@@ -1706,3 +1706,46 @@ msgstr ""
 msgid "{env} is not set in the dashboard's environment (profile {profile})"
 msgstr ""
 
+#: llmcord_core/i18n/codes.py
+msgid "The One Card rules must be a set of options."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The option {name} must be on or off."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The last card rule must be one of {choices}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The bankruptcy limit must be a whole number from {low} to {high}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The call-out penalty must be a whole number from {low} to {high}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The turn timeout must be a whole number from {low} to {high}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The declaration phrases must be 1 to {limit} words of up to {length} characters."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Add at least one declaration phrase."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Use at most {limit} declaration phrases."
+msgstr ""
+

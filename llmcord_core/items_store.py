@@ -234,6 +234,11 @@ class ItemsStore:
                 (guild_id, user_id, channel_id, item_key, seed, json.dumps(result.to_json(), ensure_ascii=False), now)).lastrowid
         return {'result': result, 'qty': qty, 'use_id': use_id, 'seed': seed, 'item': entry}
 
+    def mark_use_posted(self, guild_id, use_id):
+        """MNT-84: records that this use's result reached the channel (repeatable; another guild's use is left alone)."""
+        with self.db:
+            self.db.execute('INSERT OR IGNORE INTO item_use_posts(use_id,posted_at) SELECT id,? FROM item_uses WHERE id=? AND guild_id=?', (time.time(), use_id, guild_id))
+
     def item_use_log(self, guild_id, limit=50, before_id=None):
         """Newest first; `before_id` pages back. Each row's result is the decoded stored JSON."""
         limit = max(1, min(int(limit), USE_LOG_MAX))

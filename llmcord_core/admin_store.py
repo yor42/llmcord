@@ -189,6 +189,14 @@ CREATE TRIGGER IF NOT EXISTS item_uses_no_update BEFORE UPDATE ON item_uses
 BEGIN SELECT RAISE(ABORT, 'The item use log is append-only.'); END;
 CREATE TRIGGER IF NOT EXISTS item_uses_no_delete BEFORE DELETE ON item_uses
 BEGIN SELECT RAISE(ABORT, 'The item use log is append-only.'); END;
+CREATE INDEX IF NOT EXISTS item_uses_channel_time ON item_uses(guild_id,channel_id,used_at);
+CREATE TABLE IF NOT EXISTS item_use_posts (
+ use_id INTEGER PRIMARY KEY REFERENCES item_uses(id), posted_at REAL NOT NULL
+);
+CREATE TRIGGER IF NOT EXISTS item_use_posts_no_update BEFORE UPDATE ON item_use_posts
+BEGIN SELECT RAISE(ABORT, 'The item use post log is append-only.'); END;
+CREATE TRIGGER IF NOT EXISTS item_use_posts_no_delete BEFORE DELETE ON item_use_posts
+BEGIN SELECT RAISE(ABORT, 'The item use post log is append-only.'); END;
 CREATE TABLE IF NOT EXISTS user_timezones (
  guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, timezone TEXT NOT NULL, updated_at REAL NOT NULL,
  PRIMARY KEY(guild_id,user_id)
@@ -1486,6 +1494,24 @@ class AdminStore:
             if after:
                 after()
         return on
+
+    _HAPPENINGS_KEY = 'cast_sees_item_results'  # FEAT-54: same kind of pseudo row
+
+    def cast_sees_item_results(self, guild_id):
+        """D41: the cast's dialogue prompt may carry recent item results from the channel; off by default."""
+        return self._pseudo_flag(guild_id, self._HAPPENINGS_KEY)
+
+    def set_cast_sees_item_results(self, guild_id, on, expected=None):
+        return self._set_pseudo_flag(guild_id, self._HAPPENINGS_KEY, on, expected, 'cast sees item results')
+
+    _WATCHES_KEY = 'cast_watches_games'  # FEAT-55: same kind of pseudo row
+
+    def cast_watches_games(self, guild_id):
+        """D41: non-seated cast members get the public table summary and may speak as spectators; off by default."""
+        return self._pseudo_flag(guild_id, self._WATCHES_KEY)
+
+    def set_cast_watches_games(self, guild_id, on, expected=None):
+        return self._set_pseudo_flag(guild_id, self._WATCHES_KEY, on, expected, 'cast watches games')
 
     def spoken_moves_enabled(self, guild_id):
         """Experimental "Read moves from chat" (D34): off by default."""

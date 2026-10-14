@@ -33,6 +33,9 @@
     "llmcord_core/games/holdem.py": {
       "raise": 15
     },
+    "llmcord_core/games/onecard.py": {
+      "raise": 12
+    },
     "llmcord_core/games/playstyle.py": {
       "raise": 3
     },

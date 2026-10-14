@@ -12,7 +12,7 @@ from llmcord_core.games import holdem, registry
 class GamesTabSections(unittest.TestCase):
     def test_every_registered_game_has_a_section_in_registry_order(self):
         self.assertEqual(tuple(games_ui.GAME_SECTIONS), tuple(registry.keys()))
-        self.assertEqual(tuple(games_ui.GAME_SECTIONS), ('blackjack', 'doubt', 'holdem'))
+        self.assertEqual(tuple(games_ui.GAME_SECTIONS), ('blackjack', 'doubt', 'holdem', 'onecard'))
         self.assertTrue(all(callable(f) for f in games_ui.GAME_SECTIONS.values()))
 
 
