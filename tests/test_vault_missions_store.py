@@ -170,6 +170,24 @@ class StartTests(MissionCase):
         self.assertFalse(d["created"])
         self.assertEqual(c["type"], FORENSICS)
 
+    def test_a_caller_generated_forensics_puzzle_is_stored_after_the_solver_check(self):
+        """MNT-92: puzzle= is used when the solver proves it unique; a broken one is replaced by a generated puzzle; an existing mission ignores it."""
+        from llmcord_core.vault import generate_forensics
+        from llmcord_core.vault.missions import ForensicsPuzzle
+        made = generate_forensics("caller")
+        self.begin(FORENSICS, ALICE, puzzle=made)
+        self.assertEqual(self.truth(ALICE), list(made.answer))
+        self.assertEqual(json.loads(self.row(ALICE)["puzzle_json"])["hidden"], made.hidden)
+        other = generate_forensics("other")
+        self.assertEqual(self.begin(FORENSICS, ALICE, puzzle=other)["created"], False)
+        self.assertEqual(self.truth(ALICE), list(made.answer))
+        bad = ForensicsPuzzle(made.records, made.hidden, (0, 0) if tuple(made.answer) != (0, 0) else (1, 0))
+        self.begin(FORENSICS, BOB, puzzle=bad, seed="fallback")
+        self.assertNotEqual(self.truth(BOB), list(bad.answer))
+        self.assertEqual(self.truth(BOB), list(generate_forensics("fallback").answer))
+        self.begin(FORENSICS, CAROL, puzzle="not a puzzle", seed="x")
+        self.assertEqual(self.truth(CAROL), list(generate_forensics("x").answer))
+
     def test_reopening_returns_the_persisted_puzzle_and_never_regenerates(self):
         first = self.begin(BC, seed="one")
         before = dict(self.row())

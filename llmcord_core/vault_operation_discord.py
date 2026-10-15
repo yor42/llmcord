@@ -35,7 +35,7 @@ def mention(user_id: int) -> str:
 
 def render_status(view: dict, *, t=None) -> str:
     """The shared status message. A stage's secret appears only once that stage has ended (the store withholds it until then).
-    Over the limit, the lists shrink to counts first, then the oldest guesses fold into one line; the header and secrets always stay."""
+    Over the limit, the lists shrink to counts first, then the oldest guesses fold into one line; the header, secrets and previous codes always stay."""
     t = t or i18n.english()
     stage = view['stage'] or next((x for x in reversed(view['stages']) if x['status'] != 'locked'), view['stages'][0])
     size = lambda lines: len('\n'.join(lines))  # noqa: E731
@@ -46,7 +46,7 @@ def render_status(view: dict, *, t=None) -> str:
     while size(lines) > MAX_TEXT and hidden < len(stage['guesses']):
         hidden = min(len(stage['guesses']), hidden + max(1, (size(lines) - MAX_TEXT) // 40))
         lines = _status_lines(view, t, True, hidden)
-    secrets = sum(1 for x in view['stages'] if x['secret'])
+    secrets = sum(1 for x in view['stages'] if x['secret']) + sum(1 for x in view['stages'] if x['previous_secret'])
     while size(lines) > MAX_TEXT and len(lines) > 5 + secrets:  # never in practice; whole lines only, the secrets stay
         del lines[len(lines) - secrets - 1]
     return '\n'.join(lines)
@@ -88,6 +88,7 @@ def _status_lines(view: dict, t, compact: bool, hidden: int) -> list:
             lines.append(t.n('… {count} earlier guess', '… {count} earlier guesses', hidden))
         lines += [t('{n}. {mention}: {guess} — {feedback}', n=g['number'], mention=mention(g['user_id']), guess=g['guess'],
                      feedback=feedback_text(stage['protocol'], g['feedback'], t=t)) for g in stage['guesses'][hidden:]]
+    lines += [t("Previous attempt's code for stage {n}: {code}", n=s['number'], code=s['previous_secret']) for s in view['stages'] if s['previous_secret']]
     lines += [t('Secret of stage {n}: {code}', n=s['number'], code=s['secret']) for s in view['stages'] if s['secret']]
     return lines
 

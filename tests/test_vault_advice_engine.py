@@ -111,6 +111,18 @@ class WordingTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertFalse(check_wording(text, self.facts))
 
+    def test_rejects_spelled_out_numbers(self):
+        """MNT-92: a number written as a word is a digit claim the digit-run check cannot see."""
+        for text in ("Try 1234, the first digit is seven.", "Try 1234 - fifty left", "Try 1234, Two of them are in", "Try 1234, twenty-one left",
+                     "1234 아마 하나는 맞아요", "1234 둘이 들어 있어요", "1234 열 개 남았어요", "1234 스물"):
+            with self.subTest(text=text):
+                self.assertFalse(check_wording(text, self.facts))
+
+    def test_number_words_inside_other_words_are_not_rejected(self):
+        for text in ("Try 1234, someone said so.", "Try 1234 on the phone", "Try 1234, it is anyone's guess", "1234 열쇠는 어때요", "1234 하나님"):
+            with self.subTest(text=text):
+                self.assertTrue(check_wording(text, self.facts))
+
     def test_a_four_digit_remaining_count_is_not_an_allowed_number(self):
         big = AdviceFacts(guess="1234", remaining=5040, weight=0.5, in_candidates=True)
         self.assertTrue(check_wording("Try 1234.", big))

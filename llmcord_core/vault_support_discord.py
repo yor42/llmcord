@@ -2,15 +2,18 @@
 
 A mixin of ``VaultOperationPlay``. The store (``vault_support_store``) is the only source of truth and raises codes; this layer takes input and builds
 words. Every reply is ephemeral in the invoker's language and nothing is posted in the channel. The answer appears only once the mission is over.
-Creating a forensics puzzle takes about 0.2 s: the press is acknowledged first and the store runs on the event loop (the shared sqlite connection is
-not safe to write from another thread while the loop commits its own work).
+Creating a forensics puzzle takes about 0.2 s: the press is acknowledged first, the pure generator runs in a worker thread, and the store runs on the
+event loop (the shared sqlite connection is not safe to write from another thread while the loop commits its own work).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+import secrets
 
 import discord
 
+from .vault import generate_forensics
 from .vault_discord import NO_MENTIONS, SOMETHING_WRONG, feedback_text
 from .vault_store import VaultStoreError
 from llmcord_core.i18n import UserError, codes
@@ -108,7 +111,8 @@ class SupportMissions:
                 kind = action[len('mission_'):]
                 if mission is None and kind == 'forensics' and not await self._defer(interaction):
                     return
-                mission = self.store.start_support_mission(gid, uid, oid, kind, now=self.clock())
+                puzzle = await asyncio.to_thread(generate_forensics, secrets.token_hex(16)) if mission is None and kind == 'forensics' else None
+                mission = self.store.start_support_mission(gid, uid, oid, kind, now=self.clock(), puzzle=puzzle)
         except VaultStoreError as error:
             return await self.say(interaction, t.error(error))
         await self._mission_show(interaction, mission, oid, t)

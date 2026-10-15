@@ -3900,6 +3900,13 @@ msgid "Used inside your vault with /vault personal, not with /use. It costs one 
 msgstr ""
 
 #: llmcord_core/shop_ui.py
+#, python-brace-format
+msgid "Vault tool, {n} turn"
+msgid_plural "Vault tool, {n} turns"
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/shop_ui.py
 msgid "Items"
 msgstr ""
 

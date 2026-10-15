@@ -1,5 +1,5 @@
 """Vault (금고): a Bulls and Cows game engine (FEAT-62, D43). Pure Python, no Discord, database, model or network."""
-from .advice import ADVICE_TEMPLATE_KEY, AdviceFacts, advice_template, build_advice_facts, check_wording
+from .advice import ADVICE_TEMPLATE_KEY, AdviceFacts, advice_template, build_advice_facts, check_wording, spells_number
 from .clues import make_clues
 from .constraints import (
     CommonCount,
@@ -58,7 +58,7 @@ from .tools import (
 )
 
 __all__ = [
-    "ADVICE_TEMPLATE_KEY", "AdviceFacts", "advice_template", "build_advice_facts", "check_wording",
+    "ADVICE_TEMPLATE_KEY", "AdviceFacts", "advice_template", "build_advice_facts", "check_wording", "spells_number",
     "DEFAULT_LENGTH", "DEFAULT_TURNS", "LENGTHS", "PROTOCOLS", "TOOLS",
     "CommonCount", "CountEven", "CountLow", "DigitAt", "DigitPresent", "GuessResult", "NotSecret", "OpenDigit", "PairCount", "PositionHalf",
     "PositionParity", "Suggestion", "ToolResult", "ToolSpec", "VaultError",

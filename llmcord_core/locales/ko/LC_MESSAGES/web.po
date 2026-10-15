@@ -3900,6 +3900,12 @@ msgid "Used inside your vault with /vault personal, not with /use. It costs one 
 msgstr "/use가 아니라 /vault personal로 연 금고 안에서 사용해요. 턴을 1 소모해요."
 
 #: llmcord_core/shop_ui.py
+#, python-brace-format
+msgid "Vault tool, {n} turn"
+msgid_plural "Vault tool, {n} turns"
+msgstr[0] "금고 도구, {n}턴"
+
+#: llmcord_core/shop_ui.py
 msgid "Items"
 msgstr "아이템"
 

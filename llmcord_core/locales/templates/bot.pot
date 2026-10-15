@@ -3201,6 +3201,11 @@ msgstr ""
 
 #: llmcord_core/vault_operation_discord.py
 #, python-brace-format
+msgid "Previous attempt's code for stage {n}: {code}"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
 msgid "Secret of stage {n}: {code}"
 msgstr ""
 

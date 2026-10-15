@@ -582,9 +582,26 @@ class EventTests(OpCase):
         self.assertIn("Attempt 2 of 2", text)
         self.assertIn("Shared turns left: 3 of 3", text)
         self.assertNotIn("Guesses:", text)
-        if old != self.secret():
-            self.assertNotIn(old, text)
+        self.assertIn(f"Previous attempt's code for stage 1: {old}", text)   # MNT-92: the failed attempt's code is public once it has ended
+        self.assertNotIn("Secret of stage", text)
         self.assertNotIn(self.secret(), text)
+
+    async def test_previous_attempt_code_shows_in_the_channel_language_and_keeps_the_budget_logic(self):
+        """MNT-92: the retry status lists the first attempt's code (Korean for a Korean server) and never the current one; it survives the length budget."""
+        self.store.set_server_language(G, "ko")
+        self.small()
+        await self.start(BOB)
+        old = self.secret()
+        await self.burn(3)
+        await self.play.flush()
+        self.assertIn(f"1단계 이전 시도의 코드: {old}", self.text())
+        self.assertNotIn(self.secret(), self.text())
+        from llmcord_core.vault_operation_discord import MAX_TEXT, render_status
+        view = self.op()
+        view["participants"] = view["participants"] * 80
+        shrunk = render_status(view)
+        self.assertLessEqual(len(shrunk), MAX_TEXT)
+        self.assertIn(f"Previous attempt's code for stage 1: {old}", shrunk)
 
     async def test_a_second_failure_fails_the_operation_and_reveals_the_secret(self):
         """FEAT-66: the second exhausted budget posts operation_failed, ends the status (no buttons) and reveals only the ended stage's secret."""

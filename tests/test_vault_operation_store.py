@@ -475,6 +475,19 @@ class SharedTurnTests(OpCase):
         self.assertEqual(self.g(self.wrongs()[0], BOB)["number"], 1)
         self.assertEqual(self.g(old, BOB)["number"], 2)      # the old secret is only a wrong guess now
 
+    def test_retry_keeps_the_failed_attempts_code_as_previous_secret_and_hides_the_current_one(self):
+        """MNT-92: previous_secret is None on attempt 1 (also for locked stages), the first attempt's code after the retry starts, never the active secret."""
+        view = self.op()
+        self.assertTrue(all(s["previous_secret"] is None for s in view["stages"]))
+        old = self.secret()
+        self.burn(3)
+        view = self.op()
+        stage = view["stage"]
+        self.assertEqual((stage["retry"], stage["previous_secret"], stage["secret"]), (1, old, None))
+        self.assertNotEqual(stage["previous_secret"], self.secret())
+        self.assertNotIn(self.secret(), repr(view["stages"]))
+        self.assertIsNone(view["stages"][1]["previous_secret"])
+
     def test_a_retry_can_be_won_and_the_run_continues(self):
         self.burn(3)
         result = self.solve(BOB)

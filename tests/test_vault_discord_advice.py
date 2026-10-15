@@ -590,6 +590,15 @@ class ClueVoiceTests(AdviceUiCase):
                 self.assertIn(template, self.edits(click)[-1])
                 self.assertNotIn("Something went wrong", self.seen(click))
 
+    def test_clue_wording_that_spells_a_number_is_rejected_but_whole_words_are_kept(self):
+        """MNT-92: 'three' or '셋' spells a number out and is refused; 'someone' and 'phone' are not number words."""
+        from llmcord_core.vault_discord import clue_wording_ok
+        template = "Digit 2 is 7."
+        self.assertTrue(clue_wording_ok("Digit 2 is 7, someone told me on the phone.", template))
+        for wording in ("Digit 2 is 7, one of three.", "Digit 2 is 7, 셋 중 하나", "Digit 2 is 7 and fifty-fifty"):
+            with self.subTest(wording=wording):
+                self.assertFalse(clue_wording_ok(wording, template))
+
     async def test_a_model_failure_keeps_the_template_clue_silently(self):
         """FEAT-65: an error, a timeout or a missing model never blocks Reveal clue."""
         self.store.set_vault_settings(G, clue_voice="llm")

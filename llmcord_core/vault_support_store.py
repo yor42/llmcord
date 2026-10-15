@@ -3,7 +3,7 @@
 A member of an operation may do one support mission per operation: record forensics or 3-digit Bulls and Cows. The puzzle and its answer are
 stored at creation and never regenerated; the answer leaves the store only once the mission is solved or failed. A solved mission counts as one
 contribution and may pay one support reward through the ledger (a claim of type 'support'; it never pays the main contribution reward but counts toward the team reward's min_guesses). Missions spend no shared stage turn and never touch
-a stage secret. The Store shares one sqlite connection (check_same_thread=False) and write_admin only locks other write_admin callers, so store calls must not run on a background thread. The Discord layer defers the interaction and calls start_support_mission on the loop (about 0.2 s, once per member per operation, for forensics puzzle generation). A later change could split the pure generation step out. Refusals are VaultStoreError codes; the Discord edge turns them into words.
+a stage secret. The Store shares one sqlite connection (check_same_thread=False) and write_admin only locks other write_admin callers, so store calls must not run on a background thread. The Discord layer defers the interaction, generates the forensics puzzle (pure, about 0.2 s) with asyncio.to_thread, then calls start_support_mission on the loop with it (puzzle=); the store re-checks it with the solver. Refusals are VaultStoreError codes; the Discord edge turns them into words.
 """
 from __future__ import annotations
 
@@ -14,7 +14,8 @@ import time
 
 from .i18n import codes
 from .vault import (BULLS_COWS_LENGTH, BULLS_COWS_TURNS, FORENSICS_ATTEMPTS, MISSION_TYPES, VaultError, bulls_cows_feedback, bulls_cows_secret,
-                    check_bulls_cows_guess, generate_forensics, valid_forensics_answer)
+                    check_bulls_cows_guess, forensics_answers, generate_forensics, valid_forensics_answer)
+from .vault.missions import FORENSICS_LENGTH, FORENSICS_LINES
 from .vault_operation_store import VaultOperationStore
 from .vault_store import GUESS_CODES, VaultStoreError
 
@@ -50,13 +51,25 @@ class VaultSupportStore(VaultOperationStore):
         undone = self.one('SELECT 1 FROM currency_ledger WHERE guild_id=? AND reverses_id=?', (row['guild_id'], claim['ledger_id'])) is not None
         return {'amount': claim['amount'], 'ledger_id': claim['ledger_id'], 'reversed': undone}
 
-    def start_support_mission(self, guild_id, user_id, operation_id, mission_type, *, now=None, seed=None):
-        """The member's one mission of this operation: created, or the persisted one (`seed` ignored then). `seed` is a test seam only."""
+    @staticmethod
+    def _puzzle_holds(puzzle):
+        try:
+            records = tuple((g, None if r is None else tuple(r)) for g, r in puzzle.records)
+            return (len(records) == FORENSICS_LINES and 0 <= puzzle.hidden < len(records) and records[puzzle.hidden][1] is None
+                    and all(isinstance(g, str) and len(g) == FORENSICS_LENGTH for g, _ in records)
+                    and forensics_answers(records) == frozenset({tuple(puzzle.answer)}))
+        except (AttributeError, TypeError, ValueError, VaultError):
+            return False
+
+    def start_support_mission(self, guild_id, user_id, operation_id, mission_type, *, now=None, seed=None, puzzle=None):
+        """The member's one mission of this operation: created, or the persisted one (`seed` and `puzzle` ignored then). `seed` is a test seam only.
+        `puzzle` is a ForensicsPuzzle the caller generated off the loop (generate_forensics is pure); it is re-checked with the solver here and replaced by a
+        freshly generated one if it does not hold. The store itself always runs on the loop (shared sqlite connection)."""
         now = time.time() if now is None else now
         self._op_load(guild_id, user_id, operation_id, now)
         made = None
         if isinstance(mission_type, str) and mission_type == 'forensics' and self._support_row(guild_id, operation_id, user_id) is None:
-            made = generate_forensics(seed if seed is not None else secrets.token_hex(16))   # pure and slow: before the write lock; discarded if a mission appeared meanwhile
+            made = puzzle if puzzle is not None and self._puzzle_holds(puzzle) else generate_forensics(seed if seed is not None else secrets.token_hex(16))   # pure and slow: before the write lock; discarded if a mission appeared meanwhile
         with self.write_admin():
             self._op_active(guild_id, operation_id, now)
             if not isinstance(mission_type, str) or mission_type not in MISSION_TYPES:

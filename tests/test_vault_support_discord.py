@@ -225,6 +225,30 @@ class PickerTests(MissionCase):
         self.assertEqual(self.labels_of(shown), ["Answer"])
         self.assertEqual(self.store.support_mission(G, ALICE, self.oid, now=self.now)["status"], "active")
 
+    async def test_forensics_puzzle_is_generated_in_a_worker_thread_and_the_store_runs_on_the_loop(self):
+        """MNT-92: generate_forensics runs through asyncio.to_thread after the defer; start_support_mission is called on the loop thread with that puzzle."""
+        import threading
+        from unittest import mock
+        import llmcord_core.vault_support_discord as module
+        loop_thread = threading.get_ident()
+        seen = {}
+        real, real_start = module.generate_forensics, self.store.start_support_mission
+
+        def generate(seed):
+            seen["generate"] = threading.get_ident()
+            return real(seed)
+
+        def start(*args, **kw):
+            seen["store"], seen["puzzle"] = threading.get_ident(), kw.get("puzzle")
+            return real_start(*args, **kw)
+
+        with mock.patch.object(module, "generate_forensics", generate), mock.patch.object(self.store, "start_support_mission", start):
+            await self.begin(FORENSICS)
+        self.assertNotEqual(seen["generate"], loop_thread)
+        self.assertEqual(seen["store"], loop_thread)
+        self.assertIsNotNone(seen["puzzle"])
+        self.assertEqual(self.mission()["mission_type"], "forensics")
+
     async def test_choosing_forensics_shows_the_records_with_one_hidden_line_and_no_answer(self):
         """FEAT-67: forensics lists every recorded guess with its result, the hidden one as '?', asks for that line and never shows its result."""
         _, shown = await self.begin(FORENSICS)

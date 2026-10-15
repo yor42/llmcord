@@ -100,7 +100,10 @@ def use_rows(uses, names, zone_name, *, t=None):
             item = f'{recipe.emoji} {items.display_name(recipe, t.locale)}'.strip()
         except (KeyError, TypeError):
             item = use['item_key']
-        text = ' '.join(str((use['result'] or {}).get('text', '')).replace('**', '').split())
+        result = use['result'] or {}
+        text = ' '.join(str(result.get('text', '')).replace('**', '').split())
+        if not text and ('vault_session' in result or 'vault_operation' in result) and isinstance(result.get('turn_cost'), int):
+            text = t.n('Vault tool, {n} turn', 'Vault tool, {n} turns', result['turn_cost'], n=result['turn_cost'])
         rows.append({'id': use['id'], 'time': datetime.fromtimestamp(use['used_at'], zone).strftime('%Y-%m-%d %H:%M'),
                      'member': member_label(names, use['user_id'], t=t), 'item': item, 'result': text if len(text) <= 200 else text[:199] + '…'})
     return rows

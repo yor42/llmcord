@@ -1245,20 +1245,20 @@ msgstr "• 모든 말을 먼저 도착시킨 사람, 또는 끝까지 남은 �
 #: llmcord_core/i18n/terms.py
 msgctxt "vault protocol"
 msgid "Standard"
-msgstr ""표준"
+msgstr "표준"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "vault protocol"
 msgid "Total Match"
-msgstr ""전체 일치"
+msgstr "전체 일치"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "vault protocol"
 msgid "Position-Only"
-msgstr ""위치만"
+msgstr "위치만"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "vault protocol"
 msgid "Open"
-msgstr ""오픈"
+msgstr "오픈"
 

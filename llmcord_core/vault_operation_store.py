@@ -172,7 +172,7 @@ class VaultOperationStore(VaultStore):
         return row, stage
 
     def _op_start_stage(self, row, number, retry, now, seed=None):
-        """Inside write_admin: a fresh secret, budget and clues for stage `number` (a retry replaces the stage's current attempt)."""
+        """Inside write_admin: a fresh secret, budget and clues for stage `number` (a retry replaces the stage's current attempt; the failed attempt's code is kept in previous_secret)."""
         guild_id, oid = row['guild_id'], row['id']
         protocol = json.loads(row['protocols_json'])[number - 1]
         rng = random.Random(f'{seed}/{number}/{retry}') if seed is not None else secrets.SystemRandom()
@@ -183,7 +183,7 @@ class VaultOperationStore(VaultStore):
         shown = open_digit(code, rng) if protocol == 'open' else None
         budget = self.vault_settings(guild_id)['turns'][protocol]
         if retry:
-            self.db.execute("UPDATE vault_operation_stages SET retry=?,secret=?,open_digit=?,turn_budget=?,status='active',created_at=? WHERE operation_id=? AND guild_id=? AND number=?",
+            self.db.execute("UPDATE vault_operation_stages SET retry=?,previous_secret=secret,secret=?,open_digit=?,turn_budget=?,status='active',created_at=? WHERE operation_id=? AND guild_id=? AND number=?",
                 (retry, code, shown, budget, now, oid, guild_id, number))
             self.db.execute('DELETE FROM vault_operation_clues WHERE operation_id=? AND guild_id=? AND stage_number=?', (oid, guild_id, number))
         else:
@@ -236,7 +236,7 @@ class VaultOperationStore(VaultStore):
             if s is None:
                 entries.append({'number': number, 'protocol': protocols[number - 1], 'length': DEFAULT_LENGTH, 'status': 'locked', 'retry': 0, 'turn_budget': None,
                                 'turns_used': 0, 'turns_left': None, 'open_digit': None, 'guesses': [], 'tools': [], 'tools_used': 0, 'cross': [], 'clues': [],
-                                'advice': [], 'constraints': [], 'secret': None})
+                                'advice': [], 'constraints': [], 'secret': None, 'previous_secret': None})
                 continue
             entries.append(self._op_stage_entry(s, [a for a in actions if a['stage_number'] == number and a['attempt'] == s['retry']],
                                                 [c for c in clue_rows if c['stage_number'] == number], names))
@@ -270,7 +270,8 @@ class VaultOperationStore(VaultStore):
                 'turns_used': used, 'turns_left': max(s['turn_budget'] - used, 0), 'open_digit': s['open_digit'], 'guesses': guesses,
                 'tools': [{**self._vault_tool_entry(t), 'user_id': t['user_id']} for t in tool_rows], 'tools_used': len(tool_rows), 'cross': crosses, 'clues': clues,
                 'advice': [{**self._vault_advice_entry(a, names), 'user_id': a['user_id']} for a in actions if a['kind'] == 'advice'],
-                'constraints': constraints, 'secret': s['secret'] if ended else None}
+                'constraints': constraints, 'secret': s['secret'] if ended else None,
+                'previous_secret': s['previous_secret'] if s['retry'] >= 1 else None}
 
     # ---- shared steps
 

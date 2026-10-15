@@ -21,7 +21,7 @@ from .models import TurnMessage
 from .names import resolve, suggest
 from .usage import capture_usage, log_purpose, log_scope
 from .vault import CountEven, CountLow, DigitPresent, PositionHalf, PositionParity
-from .vault import TOOLS, build_advice_facts
+from .vault import TOOLS, build_advice_facts, spells_number
 from .vault_store import MAX_TOOLS, VaultStoreError
 from llmcord_core import i18n, items
 from llmcord_core.i18n import N_, NP_, UserError, codes
@@ -85,7 +85,7 @@ def advice_line(entry: dict, t) -> str:
 
 
 def clue_wording_ok(wording, template: str) -> bool:
-    return isinstance(wording, str) and bool(wording.strip()) and set(DIGIT_RUNS.findall(wording)) == set(DIGIT_RUNS.findall(template))
+    return isinstance(wording, str) and bool(wording.strip()) and not spells_number(wording) and set(DIGIT_RUNS.findall(wording)) == set(DIGIT_RUNS.findall(template))
 
 
 def tool_name(key: str, t) -> str:

@@ -9,6 +9,7 @@ from helpers import discord_transport, install_session
 
 from llmcord_core import items
 from llmcord_core.admin_store import ConflictError
+from llmcord_core.i18n import Translator
 from llmcord_core.currency_ui import ledger_rows, reverse_detail, reverse_note
 from llmcord_core.shop_ui import ShopPanel, has_plain_table, item_detail, lines_of, save_item, use_rows, whole, with_lines
 from llmcord_core.store import Store
@@ -61,6 +62,15 @@ class HelperTests(unittest.TestCase):
         detail = item_detail(saved)
         self.assertNotIn('SECRET-TEXT', json.dumps(detail))
         self.assertEqual((detail['item_key'], detail['price'], detail['extra_lines'], detail['replace_lines'], detail['revision']), ('fortune_cookie', 30, 2, 1, 1))
+
+    def test_use_rows_summarise_vault_tool_uses_without_any_secret(self):
+        """MNT-92: a vault tool use stores no text; the row says it was a vault tool and how many turns it cost, in the viewer's language."""
+        uses = [{'id': 1, 'user_id': 5, 'item_key': 'dice', 'used_at': 0, 'result': {'tool': 'dice', 'vault_session': 9, 'turn_cost': 1}},
+                {'id': 2, 'user_id': 5, 'item_key': 'dice', 'used_at': 0, 'result': {'tool': 'dice', 'vault_operation': 3, 'turn_cost': 2}}]
+        rows = use_rows(uses, {}, 'UTC')
+        self.assertEqual([r['result'] for r in rows], ['Vault tool, 1 turn', 'Vault tool, 2 turns'])
+        korean = use_rows(uses, {}, 'UTC', t=Translator('ko'))
+        self.assertEqual([r['result'] for r in korean], ['금고 도구, 1턴', '금고 도구, 2턴'])
 
     def test_use_rows_show_names_plain_text_and_the_server_timezone(self):
         uses = [{'id': 3, 'user_id': 5, 'item_key': 'dice', 'used_at': 0, 'result': {'text': 'You rolled a **4**\n(1-6).'}},

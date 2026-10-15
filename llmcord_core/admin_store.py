@@ -707,6 +707,7 @@ class AdminStore:
             'member_settings': {'spoken_moves': 'INTEGER NOT NULL DEFAULT 1 CHECK(spoken_moves IN (0,1))', 'spoken_veto': 'INTEGER NOT NULL DEFAULT 1 CHECK(spoken_veto IN (0,1))'},
             'model_usage': {'channel_id': 'INTEGER', 'feature': "TEXT NOT NULL DEFAULT ''"},
             'vault_clues': {'revealed_at': 'REAL'},
+            'vault_operation_stages': {'previous_secret': 'TEXT'},
             'vault_operation_settings': {'support_reward': 'INTEGER NOT NULL DEFAULT 0 CHECK(support_reward>=0)'},
             'vault_settings': {'advice_cap': 'INTEGER NOT NULL DEFAULT 6', 'clue_voice': "TEXT NOT NULL DEFAULT 'template'"},
         }.items():
