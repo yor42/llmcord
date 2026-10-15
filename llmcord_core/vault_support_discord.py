@@ -69,7 +69,8 @@ def render_result(result: dict, t) -> str:
     lines = [t('Support mission complete!') if event == 'solved' else t('Support mission failed.'), _answer_line(mission, t)]
     if event == 'solved':
         reward = mission['reward']
-        lines.append(t('Reward: {amount}', amount=reward['amount']) if reward and reward['amount'] > 0 else t('No reward was paid for this mission.'))
+        lines.append(t('Reward: {amount}', amount=reward['amount']) if reward and reward['amount'] > 0 else t('Your reward could not be paid because your balance is at its limit.')
+                     if result.get('reward_refused') else t('No reward was paid for this mission.'))
     return '\n'.join(lines)
 
 

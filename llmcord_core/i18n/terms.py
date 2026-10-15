@@ -283,3 +283,7 @@ YUT_HOW_FINISH = N_('• Passing the last point takes a piece home; no exact thr
 YUT_HOW_TIMEOUT = N_('• Take longer than {seconds} s and a throw or move is made for you; miss two in a row and you forfeit your seat.')
 YUT_HOW_WIN = N_('• The first to bring every piece home, or the last player standing, takes the pot.')
 YUT_HOW_WIN_POT = N_('• The first to bring every piece home, or the last player standing, takes the pot ({ante} each).')
+
+# Vault protocol labels (vault_discord.py, vault_operation_discord.py, games_ui.py; FEAT-62), keyed by the protocol name of vault/rules.py.
+VAULT_PROTOCOLS = {'standard': NP_('vault protocol', 'Standard'), 'total_match': NP_('vault protocol', 'Total Match'),
+                   'position_only': NP_('vault protocol', 'Position-Only'), 'open': NP_('vault protocol', 'Open')}

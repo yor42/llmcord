@@ -26,6 +26,7 @@ from .vault_store import MAX_TOOLS, VaultStoreError
 from llmcord_core import i18n, items
 from llmcord_core.i18n import N_, NP_, UserError, codes
 from llmcord_core.i18n.discord_locale import C_, invoker_t
+from llmcord_core.i18n.terms import VAULT_PROTOCOLS as PROTOCOLS
 
 PREFIX = 'llmcord:vault'
 NO_MENTIONS = discord.AllowedMentions.none()
@@ -46,8 +47,6 @@ ADVICE_COUNT = ' About {remaining} codes are still possible.'
 CLUE_USER = ('You pass on this clue about the vault code: "{text}" Say it in your own words in one short sentence. '
              'Keep every number exactly as given and add no other numbers.')
 LINE_SCHEMA = {'type': 'object', 'properties': {'line': {'type': 'string'}}, 'required': ['line'], 'additionalProperties': False}
-PROTOCOLS = {'standard': NP_('vault protocol', 'Standard'), 'total_match': NP_('vault protocol', 'Total Match'),
-             'position_only': NP_('vault protocol', 'Position-Only'), 'open': NP_('vault protocol', 'Open')}
 STATUSES = {'active': NP_('vault status', 'In progress'), 'solved': NP_('vault status', 'Solved'),
             'failed': NP_('vault status', 'Failed'), 'expired': NP_('vault status', 'Expired')}
 

@@ -32,6 +32,7 @@ Every new msgid the Vault helpers and section pass to ``t`` / ``t.p`` / ``t.n`` 
 import ast
 import inspect
 import unittest
+from pathlib import Path
 
 from llmcord_core import games_ui, items, shop_ui, vault_discord
 from llmcord_core.admin_store import ConflictError
@@ -279,6 +280,23 @@ class Options(unittest.TestCase):
             self.assertEqual(list(options), list(PROTOCOLS))
             self.assertEqual(options, {p: t.render(vault_discord.PROTOCOLS[p]) for p in PROTOCOLS})
         self.assertEqual(helper('vault_protocol_options')(EN)['position_only'], 'Position-Only')
+
+
+class WebProcessImports(unittest.TestCase):
+    def test_protocol_labels_do_not_import_the_discord_vault_module(self):
+        """MNT-91: the dashboard reads the protocol labels from a neutral module, so the web process never loads vault_discord."""
+        import subprocess
+        import sys
+        code = ("import sys; from llmcord_core import games_ui; from llmcord_core.i18n import english; "
+                "labels = games_ui.vault_protocol_options(english()); "
+                "assert labels['position_only'] == 'Position-Only', labels; assert 'llmcord_core.vault_discord' not in sys.modules")
+        done = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, cwd=str(Path(__file__).resolve().parent.parent))
+        self.assertEqual(done.returncode, 0, done.stderr)
+
+    def test_discord_and_dashboard_share_the_same_labels(self):
+        from llmcord_core import vault_discord
+        from llmcord_core.i18n.terms import VAULT_PROTOCOLS
+        self.assertIs(vault_discord.PROTOCOLS, VAULT_PROTOCOLS)
 
 
 class Strings(unittest.TestCase):

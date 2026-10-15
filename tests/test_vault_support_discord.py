@@ -412,6 +412,17 @@ class BullsAndCowsTests(MissionCase):
         self.assertNotIn("Reward:", text)
         self.assertEqual(self.money(), before)
 
+    async def test_a_reward_refused_by_the_balance_cap_says_so_instead_of_nothing_was_paid(self):
+        """MNT-91: a support reward the balance cap refuses is reported as such, not as "No reward was paid"."""
+        self.store.set_vault_operation_settings(G, support_reward=7)
+        self.store.db.execute("INSERT INTO currency_balances(guild_id,user_id,balance,updated_at) VALUES(?,?,?,?)", (G, ALICE, self.store.MAX_CURRENCY_BALANCE - 3, 0))
+        self.store.db.commit()
+        text = self.private(await self.solve_bulls())
+        self.assertIn(SOLVED, text)
+        self.assertIn("Your reward could not be paid because your balance is at its limit.", text)
+        self.assertNotIn(NO_REWARD, text)
+        self.assertNotIn("Reward: 7", text)
+
     async def test_running_out_of_attempts_fails_for_good_and_reveals_the_code(self):
         """FEAT-67: six wrong codes fail the mission; only the last reply reveals the code; reopening shows it failed with no Answer button."""
         _, shown = await self.begin(BULLS)

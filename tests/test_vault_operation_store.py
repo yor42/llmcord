@@ -884,6 +884,46 @@ class RewardTests(OpCase):
         self.assertEqual((entry["amount"], entry["source"]), (20, "vault"))
         self.assertEqual(mine["reward_contribution"]["ledger_id"], entry["id"])
 
+    def fill(self, user):
+        self.store.db.execute("INSERT INTO currency_balances(guild_id,user_id,balance,updated_at) VALUES(?,?,?,?)", (G, user, self.store.MAX_CURRENCY_BALANCE - 10, NOW))
+        self.store.db.commit()
+
+    def test_a_contribution_reward_refused_by_the_balance_cap_is_flagged_and_paid_later_when_room_exists(self):
+        self.fill(ALICE)
+        first = self.g(self.wrongs()[0], ALICE)
+        self.assertTrue(first["reward_refused"])
+        self.assertTrue(self.participant(ALICE)["reward_refused"])
+        self.assertEqual((self.participant(ALICE)["reward_contribution"], self.vault_ledger(ALICE)), (None, []))
+        self.assertFalse(self.g(self.wrongs()[0], BOB)["reward_refused"])
+        self.assertFalse(self.participant(BOB)["reward_refused"])
+        self.store.db.execute("UPDATE currency_balances SET balance=0 WHERE guild_id=? AND user_id=?", (G, ALICE))
+        self.store.db.commit()
+        again = self.g(self.wrongs()[0], ALICE)
+        self.assertFalse(again["reward_refused"])
+        self.assertFalse(self.participant(ALICE)["reward_refused"])
+        self.assertEqual(self.store.balance(G, ALICE), 20)
+
+    def test_a_team_reward_refused_by_the_balance_cap_is_flagged_on_the_winning_action(self):
+        self.store.set_vault_operation_settings(G, contribution_reward=0)
+        self.g(self.wrongs()[0], ALICE)
+        self.fill(ALICE)
+        self.solve(BOB)
+        self.solve(BOB)
+        done = self.solve(ALICE)
+        self.assertEqual(done["event"], "operation_solved")
+        self.assertTrue(done["reward_refused"])
+        view = done["operation"]
+        self.assertEqual([p["reward_refused"] for p in view["participants"]], [True, False, False])
+        self.assertEqual(self.store.balance(G, BOB), 50)
+
+    def test_replays_and_unrewarded_actions_report_no_refusal(self):
+        self.fill(ALICE)
+        a = self.wrongs()[0]
+        self.g(a, ALICE, action_key="k")
+        self.assertFalse(self.g(a, ALICE, action_key="k")["reward_refused"])
+        self.store.set_vault_operation_settings(G, contribution_reward=0, team_reward=0)
+        self.assertFalse(self.participant(ALICE)["reward_refused"])
+
     def test_joining_reading_clues_and_advice_pay_nothing(self):
         self.store.reveal_operation_clue(G, BOB, self.oid, 1, now=NOW)
         self.store.record_operation_advice(G, BOB, self.oid, self.ann, now=NOW)

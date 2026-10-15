@@ -3043,8 +3043,8 @@ msgid "Allowed protocols"
 msgstr "허용할 방식"
 
 #: llmcord_core/games_ui.py
-msgid "Standard and Open are on by default. Total Match and Position-Only give much less feedback per guess, so they are harder: turn them on only if your members want that."
-msgstr "기본 방식과 오픈은 기본으로 켜져 있어요. 전체 일치와 위치만은 추측마다 주는 정보가 훨씬 적어서 더 어려워요. 멤버들이 원할 때만 켜 주세요."
+msgid "Applies to personal vaults only; the three stages of the weekly operation choose their protocols separately. Standard and Open are on by default. Total Match and Position-Only give much less feedback per guess, so they are harder: turn them on only if your members want that."
+msgstr "개인 금고에만 적용돼요. 주간 작전의 세 단계는 방식을 따로 정해요. 기본 방식과 오픈은 기본으로 켜져 있어요. 전체 일치와 위치만은 추측마다 주는 정보가 훨씬 적어서 더 어려워요. 멤버들이 원할 때만 켜 주세요."
 
 #: llmcord_core/games_ui.py
 #, python-brace-format

@@ -131,6 +131,10 @@ def render_picker(operation_id: int, held: dict, *, t=None):
     return buttons
 
 
+def refused_note(result: dict, t) -> str:
+    return '\n' + t('Your reward could not be paid because your balance is at its limit.') if result.get('reward_refused') else ''
+
+
 class VaultOperationButton(discord.ui.DynamicItem[discord.ui.Button], template=PREFIX + r':op_(?P<action>[a-z0-9_]+):(?P<operation>\d+)'):
     """One button; its custom_id carries the action and the operation, never a member or the code."""
 
@@ -554,7 +558,7 @@ class VaultOperationPlay(SupportMissions):
         except VaultStoreError as error:
             return await self.say(interaction, t.error(error))
         protocol = (before['stage'] or before['stages'][0])['protocol']
-        await self.say(interaction, t('Guess {n}: {guess} — {feedback}', n=result['number'], guess=result['guess'], feedback=feedback_text(protocol, result['feedback'], t=t)))
+        await self.say(interaction, t('Guess {n}: {guess} — {feedback}', n=result['number'], guess=result['guess'], feedback=feedback_text(protocol, result['feedback'], t=t)) + refused_note(result, t))
         await self._done(interaction, result, uid)
 
     async def submit_tool(self, interaction, operation_id: int, tool_key: str, values: dict) -> None:
@@ -572,7 +576,7 @@ class VaultOperationPlay(SupportMissions):
             text = t.error(error)
             reason = TOOL_REASONS.get(error.params.get('reason')) if error.code == codes.VAULT_TOOL_BAD_PARAMS else None
             return await self.say(interaction, f'{text} {t.render(reason)}' if reason else text)
-        await self.say(interaction, tool_line(result, t))
+        await self.say(interaction, tool_line(result, t) + refused_note(result, t))
         await self._done(interaction, result, uid)
 
     async def submit_cross(self, interaction, operation_id: int, first: str, second: str) -> None:
@@ -585,7 +589,7 @@ class VaultOperationPlay(SupportMissions):
             result = self.store.operation_cross_validate(gid, uid, operation_id, numbers[0], numbers[1], action_key=str(interaction.id), now=self.clock())
         except VaultStoreError as error:
             return await self.say(interaction, t.error(error))
-        await self.say(interaction, cross_line({'numbers': result['numbers'], 'count': result['count'], 'common': result['common']}, t))
+        await self.say(interaction, cross_line({'numbers': result['numbers'], 'count': result['count'], 'common': result['common']}, t) + refused_note(result, t))
         await self._done(interaction, result, uid)
 
 

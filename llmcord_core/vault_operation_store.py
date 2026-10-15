@@ -212,12 +212,23 @@ class VaultOperationStore(VaultStore):
         for a in actions:
             if a['kind'] in CONTRIBUTIONS:
                 contributions[a['user_id']] = contributions.get(a['user_id'], 0) + 1
+        settings = self.vault_operation_settings(gid)
+        owed_guesses = dict(contributions)
+        solved_missions = set()
         for m in self.all("SELECT user_id FROM vault_support_missions WHERE guild_id=? AND operation_id=? AND status='solved'", (gid, oid)):
             contributions[m['user_id']] = contributions.get(m['user_id'], 0) + 1
+            solved_missions.add(m['user_id'])
 
         def claim(user_id, kind):
             c = next((c for c in claims if c['user_id'] == user_id and c['type'] == kind), None)
             return {'amount': c['amount'], 'ledger_id': c['ledger_id'], 'reversed': c['ledger_id'] in reversed_ids} if c else None
+
+        def refused(user_id):
+            """A reward that is owed and unpaid: the claim is written in the same transaction as the credit, so only a balance cap leaves it missing."""
+            need = settings['min_guesses']
+            return bool((settings['contribution_reward'] > 0 and owed_guesses.get(user_id, 0) >= need and not claim(user_id, 'contribution'))
+                        or (settings['team_reward'] > 0 and row['status'] == 'solved' and contributions.get(user_id, 0) >= need and not claim(user_id, 'team'))
+                        or (settings['support_reward'] > 0 and user_id in solved_missions and not claim(user_id, 'support')))
 
         entries = []
         for number in range(1, STAGES + 1):
@@ -234,7 +245,8 @@ class VaultOperationStore(VaultStore):
                 'participants': [{'user_id': p['user_id'], 'joined_at': p['joined_at'],
                                   'advisor': {'character_id': p['advisor_id'], 'name': names.get(p['advisor_id'])} if p['advisor_id'] else None,
                                   'contributions': contributions.get(p['user_id'], 0), 'reward_contribution': claim(p['user_id'], 'contribution'),
-                                  'reward_team': claim(p['user_id'], 'team'), 'reward_support': claim(p['user_id'], 'support')} for p in people],
+                                  'reward_team': claim(p['user_id'], 'team'), 'reward_support': claim(p['user_id'], 'support'),
+                                  'reward_refused': refused(p['user_id'])} for p in people],
                 'stage': next((e for e in entries if e['status'] == 'active'), None), 'stages': entries}
 
     def _op_stage_entry(self, s, actions, clue_rows, names):
@@ -288,15 +300,16 @@ class VaultOperationStore(VaultStore):
         return self.one('SELECT * FROM vault_operation_actions WHERE id=? AND guild_id=?', (action_id, stage['guild_id']))
 
     def _op_pay(self, row, user_id, kind, amount, now):
-        """Inside write_admin: one ledger credit and its unique claim; a balance cap that refuses it leaves it unpaid."""
+        """Inside write_admin: one ledger credit and its unique claim. True when a balance cap refused it, leaving it unpaid (retried on a later action)."""
         if amount <= 0:
-            return
+            return False
         try:
             entry = self._append_ledger(row['guild_id'], user_id, amount, f"Vault operation {'team ' if kind == 'team' else 'support mission ' if kind == 'support' else ''}reward ({row['week_key']})", user_id, 'vault', None)
         except UserError:
-            return
+            return True
         self.db.execute('INSERT INTO vault_operation_claims(guild_id,operation_id,user_id,type,amount,ledger_id,created_at) VALUES(?,?,?,?,?,?,?)',
             (row['guild_id'], row['id'], user_id, kind, amount, entry['id'], now))
+        return False
 
     def _op_contributions(self, guild_id, operation_id, user_id, missions=False):
         """Qualifying contributions: guesses, tools and cross-validations; `missions` adds a solved support mission (team reward only, never the contribution reward)."""
@@ -304,24 +317,30 @@ class VaultOperationStore(VaultStore):
         solved = self.one("SELECT COUNT(*) FROM vault_support_missions WHERE guild_id=? AND operation_id=? AND user_id=? AND status='solved'", (guild_id, operation_id, user_id))[0] if missions else 0
         return solved + self.one(f'SELECT COUNT(*) FROM vault_operation_actions WHERE guild_id=? AND operation_id=? AND user_id=? AND kind IN ({marks})', (guild_id, operation_id, user_id, *CONTRIBUTIONS))[0]
 
-    def _op_qualify(self, row, user_id, now):
-        settings = self.vault_operation_settings(row['guild_id'])
+    def _op_qualify(self, row, user_id, now, settings=None):
+        """Inside write_admin: the contribution reward once the member qualifies. True when a balance cap refused it."""
+        settings = settings or self.vault_operation_settings(row['guild_id'])
         if settings['contribution_reward'] <= 0 or self._op_contributions(row['guild_id'], row['id'], user_id) < settings['min_guesses']:
-            return
+            return False
         if self.one("SELECT 1 FROM vault_operation_claims WHERE guild_id=? AND operation_id=? AND user_id=? AND type='contribution'", (row['guild_id'], row['id'], user_id)) is None:
-            self._op_pay(row, user_id, 'contribution', settings['contribution_reward'], now)
+            return self._op_pay(row, user_id, 'contribution', settings['contribution_reward'], now)
+        return False
 
-    def _op_team_reward(self, row, now):
-        settings = self.vault_operation_settings(row['guild_id'])
+    def _op_team_reward(self, row, now, settings=None):
+        """Inside write_admin: the team reward to every qualified member. Returns the user ids a balance cap refused."""
+        settings = settings or self.vault_operation_settings(row['guild_id'])
+        refused = set()
         if settings['team_reward'] <= 0:
-            return
+            return refused
         for p in self.all('SELECT user_id FROM vault_operation_participants WHERE guild_id=? AND operation_id=? ORDER BY id', (row['guild_id'], row['id'])):
             qualified = self._op_contributions(row['guild_id'], row['id'], p['user_id'], missions=True) >= settings['min_guesses']
             if qualified and self.one("SELECT 1 FROM vault_operation_claims WHERE guild_id=? AND operation_id=? AND user_id=? AND type='team'", (row['guild_id'], row['id'], p['user_id'])) is None:
-                self._op_pay(row, p['user_id'], 'team', settings['team_reward'], now)
+                if self._op_pay(row, p['user_id'], 'team', settings['team_reward'], now):
+                    refused.add(p['user_id'])
+        return refused
 
-    def _op_advance(self, row, stage, won, now):
-        """Inside write_admin, after a turn was spent: solves, retries or fails the stage. Returns the event name or None."""
+    def _op_advance(self, row, stage, won, now, settings=None, refused=None):
+        """Inside write_admin, after a turn was spent: solves, retries or fails the stage. Returns the event name or None; `refused` (a set) collects the user ids whose team reward a cap refused."""
         guild_id, oid = row['guild_id'], row['id']
         if won:
             self.db.execute("UPDATE vault_operation_stages SET status='solved' WHERE id=? AND guild_id=?", (stage['id'], guild_id))
@@ -329,7 +348,9 @@ class VaultOperationStore(VaultStore):
                 self._op_start_stage(row, stage['number'] + 1, 0, now)
                 return 'stage_solved'
             self.db.execute("UPDATE vault_operations SET status='solved',finished_at=? WHERE id=? AND guild_id=?", (now, oid, guild_id))
-            self._op_team_reward(row, now)
+            held = self._op_team_reward(row, now, settings)
+            if refused is not None:
+                refused |= held
             return 'operation_solved'
         if self._op_used(stage) < stage['turn_budget']:
             return None
@@ -359,12 +380,13 @@ class VaultOperationStore(VaultStore):
             result = feedback(stage['protocol'], stage['secret'], code)
             won = code == stage['secret']
             action = self._op_insert(stage, user_id, 'guess', now, action_key, number=len(guesses) + 1, guess=code, feedback_json=json.dumps(list(result)), won=int(won))
-            self._op_qualify(row, user_id, now)
-            event = self._op_advance(row, stage, won, now)
-            return self._op_guess_result(action, guild_id, operation_id, False, event)
+            settings, owed = self.vault_operation_settings(guild_id), set()
+            late = self._op_qualify(row, user_id, now, settings)
+            event = self._op_advance(row, stage, won, now, settings, owed)
+            return self._op_guess_result(action, guild_id, operation_id, False, event, late or user_id in owed)
 
-    def _op_guess_result(self, action, guild_id, operation_id, replayed, event):
-        return {'number': action['number'], 'guess': action['guess'], 'feedback': tuple(json.loads(action['feedback_json'])), 'won': bool(action['won']),
+    def _op_guess_result(self, action, guild_id, operation_id, replayed, event, refused=False):
+        return {'reward_refused': refused, 'number': action['number'], 'guess': action['guess'], 'feedback': tuple(json.loads(action['feedback_json'])), 'won': bool(action['won']),
                 'replayed': replayed, 'event': event, 'operation': self._op_view_now(guild_id, operation_id)}
 
     def reveal_operation_clue(self, guild_id, user_id, operation_id, position, *, now=None):
@@ -465,14 +487,16 @@ class VaultOperationStore(VaultStore):
             action = self._op_insert(stage, user_id, 'tool', now, action_key, tool_key=tool_key, params_json=json.dumps(params, sort_keys=True), text_key=found.text_key,
                 data_json=json.dumps(found.data, sort_keys=True), constraint_kind=type(found.constraint).__name__,
                 constraint_json=json.dumps(dataclasses.asdict(found.constraint), sort_keys=True), turn_cost=cost, use_id=used['use_id'])
-            self._op_qualify(row, user_id, now)
-            return self._op_tool_result(action, False, self._op_advance(row, stage, False, now))
+            settings, owed = self.vault_operation_settings(guild_id), set()
+            late = self._op_qualify(row, user_id, now, settings)
+            event = self._op_advance(row, stage, False, now, settings, owed)
+            return self._op_tool_result(action, False, event, late or user_id in owed)
 
-    def _op_tool_result(self, action, replayed, event):
+    def _op_tool_result(self, action, replayed, event, refused=False):
         entry = self._vault_tool_entry(action)
         return {'tool': entry['tool'], 'params': entry['params'], 'text_key': entry['text_key'], 'data': entry['data'], 'turn_cost': entry['turn_cost'],
                 'constraint': self._vault_tool_constraint(action), 'qty': self.item_qty(action['guild_id'], action['user_id'], entry['tool']), 'replayed': replayed,
-                'event': event, 'operation': self._op_view_now(action['guild_id'], action['operation_id'])}
+                'event': event, 'reward_refused': refused, 'operation': self._op_view_now(action['guild_id'], action['operation_id'])}
 
     def operation_cross_validate(self, guild_id, user_id, operation_id, number_a, number_b, *, action_key=None, now=None):
         """Two members' guesses in the current attempt: reveals how many of their shared digits the secret holds; the count becomes public. Costs one shared turn, no item."""
@@ -504,10 +528,12 @@ class VaultOperationStore(VaultStore):
             count = len(common & set(stage['secret']))
             action = self._op_insert(stage, user_id, 'cross', now, action_key, turn_cost=1, data_json=json.dumps({'numbers': list(numbers), 'common': list(digits), 'count': count}),
                 constraint_kind='CommonCount', constraint_json=json.dumps(dataclasses.asdict(CommonCount(digits, count)), sort_keys=True))
-            self._op_qualify(row, user_id, now)
-            return self._op_cross_result(action, False, self._op_advance(row, stage, False, now))
+            settings, owed = self.vault_operation_settings(guild_id), set()
+            late = self._op_qualify(row, user_id, now, settings)
+            event = self._op_advance(row, stage, False, now, settings, owed)
+            return self._op_cross_result(action, False, event, late or user_id in owed)
 
-    def _op_cross_result(self, action, replayed, event):
+    def _op_cross_result(self, action, replayed, event, refused=False):
         data = json.loads(action['data_json'])
         return {'count': data['count'], 'common': data['common'], 'numbers': tuple(data['numbers']), 'turn_cost': 1, 'replayed': replayed, 'event': event,
-                'operation': self._op_view_now(action['guild_id'], action['operation_id'])}
+                'reward_refused': refused, 'operation': self._op_view_now(action['guild_id'], action['operation_id'])}

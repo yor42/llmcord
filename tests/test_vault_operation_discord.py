@@ -527,6 +527,32 @@ class GuessTests(OpCase):
         self.assertTrue(modal.guess.required)
 
 
+class RefusedRewardTests(OpCase):
+    def fill(self, user=ALICE):
+        self.store.db.execute("INSERT INTO currency_balances(guild_id,user_id,balance,updated_at) VALUES(?,?,?,?)", (G, user, self.store.MAX_CURRENCY_BALANCE - 10, 0))
+        self.store.db.commit()
+
+    async def test_a_guess_whose_reward_the_balance_cap_refused_says_so_privately_in_the_members_language(self):
+        """MNT-91: the reward note is part of the invoker's private reply, English and Korean; a member whose reward was paid sees none."""
+        self.store.set_vault_operation_settings(G, contribution_reward=20)
+        await self.start()
+        self.fill()
+        note = "Your reward could not be paid because your balance is at its limit."
+        click = await self.guess()
+        self.assertTrue(self.gone(click))
+        self.assertTrue(self.private(click).endswith("\n" + note), self.private(click))
+        korean = await self.guess(locale="ko")
+        self.assertRegex(self.private(korean), HANGUL)
+        self.assertNotIn(note, self.private(korean))
+        await self.play.flush()
+        self.assertNotIn(note, self.text())
+
+    async def test_no_note_when_nothing_was_refused(self):
+        self.store.set_vault_operation_settings(G, contribution_reward=20)
+        await self.start()
+        self.assertNotIn("balance is at its limit", self.private(await self.guess()))
+
+
 class EventTests(OpCase):
     async def test_stage_solved_is_announced_publicly_and_opens_the_next_stage(self):
         """FEAT-66: a winning guess posts the stage_solved announcement as a NEW channel message; the status shows stage 2 and the solved stage's secret."""

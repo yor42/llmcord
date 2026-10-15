@@ -1242,3 +1242,23 @@ msgstr "• 모든 말을 먼저 도착시킨 사람, 또는 끝까지 남은 �
 msgid "• The first to bring every piece home, or the last player standing, takes the pot ({ante} each)."
 msgstr "• 모든 말을 먼저 도착시킨 사람, 또는 끝까지 남은 사람이 팟을 가져가요(각자 {ante})."
 
+#: llmcord_core/i18n/terms.py
+msgctxt "vault protocol"
+msgid "Standard"
+msgstr ""표준"
+
+#: llmcord_core/i18n/terms.py
+msgctxt "vault protocol"
+msgid "Total Match"
+msgstr ""전체 일치"
+
+#: llmcord_core/i18n/terms.py
+msgctxt "vault protocol"
+msgid "Position-Only"
+msgstr ""위치만"
+
+#: llmcord_core/i18n/terms.py
+msgctxt "vault protocol"
+msgid "Open"
+msgstr ""오픈"
+

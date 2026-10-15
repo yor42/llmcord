@@ -1234,3 +1234,23 @@ msgstr ""
 msgid "• The first to bring every piece home, or the last player standing, takes the pot ({ante} each)."
 msgstr ""
 
+#: llmcord_core/i18n/terms.py
+msgctxt "vault protocol"
+msgid "Standard"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "vault protocol"
+msgid "Total Match"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "vault protocol"
+msgid "Position-Only"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "vault protocol"
+msgid "Open"
+msgstr ""
+

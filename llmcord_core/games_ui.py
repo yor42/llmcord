@@ -609,7 +609,7 @@ def week_start_options(t):
 
 def vault_protocol_options(t):
     from .vault import PROTOCOLS
-    from .vault_discord import PROTOCOLS as LABELS
+    from .i18n.terms import VAULT_PROTOCOLS as LABELS
     return {p: t.render(LABELS[p]) for p in PROTOCOLS}
 
 
@@ -628,7 +628,7 @@ def vault_section(ctx):
         enabled = ui.switch(t('Vault is on'), value=form['enabled'])
         ui.label(t('Off: /vault refuses to open a vault. Vaults already in progress are not touched.')).classes('ll-muted')
         allowed = ui.select(protocols, value=form['protocols'], multiple=True, label=t('Allowed protocols')).props('use-chips').classes('w-full')
-        ui.label(t('Standard and Open are on by default. Total Match and Position-Only give much less feedback per guess, so they are harder: turn them on only if your members want that.')).classes('ll-muted')
+        ui.label(t('Applies to personal vaults only; the three stages of the weekly operation choose their protocols separately. Standard and Open are on by default. Total Match and Position-Only give much less feedback per guess, so they are harder: turn them on only if your members want that.')).classes('ll-muted')
         with ui.element('div').classes('ll-form-row ll-field-row'):
             turns = {p: ui.number(t('Turns: {protocol}', protocol=protocols[p]), value=form['turns'][p], min=1, max=50, precision=0, format='%d').classes('ll-wide') for p in PROTOCOLS}
         with ui.element('div').classes('ll-form-row ll-field-row'):

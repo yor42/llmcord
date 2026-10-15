@@ -125,15 +125,16 @@ class VaultSupportStore(VaultOperationStore):
             event = 'solved' if correct else 'failed' if number >= BUDGETS[row['mission_type']] else None
             self.db.execute('UPDATE vault_support_missions SET attempts_used=?,status=?,finished_at=? WHERE id=? AND guild_id=?',
                 (number, event or 'active', now if event else None, row['id'], guild_id))
+            refused = False
             if correct:
                 operation, _ = self._op_active(guild_id, operation_id, now)
                 reward = self.vault_operation_settings(guild_id)['support_reward']
                 if reward > 0:
-                    self._op_pay(operation, user_id, 'support', reward, now)
+                    refused = self._op_pay(operation, user_id, 'support', reward, now)
             return self._support_result(self.one('SELECT * FROM vault_support_missions WHERE id=? AND guild_id=?', (row['id'], guild_id)),
-                                        self.one('SELECT * FROM vault_support_attempts WHERE id=? AND guild_id=?', (attempt_id, guild_id)), False, event)
+                                        self.one('SELECT * FROM vault_support_attempts WHERE id=? AND guild_id=?', (attempt_id, guild_id)), False, event, refused)
 
-    def _support_result(self, mission, attempt, replayed, event):
+    def _support_result(self, mission, attempt, replayed, event, refused=False):
         found = json.loads(attempt['feedback_json']) if attempt['feedback_json'] else None
         return {'correct': bool(attempt['correct']), 'feedback': tuple(found) if found is not None else None, 'number': attempt['number'], 'event': event,
-                'replayed': replayed, 'mission': self._support_view(mission)}
+                'replayed': replayed, 'reward_refused': refused, 'mission': self._support_view(mission)}

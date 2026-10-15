@@ -2839,26 +2839,6 @@ msgid "That position is already revealed."
 msgstr ""
 
 #: llmcord_core/vault_discord.py
-msgctxt "vault protocol"
-msgid "Standard"
-msgstr ""
-
-#: llmcord_core/vault_discord.py
-msgctxt "vault protocol"
-msgid "Total Match"
-msgstr ""
-
-#: llmcord_core/vault_discord.py
-msgctxt "vault protocol"
-msgid "Position-Only"
-msgstr ""
-
-#: llmcord_core/vault_discord.py
-msgctxt "vault protocol"
-msgid "Open"
-msgstr ""
-
-#: llmcord_core/vault_discord.py
 msgctxt "vault status"
 msgid "In progress"
 msgstr ""
@@ -3113,7 +3093,8 @@ msgstr ""
 msgid "Reward: {amount:,} {currency}"
 msgstr ""
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
+#: llmcord_core/vault_support_discord.py
 msgid "Your reward could not be paid because your balance is at its limit."
 msgstr ""
 

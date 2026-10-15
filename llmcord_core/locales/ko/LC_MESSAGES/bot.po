@@ -2849,26 +2849,6 @@ msgid "That position is already revealed."
 msgstr "이미 공개된 위치예요."
 
 #: llmcord_core/vault_discord.py
-msgctxt "vault protocol"
-msgid "Standard"
-msgstr "표준"
-
-#: llmcord_core/vault_discord.py
-msgctxt "vault protocol"
-msgid "Total Match"
-msgstr "전체 일치"
-
-#: llmcord_core/vault_discord.py
-msgctxt "vault protocol"
-msgid "Position-Only"
-msgstr "위치만"
-
-#: llmcord_core/vault_discord.py
-msgctxt "vault protocol"
-msgid "Open"
-msgstr "오픈"
-
-#: llmcord_core/vault_discord.py
 msgctxt "vault status"
 msgid "In progress"
 msgstr "진행 중"
@@ -3116,7 +3096,8 @@ msgstr "금고를 열었어요!"
 msgid "Reward: {amount:,} {currency}"
 msgstr "보상: {amount:,} {currency}"
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
+#: llmcord_core/vault_support_discord.py
 msgid "Your reward could not be paid because your balance is at its limit."
 msgstr "잔액이 한도에 도달해서 보상을 지급하지 못했어요."
 

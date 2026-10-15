@@ -3038,7 +3038,7 @@ msgid "Allowed protocols"
 msgstr ""
 
 #: llmcord_core/games_ui.py
-msgid "Standard and Open are on by default. Total Match and Position-Only give much less feedback per guess, so they are harder: turn them on only if your members want that."
+msgid "Applies to personal vaults only; the three stages of the weekly operation choose their protocols separately. Standard and Open are on by default. Total Match and Position-Only give much less feedback per guess, so they are harder: turn them on only if your members want that."
 msgstr ""
 
 #: llmcord_core/games_ui.py
