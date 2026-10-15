@@ -2,6 +2,7 @@
 from .advice import ADVICE_TEMPLATE_KEY, AdviceFacts, advice_template, build_advice_facts, check_wording
 from .clues import make_clues
 from .constraints import (
+    CommonCount,
     CountEven,
     CountLow,
     DigitAt,
@@ -45,7 +46,7 @@ from .tools import (
 __all__ = [
     "ADVICE_TEMPLATE_KEY", "AdviceFacts", "advice_template", "build_advice_facts", "check_wording",
     "DEFAULT_LENGTH", "DEFAULT_TURNS", "LENGTHS", "PROTOCOLS", "TOOLS",
-    "CountEven", "CountLow", "DigitAt", "DigitPresent", "GuessResult", "NotSecret", "OpenDigit", "PairCount", "PositionHalf",
+    "CommonCount", "CountEven", "CountLow", "DigitAt", "DigitPresent", "GuessResult", "NotSecret", "OpenDigit", "PairCount", "PositionHalf",
     "PositionParity", "Suggestion", "ToolResult", "ToolSpec", "VaultError",
     "all_secrets", "check_guess", "cross_validation", "cross_validation_common", "evaluate", "evaluate_tool",
     "feedback", "filter_candidates", "is_redundant", "is_win", "make_clues", "open_digit", "played", "random_secret",

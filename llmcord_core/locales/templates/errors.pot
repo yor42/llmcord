@@ -1884,3 +1884,52 @@ msgstr ""
 msgid "The Vault settings were changed elsewhere. Reload the page and try again."
 msgstr ""
 
+#: llmcord_core/i18n/codes.py
+msgid "The weekly operation is not turned on for this server."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The operation runs in a different channel. Join it there."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The operation needs two eligible characters in this channel's cast to hold the clues."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Join the operation first."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Pick two different guesses from this attempt."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Cross-validation needs guesses from two different members."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Cross-validation was already used in this attempt."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The operation channel must be a channel id."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The week start must be a day from 0 (Monday) to 6 (Sunday)."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Choose a Vault protocol for each of the three stages."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The contributions needed for a reward must be a whole number from {low} to {high}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Cross-validation on those two guesses would tell you nothing new. Nothing was spent."
+msgstr ""
+

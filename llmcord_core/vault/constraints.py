@@ -57,6 +57,15 @@ class PairCount:
 
 
 @dataclass(frozen=True)
+class CommonCount:
+    digits: str  # the digits two guesses share, sorted (cross-validation, FEAT-66)
+    count: int  # how many of them the secret contains
+
+    def holds(self, secret: str) -> bool:
+        return len(set(self.digits) & set(secret)) == self.count
+
+
+@dataclass(frozen=True)
 class CountEven:
     count: int
 

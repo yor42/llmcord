@@ -1892,3 +1892,52 @@ msgstr "이 서버는 오늘 캐릭터 대화 {limit}회를 모두 사용했어�
 msgid "The Vault settings were changed elsewhere. Reload the page and try again."
 msgstr "금고 설정이 다른 곳에서 바뀌었어요. 페이지를 새로고침한 뒤 다시 시도해 주세요."
 
+#: llmcord_core/i18n/codes.py
+msgid "The weekly operation is not turned on for this server."
+msgstr "이 서버에서는 주간 작전이 켜져 있지 않아요."
+
+#: llmcord_core/i18n/codes.py
+msgid "The operation runs in a different channel. Join it there."
+msgstr "작전은 다른 채널에서 진행돼요. 그 채널에서 참여해 주세요."
+
+#: llmcord_core/i18n/codes.py
+msgid "The operation needs two eligible characters in this channel's cast to hold the clues."
+msgstr "작전에는 단서를 맡을 수 있는 캐릭터 두 명이 이 채널의 출연진에 있어야 해요."
+
+#: llmcord_core/i18n/codes.py
+msgid "Join the operation first."
+msgstr "먼저 작전에 참여해 주세요."
+
+#: llmcord_core/i18n/codes.py
+msgid "Pick two different guesses from this attempt."
+msgstr "이번 시도에서 서로 다른 추측 두 개를 골라 주세요."
+
+#: llmcord_core/i18n/codes.py
+msgid "Cross-validation needs guesses from two different members."
+msgstr "교차 검증에는 서로 다른 두 멤버의 추측이 필요해요."
+
+#: llmcord_core/i18n/codes.py
+msgid "Cross-validation was already used in this attempt."
+msgstr "이번 시도에서는 이미 교차 검증을 썼어요."
+
+#: llmcord_core/i18n/codes.py
+msgid "The operation channel must be a channel id."
+msgstr "작전 채널은 채널 ID여야 해요."
+
+#: llmcord_core/i18n/codes.py
+msgid "The week start must be a day from 0 (Monday) to 6 (Sunday)."
+msgstr "한 주의 시작은 0(월요일)부터 6(일요일) 사이의 요일이어야 해요."
+
+#: llmcord_core/i18n/codes.py
+msgid "Choose a Vault protocol for each of the three stages."
+msgstr "세 단계마다 금고 방식을 하나씩 골라 주세요."
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The contributions needed for a reward must be a whole number from {low} to {high}."
+msgstr "보상에 필요한 기여 횟수는 {low}에서 {high} 사이의 정수여야 해요."
+
+#: llmcord_core/i18n/codes.py
+msgid "Cross-validation on those two guesses would tell you nothing new. Nothing was spent."
+msgstr "그 두 추측으로 교차 검증을 해도 새로 알 수 있는 게 없어요. 아무것도 쓰이지 않았어요."
+

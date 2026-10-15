@@ -305,6 +305,51 @@ CREATE TABLE IF NOT EXISTS vault_reward_claims (
  user_id INTEGER NOT NULL, type TEXT NOT NULL, amount INTEGER NOT NULL, ledger_id INTEGER NOT NULL, created_at REAL NOT NULL,
  UNIQUE(session_id,user_id,type)
 );
+CREATE TABLE IF NOT EXISTS vault_operation_settings (
+ guild_id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)), channel_id INTEGER,
+ week_start INTEGER NOT NULL DEFAULT 0 CHECK(week_start BETWEEN 0 AND 6), stage_protocols_json TEXT NOT NULL DEFAULT '',
+ contribution_reward INTEGER NOT NULL DEFAULT 0 CHECK(contribution_reward>=0), team_reward INTEGER NOT NULL DEFAULT 0 CHECK(team_reward>=0),
+ min_guesses INTEGER NOT NULL DEFAULT 1 CHECK(min_guesses BETWEEN 1 AND 30), revision INTEGER NOT NULL DEFAULT 0, updated_at REAL NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS vault_operations (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, channel_id INTEGER NOT NULL, week_key TEXT NOT NULL,
+ starts_at REAL NOT NULL, expires_at REAL NOT NULL, status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','solved','failed','expired')),
+ npc_ids_json TEXT NOT NULL, protocols_json TEXT NOT NULL, created_by INTEGER NOT NULL, created_at REAL NOT NULL, finished_at REAL,
+ UNIQUE(guild_id,channel_id,week_key)
+);
+CREATE INDEX IF NOT EXISTS vault_operations_active ON vault_operations(guild_id,channel_id,status,expires_at);
+CREATE TABLE IF NOT EXISTS vault_operation_participants (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, operation_id INTEGER NOT NULL REFERENCES vault_operations(id) ON DELETE CASCADE,
+ user_id INTEGER NOT NULL, advisor_id INTEGER, joined_at REAL NOT NULL,
+ UNIQUE(operation_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS vault_operation_stages (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, operation_id INTEGER NOT NULL REFERENCES vault_operations(id) ON DELETE CASCADE,
+ number INTEGER NOT NULL CHECK(number BETWEEN 1 AND 3), retry INTEGER NOT NULL DEFAULT 0 CHECK(retry IN (0,1)), protocol TEXT NOT NULL, length INTEGER NOT NULL,
+ turn_budget INTEGER NOT NULL CHECK(turn_budget>=1), secret TEXT NOT NULL, open_digit TEXT,
+ status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','solved','failed','expired')), created_at REAL NOT NULL,
+ UNIQUE(operation_id,number)
+);
+CREATE TABLE IF NOT EXISTS vault_operation_actions (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, operation_id INTEGER NOT NULL REFERENCES vault_operations(id) ON DELETE CASCADE,
+ stage_number INTEGER NOT NULL, attempt INTEGER NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('guess','tool','cross','advice')), user_id INTEGER NOT NULL,
+ number INTEGER, guess TEXT, feedback_json TEXT, won INTEGER NOT NULL DEFAULT 0, tool_key TEXT, params_json TEXT, text_key TEXT, data_json TEXT,
+ constraint_kind TEXT, constraint_json TEXT, turn_cost INTEGER NOT NULL DEFAULT 0, use_id INTEGER, character_id INTEGER, remaining INTEGER,
+ source TEXT, text TEXT, action_key TEXT, created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS vault_operation_actions_stage ON vault_operation_actions(guild_id,operation_id,stage_number,attempt,id);
+CREATE UNIQUE INDEX IF NOT EXISTS vault_operation_actions_key ON vault_operation_actions(operation_id,kind,action_key) WHERE action_key IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS vault_operation_actions_guess ON vault_operation_actions(operation_id,stage_number,attempt,guess) WHERE kind='guess';
+CREATE TABLE IF NOT EXISTS vault_operation_clues (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, operation_id INTEGER NOT NULL REFERENCES vault_operations(id) ON DELETE CASCADE,
+ stage_number INTEGER NOT NULL, position INTEGER NOT NULL, character_id INTEGER NOT NULL, kind TEXT NOT NULL, data_json TEXT NOT NULL, revealed_at REAL,
+ UNIQUE(operation_id,stage_number,position)
+);
+CREATE TABLE IF NOT EXISTS vault_operation_claims (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, operation_id INTEGER NOT NULL REFERENCES vault_operations(id) ON DELETE CASCADE,
+ user_id INTEGER NOT NULL, type TEXT NOT NULL, amount INTEGER NOT NULL, ledger_id INTEGER NOT NULL, created_at REAL NOT NULL,
+ UNIQUE(operation_id, user_id, type)
+);
 """
 
 
