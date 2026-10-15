@@ -25,6 +25,7 @@
 - [I Doubt It](I-Doubt-It)
 - [Texas Hold'em](Texas-Holdem)
 - [One Card](One-Card)
+- [Yut](Yut)
 
 **Admin dashboard**
 - [Overview](Dashboard-Overview)

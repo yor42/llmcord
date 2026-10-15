@@ -2946,6 +2946,22 @@ msgid "Ante: each player pays this into the pot when joining; the winner takes t
 msgstr ""
 
 #: llmcord_core/games_ui.py
+msgid "Off: /game start refuses Yut, and open Yut tables close with every ante refunded."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Pieces per player"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Back-do (빽도) throw"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Ante: each player pays this into the pot when joining; the winner takes the pot. 0 = no ante. Turn timeout: a player who runs out of time has the throw or move made automatically. Pieces per player: how many pieces each player must bring home. Back-do: allow the throw that moves a piece one step back. Changes apply to tables opened afterwards."
+msgstr ""
+
+#: llmcord_core/games_ui.py
 msgid "Off: /game start refuses Texas Hold'em, and open Hold'em tables close with every stack cashed out."
 msgstr ""
 

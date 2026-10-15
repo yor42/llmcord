@@ -4973,6 +4973,56 @@ class DashboardBrowserTests(unittest.TestCase):
             self.post_hook('/_test/games', {'onecard_rules': default})
             context.close()
 
+    def yut_card(self, page):
+        return page.locator('.ll-section').filter(has=page.get_by_text('Yut', exact=True))
+
+    def test_games_tab_yut_section_saves_rules_and_switch_and_refuses_bad_values(self):
+        """FEAT-59: the Yut section saves ante, turn timeout, pieces and the Back-do switch (games.yut_rules) and the Enabled switch (games.yut_enabled), refuses out-of-range pieces, and shows the conflict message on a stale save."""
+        import json
+        from llmcord_core.games import yut
+        from playwright.sync_api import expect
+        default = yut.normalize_rules({})
+        context, page, errors = self.open_games()
+        try:
+            bar = page.get_by_role('region', name='Unsaved changes')
+            card = self.yut_card(page)
+            card.get_by_role('switch', name='Enabled', exact=True).wait_for(timeout=5000)
+            self.assertEqual(card.get_by_label('Pieces per player', exact=True).input_value(), '4')
+            card.get_by_label('Pieces per player', exact=True).fill('7')
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Pieces per player must be a whole number from 2 to 5.', exact=True).wait_for(timeout=5000)
+            self.assertEqual(self.state()['games']['1']['yut_rules'], default)
+            card.get_by_label('Pieces per player', exact=True).fill('3')
+            card.get_by_label('Ante', exact=True).fill('50')
+            card.get_by_role('switch', name='Back-do (빽도) throw', exact=True).click()
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Yut rules saved', exact=True).wait_for(timeout=5000)
+            saved = self.state()['games']['1']['yut_rules']
+            self.assertEqual(saved, {**default, 'pieces': 3, 'ante': 50, 'backdo': False})
+            rows = [r for r in self.state()['audit'] if r['action'] == 'games.yut_rules']
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(json.loads(rows[0]['detail_json']), saved)
+            card.get_by_role('switch', name='Enabled', exact=True).click()
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('Yut setting saved', exact=True).wait_for(timeout=5000)
+            self.assertFalse(self.state()['games']['1']['yut_enabled'])
+            self.assertIn('games.yut_enabled', self.audit_actions())
+            page.reload()
+            card = self.yut_card(page)
+            expect(card.get_by_role('switch', name='Enabled', exact=True)).to_have_attribute('aria-checked', 'false', timeout=5000)
+            expect(card.get_by_label('Pieces per player', exact=True)).to_have_value('3', timeout=5000)
+            self.post_hook('/_test/games', {'yut_enabled': True})
+            page.reload()
+            card = self.yut_card(page)
+            card.get_by_label('Ante', exact=True).fill('9')
+            self.post_hook('/_test/games', {'yut_rules': {'turn_timeout': 90}})
+            bar.get_by_role('button', name='Save changes', exact=True).click()
+            page.get_by_text('The Yut rules were changed elsewhere. Reload the page and try again.', exact=True).wait_for(timeout=5000)
+            self.assertFalse(self.page_errors(page), (errors, getattr(page, 'network', [])))
+        finally:
+            self.post_hook('/_test/games', {'yut_rules': default, 'yut_enabled': True})
+            context.close()
+
     def test_games_tab_holdem_switch_and_rules_save_persist_validate_and_conflict(self):
         """FEAT-33 D: the Texas Hold'em section saves its switch and its blinds, buy-in range, action timeout and assist rules with audit rows, persists after reload, refuses an invalid buy-in range and a stale save, and leaves guild 2 alone."""
         import json

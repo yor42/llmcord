@@ -160,6 +160,11 @@ The **Smallest bet** and **Largest bet** (whole numbers from 1 to 100,000; the s
 - **One Card rules** (saved as "One Card rules saved", audited as `games.onecard_rules` with the full rules): **Ante** (0 to 1,000,000,000; 0 = none, the default), **Turn timeout (seconds)**, **Last card restriction** (No restriction, No attack cards, or No attack cards or Jokers: a player cannot finish on those), **Spade Ace counts +10** (off: the ♠A is +5), **Defense chain** (off: an attack can only be answered by drawing), **King skips two seats** (only while 4 or more players are still in), **Bankruptcy** with a **Bankruptcy limit** (15 to 30 cards, default 20; a player who reaches it is out and their cards go back to the draw pile), **Call-out penalty** (1 to 3 cards, default 1) and **Declaration phrases (one per line)** (1 to 8 phrases; default 원카드 and One Card). Changes apply to tables opened afterwards. A stale save is refused ("The One Card rules were changed elsewhere. Reload the page and try again.").
 - Declarations and call-outs are read in the table thread whenever One Card is on; they do not use the Experimental spoken-move switches.
 
+**Yut**
+
+- **Enabled** (saved as "Yut setting saved", audited as `games.yut_enabled`): off, `/game start game:yut` is refused and the server's open Yut tables close with every ante refunded.
+- **Yut rules** (saved as "Yut rules saved", audited as `games.yut_rules` with the full rules): **Ante** (0 to 1,000,000,000; 0 = none, the default), **Turn timeout (seconds)** (15 to 300, default 60), **Back-do (빽도) throw** (on by default; off: the marked stick counts as a plain 도) and **Pieces per player** (2 to 5, default 4). Changes apply to tables opened afterwards. A stale save is refused ("The Yut rules were changed elsewhere. Reload the page and try again.").
+
 **Texas Hold'em**
 
 - **Texas Hold'em is on** (saved as "Texas Hold'em setting saved", audited as `games.holdem_enabled`): off, `/game start game:holdem` is refused and the server's open Hold'em tables close with every stack cashed out into wallets; the toast says how many tables were closed.

@@ -462,6 +462,54 @@ def onecard_section(ctx):
                           reset=lambda: [c.set_value(shown(k, rules['value'][k])) for c, k in zip(controls, keys)])
 
 
+def yut_section(ctx):
+    from nicegui import ui
+    from .dashboard import section
+    from .games import yut
+    t = web_locale.current()
+    game = terms.GAME_YUT
+    store, gid = ctx.store, ctx.guild_id
+    with section(t(game)):
+        on = {'value': store.game_enabled(gid, 'yut')}
+        switch = ui.switch(t('Enabled'), value=on['value'])
+        ui.label(t('Off: /game start refuses Yut, and open Yut tables close with every ante refunded.')).classes('ll-muted')
+        def save_on():
+            result = store.set_game_enabled(gid, 'yut', bool(switch.value), on['value'])
+            on['value'] = result['enabled']
+            return result
+        def toast(result):
+            closed = len(result['closed_tables'])
+            if closed:
+                ui.notify(t.n('{game} is off. Closed {n} open table.', '{game} is off. Closed {n} open tables.', closed, game=game, n=closed), type='positive')
+        ctx.savebar.track(t(game), {switch: on['value']}, save=save_on, action='games.yut_enabled',
+                          detail=lambda result: dict(result), success=t('{game} setting saved', game=game),
+                          dirty=lambda: bool(switch.value) != on['value'],
+                          reset=lambda: switch.set_value(on['value']),
+                          then=toast)
+
+        rules = {'value': store.game_rules(gid, 'yut')}
+        value = rules['value']
+        with ui.element('div').classes('ll-form-row ll-field-row'):
+            ante = ui.number(t.p('field', 'Ante'), value=value['ante'], min=0, max=yut.ANTE_MAX, precision=0, format='%d').classes('ll-wide')
+            timeout = ui.number(t('Turn timeout (seconds)'), value=value['turn_timeout'], min=yut.TIMEOUT_RANGE[0], max=yut.TIMEOUT_RANGE[1], precision=0, format='%d').classes('ll-wide')
+            pieces = ui.number(t('Pieces per player'), value=value['pieces'], min=yut.PIECES_RANGE[0], max=yut.PIECES_RANGE[1], precision=0, format='%d').classes('ll-wide')
+        backdo = ui.switch(t('Back-do (빽도) throw'), value=value['backdo'])
+        ui.label(t('Ante: each player pays this into the pot when joining; the winner takes the pot. 0 = no ante. Turn timeout: a player who runs out of time has the throw or move made automatically. '
+                   'Pieces per player: how many pieces each player must bring home. Back-do: allow the throw that moves a piece one step back. Changes apply to tables opened afterwards.')).classes('ll-muted')
+        controls = (ante, timeout, pieces, backdo)
+        keys = ('ante', 'turn_timeout', 'pieces', 'backdo')
+        def current():
+            return {'ante': _whole(ante.value), 'turn_timeout': _whole(timeout.value), 'pieces': _whole(pieces.value), 'backdo': bool(backdo.value)}
+        def save_rules():
+            result = store.set_game_rules(gid, 'yut', current(), expected=rules['value'])
+            rules['value'] = result
+            return result
+        ctx.savebar.track(t('{game} rules', game=game), {c: rules['value'][k] for c, k in zip(controls, keys)},
+                          save=save_rules, action='games.yut_rules', detail=lambda result: dict(result), success=t('{game} rules saved', game=game),
+                          dirty=lambda: current() != rules['value'],
+                          reset=lambda: [c.set_value(rules['value'][k]) for c, k in zip(controls, keys)])
+
+
 def holdem_section(ctx):
     from nicegui import ui
     from .dashboard import section
@@ -509,7 +557,7 @@ def holdem_section(ctx):
                           reset=lambda: [c.set_value(rules['value'][k]) for c, k in zip(controls, keys)])
 
 
-GAME_SECTIONS = {'blackjack': blackjack_section, 'doubt': doubt_section, 'holdem': holdem_section, 'onecard': onecard_section}
+GAME_SECTIONS = {'blackjack': blackjack_section, 'doubt': doubt_section, 'holdem': holdem_section, 'onecard': onecard_section, 'yut': yut_section}
 
 
 async def games_panel(ctx):

@@ -12,7 +12,7 @@ Administrators arrange characters and lore into **worlds**, **hubs** and **chann
 | Learn the commands | [Discord commands](Discord-Commands) |
 | Understand worlds, hubs and casts | [Worlds, hubs and casts](Worlds-Hubs-and-Casts), [Scenes and ambient mode](Scenes-and-Ambient-Mode), [Favorites](Favorites) |
 | Know what a character remembers | [Lore and memory](Lore-and-Memory) |
-| Play games and spend currency | [Blackjack](Blackjack), [I Doubt It](I-Doubt-It), [Texas Hold'em](Texas-Holdem), [One Card](One-Card), [Items and the shop](Items-and-Shop) |
+| Play games and spend currency | [Blackjack](Blackjack), [I Doubt It](I-Doubt-It), [Texas Hold'em](Texas-Holdem), [One Card](One-Card), [Yut](Yut), [Items and the shop](Items-and-Shop) |
 | Run a server from the dashboard | [Dashboard overview](Dashboard-Overview), then the dashboard pages in the sidebar |
 | Operate the bot (caps, model profiles) | [Bot settings](Bot-Settings), [Monitoring and costs](Monitoring-and-Costs) |
 | Work on the code | [Architecture](Architecture), [Testing and verification](Testing-and-Verification), [Engineering docs](Engineering-Docs) |
@@ -27,7 +27,7 @@ The words used in commands, the dashboard and these pages are defined in the [Gl
 - **Lore and memory.** Hand-written lore, SillyTavern and RisuAI lorebook imports with conflict review, World Info rules, scene summaries, and personal facts kept only after `/memory opt_in`.
 - **Prompt presets.** Per-server, versioned prompt structures, with SillyTavern Chat Completion preset import.
 - **Emotion avatars.** A character can change its avatar by mood for each line.
-- **Currency, items and games.** Daily check-ins, a toy shop, and blackjack, I Doubt It, Texas Hold'em and One Card tables where characters play and talk.
+- **Currency, items and games.** Daily check-ins, a toy shop, and blackjack, I Doubt It, Texas Hold'em, One Card and Yut tables where characters play and talk.
 - **Costs under control.** Per-server usage reports, an optional turn log, and bot-wide spending caps.
 
 ## Source and license
