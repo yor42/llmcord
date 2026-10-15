@@ -444,6 +444,7 @@ class VaultOperationStore(VaultStore):
                 raise VaultStoreError(codes.VAULT_TOOL_NO_TURNS)
             if self.item_qty(guild_id, user_id, tool_key) < 1:
                 raise VaultStoreError(codes.VAULT_TOOL_NOT_HELD)
+            self._vault_tool_enabled(guild_id, tool_key)
             history = [GuessResult(g['guess'], stage['protocol'], tuple(json.loads(g['feedback_json']))) for g in self._op_attempt(stage, 'guess')]
             history += [c for c in map(self._vault_tool_constraint, tools) if isinstance(c, DigitAt)]
             try:

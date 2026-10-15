@@ -197,7 +197,7 @@ def guess_log(result: dict, currency: str, *, t=None) -> str:
             lines.append(t('Reward: {amount:,} {currency}', amount=session['reward']['amount'], currency=currency))
         elif result['reward_refused']:
             lines.append(t('Your reward could not be paid because your balance is at its limit.'))
-    elif session['status'] == 'failed' and result['number'] >= session['turn_budget']:
+    elif session['status'] == 'failed':
         lines.append(t('Out of turns. The vault stays closed today.'))
     return '\n'.join(lines)
 
@@ -399,13 +399,12 @@ class VaultPlay:
         if refused is None and hidden is not None and self.store.vault_settings(gid)['clue_voice'] == 'llm':
             entry = next((c for c in view['clues'] if c['position'] == hidden and c.get('constraint') is not None), None)
             if entry is not None:
-                if not await self._defer(interaction):
-                    return
-                deferred = True
-                try:
-                    voiced = await self._voice_clue(interaction, entry)
-                except Exception as error:
-                    logging.error('Vault clue voice failed: %s', type(error).__name__)
+                deferred = await self._defer(interaction)
+                if deferred:
+                    try:
+                        voiced = await self._voice_clue(interaction, entry)
+                    except Exception as error:
+                        logging.error('Vault clue voice failed: %s', type(error).__name__)
         await self._show(interaction, view, t, edit=True, original=bool(deferred))
         if voiced:
             await self.say(interaction, t('{name}: {fact}', name=entry['name'] or t('a deleted character'), fact=voiced))

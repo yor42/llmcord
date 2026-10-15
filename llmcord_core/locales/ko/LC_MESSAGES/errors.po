@@ -1840,6 +1840,10 @@ msgid "You do not have that tool. Buy one with /shop."
 msgstr "그 도구를 가지고 있지 않아요. /shop에서 구매해 주세요."
 
 #: llmcord_core/i18n/codes.py
+msgid "This tool is switched off in this server. Nothing was spent."
+msgstr "이 서버에서는 이 도구를 사용할 수 없어요. 아무것도 소모되지 않았어요."
+
+#: llmcord_core/i18n/codes.py
 msgid "That tool cannot be used that way. Nothing was spent."
 msgstr "그렇게는 도구를 쓸 수 없어요. 아무것도 소모되지 않았어요."
 

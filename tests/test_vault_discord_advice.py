@@ -60,6 +60,9 @@ import asyncio
 import json
 import re
 import unittest
+from types import SimpleNamespace
+
+import discord
 
 from llmcord_core.errors import ModelConfigError
 from llmcord_core.usage import ModelUsage, _capture
@@ -553,6 +556,21 @@ class ClueVoiceTests(AdviceUiCase):
         self.assertEqual((len(self.advice_rows()), len(self.actions())), (0, 0))
         self.assertEqual(self.store.vault_session(G, ALICE, self.sid, now=NOW)["turns_left"], 9)
         self.assert_no_secret(click)
+
+    async def test_a_failed_defer_still_shows_the_status_after_the_committed_reveal(self):
+        """Regression (final review): with the llm voice the reveal is committed before the defer; if Discord refuses the defer the press
+        must still edit the normal status (template path), make no model call, and not reveal a second clue."""
+        self.store.set_vault_settings(G, clue_voice="llm")
+        await self.start()
+        click = self.click()
+
+        async def refuse(**kwargs):
+            raise discord.HTTPException(SimpleNamespace(status=500, reason="x"), "x")
+        click.response.defer = refuse
+        await self.bot.vault.press(click, "clue", self.sid)
+        self.assertEqual(self.models.calls, [])
+        self.assertEqual(len(click.response.edited), 1)
+        self.assertEqual(self.store.one("SELECT COUNT(*) FROM vault_clues WHERE session_id=? AND revealed_at IS NOT NULL", (self.sid,))[0], 1)
 
     async def test_bad_clue_wording_keeps_the_template_clue_silently(self):
         """FEAT-65: wording that drops the clue's numbers or adds another digit run is not shown; the template clue is."""

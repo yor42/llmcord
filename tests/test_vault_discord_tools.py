@@ -413,6 +413,17 @@ class ToolRefusalTests(ToolUiCase):
         self.assertIn("Status: Expired", self.status(submit))
         self.assertEqual(self.qty(SPECTRUM), 1)
 
+    async def test_a_tool_switched_off_in_the_shop_is_refused_in_the_invoker_locale(self):
+        """Regression (final review): Allow use off means the submit says so; nothing is spent."""
+        await self.started(SPECTRUM)
+        self.store.save_shop_item(G, SPECTRUM, expected_revision=0, for_sale=True, allow_use=False)
+        sid = self.row()["id"]
+        direct = self.click()
+        await self.bot.vault.submit_tool(direct, sid, SPECTRUM, {"position": "1"})
+        self.assertEqual(self.everything(direct), "This tool is switched off in this server. Nothing was spent.")
+        self.assertEqual(self.qty(SPECTRUM), 1)
+        self.assertEqual(self.store.one("SELECT COUNT(*) FROM vault_tool_uses")[0], 0)
+
 
 class ToolOwnerTests(ToolUiCase):
     async def test_only_the_owner_opens_the_picker_or_a_modal_or_submits(self):

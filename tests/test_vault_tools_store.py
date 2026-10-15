@@ -409,3 +409,13 @@ class IsolationTests(ToolCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AllowUseTests(ToolCase):
+    def test_a_tool_switched_off_in_the_shop_is_refused_for_free(self):
+        """Regression (final review): the shop's Allow use switch governs Vault tools too; the refusal spends nothing."""
+        self.give(SPECTRUM)
+        self.store.save_shop_item(G, SPECTRUM, expected_revision=0, for_sale=True, allow_use=False)
+        self.refused("vault.tool_disabled", SPECTRUM, {"position": 1})
+        self.store.save_shop_item(G, SPECTRUM, expected_revision=1, for_sale=True, allow_use=True)
+        self.assertEqual(self.use(SPECTRUM, {"position": 1})["qty"], 0)

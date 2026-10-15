@@ -17,7 +17,7 @@ from zoneinfo import ZoneInfo
 
 from .admin_store import ConflictError
 from .i18n import UserError, codes
-from .items_store import NotHeld
+from .items_store import NotHeld, _recipe
 from .vault import (ADVICE_TEMPLATE_KEY, DEFAULT_LENGTH, DEFAULT_TURNS, PROTOCOLS, TOOLS, CountEven, CountLow, DigitAt, DigitPresent, GuessResult, OpenDigit, PairCount,
                     PositionHalf, PositionParity, ToolResult, VaultError, build_advice_facts, check_guess, check_wording, evaluate_tool, feedback, filter_candidates, is_redundant, make_clues,
                     open_digit, played, random_secret, tool_fits)
@@ -411,6 +411,7 @@ class VaultStore:
             raise VaultStoreError(codes.VAULT_TOOL_NO_TURNS)
         if self.item_qty(guild_id, user_id, tool_key) < 1:
             raise VaultStoreError(codes.VAULT_TOOL_NOT_HELD)
+        self._vault_tool_enabled(guild_id, tool_key)
         history = [GuessResult(g['guess'], row['protocol'], tuple(json.loads(g['feedback_json']))) for g in guesses]
         history += [c for c in map(self._vault_tool_constraint, tools) if isinstance(c, DigitAt)]
         try:
@@ -438,6 +439,12 @@ class VaultStore:
             self._vault_finish(guild_id, session_id, 'failed', now)
         return self._vault_tool_result(self.one('SELECT * FROM vault_sessions WHERE id=? AND guild_id=?', (session_id, guild_id)),
                                        self.one('SELECT * FROM vault_tool_uses WHERE id=? AND guild_id=?', (action_id, guild_id)), False)
+
+    def _vault_tool_enabled(self, guild_id, tool_key):
+        """The shop's Allow use switch also governs Vault tools; inside the caller's transaction, before anything is consumed."""
+        recipe = _recipe(tool_key)
+        if recipe is not None and not self._shop_entry(recipe, self._shop_row(guild_id, tool_key))['allow_use']:
+            raise VaultStoreError(codes.VAULT_TOOL_DISABLED)
 
     @staticmethod
     def _vault_verifier_known(secret, guess):

@@ -1029,3 +1029,17 @@ class IsolationTests(OpCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AllowUseTests(OpCase):
+    def setUp(self):
+        super().setUp()
+        self.start()
+
+    def test_a_tool_switched_off_in_the_shop_is_refused_for_free(self):
+        """Regression (final review): the shop's Allow use switch governs operation tools; no unit, no shared turn, no use row."""
+        self.give(SPECTRUM, 1, ALICE)
+        self.store.save_shop_item(G, SPECTRUM, expected_revision=0, for_sale=True, allow_use=False)
+        before = (self.store.item_qty(G, ALICE, SPECTRUM), len(self.store.item_use_log(G)), self.op()["stage"]["turns_used"])
+        self.refused("vault.tool_disabled", self.tool, {"position": 1}, ALICE)
+        self.assertEqual((self.store.item_qty(G, ALICE, SPECTRUM), len(self.store.item_use_log(G)), self.op()["stage"]["turns_used"]), before)

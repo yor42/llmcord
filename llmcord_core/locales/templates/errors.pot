@@ -1832,6 +1832,10 @@ msgid "You do not have that tool. Buy one with /shop."
 msgstr ""
 
 #: llmcord_core/i18n/codes.py
+msgid "This tool is switched off in this server. Nothing was spent."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
 msgid "That tool cannot be used that way. Nothing was spent."
 msgstr ""
 

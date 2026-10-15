@@ -684,3 +684,15 @@ class KoreanTests(VaultCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GuessLogOutOfTurnsTests(unittest.TestCase):
+    def test_out_of_turns_follows_the_failed_status_not_the_guess_number(self):
+        """Regression (final review): tool turn costs also exhaust the budget (budget 9: a 2-turn tool + 7 guesses fails at guess 7)."""
+        from llmcord_core.vault_discord import guess_log
+        base = {"number": 7, "guess": "1234", "feedback": (0, 0), "won": False, "reward_refused": False}
+        session = {"protocol": "standard", "turn_budget": 9, "reward": None}
+        failed = guess_log({**base, "session": {**session, "status": "failed"}}, "coins")
+        active = guess_log({**base, "session": {**session, "status": "active"}}, "coins")
+        self.assertIn("Out of turns. The vault stays closed today.", failed)
+        self.assertNotIn("Out of turns", active)
