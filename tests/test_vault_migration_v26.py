@@ -57,7 +57,7 @@ class V25UpgradeTests(unittest.TestCase):
             self.assertFalse(set(OPERATION_TABLES) & tables(path))
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 26)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 27)
                 self.assertEqual(store.balance(G, ALICE), 120)
                 self.assertEqual(store.vault_settings(G)["reward"], 30)
                 self.assertEqual(store.vault_session(G, ALICE, sid, now=NOW + 5)["status"], "active")
@@ -99,7 +99,7 @@ class V25UpgradeTests(unittest.TestCase):
             backups = list(Path(folder).glob("*.pre-*.sqlite3"))
             self.assertEqual(len(backups), 1)
             self.assertIn(".pre-v25-", backups[0].name)
-            self.assertEqual(sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0], 26)
+            self.assertEqual(sqlite3.connect(path).execute("PRAGMA user_version").fetchone()[0], 27)
 
     def test_a_failed_upgrade_leaves_the_v25_file_as_it_was(self):
         """The upgrade is one transaction: a statement that fails halfway rolls the whole upgrade back (the existing atomic-upgrade guarantee)."""
@@ -116,7 +116,7 @@ class V25UpgradeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "new.sqlite3"
             with closing(sqlite3.connect(path)) as db, db:
-                db.execute("PRAGMA user_version=27")
+                db.execute("PRAGMA user_version=28")
             with self.assertRaisesRegex(ValueError, "newer than this application"):
                 Store(path)
             self.assertEqual(list(Path(folder).glob("*.pre-*.sqlite3")), [])
@@ -126,7 +126,7 @@ class SchemaTests(unittest.TestCase):
     def test_fresh_store_is_v26_with_every_operation_table(self):
         store = Store()
         self.addCleanup(store.close)
-        self.assertEqual(store.one("PRAGMA user_version")[0], 26)
+        self.assertEqual(store.one("PRAGMA user_version")[0], 27)
         have = {r[0] for r in store.all("SELECT name FROM sqlite_master WHERE type='table'")}
         self.assertTrue(set(OPERATION_TABLES) <= have)
 

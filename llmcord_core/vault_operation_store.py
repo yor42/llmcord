@@ -35,10 +35,10 @@ class VaultOperationStore(VaultStore):
         return {'enabled': bool(row['enabled']) if row else False, 'channel_id': row['channel_id'] if row else None,
                 'week_start': row['week_start'] if row else 0, 'stage_protocols': protocols or list(DEFAULT_STAGE_PROTOCOLS),
                 'contribution_reward': row['contribution_reward'] if row else 0, 'team_reward': row['team_reward'] if row else 0,
-                'min_guesses': row['min_guesses'] if row else 1, 'revision': row['revision'] if row else 0}
+                'min_guesses': row['min_guesses'] if row else 1, 'support_reward': row['support_reward'] if row else 0, 'revision': row['revision'] if row else 0}
 
     def set_vault_operation_settings(self, guild_id, *, enabled=None, channel_id=None, week_start=None, stage_protocols=None, contribution_reward=None,
-                                     team_reward=None, min_guesses=None, expected_revision=None):
+                                     team_reward=None, min_guesses=None, support_reward=None, expected_revision=None):
         def whole(value, low, high):
             return not isinstance(value, bool) and isinstance(value, int) and low <= value <= high
         if enabled is not None and not isinstance(enabled, bool):
@@ -50,7 +50,7 @@ class VaultOperationStore(VaultStore):
         if stage_protocols is not None and (not isinstance(stage_protocols, (list, tuple)) or len(stage_protocols) != STAGES
                                             or not all(isinstance(p, str) and p in PROTOCOLS for p in stage_protocols)):
             raise UserError(codes.VAULT_OPERATION_SETTINGS_PROTOCOLS)
-        for reward in (contribution_reward, team_reward):
+        for reward in (contribution_reward, team_reward, support_reward):
             if reward is not None and not whole(reward, 0, self.MAX_CURRENCY_CHANGE):
                 raise UserError(codes.VAULT_SETTINGS_REWARD, limit=self.MAX_CURRENCY_CHANGE)
         if min_guesses is not None and not whole(min_guesses, 1, MAX_MIN_GUESSES):
@@ -64,13 +64,14 @@ class VaultOperationStore(VaultStore):
                    'stage_protocols': current['stage_protocols'] if stage_protocols is None else list(stage_protocols),
                    'contribution_reward': current['contribution_reward'] if contribution_reward is None else contribution_reward,
                    'team_reward': current['team_reward'] if team_reward is None else team_reward,
-                   'min_guesses': current['min_guesses'] if min_guesses is None else min_guesses, 'revision': current['revision'] + 1}
-            self.db.execute('INSERT INTO vault_operation_settings(guild_id,enabled,channel_id,week_start,stage_protocols_json,contribution_reward,team_reward,min_guesses,revision,updated_at) '
-                'VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(guild_id) DO UPDATE SET enabled=excluded.enabled,channel_id=excluded.channel_id,week_start=excluded.week_start,'
+                   'min_guesses': current['min_guesses'] if min_guesses is None else min_guesses,
+                   'support_reward': current['support_reward'] if support_reward is None else support_reward, 'revision': current['revision'] + 1}
+            self.db.execute('INSERT INTO vault_operation_settings(guild_id,enabled,channel_id,week_start,stage_protocols_json,contribution_reward,team_reward,min_guesses,support_reward,revision,updated_at) '
+                'VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(guild_id) DO UPDATE SET enabled=excluded.enabled,channel_id=excluded.channel_id,week_start=excluded.week_start,'
                 'stage_protocols_json=excluded.stage_protocols_json,contribution_reward=excluded.contribution_reward,team_reward=excluded.team_reward,'
-                'min_guesses=excluded.min_guesses,revision=excluded.revision,updated_at=excluded.updated_at',
+                'min_guesses=excluded.min_guesses,support_reward=excluded.support_reward,revision=excluded.revision,updated_at=excluded.updated_at',
                 (guild_id, int(new['enabled']), new['channel_id'], new['week_start'], json.dumps(new['stage_protocols']), new['contribution_reward'],
-                 new['team_reward'], new['min_guesses'], new['revision'], time.time()))
+                 new['team_reward'], new['min_guesses'], new['support_reward'], new['revision'], time.time()))
         return self.vault_operation_settings(guild_id)
 
     # ---- lifecycle
@@ -211,6 +212,8 @@ class VaultOperationStore(VaultStore):
         for a in actions:
             if a['kind'] in CONTRIBUTIONS:
                 contributions[a['user_id']] = contributions.get(a['user_id'], 0) + 1
+        for m in self.all("SELECT user_id FROM vault_support_missions WHERE guild_id=? AND operation_id=? AND status='solved'", (gid, oid)):
+            contributions[m['user_id']] = contributions.get(m['user_id'], 0) + 1
 
         def claim(user_id, kind):
             c = next((c for c in claims if c['user_id'] == user_id and c['type'] == kind), None)
@@ -231,7 +234,7 @@ class VaultOperationStore(VaultStore):
                 'participants': [{'user_id': p['user_id'], 'joined_at': p['joined_at'],
                                   'advisor': {'character_id': p['advisor_id'], 'name': names.get(p['advisor_id'])} if p['advisor_id'] else None,
                                   'contributions': contributions.get(p['user_id'], 0), 'reward_contribution': claim(p['user_id'], 'contribution'),
-                                  'reward_team': claim(p['user_id'], 'team')} for p in people],
+                                  'reward_team': claim(p['user_id'], 'team'), 'reward_support': claim(p['user_id'], 'support')} for p in people],
                 'stage': next((e for e in entries if e['status'] == 'active'), None), 'stages': entries}
 
     def _op_stage_entry(self, s, actions, clue_rows, names):
@@ -289,15 +292,17 @@ class VaultOperationStore(VaultStore):
         if amount <= 0:
             return
         try:
-            entry = self._append_ledger(row['guild_id'], user_id, amount, f"Vault operation {'team ' if kind == 'team' else ''}reward ({row['week_key']})", user_id, 'vault', None)
+            entry = self._append_ledger(row['guild_id'], user_id, amount, f"Vault operation {'team ' if kind == 'team' else 'support mission ' if kind == 'support' else ''}reward ({row['week_key']})", user_id, 'vault', None)
         except UserError:
             return
         self.db.execute('INSERT INTO vault_operation_claims(guild_id,operation_id,user_id,type,amount,ledger_id,created_at) VALUES(?,?,?,?,?,?,?)',
             (row['guild_id'], row['id'], user_id, kind, amount, entry['id'], now))
 
-    def _op_contributions(self, guild_id, operation_id, user_id):
+    def _op_contributions(self, guild_id, operation_id, user_id, missions=False):
+        """Qualifying contributions: guesses, tools and cross-validations; `missions` adds a solved support mission (team reward only, never the contribution reward)."""
         marks = ','.join('?' * len(CONTRIBUTIONS))
-        return self.one(f'SELECT COUNT(*) FROM vault_operation_actions WHERE guild_id=? AND operation_id=? AND user_id=? AND kind IN ({marks})', (guild_id, operation_id, user_id, *CONTRIBUTIONS))[0]
+        solved = self.one("SELECT COUNT(*) FROM vault_support_missions WHERE guild_id=? AND operation_id=? AND user_id=? AND status='solved'", (guild_id, operation_id, user_id))[0] if missions else 0
+        return solved + self.one(f'SELECT COUNT(*) FROM vault_operation_actions WHERE guild_id=? AND operation_id=? AND user_id=? AND kind IN ({marks})', (guild_id, operation_id, user_id, *CONTRIBUTIONS))[0]
 
     def _op_qualify(self, row, user_id, now):
         settings = self.vault_operation_settings(row['guild_id'])
@@ -311,7 +316,7 @@ class VaultOperationStore(VaultStore):
         if settings['team_reward'] <= 0:
             return
         for p in self.all('SELECT user_id FROM vault_operation_participants WHERE guild_id=? AND operation_id=? ORDER BY id', (row['guild_id'], row['id'])):
-            qualified = self._op_contributions(row['guild_id'], row['id'], p['user_id']) >= settings['min_guesses']
+            qualified = self._op_contributions(row['guild_id'], row['id'], p['user_id'], missions=True) >= settings['min_guesses']
             if qualified and self.one("SELECT 1 FROM vault_operation_claims WHERE guild_id=? AND operation_id=? AND user_id=? AND type='team'", (row['guild_id'], row['id'], p['user_id'])) is None:
                 self._op_pay(row, p['user_id'], 'team', settings['team_reward'], now)
 

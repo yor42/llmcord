@@ -919,7 +919,7 @@ class MigrationTests(unittest.TestCase):
             self.assertFalse(set(self.VAULT_TABLES) & self.tables(path))
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 26)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 27)
                 self.assertEqual(store.balance(G, ALICE), 120)
                 self.assertEqual(store.vault_settings(G)["enabled"], False)
                 self.assertEqual(store.all("SELECT 1 FROM vault_sessions"), [])
@@ -940,7 +940,7 @@ class MigrationTests(unittest.TestCase):
             self.assertEqual(len(list(Path(folder).glob("*.pre-v25-*.sqlite3"))), 1)
 
     def test_fresh_store_is_v25_and_a_vault_works_after_upgrade(self):
-        self.assertEqual(Store().one("PRAGMA user_version")[0], 26)
+        self.assertEqual(Store().one("PRAGMA user_version")[0], 27)
         with tempfile.TemporaryDirectory() as folder:
             store = Store(self.v24_file(folder))
             try:

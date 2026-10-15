@@ -1933,3 +1933,23 @@ msgstr ""
 msgid "Cross-validation on those two guesses would tell you nothing new. Nothing was spent."
 msgstr ""
 
+#: llmcord_core/i18n/codes.py
+msgid "Pick one of the support missions to start."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "You already took a different support mission in this operation."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Start a support mission first."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Your support mission in this operation is already over."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Answer with the strikes and balls of the hidden record, for example 1 and 2. Together they cannot be more than 4, and 3 strikes with 1 ball is impossible."
+msgstr ""
+

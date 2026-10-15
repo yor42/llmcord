@@ -1941,3 +1941,23 @@ msgstr "보상에 필요한 기여 횟수는 {low}에서 {high} 사이의 정수
 msgid "Cross-validation on those two guesses would tell you nothing new. Nothing was spent."
 msgstr "그 두 추측으로 교차 검증을 해도 새로 알 수 있는 게 없어요. 아무것도 쓰이지 않았어요."
 
+#: llmcord_core/i18n/codes.py
+msgid "Pick one of the support missions to start."
+msgstr "시작할 지원 임무를 하나 골라 주세요."
+
+#: llmcord_core/i18n/codes.py
+msgid "You already took a different support mission in this operation."
+msgstr "이번 작전에서 이미 다른 지원 임무를 맡았어요."
+
+#: llmcord_core/i18n/codes.py
+msgid "Start a support mission first."
+msgstr "먼저 지원 임무를 시작해 주세요."
+
+#: llmcord_core/i18n/codes.py
+msgid "Your support mission in this operation is already over."
+msgstr "이번 작전의 지원 임무는 이미 끝났어요."
+
+#: llmcord_core/i18n/codes.py
+msgid "Answer with the strikes and balls of the hidden record, for example 1 and 2. Together they cannot be more than 4, and 3 strikes with 1 ball is impossible."
+msgstr "가려진 기록의 스트라이크와 볼 수를 입력해 주세요. 예를 들어 1과 2처럼요. 합계는 4를 넘을 수 없고, 스트라이크 3에 볼 1은 불가능해요."
+

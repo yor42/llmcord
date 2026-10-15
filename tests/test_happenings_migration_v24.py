@@ -41,7 +41,7 @@ class V23UpgradeTests(unittest.TestCase):
             Store(path).close()
             self.assertEqual(item_use_rows(path), before)
             with closing(sqlite3.connect(path)) as db:
-                self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 26)
+                self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 27)
                 indexes = {row[1]: row for row in db.execute("PRAGMA index_list(item_uses)")}
                 self.assertIn("item_uses_channel_time", indexes)
                 self.assertEqual([c[2] for c in db.execute("PRAGMA index_info(item_uses_channel_time)")], ["guild_id", "channel_id", "used_at"])
@@ -96,7 +96,7 @@ class V23UpgradeTests(unittest.TestCase):
     def test_fresh_store_is_v24_with_index_and_empty_post_table(self):
         store = Store()
         self.addCleanup(store.close)
-        self.assertEqual(store.one("PRAGMA user_version")[0], 26)
+        self.assertEqual(store.one("PRAGMA user_version")[0], 27)
         self.assertIn("item_uses_channel_time", {r[1] for r in store.all("PRAGMA index_list(item_uses)")})
         self.assertEqual(store.all("SELECT * FROM item_use_posts"), [])
 

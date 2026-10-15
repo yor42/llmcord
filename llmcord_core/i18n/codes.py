@@ -499,3 +499,9 @@ VAULT_OPERATION_SETTINGS_WEEK_START = E_('vault.operation_settings_week_start', 
 VAULT_OPERATION_SETTINGS_PROTOCOLS = E_('vault.operation_settings_protocols', 'Choose a Vault protocol for each of the three stages.')
 VAULT_OPERATION_SETTINGS_MIN_GUESSES = E_('vault.operation_settings_min_guesses', 'The contributions needed for a reward must be a whole number from {low} to {high}.')
 VAULT_CROSS_REDUNDANT = E_('vault.cross_redundant', 'Cross-validation on those two guesses would tell you nothing new. Nothing was spent.')
+# --- FEAT-67: Vault support missions
+VAULT_MISSION_TYPE_UNKNOWN = E_('vault.mission_type_unknown', 'Pick one of the support missions to start.')
+VAULT_MISSION_EXISTS = E_('vault.mission_exists', 'You already took a different support mission in this operation.')
+VAULT_MISSION_NONE = E_('vault.mission_none', 'Start a support mission first.')
+VAULT_MISSION_FINISHED = E_('vault.mission_finished', 'Your support mission in this operation is already over.')
+VAULT_MISSION_ANSWER_INVALID = E_('vault.mission_answer_invalid', 'Answer with the strikes and balls of the hidden record, for example 1 and 2. Together they cannot be more than 4, and 3 strikes with 1 ball is impossible.')

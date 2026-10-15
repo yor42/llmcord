@@ -52,7 +52,7 @@ class SchemaV5Tests(unittest.TestCase):
         """FEAT-01 (D14): a new database is at version 6 with the timezone and turn_log schema."""
         store = Store()
         try:
-            self.assertEqual(store.one("PRAGMA user_version")[0], 26)
+            self.assertEqual(store.one("PRAGMA user_version")[0], 27)
             self.assert_new_schema(store.db)
         finally:
             store.close()
@@ -64,7 +64,7 @@ class SchemaV5Tests(unittest.TestCase):
             path = self.v4_file(folder)
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 26)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 27)
                 self.assert_new_schema(store.db)
                 row = store.one("SELECT * FROM guild_settings WHERE guild_id=1")
                 self.assertEqual((row["preset_id"], row["preset_revision"], row["usage_footer"]), (7, 3, 0))
@@ -92,7 +92,7 @@ class SchemaV5Tests(unittest.TestCase):
                     connection.execute(f"ALTER TABLE nodes DROP COLUMN {name}")
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 26)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 27)
                 self.assert_new_schema(store.db)
                 self.assertTrue({"author_label", "mentions_json"} <= set(columns(store.db, "nodes")))
             finally:
@@ -112,11 +112,11 @@ class SchemaV5Tests(unittest.TestCase):
             self.assertEqual(list(Path(folder).glob("*.pre-v*")), [])
 
     def test_v17_file_is_rejected(self):
-        """FEAT-01 (D14): a newer file (user_version 27) raises 'newer than this application'."""
+        """FEAT-01 (D14): a newer file (user_version 28) raises 'newer than this application'."""
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "new.sqlite3"
             with closing(sqlite3.connect(path)) as connection, connection:
-                connection.execute("PRAGMA user_version=27")
+                connection.execute("PRAGMA user_version=28")
             with self.assertRaisesRegex(ValueError, "newer than this application"):
                 Store(path)
 

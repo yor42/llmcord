@@ -170,7 +170,7 @@ class SettingsTests(unittest.TestCase):
 
     def test_defaults_are_off_unbound_monday_and_no_reward(self):
         self.assertEqual(self.store.vault_operation_settings(G), {"enabled": False, "channel_id": None, "week_start": 0, "stage_protocols": ["standard", "standard", "open"],
-                                                                  "contribution_reward": 0, "team_reward": 0, "min_guesses": 1, "revision": 0})
+                                                                  "contribution_reward": 0, "team_reward": 0, "min_guesses": 1, "support_reward": 0, "revision": 0})
 
     def test_save_reads_back_bumps_revision_keeps_other_fields_and_is_per_guild(self):
         first = self.store.set_vault_operation_settings(G, enabled=True, channel_id=CH, week_start=3)

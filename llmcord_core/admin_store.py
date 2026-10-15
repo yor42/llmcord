@@ -350,6 +350,18 @@ CREATE TABLE IF NOT EXISTS vault_operation_claims (
  user_id INTEGER NOT NULL, type TEXT NOT NULL, amount INTEGER NOT NULL, ledger_id INTEGER NOT NULL, created_at REAL NOT NULL,
  UNIQUE(operation_id, user_id, type)
 );
+CREATE TABLE IF NOT EXISTS vault_support_missions (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, operation_id INTEGER NOT NULL REFERENCES vault_operations(id) ON DELETE CASCADE,
+ user_id INTEGER NOT NULL, mission_type TEXT NOT NULL CHECK(mission_type IN ('forensics','bulls_cows')), puzzle_json TEXT NOT NULL, answer_json TEXT NOT NULL,
+ status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','solved','failed')), attempts_used INTEGER NOT NULL DEFAULT 0, created_at REAL NOT NULL, finished_at REAL,
+ UNIQUE(operation_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS vault_support_attempts (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, mission_id INTEGER NOT NULL REFERENCES vault_support_missions(id) ON DELETE CASCADE,
+ number INTEGER NOT NULL, answer_json TEXT NOT NULL, feedback_json TEXT, correct INTEGER NOT NULL DEFAULT 0, action_key TEXT, created_at REAL NOT NULL,
+ UNIQUE(mission_id, number), UNIQUE(mission_id, answer_json)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS vault_support_attempts_key ON vault_support_attempts(mission_id,action_key) WHERE action_key IS NOT NULL;
 """
 
 
@@ -695,6 +707,7 @@ class AdminStore:
             'member_settings': {'spoken_moves': 'INTEGER NOT NULL DEFAULT 1 CHECK(spoken_moves IN (0,1))', 'spoken_veto': 'INTEGER NOT NULL DEFAULT 1 CHECK(spoken_veto IN (0,1))'},
             'model_usage': {'channel_id': 'INTEGER', 'feature': "TEXT NOT NULL DEFAULT ''"},
             'vault_clues': {'revealed_at': 'REAL'},
+            'vault_operation_settings': {'support_reward': 'INTEGER NOT NULL DEFAULT 0 CHECK(support_reward>=0)'},
             'vault_settings': {'advice_cap': 'INTEGER NOT NULL DEFAULT 6', 'clue_voice': "TEXT NOT NULL DEFAULT 'template'"},
         }.items():
             columns = {row[1] for row in self.db.execute(f'PRAGMA table_info({table})')}

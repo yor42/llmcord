@@ -53,7 +53,7 @@ class UpgradeTests(unittest.TestCase):
             self.assertNotIn("spoken_veto", member_columns(path))
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 26)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 27)
                 self.assertEqual(store.favorites_mode(G, ALICE), "step_in")
                 self.assertIs(store.spoken_member_on(G, BOB), False)
                 self.assertIs(store.spoken_moves_enabled(G), True)
@@ -83,7 +83,7 @@ class UpgradeTests(unittest.TestCase):
             finally:
                 store.close()
             Store(path).close()
-            self.assertEqual(user_version(path), 26)
+            self.assertEqual(user_version(path), 27)
             self.assertEqual(len(list(Path(folder).glob("*.pre-v23-*.sqlite3"))), 1)
             with closing(Store(path)) as store:
                 self.assertIs(store.spoken_veto_member_on(G, ALICE), False)
@@ -95,7 +95,7 @@ class UpgradeTests(unittest.TestCase):
             Store(fresh).close()
             upgraded = v22_file(folder)
             Store(upgraded).close()
-            self.assertEqual(user_version(fresh), 26)
+            self.assertEqual(user_version(fresh), 27)
             self.assertEqual(member_columns(fresh)["spoken_veto"][1:], member_columns(upgraded)["spoken_veto"][1:])
             self.assertEqual(list(Path(folder).glob("fresh.sqlite3.pre-*")), [])
 
