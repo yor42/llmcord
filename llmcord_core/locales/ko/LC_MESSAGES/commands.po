@@ -466,3 +466,47 @@ msgstr "가진 아이템 사용"
 msgid "The item to use"
 msgstr "사용할 아이템"
 
+#: llmcord_core/vault_discord.py
+msgid "Experimental: open your personal vault by guessing its code"
+msgstr "실험 기능: 추측으로 개인 금고를 열어 보세요"
+
+#: llmcord_core/vault_discord.py
+msgid "Start or continue today's personal vault"
+msgstr "오늘의 개인 금고를 시작하거나 이어서 하기"
+
+#: llmcord_core/vault_discord.py
+msgid "Protocol for a new vault (default: Standard)"
+msgstr "새 금고의 방식 (기본: 표준)"
+
+#: llmcord_core/vault_discord.py
+msgid "A favorite or cast character who helps with a new vault"
+msgstr "새 금고를 도와줄 즐겨찾기 또는 출연진 캐릭터"
+
+#: llmcord_core/vault_discord.py
+msgid "A second partner for a new vault"
+msgstr "새 금고의 두 번째 파트너"
+
+#: llmcord_core/vault_discord.py
+msgid "Guess the code: 4 different digits"
+msgstr "코드 추측: 서로 다른 숫자 4개"
+
+#: llmcord_core/vault_discord.py
+msgid "Standard"
+msgstr "표준"
+
+#: llmcord_core/vault_discord.py
+msgid "Total Match"
+msgstr "전체 일치"
+
+#: llmcord_core/vault_discord.py
+msgid "Position-Only"
+msgstr "위치만"
+
+#: llmcord_core/vault_discord.py
+msgid "Open"
+msgstr "오픈"
+
+#: llmcord_core/vault_discord.py
+msgid "Show your recent vaults"
+msgstr "최근 금고 보기"
+

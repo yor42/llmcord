@@ -2767,3 +2767,240 @@ msgstr ""
 msgid "failed at {stage}"
 msgstr ""
 
+#: llmcord_core/vault_discord.py
+msgid "This vault belongs to someone else. Run /vault personal to open your own."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "You have no vaults yet. Start one with /vault personal."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Something went wrong with the vault. Try again."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgctxt "vault protocol"
+msgid "Standard"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgctxt "vault protocol"
+msgid "Total Match"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgctxt "vault protocol"
+msgid "Position-Only"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgctxt "vault protocol"
+msgid "Open"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgctxt "vault status"
+msgid "In progress"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgctxt "vault status"
+msgid "Solved"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgctxt "vault status"
+msgid "Failed"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgctxt "vault status"
+msgid "Expired"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "{count} match"
+msgid_plural "{count} matches"
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "{count} strike"
+msgid_plural "{count} strikes"
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "{strikes}, {balls}"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "{count} ball"
+msgid_plural "{count} balls"
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Exactly {count} digit is even."
+msgid_plural "Exactly {count} digits are even."
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Exactly {count} digit is low (0 to 4)."
+msgid_plural "Exactly {count} digits are low (0 to 4)."
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "The code contains the digit {digit}."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "The code does not contain the digit {digit}."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Digit {position} is odd."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Digit {position} is even."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Digit {position} is high (5 to 9)."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Digit {position} is low (0 to 4)."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Personal vault ({date})"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Protocol: {protocol}"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Status: {status}"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Turns left: {left} of {budget}"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Open digit: {digit}"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "a deleted character"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Partners: {names}"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Clues revealed: {n} of {total}"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Clue from {name}: {text}"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Guesses:"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "{n}. {guess} — {feedback}"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Secret: {code}"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgctxt "button.vault"
+msgid "Guess"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgctxt "button.vault"
+msgid "Reveal clue"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Guess {n}: {guess} — {feedback}"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "You opened the vault!"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Reward: {amount:,} {currency}"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Your reward could not be paid because your balance is at its limit."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Out of turns. The vault stays closed today."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgctxt "modal.vault"
+msgid "Guess the code"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgctxt "modal.vault"
+msgid "Your guess"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgctxt "modal.vault"
+msgid "4 different digits"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "{date} · {protocol} · {status} · {used}/{budget} turns"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Reward: {amount:,} {currency} (reversed)"
+msgstr ""
+

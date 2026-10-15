@@ -2778,3 +2778,235 @@ msgstr ""
 msgid "failed at {stage}"
 msgstr "{stage} 단계에서 실패"
 
+#: llmcord_core/vault_discord.py
+msgid "This vault belongs to someone else. Run /vault personal to open your own."
+msgstr "다른 사람의 금고예요. /vault personal을 실행해서 내 금고를 열어 주세요."
+
+#: llmcord_core/vault_discord.py
+msgid "You have no vaults yet. Start one with /vault personal."
+msgstr "아직 금고가 없어요. /vault personal로 시작해 보세요."
+
+#: llmcord_core/vault_discord.py
+msgid "Something went wrong with the vault. Try again."
+msgstr "금고에 문제가 생겼어요. 다시 시도해 주세요."
+
+#: llmcord_core/vault_discord.py
+msgctxt "vault protocol"
+msgid "Standard"
+msgstr "표준"
+
+#: llmcord_core/vault_discord.py
+msgctxt "vault protocol"
+msgid "Total Match"
+msgstr "전체 일치"
+
+#: llmcord_core/vault_discord.py
+msgctxt "vault protocol"
+msgid "Position-Only"
+msgstr "위치만"
+
+#: llmcord_core/vault_discord.py
+msgctxt "vault protocol"
+msgid "Open"
+msgstr "오픈"
+
+#: llmcord_core/vault_discord.py
+msgctxt "vault status"
+msgid "In progress"
+msgstr "진행 중"
+
+#: llmcord_core/vault_discord.py
+msgctxt "vault status"
+msgid "Solved"
+msgstr "열림"
+
+#: llmcord_core/vault_discord.py
+msgctxt "vault status"
+msgid "Failed"
+msgstr "실패"
+
+#: llmcord_core/vault_discord.py
+msgctxt "vault status"
+msgid "Expired"
+msgstr "만료"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "{count} match"
+msgid_plural "{count} matches"
+msgstr[0] "일치 {count}개"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "{count} strike"
+msgid_plural "{count} strikes"
+msgstr[0] "스트라이크 {count}"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "{strikes}, {balls}"
+msgstr "{strikes}, {balls}"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "{count} ball"
+msgid_plural "{count} balls"
+msgstr[0] "볼 {count}"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Exactly {count} digit is even."
+msgid_plural "Exactly {count} digits are even."
+msgstr[0] "짝수 숫자가 정확히 {count}개예요."
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Exactly {count} digit is low (0 to 4)."
+msgid_plural "Exactly {count} digits are low (0 to 4)."
+msgstr[0] "낮은 숫자(0~4)가 정확히 {count}개예요."
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "The code contains the digit {digit}."
+msgstr "코드에 들어 있는 숫자: {digit}."
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "The code does not contain the digit {digit}."
+msgstr "코드에 들어 있지 않은 숫자: {digit}."
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Digit {position} is odd."
+msgstr "{position}번째 숫자는 홀수예요."
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Digit {position} is even."
+msgstr "{position}번째 숫자는 짝수예요."
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Digit {position} is high (5 to 9)."
+msgstr "{position}번째 숫자는 높아요(5~9)."
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Digit {position} is low (0 to 4)."
+msgstr "{position}번째 숫자는 낮아요(0~4)."
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Personal vault ({date})"
+msgstr "개인 금고 ({date})"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Protocol: {protocol}"
+msgstr "방식: {protocol}"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Status: {status}"
+msgstr "상태: {status}"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Turns left: {left} of {budget}"
+msgstr "남은 횟수: {left}/{budget}"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Open digit: {digit}"
+msgstr "공개된 숫자: {digit}"
+
+#: llmcord_core/vault_discord.py
+msgid "a deleted character"
+msgstr "삭제된 캐릭터"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Partners: {names}"
+msgstr "파트너: {names}"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Clues revealed: {n} of {total}"
+msgstr "확인한 단서: {total}개 중 {n}개"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Clue from {name}: {text}"
+msgstr "{name}의 단서: {text}"
+
+#: llmcord_core/vault_discord.py
+msgid "Guesses:"
+msgstr "추측 기록:"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "{n}. {guess} — {feedback}"
+msgstr "{n}. {guess} — {feedback}"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Secret: {code}"
+msgstr "비밀 코드: {code}"
+
+#: llmcord_core/vault_discord.py
+msgctxt "button.vault"
+msgid "Guess"
+msgstr "추측"
+
+#: llmcord_core/vault_discord.py
+msgctxt "button.vault"
+msgid "Reveal clue"
+msgstr "단서 보기"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Guess {n}: {guess} — {feedback}"
+msgstr "{n}번째 추측: {guess} — {feedback}"
+
+#: llmcord_core/vault_discord.py
+msgid "You opened the vault!"
+msgstr "금고를 열었어요!"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Reward: {amount:,} {currency}"
+msgstr "보상: {amount:,} {currency}"
+
+#: llmcord_core/vault_discord.py
+msgid "Your reward could not be paid because your balance is at its limit."
+msgstr "잔액이 한도에 도달해서 보상을 지급하지 못했어요."
+
+#: llmcord_core/vault_discord.py
+msgid "Out of turns. The vault stays closed today."
+msgstr "횟수를 모두 썼어요. 오늘은 금고가 닫힌 채로 남아요."
+
+#: llmcord_core/vault_discord.py
+msgctxt "modal.vault"
+msgid "Guess the code"
+msgstr "코드 추측"
+
+#: llmcord_core/vault_discord.py
+msgctxt "modal.vault"
+msgid "Your guess"
+msgstr "내 추측"
+
+#: llmcord_core/vault_discord.py
+msgctxt "modal.vault"
+msgid "4 different digits"
+msgstr "서로 다른 숫자 4개"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "{date} · {protocol} · {status} · {used}/{budget} turns"
+msgstr "{date} · {protocol} · {status} · {used}/{budget}번 사용"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Reward: {amount:,} {currency} (reversed)"
+msgstr "보상: {amount:,} {currency} (회수됨)"
+

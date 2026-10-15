@@ -462,6 +462,26 @@ EXPECTED_COMMANDS = {
         False,
     ),
     "time show": ("Show the timezone characters use for you", (), 0, "None", False),
+    "vault history": ("Show your recent vaults", (), 0, "None", False),
+    "vault personal": (
+        "Start or continue today's personal vault",
+        (
+            (
+                "protocol",
+                "string",
+                False,
+                "Protocol for a new vault (default: Standard)",
+                False,
+                (("Standard", "standard"), ("Total Match", "total_match"), ("Position-Only", "position_only"), ("Open", "open")),
+            ),
+            ("partner", "string", False, "A favorite or cast character who helps with a new vault", True, ()),
+            ("second_partner", "string", False, "A second partner for a new vault", True, ()),
+            ("guess", "string", False, "Guess the code: 4 different digits", False, ()),
+        ),
+        0,
+        "None",
+        False,
+    ),
     "use": (
         "Use an item you hold",
         (("item", "string", True, "The item to use", True, ()),),
@@ -492,6 +512,7 @@ EXPECTED_GROUPS = {
     "scene": ("Start a fresh scene", "None", False),
     "space": ("List the server's worlds and hubs", "None", False),
     "time": ("Set the timezone characters use for you", "None", False),
+    "vault": ("Experimental: open your personal vault by guessing its code", "None", False),
 }
 
 

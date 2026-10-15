@@ -46,6 +46,7 @@ from .games_onecard_discord import OneCardButton, OneCardTables
 from .games_yut_discord import YutButton, YutTables
 from .table_view import public_table_view
 from .items_discord import register_items_commands
+from .vault_discord import VaultButton, register_vault_commands
 from llmcord_core import i18n
 from llmcord_core.i18n import N_, UserError, codes
 from llmcord_core.i18n import discord_locale
@@ -206,7 +207,7 @@ class SkitBot(commands.Bot):
         await self.holdem.recover()
         await self.onecard.recover()
         await self.yut.recover()
-        self.add_dynamic_items(GameButton, SpokenButton, SpokenDoubtButton, DoubtButton, HoldemButton, OneCardButton, YutButton)
+        self.add_dynamic_items(GameButton, SpokenButton, SpokenDoubtButton, DoubtButton, HoldemButton, OneCardButton, YutButton, VaultButton)
         self.cleanup_task = asyncio.create_task(self._cleanup_loop())
 
     async def on_ready(self):
@@ -1846,6 +1847,7 @@ def register_commands(bot: SkitBot) -> None:
     register_game_commands(bot, ctx, admin_games)
     register_doubt_commands(bot, ctx)
     register_items_commands(bot, ctx)
+    register_vault_commands(bot, ctx)
     _register_lore_commands(bot, ctx, admin_lore)
     _register_scene_commands(bot, ctx, admin_scene)
     bot.tree.add_command(admin)

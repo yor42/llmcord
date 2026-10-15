@@ -150,13 +150,21 @@ class VaultStore:
         if isinstance(position, bool) or not isinstance(position, int):
             raise VaultStoreError(codes.VAULT_CLUE_UNKNOWN)
         with self.write_admin():
-            clue = self.one('SELECT * FROM vault_clues WHERE guild_id=? AND session_id=? AND position=?', (guild_id, session_id, position - 1))
-            if clue is None:
-                raise VaultStoreError(codes.VAULT_CLUE_UNKNOWN)
-            if clue['revealed_at'] is None:
-                self.db.execute('UPDATE vault_clues SET revealed_at=? WHERE id=? AND guild_id=?', (now, clue['id'], guild_id))
-                clue = self.one('SELECT * FROM vault_clues WHERE id=? AND guild_id=?', (clue['id'], guild_id))
-            return self._vault_clue_entry(clue, self.character_names(guild_id, [clue['character_id']]))
+            fresh = self.one('SELECT status,expires_at FROM vault_sessions WHERE id=? AND guild_id=? AND user_id=?', (session_id, guild_id, user_id))
+            if fresh is None:
+                raise VaultStoreError(codes.VAULT_NOT_FOUND)
+            lapsed = fresh['status'] == 'active' and fresh['expires_at'] <= now
+            if lapsed:
+                self._vault_finish(guild_id, session_id, 'expired', now)
+            if fresh['status'] == 'active' and not lapsed:
+                clue = self.one('SELECT * FROM vault_clues WHERE guild_id=? AND session_id=? AND position=?', (guild_id, session_id, position - 1))
+                if clue is None:
+                    raise VaultStoreError(codes.VAULT_CLUE_UNKNOWN)
+                if clue['revealed_at'] is None:
+                    self.db.execute('UPDATE vault_clues SET revealed_at=? WHERE id=? AND guild_id=?', (now, clue['id'], guild_id))
+                    clue = self.one('SELECT * FROM vault_clues WHERE id=? AND guild_id=?', (clue['id'], guild_id))
+                return self._vault_clue_entry(clue, self.character_names(guild_id, [clue['character_id']]))
+        raise VaultStoreError(codes.VAULT_NOT_ACTIVE)
 
     def vault_session(self, guild_id, user_id, session_id, *, now=None):
         now = time.time() if now is None else now
@@ -180,6 +188,7 @@ class VaultStore:
     def open_personal_vault(self, guild_id, user_id, channel_id, *, protocol='standard', partner_ids=(), now=None, seed=None, parent_id=None):
         """Starts or resumes the member's vault for the server day (one per local date: a failed or solved one is returned again, never reset)."""
         now = time.time() if now is None else now
+        partner_ids = list(partner_ids)
         with self.write_admin():
             self._vault_expire(guild_id, now, user_id)
         with self.write_admin():

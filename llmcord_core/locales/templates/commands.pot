@@ -458,3 +458,47 @@ msgstr ""
 msgid "The item to use"
 msgstr ""
 
+#: llmcord_core/vault_discord.py
+msgid "Experimental: open your personal vault by guessing its code"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Start or continue today's personal vault"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Protocol for a new vault (default: Standard)"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "A favorite or cast character who helps with a new vault"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "A second partner for a new vault"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Guess the code: 4 different digits"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Standard"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Total Match"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Position-Only"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Open"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Show your recent vaults"
+msgstr ""
+
