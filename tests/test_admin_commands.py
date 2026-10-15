@@ -48,7 +48,7 @@ MEMBER_SURFACE = {
     "game": {"start", "hand", "rules", "spoken_moves", "spoken_veto"},
     "lore": {"list"},
     "scene": {"reset"},
-    "vault": {"personal", "history"},
+    "vault": {"personal", "history", "operation"},
 }
 # UI-49: top-level admin-only command outside the ``/admin`` group.
 ADMIN_TOP_LEVEL = {"context"}
@@ -113,9 +113,9 @@ class AdminSurfaceTests(unittest.TestCase):
         self.bot.store.close()
 
     def test_surface_table_matches_d11(self):
-        """Guard for the tests below: the expected tables have the 22 admin and 37 member (plus the admin-only /context) commands: D11's 27 plus FEAT-21 B1's ``/game start``, ``/game hand`` and ``/game rules``, plus FEAT-63's ``/vault personal`` and ``/vault history``."""
+        """Guard for the tests below: the expected tables have the 22 admin and 38 member (plus the admin-only /context) commands: D11's 27 plus FEAT-21 B1's ``/game start``, ``/game hand`` and ``/game rules``, plus FEAT-63's ``/vault personal`` and ``/vault history``, plus FEAT-66's ``/vault operation``."""
         self.assertEqual(len(ADMIN_PATHS), 22)
-        self.assertEqual(len(MEMBER_PATHS), 37)
+        self.assertEqual(len(MEMBER_PATHS), 38)
         self.assertEqual(set(ADMIN_OPTIONS), ADMIN_PATHS)
 
     def test_admin_group_holds_exactly_the_admin_subcommands(self):

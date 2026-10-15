@@ -463,6 +463,7 @@ EXPECTED_COMMANDS = {
     ),
     "time show": ("Show the timezone characters use for you", (), 0, "None", False),
     "vault history": ("Show your recent vaults", (), 0, "None", False),
+    "vault operation": ("Join the weekly co-op vault operation in this channel", (), 0, "None", False),
     "vault personal": (
         "Start or continue today's personal vault",
         (

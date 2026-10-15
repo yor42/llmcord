@@ -2948,7 +2948,7 @@ msgstr ""
 msgid "Digit {position} is low (0 to 4)."
 msgstr ""
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 msgid "a deleted character"
 msgstr ""
 
@@ -3004,7 +3004,7 @@ msgstr ""
 msgid "Protocol: {protocol}"
 msgstr ""
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 #, python-brace-format
 msgid "Status: {status}"
 msgstr ""
@@ -3019,11 +3019,11 @@ msgstr ""
 msgid "Tools used: {n} of {limit}"
 msgstr ""
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 msgid "Tool results:"
 msgstr ""
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 #, python-brace-format
 msgid "Open digit: {digit}"
 msgstr ""
@@ -3033,12 +3033,12 @@ msgstr ""
 msgid "Partners: {names}"
 msgstr ""
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 #, python-brace-format
 msgid "Clues revealed: {n} of {total}"
 msgstr ""
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 #, python-brace-format
 msgid "Clue from {name}: {text}"
 msgstr ""
@@ -3047,7 +3047,7 @@ msgstr ""
 msgid "Partner advice:"
 msgstr ""
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 msgid "Guesses:"
 msgstr ""
 
@@ -3061,22 +3061,22 @@ msgstr ""
 msgid "Secret: {code}"
 msgstr ""
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 msgctxt "button.vault"
 msgid "Guess"
 msgstr ""
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 msgctxt "button.vault"
 msgid "Reveal clue"
 msgstr ""
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 msgctxt "button.vault"
 msgid "Tools"
 msgstr ""
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 #, python-brace-format
 msgctxt "button.vault"
 msgid "Ask {name}"
@@ -3087,19 +3087,19 @@ msgctxt "button.vault"
 msgid "Strategy meeting"
 msgstr ""
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 #, python-brace-format
 msgid "{name} ×{qty} ({count} turn)"
 msgid_plural "{name} ×{qty} ({count} turns)"
 msgstr[0] ""
 msgstr[1] ""
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 msgctxt "button.vault"
 msgid "Back"
 msgstr ""
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 #, python-brace-format
 msgid "Guess {n}: {guess} — {feedback}"
 msgstr ""
@@ -3121,12 +3121,12 @@ msgstr ""
 msgid "Out of turns. The vault stays closed today."
 msgstr ""
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 msgctxt "modal.vault"
 msgid "Guess the code"
 msgstr ""
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 msgctxt "modal.vault"
 msgid "Your guess"
 msgstr ""
@@ -3164,5 +3164,164 @@ msgstr ""
 #: llmcord_core/vault_discord.py
 #, python-brace-format
 msgid "Reward: {amount:,} {currency} (reversed)"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Weekly operation ({week})"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Stage {n} of {total}: {protocol}"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Attempt {n} of {total}"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Shared turns left: {left} of {budget}"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Team tools used: {n} of {limit}"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Characters: {names}"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Participants: {mentions}"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Advisors: {entries}"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "… {count} earlier guess"
+msgid_plural "… {count} earlier guesses"
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "{n}. {mention}: {guess} — {feedback}"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Secret of stage {n}: {code}"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Cross-check of guesses {a} and {b}: the code has exactly {count} of the digits {digits}."
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "button.vault"
+msgid "Cross-check"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "button.vault"
+msgid "Ask my advisor"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "button.vault"
+msgid "Advisor"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "button.vault"
+msgid "Join"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "button.vault"
+msgid "Refresh"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgctxt "modal.vault"
+msgid "{length} different digits"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "modal.vault"
+msgid "Cross-check two guesses"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "modal.vault"
+msgid "First guess (number)"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "modal.vault"
+msgid "Second guess (number)"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Stage {stage} cleared! Stage {next} is open."
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Stage {stage} ran out of turns. The team gets one more try with a new code."
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgid "The operation failed. The vault stays closed this week."
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgid "The operation is solved! All three stages are cleared."
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgid "You joined the operation."
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgid "You are already in the operation."
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgid "Choose a tool."
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgid "You have no favorite to bring as an advisor here."
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgid "Choose a favorite to advise you. Choose none to clear."
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgid "Choose an advisor."
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Your advisor: {name}"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgid "You no longer have an advisor."
 msgstr ""
 

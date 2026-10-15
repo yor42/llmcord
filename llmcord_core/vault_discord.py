@@ -202,7 +202,7 @@ def guess_log(result: dict, currency: str, *, t=None) -> str:
     return '\n'.join(lines)
 
 
-class VaultButton(discord.ui.DynamicItem[discord.ui.Button], template=PREFIX + r':(?P<action>[a-z0-9_]+):(?P<session>\d+)'):
+class VaultButton(discord.ui.DynamicItem[discord.ui.Button], template=PREFIX + r':(?!op_)(?P<action>[a-z0-9_]+):(?P<session>\d+)'):
     """One button; its custom_id carries the action and the session, never a member or the code."""
 
     def __init__(self, action: str, session_id: int, label: str = '', style=discord.ButtonStyle.secondary, disabled: bool = False):

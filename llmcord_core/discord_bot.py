@@ -47,6 +47,7 @@ from .games_yut_discord import YutButton, YutTables
 from .table_view import public_table_view
 from .items_discord import register_items_commands
 from .vault_discord import VaultButton, register_vault_commands
+from .vault_operation_discord import VaultOperationButton, register_vault_operation_commands
 from llmcord_core import i18n
 from llmcord_core.i18n import N_, UserError, codes
 from llmcord_core.i18n import discord_locale
@@ -207,7 +208,7 @@ class SkitBot(commands.Bot):
         await self.holdem.recover()
         await self.onecard.recover()
         await self.yut.recover()
-        self.add_dynamic_items(GameButton, SpokenButton, SpokenDoubtButton, DoubtButton, HoldemButton, OneCardButton, YutButton, VaultButton)
+        self.add_dynamic_items(GameButton, SpokenButton, SpokenDoubtButton, DoubtButton, HoldemButton, OneCardButton, YutButton, VaultButton, VaultOperationButton)
         self.cleanup_task = asyncio.create_task(self._cleanup_loop())
 
     async def on_ready(self):
@@ -249,6 +250,11 @@ class SkitBot(commands.Bot):
             await self.holdem.close()
         except Exception:
             logging.exception("Closing the Texas Hold'em timers failed")
+        try:
+            await self.vault_operation.flush()
+            await self.vault_operation.close()
+        except Exception:
+            logging.exception('Closing the vault operation status failed')
         try:
             await self.onecard.close()
         except Exception:
@@ -1848,6 +1854,7 @@ def register_commands(bot: SkitBot) -> None:
     register_doubt_commands(bot, ctx)
     register_items_commands(bot, ctx)
     register_vault_commands(bot, ctx)
+    register_vault_operation_commands(bot, ctx)
     _register_lore_commands(bot, ctx, admin_lore)
     _register_scene_commands(bot, ctx, admin_scene)
     bot.tree.add_command(admin)

@@ -510,3 +510,7 @@ msgstr "오픈"
 msgid "Show your recent vaults"
 msgstr "최근 금고 보기"
 
+#: llmcord_core/vault_operation_discord.py
+msgid "Join the weekly co-op vault operation in this channel"
+msgstr "이 채널의 주간 협동 금고 작전에 참여해요"
+

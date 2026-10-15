@@ -1284,7 +1284,7 @@ msgstr "버튼을 눌러 참가해 주세요. 호스트가 (호스트가 나갔�
 #: llmcord_core/games_doubt_discord.py
 msgctxt "button.doubt"
 msgid "Join"
-msgstr "참가"
+msgstr "참여"
 
 #: llmcord_core/games_doubt_discord.py
 msgctxt "button.doubt"
@@ -2192,7 +2192,7 @@ msgstr "버튼을 눌러 참가해 주세요. 호스트가 {low}~{high}명으로
 #: llmcord_core/games_onecard_discord.py
 msgctxt "button.onecard"
 msgid "Join"
-msgstr "참가"
+msgstr "참여"
 
 #: llmcord_core/games_onecard_discord.py
 msgctxt "button.onecard"
@@ -2456,7 +2456,7 @@ msgstr "네, 기권할게요"
 #: llmcord_core/games_yut_discord.py
 msgctxt "button.yut"
 msgid "Join"
-msgstr "참가"
+msgstr "참여"
 
 #: llmcord_core/games_yut_discord.py
 msgctxt "button.yut"
@@ -2953,7 +2953,7 @@ msgstr "{position}번째 숫자는 높아요(5~9)."
 msgid "Digit {position} is low (0 to 4)."
 msgstr "{position}번째 숫자는 낮아요(0~4)."
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 msgid "a deleted character"
 msgstr "삭제된 캐릭터"
 
@@ -3008,7 +3008,7 @@ msgstr "개인 금고 ({date})"
 msgid "Protocol: {protocol}"
 msgstr "방식: {protocol}"
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 #, python-brace-format
 msgid "Status: {status}"
 msgstr "상태: {status}"
@@ -3023,11 +3023,11 @@ msgstr "남은 횟수: {left}/{budget}"
 msgid "Tools used: {n} of {limit}"
 msgstr "사용한 금고 도구: {n}/{limit}"
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 msgid "Tool results:"
 msgstr "도구 결과:"
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 #, python-brace-format
 msgid "Open digit: {digit}"
 msgstr "공개된 숫자: {digit}"
@@ -3037,12 +3037,12 @@ msgstr "공개된 숫자: {digit}"
 msgid "Partners: {names}"
 msgstr "파트너: {names}"
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 #, python-brace-format
 msgid "Clues revealed: {n} of {total}"
 msgstr "확인한 단서: {total}개 중 {n}개"
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 #, python-brace-format
 msgid "Clue from {name}: {text}"
 msgstr "{name}의 단서: {text}"
@@ -3051,7 +3051,7 @@ msgstr "{name}의 단서: {text}"
 msgid "Partner advice:"
 msgstr "파트너 조언:"
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 msgid "Guesses:"
 msgstr "추측 기록:"
 
@@ -3065,22 +3065,22 @@ msgstr "{n}. {guess} — {feedback}"
 msgid "Secret: {code}"
 msgstr "비밀 코드: {code}"
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 msgctxt "button.vault"
 msgid "Guess"
 msgstr "추측"
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 msgctxt "button.vault"
 msgid "Reveal clue"
 msgstr "단서 보기"
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 msgctxt "button.vault"
 msgid "Tools"
 msgstr "금고 도구"
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 #, python-brace-format
 msgctxt "button.vault"
 msgid "Ask {name}"
@@ -3091,18 +3091,18 @@ msgctxt "button.vault"
 msgid "Strategy meeting"
 msgstr "작전 회의"
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 #, python-brace-format
 msgid "{name} ×{qty} ({count} turn)"
 msgid_plural "{name} ×{qty} ({count} turns)"
 msgstr[0] "{name} ×{qty} ({count}턴)"
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 msgctxt "button.vault"
 msgid "Back"
 msgstr "뒤로"
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 #, python-brace-format
 msgid "Guess {n}: {guess} — {feedback}"
 msgstr "{n}번째 추측: {guess} — {feedback}"
@@ -3124,12 +3124,12 @@ msgstr "잔액이 한도에 도달해서 보상을 지급하지 못했어요."
 msgid "Out of turns. The vault stays closed today."
 msgstr "횟수를 모두 썼어요. 오늘은 금고가 닫힌 채로 남아요."
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 msgctxt "modal.vault"
 msgid "Guess the code"
 msgstr "코드 추측"
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_operation_discord.py
 msgctxt "modal.vault"
 msgid "Your guess"
 msgstr "내 추측"
@@ -3168,4 +3168,162 @@ msgstr "{date} · {protocol} · {status} · {used}/{budget}번 사용"
 #, python-brace-format
 msgid "Reward: {amount:,} {currency} (reversed)"
 msgstr "보상: {amount:,} {currency} (회수됨)"
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Weekly operation ({week})"
+msgstr "주간 작전 ({week})"
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Stage {n} of {total}: {protocol}"
+msgstr "{total}단계 중 {n}단계: {protocol}"
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Attempt {n} of {total}"
+msgstr "시도 {n}/{total}"
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Shared turns left: {left} of {budget}"
+msgstr "남은 공동 턴: {left}/{budget}"
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Team tools used: {n} of {limit}"
+msgstr "팀이 쓴 금고 도구: {n}/{limit}"
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Characters: {names}"
+msgstr "캐릭터: {names}"
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Participants: {mentions}"
+msgstr "참가자: {mentions}"
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Advisors: {entries}"
+msgstr "조언자: {entries}"
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "… {count} earlier guess"
+msgid_plural "… {count} earlier guesses"
+msgstr[0] "… 이전 추측 {count}개"
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "{n}. {mention}: {guess} — {feedback}"
+msgstr "{n}. {mention}: {guess} — {feedback}"
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Secret of stage {n}: {code}"
+msgstr "{n}단계의 비밀 코드: {code}"
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Cross-check of guesses {a} and {b}: the code has exactly {count} of the digits {digits}."
+msgstr "추측 {a}번과 {b}번의 교차 검증: 코드에는 숫자 {digits} 중 정확히 {count}개가 들어 있어요."
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "button.vault"
+msgid "Cross-check"
+msgstr "교차 검증"
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "button.vault"
+msgid "Ask my advisor"
+msgstr "내 조언자에게 묻기"
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "button.vault"
+msgid "Advisor"
+msgstr "조언자"
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "button.vault"
+msgid "Join"
+msgstr "참여"
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "button.vault"
+msgid "Refresh"
+msgstr "새로고침"
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgctxt "modal.vault"
+msgid "{length} different digits"
+msgstr "서로 다른 숫자 {length}개"
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "modal.vault"
+msgid "Cross-check two guesses"
+msgstr "추측 두 개 교차 검증"
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "modal.vault"
+msgid "First guess (number)"
+msgstr "첫 번째 추측 (번호)"
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "modal.vault"
+msgid "Second guess (number)"
+msgstr "두 번째 추측 (번호)"
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Stage {stage} cleared! Stage {next} is open."
+msgstr "{stage}단계 돌파! {next}단계가 열렸어요."
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Stage {stage} ran out of turns. The team gets one more try with a new code."
+msgstr "{stage}단계의 턴을 모두 썼어요. 새 코드로 한 번 더 도전할 수 있어요."
+
+#: llmcord_core/vault_operation_discord.py
+msgid "The operation failed. The vault stays closed this week."
+msgstr "작전에 실패했어요. 이번 주 금고는 닫힌 채로 남아요."
+
+#: llmcord_core/vault_operation_discord.py
+msgid "The operation is solved! All three stages are cleared."
+msgstr "작전 성공! 세 단계를 모두 돌파했어요."
+
+#: llmcord_core/vault_operation_discord.py
+msgid "You joined the operation."
+msgstr "작전에 참여했어요."
+
+#: llmcord_core/vault_operation_discord.py
+msgid "You are already in the operation."
+msgstr "이미 작전에 참여하고 있어요."
+
+#: llmcord_core/vault_operation_discord.py
+msgid "Choose a tool."
+msgstr "사용할 도구를 골라 주세요."
+
+#: llmcord_core/vault_operation_discord.py
+msgid "You have no favorite to bring as an advisor here."
+msgstr "여기서 조언자로 데려올 즐겨찾기 캐릭터가 없어요."
+
+#: llmcord_core/vault_operation_discord.py
+msgid "Choose a favorite to advise you. Choose none to clear."
+msgstr "조언해 줄 즐겨찾기 캐릭터를 골라 주세요. 아무것도 고르지 않으면 해제돼요."
+
+#: llmcord_core/vault_operation_discord.py
+msgid "Choose an advisor."
+msgstr "조언자를 골라 주세요."
+
+#: llmcord_core/vault_operation_discord.py
+#, python-brace-format
+msgid "Your advisor: {name}"
+msgstr "내 조언자: {name}"
+
+#: llmcord_core/vault_operation_discord.py
+msgid "You no longer have an advisor."
+msgstr "조언자를 해제했어요."
 

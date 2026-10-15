@@ -502,3 +502,7 @@ msgstr ""
 msgid "Show your recent vaults"
 msgstr ""
 
+#: llmcord_core/vault_operation_discord.py
+msgid "Join the weekly co-op vault operation in this channel"
+msgstr ""
+
