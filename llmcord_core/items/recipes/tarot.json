@@ -9,6 +9,10 @@
   "consumable": true,
   "default_price": 60,
   "audience": "none",
+  "orientation": {
+    "en": ["Upright", "Reversed"],
+    "ko": ["정방향", "역방향"]
+  },
   "params": {
     "reversed_chance": 0.5
   },

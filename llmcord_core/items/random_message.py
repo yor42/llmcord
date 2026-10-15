@@ -19,7 +19,7 @@ from .recipe import (
 )
 
 PARAM_KEYS = ('sides', 'reversed_chance')
-ORIENTATION = {'en': ('Upright', 'Reversed'), 'ko': ('정방향', '역방향')}  # tarot words by locale; the index is whether the card came up reversed
+ORIENTATION = ('Upright', 'Reversed')  # used only by a two-sided recipe that has no `orientation` words of its own
 MAX_FIELDS = 8
 MAX_RANGE = 1000
 _IDENT = set(string.ascii_lowercase + '_')
@@ -221,7 +221,7 @@ def roll(recipe: Recipe, seed, locale=DEFAULT_LOCALE, extra_entries=None, replac
             values.update(row)
             if {'upright', 'reversed'} <= set(row):
                 flipped = rng.random() < recipe.params.get('reversed_chance', 0)
-                values['orientation'] = lookup(ORIENTATION, locale)[flipped]
+                values['orientation'] = (lookup(recipe.orientation, locale) or ORIENTATION)[flipped]
                 values['meaning'] = row['reversed' if flipped else 'upright']
         else:
             values[name] = row

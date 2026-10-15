@@ -207,6 +207,7 @@ RECIPE_RECORD_FIELDS = E_('recipe.record_fields', '{where}[{index}]: expected a 
 RECIPE_RECORD_DIFFER = E_('recipe.record_differ', '{where}[{index}]: fields differ from the first record')
 RECIPE_UNKNOWN_PARAMS = E_('recipe.unknown_params', 'unknown param(s): {params}')
 RECIPE_REVERSED_CHANCE = E_('recipe.reversed_chance', 'params.reversed_chance: expected a number from 0 to 1')
+RECIPE_ORIENTATION_PAIR = E_('recipe.orientation_pair', '{where}: expected two words, upright then reversed')
 RECIPE_RANGE_FORM = E_('recipe.range_form', '{where}: expected {{"range": [low, high]}}')
 RECIPE_RANGE_SIDES = E_('recipe.range_sides', '{where}: range uses "sides" but params.sides is missing')
 RECIPE_PLACEHOLDER_CLASH = E_('recipe.placeholder_clash', 'tables.{name}: placeholder name clashes with another table or param')

@@ -31,7 +31,7 @@ from .cards import parse_card
 from .currency_ui import currency_panel
 from .games import playstyle
 from .games_ui import games_panel
-from .shop_ui import shop_panel
+from .shop_ui import error_text, shop_panel
 from .presets_ui import presets_panel
 from .config import PROFILE_KEYS, format_key_ref, parse_key_ref, validate_profile_name
 from . import i18n
@@ -61,7 +61,7 @@ class OperatorContext:
         try:
             return True, await self.service.run_operator(self.ident, operation, action, detail)
         except (ValueError, HTTPException) as error:
-            ui.notify(error.detail if isinstance(error, HTTPException) else t.error(error), type='negative', timeout=8000)
+            ui.notify(error.detail if isinstance(error, HTTPException) else error_text(error, t), type='negative', timeout=8000)
             return False, error
         except sqlite3.OperationalError as error:
             logging.warning('Operator action hit a database error', exc_info=True)
@@ -789,7 +789,7 @@ class LiveContext:
         try:
             return True, await self.service.run(self.ident, self.guild_id, operation, action, detail)
         except (ValueError, HTTPException, sqlite3.IntegrityError, TypeError, KeyError) as error:
-            message = error.detail if isinstance(error, HTTPException) else t('This name already exists') if isinstance(error, sqlite3.IntegrityError) else t('Choose valid values for all required fields') if isinstance(error, (TypeError, KeyError)) else t.error(error)
+            message = error.detail if isinstance(error, HTTPException) else t('This name already exists') if isinstance(error, sqlite3.IntegrityError) else t('Choose valid values for all required fields') if isinstance(error, (TypeError, KeyError)) else error_text(error, t)
             ui.notify(message, type='negative', timeout=8000)
             return AttemptFailed((False, None), error)
         except sqlite3.OperationalError as error:

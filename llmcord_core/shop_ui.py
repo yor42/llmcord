@@ -4,6 +4,7 @@ Custom lines and results are admin or roll text: shown as plain text only, and n
 """
 from __future__ import annotations
 
+import copy
 import math
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -15,6 +16,19 @@ from .i18n import NP_, web_locale
 PAGE = 50
 LOCALE = items.recipe.DEFAULT_LOCALE
 ITEM_KINDS = {'random_message': NP_('item kind', 'Random message')}
+
+
+def error_text(error, t):
+    """t.error(error) with params['name'] replaced by the viewer's item name where the error names a recipe (params['item'])."""
+    params = getattr(error, 'params', None)
+    if isinstance(params, dict) and params.get('item') and 'name' in params:
+        try:
+            name = items.display_name(items.get_item(params['item']), t.locale)
+        except (KeyError, TypeError):
+            name = params['name']
+        error = copy.copy(error)
+        error.params = {**params, 'name': name}
+    return t.error(error)
 
 
 def kind_line(recipe, t):

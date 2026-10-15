@@ -160,6 +160,7 @@ class CurrencyPanel:
             saved = {'name': store.currency_name(gid)}
             name = ui.input(t('Currency name'), value=saved['name']).props('maxlength=32')
             ui.label(t('What this server calls its currency, for example coins or gold (1 to 32 characters). Members see it in /balance.')).classes('ll-muted')
+            ui.label(t('On a Korean-language server, rename the default currency coins to a Korean word such as 코인, so messages read naturally.')).classes('ll-muted')
             def save_name():
                 saved['name'] = store.set_currency_name(gid, name.value, saved['name'])
                 return saved['name']

@@ -19,7 +19,7 @@ MAX_PRICE = 1_000_000
 MAX_COOLDOWN = 7 * 86400
 DEFAULT_LOCALE = 'en'
 AUDIENCES = ('none', 'member', 'any', 'npc')
-_FIELDS = {'key', 'kind', 'name', 'emoji', 'consumable', 'default_price', 'default_cooldown_seconds', 'params', 'tables', 'template', 'audience'}
+_FIELDS = {'key', 'kind', 'name', 'emoji', 'consumable', 'default_price', 'default_cooldown_seconds', 'params', 'tables', 'template', 'audience', 'orientation'}
 
 
 class RecipeError(UserError):
@@ -39,9 +39,11 @@ class Recipe:
     tables: dict = field(default_factory=dict)
     template: dict = field(default_factory=dict)
     audience: str = 'none'
+    orientation: Mapping = None  # locale -> [upright word, reversed word] for two-sided (tarot-like) tables
     names: Mapping = None  # locale -> name; {'en': name} when the recipe gave a plain string
 
     def __post_init__(self):
+        object.__setattr__(self, 'orientation', MappingProxyType(dict(self.orientation or {})))
         object.__setattr__(self, 'names', MappingProxyType(dict(self.names) if self.names else {DEFAULT_LOCALE: self.name}))
 
     @property
@@ -140,7 +142,13 @@ def parse_common(data):
         names = {loc: check_text(value, f'name.{loc}', MAX_NAME) for loc, value in check_locale_keyed(raw_name, 'name').items()}
     else:
         names = {DEFAULT_LOCALE: check_text(raw_name, 'name', MAX_NAME)}
+    orientation = {}
+    if 'orientation' in data:
+        for loc, pair in check_locale_keyed(data['orientation'], 'orientation').items():
+            if not isinstance(pair, list) or len(pair) != 2:
+                raise RecipeError(codes.RECIPE_ORIENTATION_PAIR, where=f'orientation.{loc}')
+            orientation[loc] = [check_text(w, f'orientation.{loc}[{i}]', MAX_NAME) for i, w in enumerate(pair)]
     return Recipe(key=key, kind=kind, name=names[DEFAULT_LOCALE], names=names, emoji=emoji, consumable=consumable,
                   default_price=check_int(data['default_price'], 'default_price', 0, MAX_PRICE), default_cooldown_seconds=cooldown,
                   params=dict(data.get('params', {})), tables=dict(data.get('tables', {})), template=dict(data.get('template', {})),
-                  audience=audience)
+                  audience=audience, orientation=orientation)

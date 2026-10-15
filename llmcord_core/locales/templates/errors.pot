@@ -870,6 +870,11 @@ msgstr ""
 
 #: llmcord_core/i18n/codes.py
 #, python-brace-format
+msgid "{where}: expected two words, upright then reversed"
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
 msgid "{where}: expected {{\"range\": [low, high]}}"
 msgstr ""
 

@@ -878,6 +878,11 @@ msgstr "params.reversed_chance: 0에서 1 사이의 숫자여야 해요"
 
 #: llmcord_core/i18n/codes.py
 #, python-brace-format
+msgid "{where}: expected two words, upright then reversed"
+msgstr "{where}: 단어가 두 개여야 해요. 정방향, 역방향 순서예요"
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
 msgid "{where}: expected {{\"range\": [low, high]}}"
 msgstr "{where}: {{\"range\": [low, high]}} 형식이어야 해요"
 

@@ -147,6 +147,10 @@ msgid "What this server calls its currency, for example coins or gold (1 to 32 c
 msgstr ""
 
 #: llmcord_core/currency_ui.py
+msgid "On a Korean-language server, rename the default currency coins to a Korean word such as 코인, so messages read naturally."
+msgstr ""
+
+#: llmcord_core/currency_ui.py
 msgid "Currency name saved"
 msgstr ""
 
