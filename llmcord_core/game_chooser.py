@@ -9,7 +9,7 @@ import json
 import re
 from types import SimpleNamespace
 
-from .games import blackjack, doubt, onecard, playstyle
+from .games import blackjack, doubt, onecard, playstyle, yut
 from .models import TurnMessage
 from .usage import capture_usage, log_purpose, log_scope
 
@@ -270,3 +270,69 @@ async def ask_onecard(bot, guild_id, channel_id, character, view, names, legal, 
                                         TurnMessage("user", onecard_table_text(view, names, legal))])
     with bot.backend.pin(), capture_usage(guild_id, channel_id, "game"), log_scope(None), log_purpose("game"):
         return await bot.models.structured_compiled(ROLE, request, "onecard_move", onecard_schema(legal))
+
+
+# --- Yut (FEAT-60): a seat's move among the legal ones; everything is public, so the prompt holds the whole board (no seed, no member identities) ---
+
+YUT_SYSTEM = ("You are {name}, playing Yut (a Korean board game) at a table in a roleplay server. Stay in character.\n"
+              "{persona}\n"
+              "Rules: on your turn you throw four sticks and move your pieces along the board by the banked throws (Do 1 step, Gae 2, Geol 3, Yut 4, Mo 5; "
+              "Back-do 1 step back). A Yut or a Mo, or a capture, gives another throw. Landing on an opposing piece sends it back to the start. "
+              "Landing on your own piece joins them into a stack that moves together. A piece on a corner may take a shortcut across the board. "
+              "The ring points are P1 to P19, P0 is the finish: passing it brings a piece home. "
+              "The shortcuts: a1, a2, b1, b2 lie on the diagonal from P5 to P15 through the center C; c1, c2, d1, d2 lie on the diagonal from P10 to P0 through C. "
+              "The first to bring every piece home wins. "
+              "Choose your move from the legal moves. "
+              f"You may also say one short line in character, at most {MAX_LINE} characters, or leave it empty. Do not mention anyone with @. Return only JSON.")
+
+
+def yut_schema(legal) -> dict:
+    return schema(legal)
+
+
+def yut_names(snap) -> list:
+    """Yut prompt names: the same shape as the other tables, with its own entry point."""
+    return _seat_names(snap)
+
+
+def _yut_where(point) -> str:
+    return "at the start" if point is None else "home" if point == "done" else f"at {point}"
+
+
+def yut_table_text(view, names, legal) -> str:
+    me = view.seat
+    lines = []
+    for i, name in enumerate(names):
+        pieces = ", ".join(f"piece {n + 1} {_yut_where(p)}" for n, p in enumerate(view.pieces[i]))
+        lines.append(f"{name}{' (you)' if i == me else ''}{'' if view.active[i] else ' (out of the game)'}: {pieces}")
+    if view.bank:
+        lines.append("Banked throws: " + ", ".join(view.bank))
+    for item in view.history[-HOLDEM_RECENT:]:
+        who = names[item.seat]
+        if item.kind == "throw":
+            lines.append(f"Earlier: {who} threw {item.name}")
+        elif item.kind == "move":
+            lines.append(f"Earlier: {who} moved piece {'+'.join(str(p + 1) for p in item.pieces)} with {item.throw}"
+                         + (f" and captured {names[item.captured[0][0]]}" if item.captured else "") + (" and brought it home" if item.end == "done" else ""))
+        elif item.kind == "forfeit":
+            lines.append(f"Earlier: {who} left the game")
+    lines.append("Legal moves:")
+    for move in legal:
+        if not move.startswith("move:"):
+            lines.append(f"- {move}")
+            continue
+        info = yut.preview(view, me, move)
+        note = f"piece {info['piece'] + 1} {_yut_where(info['start'])} with {info['throw']} goes " + ("home" if info["home"] else "back to the start" if info["end"] is None else f"to {info['end']}")
+        if info["captured"]:
+            note += f", captures {info['captured']} piece" + ("" if info["captured"] == 1 else "s")
+        lines.append(f"- {move}: {note}")
+    return "\n".join(lines)
+
+
+async def ask_yut(bot, guild_id, channel_id, character, view, names, legal, style=None) -> dict:
+    """One call on the board (all of it public); returns the raw answer (the caller validates it). Raises on any failure."""
+    legal = tuple(legal)
+    request = SimpleNamespace(messages=[TurnMessage("system", YUT_SYSTEM.format(name=character["name"], persona=with_style(persona(character), style))),
+                                        TurnMessage("user", yut_table_text(view, names, legal))])
+    with bot.backend.pin(), capture_usage(guild_id, channel_id, "game"), log_scope(None), log_purpose("game"):
+        return await bot.models.structured_compiled(ROLE, request, "yut_move", yut_schema(legal))

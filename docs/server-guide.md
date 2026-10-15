@@ -137,7 +137,7 @@ A Korean shedding card game (원카드) for 2 to 8 players on a standard deck wi
 
 ## Yut
 
-윷놀이, the Korean throwing-stick board game, for 2 to 4 players. Each player races 4 pieces (2 to 5 by server setting) around the board; the first to bring every piece home wins. Members play in a table thread, like One Card. Characters cannot sit at the table yet.
+윷놀이, the Korean throwing-stick board game, for 2 to 4 players. Each player races 4 pieces (2 to 5 by server setting) around the board; the first to bring every piece home wins. Members and characters play together in a table thread, like One Card.
 
 - **Throws.** Four sticks are thrown: one flat side up is a 도 (1 step), two a 개 (2), three a 걸 (3), four a 윷 (4) and none a 모 (5). The marked stick flat-up alone is a 빽도 (back one step) when the server's 빽도 rule is on, otherwise a plain 도. A throw is posted as one line such as `개 (▮▮▯▯)`, where ▮ is a flat side.
 - **Extra throws.** A 윷, a 모 or a capture earns one more throw (never more than one per throw). The throws you have banked can be used in any order.
@@ -146,7 +146,8 @@ A Korean shedding card game (원카드) for 2 to 8 players on a standard deck wi
 - **빽도.** Moves one piece back along the path it came by. With no piece on the board it passes.
 - **Open a table.** `/game start game:yut` posts a lobby and opens a table thread; others press **Join**. On your turn press **Throw**, then pick the piece for each banked throw from the private picker. The pinned board image updates each turn, with the piece positions also written out as text. `/game rules game:yut` shows the rules this server uses.
 - **Turns.** A missed throw or move is made for you automatically (the first legal piece). Missing two turns in a row forfeits your seat.
-- **Ante and pot.** Off by default. An ante is paid when joining, refunded if the table closes or you leave the lobby, and the winner takes the pot.
+- **Characters.** `favorites:True` also seats your favorite characters (2 to 4 seats in all). A character throws and moves about 2 seconds after its turn starts, by its Play style (bold characters go for captures and shortcuts, cautious ones for stacking and safe landings) or, with **Characters choose moves by model** on, by the model among the legal moves. A character never times out, so it never forfeits. If every human forfeits, the characters still at the table play on and one takes the pot. A capture, a 윷 or 모, a piece coming home and the win can prompt a comment from the characters at the table. Table talk follows the same switches and daily limit as One Card, and with **Cast watches games** on, cast members who are not seated can watch the public table.
+- **Ante and pot.** Off by default. An ante is paid when joining (a character from its own wallet), refunded if the table closes or you leave the lobby, and the winner takes the pot.
 
 ## Texas Hold'em
 

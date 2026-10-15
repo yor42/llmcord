@@ -1,13 +1,15 @@
 """Yut (윷놀이) on Discord (FEAT-58, D42): `/game start game:Yut`, lobby, table thread, board image, throws and moves, timers, settlement, recovery.
 
-Humans only (character seats are FEAT-60). Rules, money and persistence live in ``games.yut`` and the store; the machinery mirrors
+Characters (favorites, FEAT-60) sit at the table: they ante from their own wallet, throw and move ~2 s after their turn starts by the Play style
+policy (``yut.policy_move``) or, with Character moves on "model", by a structured model call among the legal moves made outside the lock (any
+failure falls back to the policy), and they never forfeit on a timeout. Rules, money and persistence live in ``games.yut`` and the store; the machinery mirrors
 ``games_onecard_discord``: every table runs under its own lock (store work only; no Discord call is made under it), a handler decides under
 the lock and builds an ``_Out`` that is delivered afterwards one table at a time, and timers re-check the stored state under the lock.
 Nothing is hidden in Yut, so the pieces of every seat are on the pinned board message: the PNG from ``games.yut_render`` (rendered off the
 event loop, cached by piece positions) plus its English text fallback, which is always included.
 A throw is one public line (``Gae (▮▮▯▯)``). The turn message carries Throw (throw phase) or Move (move phase) and Forfeit; Move and Forfeit
 open private (ephemeral) views, so a misclick never moves a piece. A missed turn (``turn_timeout``) makes the throw, or the first legal move,
-for the seat (actor ``timeout``); the second missed decision in a row forfeits the seat.
+for the seat (actor ``timeout``); the second missed decision in a row forfeits the seat. Both are for members only.
 """
 from __future__ import annotations
 
@@ -23,7 +25,7 @@ from . import game_chooser
 from .admin_store import ConflictError, GameError
 from .game_talk import TalkBudget
 from .games import yut, yut_render
-from .games_discord import NOT_SEATED, NOT_YOUR_TURN, NO_MENTIONS, OFF_HERE, STALE, GameTables, _sign, words
+from .games_discord import NO_CHARACTER_SEATS, NOT_SEATED, NOT_YOUR_TURN, NO_MENTIONS, OFF_HERE, STALE, GameTables, _sign, words
 from .games_doubt_discord import (GAME_OVER, JOINED, JOINED_ANTE, LEFT_CLOSED, LEFT_REFUNDED, NO_TABLE, NOT_STARTED, ONLY_HOST_START, THREAD_FAILED,
                                   THREAD_FORBIDDEN, THREAD_NOT_READY)
 from .table_runtime import TableRuntime
@@ -32,7 +34,6 @@ from llmcord_core.i18n import N_, Phrase, discord_locale, terms
 
 PREFIX = "llmcord:yut"
 YUT_OFF = N_("Yut is off on this server.")
-NO_YUT_CHARACTERS = N_("Characters can't sit at a Yut table yet.")
 YUT_MOVED_ON = N_("The table moved on — use the buttons on the newest message.")
 NOT_A_MOVE = N_("Pick one of the moves in the list.")
 NOT_A_THROW = N_("There is nothing to throw right now.")
@@ -129,10 +130,14 @@ class _Out:
     talk: tuple | None = None  # (public text, is the game's end): the event turn for the cast watching the table
     closing: str | None = None  # the table was closed from outside: this line goes to the thread and the turn message loses its buttons
     closed: bool = False  # the table is over: forget it once this is delivered
+    line: tuple | None = None  # (character, text): the model's table line, posted by the character's webhook after the move lines
 
 
 class YutTables:
     LOBBY_SECONDS = 300
+    CHARACTER_SECONDS = 2
+    MODEL_SECONDS = 20
+    POST_SECONDS = 10
     ARCHIVE_SECONDS = 600
     BOARD_DEBOUNCE_SECONDS = 1
     RETRY_SECONDS = 5  # read once at construction (TableRuntime.retry_seconds); tests set runtime.retry_seconds
@@ -181,7 +186,7 @@ class YutTables:
     def arm(self, key, kind: str, delay: float, *args) -> None:
         if self.closed:
             return
-        hook = {"lobby": self.on_lobby_timer, "turn": self.on_turn_timer, "archive": self.on_archive_timer}[kind]
+        hook = {"lobby": self.on_lobby_timer, "turn": self.on_turn_timer, "character": self.on_character_timer, "archive": self.on_archive_timer}[kind]
         self.runtime.arm(key, kind, delay, self._run, kind, hook, key, args, name=f"yut-{kind}-{key[1]}")
 
     async def _run(self, kind, hook, key, args) -> None:
@@ -199,7 +204,7 @@ class YutTables:
 
     def _release(self, key) -> None:
         """Stops the table's play timers and drops its thread. The archive timer is armed separately."""
-        for kind in ("lobby", "turn"):
+        for kind in ("lobby", "turn", "character"):
             self.runtime.disarm(key, kind)
         self.threads = {thread: k for thread, k in self.threads.items() if k != key}
         self.event_at.pop(key, None)
@@ -283,7 +288,14 @@ class YutTables:
         if snap["status"] != "playing" or not view or view["turn"] is None:
             table.deadlines.pop("turn", None)
             self.runtime.disarm(key, "turn")
+            self.runtime.disarm(key, "character")
             return
+        if snap["seats"][view["turn"]]["kind"] == "character":
+            table.deadlines.pop("turn", None)
+            self.runtime.disarm(key, "turn")
+            self.arm(key, "character", self.CHARACTER_SECONDS, snap["round_id"], snap["moves"])
+            return
+        self.runtime.disarm(key, "character")
         delay = (snap["rules"] or {}).get("turn_timeout", 60)
         table.deadlines["turn"] = self.clock() + delay
         self.arm(key, "turn", delay, snap["round_id"], snap["moves"])
@@ -498,7 +510,9 @@ class YutTables:
             stamp, who = self._stamp(key, "turn"), self._who(snap, turn, t=t)
             lines.append(t("Next: {who} — {stamp}.", who=who, stamp=stamp) if stamp and seats[turn]["kind"] == "member" else t("Next: {who}.", who=who))
             lines.append(t("Throw the sticks.") if view["phase"] == "throw" else t("Choose a banked throw and a piece to move."))
-            if view["phase"] == "throw":
+            if seats[turn]["kind"] == "character":
+                pass  # a character throws and moves by itself
+            elif view["phase"] == "throw":
                 buttons.add_item(YutButton("throw", key[1], snap["round_id"], snap["moves"], t.p("button.yut", "Throw"), discord.ButtonStyle.primary))
             else:
                 buttons.add_item(YutButton("move", key[1], snap["round_id"], snap["moves"], t.p("button.yut", "Move"), discord.ButtonStyle.primary))
@@ -587,9 +601,11 @@ class YutTables:
         return self._seal(key, out)
 
     def _moment(self, key, before, new) -> str | None:
-        """The public line for a key moment of the move just made (a capture, a piece home), else None. Names only: no markdown, no mention."""
+        """The public line for a key moment of the move just made (a capture, a piece home, a Yut or a Mo), else None. Names only: no markdown, no mention."""
         names = self._talk_names(key[0], new)
         for event in new["view"]["history"][len(before["view"]["history"]):]:
+            if event["kind"] == "throw" and event["name"] in ("yut", "mo"):
+                return f"{names[event['seat']]} threw {'Yut' if event['name'] == 'yut' else 'Mo'} and gets another throw."
             if event["kind"] != "move":
                 continue
             if event["captured"]:
@@ -603,6 +619,25 @@ class YutTables:
         if out is None:
             return
         await self._send(key, out)
+        if out.line is not None:
+            await self._post_line(key, *out.line)
+
+    async def _post_line(self, key, character, line) -> None:
+        """Best effort, outside the table lock: the character says its line in the table thread through its webhook. Nothing is saved to scene history."""
+        try:
+            row = self._row(key)
+            if row is None or row["thread_id"] is None:
+                return
+            channel = await self._channel(row["thread_id"])
+            webhook = await self.bot._webhook(channel, character)
+            slots = {r["slot_key"]: r for r in self.store.usable_avatars(key[0], character["id"])}
+            avatar = (await self.bot.resolve_avatar(slots["neutral"]))["url"] if "neutral" in slots else None
+            thread = {"thread": channel} if isinstance(channel, discord.Thread) else {}
+            await asyncio.wait_for(webhook.send(line, **thread, username=character["name"], avatar_url=avatar, allowed_mentions=NO_MENTIONS), self.POST_SECONDS)
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            logging.warning("Yut character line not posted (%s)", type(error).__name__)
 
     async def _send(self, key, out: _Out) -> None:
         table = self.tables.get(key)
@@ -781,7 +816,10 @@ class YutTables:
         if channel_id not in self.store.game_channels(guild_id):
             await self._say(interaction, OFF_HERE)
             return
-        note = NO_YUT_CHARACTERS if favorites else ""
+        _, binding = self.bot.location(interaction.channel)
+        space_id, note = (binding["space_id"] if binding else None), ""
+        if favorites and not binding:
+            note = NO_CHARACTER_SEATS
         try:
             opened = self.store.open_table(guild_id, channel_id, "yut", user.id)
         except GameError as error:
@@ -792,7 +830,11 @@ class YutTables:
         self._ensure_sweeper()
         async with self.runtime.lock(key):
             try:
-                snap = self.store.join_round(guild_id, round_id, user.id, 0)
+                if favorites and space_id is not None:
+                    result = self.store.join_with_favorites(guild_id, round_id, user.id, 0, space_id)
+                    snap, note = result["snapshot"], self.bot.games._favorites_note(result, note, t=discord_locale.invoker_t(interaction))
+                else:
+                    snap = self.store.join_round(guild_id, round_id, user.id, 0)
             except GameError as error:
                 self.store.close_table(*key)
                 self._release(key)
@@ -1140,7 +1182,100 @@ class YutTables:
                 return
         await self._publish(key, out)
 
-    # --- table talk (the cast watching, FEAT-55) --------------------------------------------
+    # --- characters (FEAT-60) -----------------------------------------------------------------
+
+    def _note_failure(self, guild_id) -> None:
+        self.talk.note_failure(guild_id)  # one counter for every table game
+
+    def _character(self, guild_id, seat):
+        character = self.store.character_by_id(seat["ref_id"])
+        return character if character is not None and character["guild_id"] == guild_id else None
+
+    def _fallback_moves(self, guild_id, snap, seat, seen) -> list:
+        """The seat's policy move, then the first legal move, then forfeit (only if the store refuses everything else, so the table never hangs)."""
+        tried = []
+        try:
+            style = self.store.character_play_style(guild_id, snap["seats"][seat]["ref_id"])
+            tried.append((seat, yut.policy_move(seen, seat, style, self.store.policy_seed(guild_id, snap["round_id"], f"{snap['moves']}/{seat}/character"))))
+        except Exception as error:
+            logging.warning("Yut policy move failed (%s)", type(error).__name__)
+        first = yut.choices(seen, seat)[:1]
+        return [*tried, *((seat, m) for m in first), (seat, "forfeit")]
+
+    def _apply_chain(self, key, snap, tried):
+        """Under the table lock: the first move the store accepts. _STALE when the state moved on, None when nothing was accepted."""
+        for seat, move in tried:
+            try:
+                return self._apply(key, snap, seat, move, "character" if move != "forfeit" else "timeout")
+            except ConflictError:
+                return _STALE
+            except GameError as error:
+                logging.warning("Yut character move refused (%s)", type(error).__name__)
+        return None
+
+    async def _apply_fresh(self, key, round_id, moves, tried):
+        """Applies only if the table is still at the move count the decision was made for; else _STALE (dropped silently)."""
+        async with self.runtime.lock(key):
+            snap = self._timer_snap(key, round_id, moves)
+            return _STALE if snap is None else self._apply_chain(key, snap, tried)
+
+    async def on_character_timer(self, guild_id, table_id, round_id, moves) -> None:
+        """The character on turn throws or moves. With Character moves "model", character table talk on and the daily limit not reached, a move
+        among several is a model call on the seat's view made outside the table lock and applied only if the table is still at the same move
+        count; the policy plays otherwise (a throw, or a single legal move, needs no model) and after any failure. A character never times out."""
+        key, out, plan = (guild_id, table_id), None, None
+        async with self.runtime.lock(key):
+            snap = self._timer_snap(key, round_id, moves)
+            if snap is None:
+                return
+            turn = snap["view"]["turn"]
+            if turn is None or snap["seats"][turn]["kind"] != "character":
+                return
+            seen = self.store.seat_view(guild_id, round_id, turn)
+            legal = yut.choices(seen, turn)
+            budget = 0 if self.store.game_character_moves(guild_id) == "style" else self._talk_budget(guild_id)  # style only: the policy plays; table talk keeps its own budget
+            if budget <= 0 or len(legal) < 2:
+                out = self._apply_chain(key, snap, self._fallback_moves(guild_id, snap, turn, seen))
+            else:
+                plan = turn, self._character(guild_id, snap["seats"][turn]), seen, game_chooser.yut_names(snap), legal
+        if plan is not None:
+            out = await self._decide(key, snap, plan)
+        await self._publish(key, None if out is _STALE else out)
+
+    async def _decide(self, key, snap, plan):
+        guild_id, round_id, moves = key[0], snap["round_id"], snap["moves"]
+        turn, character, seen, names, legal = plan
+        tried, line, asked = [], "", False
+        if character is not None:
+            try:
+                style = self.store.character_play_style(guild_id, character["id"])
+            except Exception as error:
+                style = None
+                logging.warning("Yut character play style lookup failed (%s)", type(error).__name__)
+            try:
+                result = await asyncio.wait_for(game_chooser.ask_yut(self.bot, guild_id, snap["channel_id"], character, seen, names, legal, style), self.MODEL_SECONDS)
+                move = game_chooser.holdem_move(result, legal)
+                if move is not None:
+                    asked = True
+                    tried.append((turn, move))
+                    line = game_chooser.clean_line(result.get("line"))
+            except asyncio.CancelledError:
+                self._note_failure(guild_id)  # an attempt that was cut short still counts toward the limit
+                raise
+            except Exception as error:
+                move = None
+                logging.warning("Yut character move fell back to the policy (%s)", type(error).__name__)
+            if move is None:
+                self._note_failure(guild_id)
+        tried += self._fallback_moves(guild_id, snap, turn, seen)
+        out = await self._apply_fresh(key, round_id, moves, tried)
+        if out is _STALE and asked:
+            self._note_failure(guild_id)  # a good answer dropped because the table moved on still counts toward the limit
+        elif asked and line and out is not None and out is not _STALE:
+            out.line = character, line
+        return out
+
+    # --- table talk (the cast at and watching the table, FEAT-55, FEAT-60) -------------------
 
     def _talk_budget(self, guild_id) -> int:
         """How many model calls the table-talk daily limit still allows (0 when character table talk is off). Failed attempts count."""
@@ -1153,12 +1288,15 @@ class YutTables:
         return key if key is not None and key[0] == guild_id else None
 
     def _talk_names(self, guild_id, snap) -> list:
-        """One prompt-safe name per seat (members by their guild display name, Player N when unknown); no mentions, no ids, no markdown."""
+        """One prompt-safe name per seat (characters by name, members by their guild display name, Player N when unknown); no mentions, no ids, no markdown."""
         guild, names, players = self.bot.get_guild(guild_id), [], 0
         for seat in snap["seats"]:
-            players += 1
-            member = guild.get_member(seat["ref_id"]) if guild is not None else None
-            name = getattr(member, "display_name", None) or f"Player {players}"
+            if seat["kind"] == "character":
+                name = seat["name"]
+            else:
+                players += 1
+                member = guild.get_member(seat["ref_id"]) if guild is not None else None
+                name = getattr(member, "display_name", None) or f"Player {players}"
             names.append(game_chooser.clean_name(name) or f"Player {len(names) + 1}")
         return names
 
@@ -1175,11 +1313,23 @@ class YutTables:
             snap = self.store.latest_round(*key)
         except GameError:
             return None
-        return {"table_id": key[1], "round_id": snap["round_id"], "status": snap["status"], "seated_character_ids": []}
+        return {"table_id": key[1], "round_id": snap["round_id"], "status": snap["status"],
+                "seated_character_ids": [s["ref_id"] for s in snap["seats"] if s["kind"] == "character"]}
 
     def table_block(self, guild_id, thread_id, character_id) -> str | None:
-        """Characters do not sit at Yut tables yet (FEAT-60): nothing to tell a seated character."""
-        return None
+        """What one seated character may know of the table: the public state (everything in Yut is public); None for anyone not seated."""
+        key = self._talk_key(guild_id, thread_id)
+        if key is None:
+            return None
+        try:
+            snap = self.store.latest_round(*key)
+        except GameError:
+            return None
+        mine = next((s for s in snap["seats"] if s["kind"] == "character" and s["ref_id"] == character_id), None)
+        if mine is None:
+            return None
+        return "\n".join(["You are sitting at a table of Yut (a Korean board game: players throw four sticks and move their pieces around the board; the first to bring every piece home wins).",
+                          *self._public_lines(key, snap, mine["index"])])
 
     def public_block(self, guild_id, key) -> str | None:
         """FEAT-55: the third-person public view of the table, for anyone not seated (everything is public in Yut)."""
@@ -1187,30 +1337,36 @@ class YutTables:
             snap = self.store.latest_round(*key)
         except GameError:
             return None
+        return "\n".join(["A table of Yut (a Korean board game: players throw four sticks and move their pieces around the board; the first to bring every piece home wins).",
+                          *self._public_lines(key, snap, None)])
+
+    def _public_lines(self, key, snap, me) -> list:
         names, view = self._talk_names(key[0], snap), snap["view"]
-        lines = ["A table of Yut (a Korean board game: players throw four sticks and move their pieces around the board; the first to bring every piece home wins)."]
         if not view:
-            lines.append("The game has not started yet. Seated: " + ", ".join(names) + ".")
-            return "\n".join(lines)
+            return ["The game has not started yet. Seated: " + ", ".join(names) + "."]
+
+        def who(i):
+            return names[i] + (" (you)" if i == me else "")
+        lines = []
         if view["finished"]:
-            lines.append(f"The game is over. {names[view['winner']]} won.")
+            lines.append(f"The game is over. {who(view['winner'])} won.")
         elif view["turn"] is not None:
-            lines.append(f"On turn: {names[view['turn']]} ({'to throw' if view['phase'] == 'throw' else 'to move'}).")
+            lines.append(f"On turn: {who(view['turn'])} ({'to throw' if view['phase'] == 'throw' else 'to move'}).")
         for i, row in enumerate(view["pieces"]):
-            lines.append(f"- {names[i]}: {sum(p not in (None, 'done') for p in row)} on the board, {sum(p is None for p in row)} at the start, {sum(p == 'done' for p in row)} home"
+            lines.append(f"- {who(i)}: {sum(p not in (None, 'done') for p in row)} on the board, {sum(p is None for p in row)} at the start, {sum(p == 'done' for p in row)} home"
                          + ("" if view["active"][i] else " (out of the game)"))
         recent = []
         for item in view["history"][-6:]:
-            who = names[item["seat"]]
+            name = names[item["seat"]]
             if item["kind"] == "throw":
-                recent.append(f"{who} threw {item['name']}")
+                recent.append(f"{name} threw {item['name']}")
             elif item["kind"] == "move":
-                recent.append(f"{who} moved a piece with {item['throw']}" + (" and captured" if item["captured"] else "") + (" and brought it home" if item["end"] == "done" else ""))
+                recent.append(f"{name} moved a piece with {item['throw']}" + (" and captured" if item["captured"] else "") + (" and brought it home" if item["end"] == "done" else ""))
             elif item["kind"] == "forfeit":
-                recent.append(f"{who} left the game")
+                recent.append(f"{name} left the game")
         if recent:
             lines.append("Recent play: " + "; ".join(recent) + ".")
-        return "\n".join(lines)
+        return lines
 
     # --- archive ----------------------------------------------------------------------------
 

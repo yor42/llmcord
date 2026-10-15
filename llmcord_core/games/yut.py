@@ -21,6 +21,7 @@ THROWS = ("do", "gae", "geol", "yut", "mo", "backdo")
 STEPS = {"do": 1, "gae": 2, "geol": 3, "yut": 4, "mo": 5}
 _BY_FLAT = ("mo", "do", "gae", "geol", "yut")
 DEFAULT_RULES = {"backdo": True, "pieces": 4, "ante": 0, "turn_timeout": 60}
+NOT_ON_TURN = "it is not this seat's turn"  # developer text: the store turns an IllegalMove into an error code
 ANTE_MAX = 10 ** 9
 PIECES_RANGE = (2, 5)
 TIMEOUT_RANGE = (15, 300)
@@ -173,7 +174,8 @@ def _on_board(state, seat):
 
 
 def legal_moves(state, seat):
-    if type(seat) is not int or not 0 <= seat < len(state.seats):
+    """The moves of a seat (``forfeit`` last). Reads only what a ``View`` has too, so it works on a State or a View."""
+    if type(seat) is not int or not 0 <= seat < len(state.active):
         raise ValueError("no such seat")
     if state.finished or not state.active[seat]:
         return ()
@@ -188,6 +190,23 @@ def legal_moves(state, seat):
                 if name != "backdo" or p is not None:
                     out.append(f"move:{i}:{name}")
     out.append("forfeit")
+    return tuple(out)
+
+
+def choices(state, seat):
+    """The distinct moves a seat may make, never a forfeit: pieces on the same point with the same trail move alike, so only the first is offered.
+    Works on a State or a View."""
+    out, seen = [], set()
+    for move in legal_moves(state, seat):
+        if move == "forfeit":
+            continue
+        if move.startswith("move:"):
+            _, piece, name = move.split(":")
+            same = (state.pieces[seat][int(piece)], state.trails[seat][int(piece)], name)
+            if same in seen:
+                continue
+            seen.add(same)
+        out.append(move)
     return tuple(out)
 
 
@@ -232,6 +251,20 @@ def _advance(pos, trail, name):
     if n > len(route):  # past P0: finished
         return "done", ()
     return route[n - 1], trail + route[:n]
+
+
+def preview(state, seat, move):
+    """What a ``move:<piece>:<throw>`` would do, without doing it (a State or a View): where the stack stands and lands, how many pieces
+    move together, how many opposing pieces it captures, whether it reaches home."""
+    _, piece, name = move.split(":")
+    piece = int(piece)
+    pos, trail = state.pieces[seat][piece], state.trails[seat][piece]
+    end, _ = _advance(pos, trail, name)
+    moving = sum(p == pos for p in state.pieces[seat]) if pos is not None else 1
+    captured = 0
+    if end not in (None, "done"):
+        captured = sum(p == end for o in range(len(state.active)) if o != seat and state.active[o] for p in state.pieces[o])
+    return {"piece": piece, "throw": name, "start": pos, "end": end, "moving": moving, "captured": captured, "home": end == "done"}
 
 
 def _move(state, seat, piece, name):
@@ -323,6 +356,65 @@ def board_view(state):
     last = None if state.last_throw is None else {"name": state.last_throw[0], "sticks": state.last_throw[1]}
     return {"pieces": state.pieces, "stacks": tuple(stacks), "bank": state.bank, "to_throw": state.to_throw, "phase": state.phase,
             "turn": state.turn, "last_throw": last}
+
+
+def _flat_odds():
+    p, q = P_FLAT_UP, 1 - P_FLAT_UP
+    return {"mo": q ** 4, "do": 3 * p * q ** 3, "backdo": p * q ** 3, "gae": 6 * p ** 2 * q ** 2, "geol": 4 * p ** 3 * q, "yut": p ** 4}
+
+
+_ODDS = _flat_odds()
+
+
+def _dist(point):
+    return 0 if point == "done" else len(_ROUTES[point])
+
+
+def _threat(state, seat, end):
+    """The chance that an opposing piece lands on ``end`` with its next throw (a throw counted once; extra throws are ignored)."""
+    hit = 0.0
+    for name, odds in _ODDS.items():
+        if any(_advance(p, state.trails[o][i], name)[0] == end
+               for o in range(len(state.active)) if o != seat and state.active[o]
+               for i, p in enumerate(state.pieces[o]) if p != "done" and (p is not None or name != "backdo")):
+            hit += odds
+    return hit
+
+
+def _score(state, seat, move, bold):
+    info = preview(state, seat, move)
+    start, end = info["start"], info["end"]
+    score = 3.0 * (_dist(start) - _dist(end)) + 0.1 * (20 - _dist(end))
+    score += info["captured"] * (45 + 70 * bold) + (60 if info["home"] else 0)
+    if start in ("P5", "P10") and end not in (None, "done") and not end.startswith("P"):
+        score += 12 + 40 * bold  # took the shortcut
+    if end not in (None, "done"):
+        mine = [i for i, p in enumerate(state.pieces[seat]) if p == end]
+        if mine:
+            score += (8 + 40 * (1 - bold)) * (len(mine) + info["moving"] - 1)  # stacking
+        size = info["moving"] + len(mine)
+        score -= _threat(state, seat, end) * size * (25 + 5 * (20 - _dist(end))) * (0.4 + 1.2 * (1 - bold))
+    return score
+
+
+def policy_move(state, seat, style=None, seed=None):
+    """One legal move (never a forfeit) for a seat from what is on the table (a State or a View: Yut hides nothing). The throw is always made.
+    A move is scored: a capture, bringing a stack home and a shortcut gain, advancing the front piece gains a little, and a landing an opposing
+    piece can hit costs its chance of being hit. ``style`` shifts the weights: bold (aggression and risk) values captures and shortcuts,
+    cautious values stacking and safe landings; an erratic style may deviate to another legal move. Deterministic in (state, seat, style, seed)."""
+    options = choices(state, seat)
+    if not options:
+        raise IllegalMove(NOT_ON_TURN)
+    if len(options) == 1:
+        return options[0]
+    bold = 0.5 if style is None else (style.unit("aggression") + style.unit("risk")) / 2
+    best = max(range(len(options)), key=lambda i: (_score(state, seat, options[i], bold), -i))
+    if style is not None:
+        seed = seed if seed is not None else f"{getattr(state, 'seed', 'yut')}/policy/{len(state.history)}"
+        if playstyle.erratic(style, seed, "move"):
+            others = [m for i, m in enumerate(options) if i != best]
+            return others[int(playstyle.roll(seed, "pick") * len(others))]
+    return options[best]
 
 
 def result(state):

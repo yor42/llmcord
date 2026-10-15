@@ -2406,10 +2406,6 @@ msgid "Yut is off on this server."
 msgstr "이 서버에서는 윷놀이가 꺼져 있어요."
 
 #: llmcord_core/games_yut_discord.py
-msgid "Characters can't sit at a Yut table yet."
-msgstr "아직은 캐릭터가 윷놀이 테이블에 앉을 수 없어요."
-
-#: llmcord_core/games_yut_discord.py
 msgid "The table moved on — use the buttons on the newest message."
 msgstr "테이블이 이미 진행됐어요. 가장 최근 메시지의 버튼을 사용해 주세요."
 

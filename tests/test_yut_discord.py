@@ -1,4 +1,4 @@
-"""FEAT-58 (D42): Yut on Discord, humans only: lobby, table thread, board image, throws, moves, timers, settlement, recovery, wiring.
+"""FEAT-58 (D42): Yut on Discord (character seats: test_yut_characters.py): lobby, table thread, board image, throws, moves, timers, settlement, recovery, wiring.
 
 Offline: fake channels, threads and interactions from ``helpers``, a fixed seed, the pure engine (``games.yut``) as the oracle, an in-memory
 store. Timers are driven by calling their hooks, never by waiting. Modelled on ``test_onecard_discord.py``.
@@ -12,7 +12,7 @@ from test_doubt_discord import blob, button, item_of, labels, private, says, sel
 
 from llmcord_core import i18n
 from llmcord_core.admin_store import GameError
-from llmcord_core.games_discord import STALE
+from llmcord_core.games_discord import NO_CHARACTER_SEATS, STALE
 from llmcord_core.discord_bot import SkitBot
 from llmcord_core.games import registry, yut, yut_render
 from llmcord_core.games_yut_discord import YutButton
@@ -137,7 +137,7 @@ class LobbyAndStartTests(YutCase):
 
     async def test_one_seat_cannot_start_and_favorites_get_a_note(self):
         click = await self.start(favorites=True)
-        self.assertTrue(any("can't sit at a Yut table" in t for t in says(click)))
+        self.assertTrue(any(NO_CHARACTER_SEATS in t for t in says(click)))  # FEAT-60: this channel has no world, so no character sits
         self.assertTrue(item_of(button(self.lobby(), "Start")).disabled)
 
     async def test_start_posts_the_pinned_board_with_a_png_and_the_text_fallback(self):

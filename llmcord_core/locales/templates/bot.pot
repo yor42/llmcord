@@ -2401,10 +2401,6 @@ msgid "Yut is off on this server."
 msgstr ""
 
 #: llmcord_core/games_yut_discord.py
-msgid "Characters can't sit at a Yut table yet."
-msgstr ""
-
-#: llmcord_core/games_yut_discord.py
 msgid "The table moved on — use the buttons on the newest message."
 msgstr ""
 
