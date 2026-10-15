@@ -320,10 +320,10 @@ class SwitchRecheckTests(VetoCase):
         self.assert_e5_buttons(msg)
 
     async def test_member_spoken_moves_turned_off_while_embedding_never_calls(self):
-        """FEAT-49 review: the member turning spoken moves off during the embedding await stops the call; e5's check is unchanged."""
+        """FEAT-49 review: the member turning spoken moves off during the embedding await stops the call; nothing is posted (MNT-62)."""
         msg = await self._flip_during_embed(lambda: self.store.set_spoken_member_on(G, ALICE, False))
         self.assertEqual(self.fake.calls, [])
-        self.assert_e5_buttons(msg)
+        self.assertEqual(msg.posts, [])
 
 
 class LimiterUnitTests(unittest.TestCase):

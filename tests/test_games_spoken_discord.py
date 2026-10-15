@@ -250,6 +250,30 @@ class RaceTests(SpokenCase):
         await self.settle()
         self.assertEqual((msg.posts, self.spoken.pending), ([], {}))
 
+    async def test_member_turned_off_during_inference_posts_and_keeps_nothing(self):
+        await self.deal()
+        self.runtime.gate = asyncio.Event()
+        msg = Said(ALICE, "hit me")
+        self.spoken.note_message(msg)
+        await asyncio.sleep(0)
+        self.store.set_spoken_member_on(G, ALICE, False)
+        self.runtime.gate.set()
+        await self.settle()
+        self.assertEqual((msg.posts, self.spoken.pending, self.spoken.readings), ([], {}, {}))
+
+    async def test_member_turned_off_while_the_reply_is_in_flight_deletes_it(self):
+        await self.deal()
+        msg = Said(ALICE, "hit me")
+
+        async def off():
+            self.store.set_spoken_member_on(G, ALICE, False)
+
+        msg.on_reply = off
+        self.spoken.note_message(msg)
+        await self.settle()
+        self.assertTrue(msg.posts[0].deleted)
+        self.assertEqual(self.spoken.pending, {})
+
     async def test_a_newer_phrase_replaces_the_pending_check(self):
         await self.deal()
         first = await self.say(ALICE, "hit me")

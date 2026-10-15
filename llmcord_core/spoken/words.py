@@ -11,8 +11,8 @@ _KO_CONT = "해|할|함|하|고|아|자|돼|되"
 KO_END = ("요", "해", "할", "함", "하", "합", "했", "고", "이", "가", "은", "는", "을", "를", "로", "으로", "도", "만",
            "게", "겠", "지", "자", "죠", "임", "다", "아", "돼", "되", "래", "한", "인", "입", "야", "간", "갈", "갑", "줘",
            "볼", "각")
-# Single-syllable negations match standalone or with these endings only ('말해' = say, '못생겼' = ugly).
 _KO_END = KO_END
+# Single-syllable negations match standalone or with these endings only ('말해' = say, '못생겼' = ugly).
 _KO_NEG_END = {"말": "고|아|자|라|요|래|게|지|까|았", "못": "해|하|할|함|했|한"}
 _HANGUL = "가-힣"
 _CLAUSE_BREAK = re.compile(r"[,.!?;，。！？；]")

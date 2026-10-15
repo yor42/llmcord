@@ -24,6 +24,7 @@ def _lex():
     data = json.loads((Path(__file__).with_name("ambient_invite.json")).read_text(encoding="utf-8"))
     data["exclude"] = [words.normalize(x) for x in data["exclude"]]
     data["question_end"] = re.compile(rf"(?:{data['question_end']})[\s.!~]*$")
+    data["question_end_weak"] = re.compile(rf"(?:{data['question_end_weak']})[\s.!~]*$")
     data["reaction_re"] = re.compile(data["reaction"]["pattern"])
     data["particles"] = (*words.KO_END, *data["ko_particles"])
     reactions = {words.normalize(x) for x in (*data["reaction"]["en"], *data["reaction"]["ko"])}
@@ -49,7 +50,7 @@ def _name_in(text, name):
 
 
 def _name_forms(name):
-    """The full name, plus its first word that is not a title or article and has 3+ letters (2+ syllables in Hangul)."""
+    """The full name, plus its first word that is not a title or article and has 4+ letters (2+ syllables in Hangul)."""
     name = words.normalize(name)
     forms = [name] if name else []
     parts = name.split()
@@ -58,14 +59,18 @@ def _name_forms(name):
             hangul = len(_HANGUL.findall(part))
             if part in _lex()["title_words"]:
                 continue
-            if hangul >= 2 or (not hangul and sum(c.isalpha() for c in part) >= 3):
+            if hangul >= 2 or (not hangul and sum(c.isalpha() for c in part) >= 4):
                 forms.append(part)
                 break
     return forms
 
 
 def _question(text):
-    return "?" in re.sub(r"https?://\S+", "", text) or _lex()["question_end"].search(text) is not None
+    lex = _lex()
+    if "?" in re.sub(r"https?://\S+", "", text) or lex["question_end"].search(text) is not None:
+        return True
+    # 갈래/할래 also end statements ("나 먼저 갈래"): a question only beside a question word
+    return lex["question_end_weak"].search(text) is not None and bool(words.found(text, {"ko": lex["question_words"]}, [], True))
 
 
 def _reaction(text):

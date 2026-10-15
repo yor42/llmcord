@@ -20,6 +20,8 @@
   "title_words": ["the", "a", "an", "sir", "lady", "lord", "mr", "mrs", "ms", "miss", "dr", "captain", "old", "little", "young",
                   "mister", "madam", "king", "queen", "prince", "princess"],
   "ko_particles": ["의", "와", "과", "랑", "이랑", "한테", "에게", "에서", "께", "씨", "님", "아", "야"],
-  "question_end": "있니|하니|했니|뭐니|됐니|갈래|할래|냐|나요|(?<!니)까",
+  "question_end": "있니|하니|했니|뭐니|됐니|냐|나요|(?<!니)까",
+  "question_end_weak": "갈래|할래",
+  "question_words": ["어때", "뭐", "뭘", "무슨", "어디", "누구", "누가", "언제", "왜", "어떻게", "어떤", "얼마", "몇"],
   "reaction_max_words": 3
 }

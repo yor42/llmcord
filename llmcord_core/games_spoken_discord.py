@@ -207,7 +207,8 @@ class SpokenMoves:
             self._count(key[0], "unpressed_vetoed")
 
     def _current(self, key, turn, number) -> bool:
-        return not self.closed and self.latest.get(key) == number and self.bot.games.turns.get(key) == turn
+        return (not self.closed and self.latest.get(key) == number and self.bot.games.turns.get(key) == turn
+                and self.bot.store.spoken_member_on(key[0], turn.member_id))  # MNT-62: a member who turned it Off mid-reading gets nothing posted or kept
 
     async def _check(self, key, turn, number, message, text) -> None:
         try:

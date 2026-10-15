@@ -45,7 +45,7 @@ class NameTests(unittest.TestCase):
         self.assertEqual(sig("the weather is nice", names=["The Narrator"]), ())
         self.assertEqual(sig("narrator, hello", names=["The Narrator"]), ("name",))
         self.assertEqual(sig("sir who", names=["Sir Al Bo"]), ())
-        self.assertEqual(sig("hi Bob", names=["Lady Bob Smith"]), ("name",))
+        self.assertEqual(sig("hi Rose", names=["Lady Rose Smith"]), ("name",))
         self.assertEqual(sig("the narrator", names=["The Narrator"]), ("name",))
 
     def test_multi_word_names_match_full_or_first_word(self):
@@ -54,6 +54,12 @@ class NameTests(unittest.TestCase):
         self.assertEqual(ambient.invite("hi Jane", [], NAMES).named, ())
         self.assertEqual(ambient.invite("hi Jo", [], ["Jo Bo"]).named, ())
         self.assertEqual(ambient.invite("안녕 루나야", [], ["루나 공주"]).named, (0,))
+
+    def test_a_fallback_word_needs_four_letters(self):
+        self.assertEqual(sig("what a man", names=["Old Man"]), ())
+        self.assertEqual(sig("hi Bob", names=["Lady Bob Smith"]), ())
+        self.assertEqual(sig("hi old man", names=["Old Man"]), ("name",))
+        self.assertEqual(sig("hi Mary", names=["Mary Jane"]), ("name",))
 
     def test_only_latest_and_last_two_recent_lines_count(self):
         self.assertEqual(sig("yeah", ["Luna?", "ok", "sure"]), ())
@@ -87,6 +93,12 @@ class PhraseTests(unittest.TestCase):
             self.assertEqual(sig(text, favorite=True), ("favorite",), text)
         for text in ("우리 어머니", "아니", "그러니까"):
             self.assertEqual(sig(text, favorite=True), (), text)
+
+    def test_bare_galrae_and_halrae_statements_do_not_invite(self):
+        for text in ("나 먼저 갈래", "난 이만 할래", "나 먼저 갈래.", "I will go 나 갈래"):
+            self.assertEqual(sig(text, favorite=True, follow_up=True), (), text)
+        for text in ("나 먼저 갈래?", "나 먼저 갈래？", "다들 어때 갈래", "뭐 할래", "누구 갈래", "어때 갈래"):
+            self.assertIn("favorite", sig(text, favorite=True), text)
 
     def test_plain_chat_and_excludes_are_silent(self):
         for text in ("random weather", "my thoughts and prayers", "I don't tell anyone's secrets", "누가 봐도 그렇지", "anyonexyz", "너는 바보"):

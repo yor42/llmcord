@@ -249,6 +249,28 @@ class CheckTests(SpokenDoubtCase):
         self.assertFalse(self.last_check(one).deleted or self.last_check(two).deleted)
         self.assertEqual(len(self.spoken.pending), 2)
 
+    async def test_member_turned_off_before_the_post_or_during_it_leaves_no_check(self):
+        seat = await self.window()
+        user = self.doubter(seat)
+        chat = self.say(user)
+        self.store.set_spoken_member_on(G, user, False)
+        await self.settle()
+        self.assertEqual((chat.posts, self.spoken.pending), ([], {}))
+        self.store.set_spoken_member_on(G, user, True)
+        chat = Chat(self.thread(), user, "I doubt it")
+        reply = chat.reply
+
+        async def flip(content, view=None, **kwargs):
+            post = await reply(content, view=view, **kwargs)
+            self.store.set_spoken_member_on(G, user, False)
+            return post
+
+        chat.reply = flip
+        self.spoken.note_message(chat)
+        await self.settle()
+        self.assertTrue(chat.posts[-1].deleted)
+        self.assertEqual(self.spoken.pending, {})
+
     async def test_a_check_posted_after_the_window_moved_on_is_deleted(self):
         seat = await self.window()
         user = self.doubter(seat)

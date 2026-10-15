@@ -118,7 +118,8 @@ class SpokenDoubts:
         task.add_done_callback(self.tasks.discard)
 
     def _current(self, slot, number, round_id, moves) -> bool:
-        return not self.closed and self.latest.get(slot) == number and self.windows.get(slot[0]) == (round_id, moves)
+        return (not self.closed and self.latest.get(slot) == number and self.windows.get(slot[0]) == (round_id, moves)
+                and self.bot.store.spoken_member_on(slot[0][0], slot[1]))  # MNT-62: Off mid-flight posts nothing
 
     async def _post(self, slot, number, message, round_id, moves) -> None:
         try:
