@@ -72,6 +72,12 @@ msgctxt "game name"
 msgid "One Card"
 msgstr ""
 
+#. i18n: Korean: 윷놀이.
+#: llmcord_core/i18n/terms.py
+msgctxt "game name"
+msgid "Yut"
+msgstr ""
+
 #: llmcord_core/i18n/terms.py
 msgctxt "game noun"
 msgid "blackjack"
@@ -93,6 +99,11 @@ msgstr ""
 #: llmcord_core/i18n/terms.py
 msgctxt "game noun"
 msgid "One Card"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "game noun"
+msgid "Yut"
 msgstr ""
 
 #: llmcord_core/i18n/terms.py
@@ -1136,5 +1147,90 @@ msgstr ""
 #: llmcord_core/i18n/terms.py
 #, python-brace-format
 msgid "• The last player standing, or whoever plays their last card, takes the pot ({ante} each)."
+msgstr ""
+
+#. i18n: Korean throw names: 도, 개, 걸, 윷, 모, 빽도.
+#: llmcord_core/i18n/terms.py
+msgctxt "yut throw"
+msgid "Do"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "yut throw"
+msgid "Gae"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "yut throw"
+msgid "Geol"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "yut throw"
+msgid "Yut"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "yut throw"
+msgid "Mo"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "yut throw"
+msgid "Back-do"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "yut rules line"
+msgid "back-do on"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgctxt "yut rules line"
+msgid "back-do off"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "yut rules line"
+msgid "{count} pieces each"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "**Yut in short**"
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "Bring all your pieces once around the board and home before anyone else. On your turn, throw the four sticks: Do = 1 step, Gae = 2, Geol = 3, Yut = 4, Mo = 5."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• Yut, Mo and capturing an opponent each earn another throw. Throws you have not used wait in a bank, and you choose the order."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• Landing on your own piece stacks them (they move together). Landing on an opponent's piece sends it back to the start. A piece that stops on a corner or the center takes the shortcut."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• Back-do moves a piece one step back. A piece still at the start cannot use it, and with no piece on the board it is lost."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• Passing the last point takes a piece home; no exact throw is needed."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "• Take longer than {seconds} s and a throw or move is made for you; miss two in a row and you forfeit your seat."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+msgid "• The first to bring every piece home, or the last player standing, takes the pot."
+msgstr ""
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "• The first to bring every piece home, or the last player standing, takes the pot ({ante} each)."
 msgstr ""
 

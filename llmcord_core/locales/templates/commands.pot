@@ -403,6 +403,10 @@ msgid "One Card"
 msgstr ""
 
 #: llmcord_core/games_doubt_discord.py
+msgid "Yut (윷놀이)"
+msgstr ""
+
+#: llmcord_core/games_doubt_discord.py
 msgid "Open a table in this channel"
 msgstr ""
 

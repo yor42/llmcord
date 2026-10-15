@@ -31,11 +31,14 @@ GAME_DOUBT = NP_('game name', 'I Doubt It')
 GAME_HOLDEM = NP_('game name', "Texas Hold'em")
 # i18n: Korean: 원카드.
 GAME_ONECARD = NP_('game name', 'One Card')
+# i18n: Korean: 윷놀이.
+GAME_YUT = NP_('game name', 'Yut')
 NOUN_BLACKJACK = NP_('game noun', 'blackjack')
 # i18n: Korean: plain 다우트, without (카드게임). It sits inside a sentence and takes particles ({game:이/가}); a closing parenthesis would break the particle choice.
 NOUN_DOUBT = NP_('game noun', 'I Doubt It')
 NOUN_HOLDEM = NP_('game noun', "Texas Hold'em")
 NOUN_ONECARD = NP_('game noun', 'One Card')
+NOUN_YUT = NP_('game noun', 'Yut')
 
 # Poker ranks by card value (2..14), singular and plural, and the nine hand categories (index = category).
 POKER_RANK = {
@@ -261,3 +264,22 @@ ONECARD_HOW_BANKRUPTCY = N_('• Reach {limit} cards and you go bankrupt: you ar
 ONECARD_HOW_TIMEOUT = N_('• Take longer than {seconds} s and you draw and lose the turn; miss two turns in a row and you forfeit your seat.')
 ONECARD_HOW_WIN = N_('• The last player standing, or whoever plays their last card, takes the pot.')
 ONECARD_HOW_WIN_POT = N_('• The last player standing, or whoever plays their last card, takes the pot ({ante} each).')
+
+# --- FEAT-58: Yut rules line, how to play and throw names (games/yut.py). The ante and turn-timeout rules lines reuse the I Doubt It terms above.
+# i18n: Korean throw names: 도, 개, 걸, 윷, 모, 빽도.
+YUT_THROW = {
+    'do': NP_('yut throw', 'Do'), 'gae': NP_('yut throw', 'Gae'), 'geol': NP_('yut throw', 'Geol'),
+    'yut': NP_('yut throw', 'Yut'), 'mo': NP_('yut throw', 'Mo'), 'backdo': NP_('yut throw', 'Back-do'),
+}
+YUT_RULE_BACKDO_ON = NP_('yut rules line', 'back-do on')
+YUT_RULE_BACKDO_OFF = NP_('yut rules line', 'back-do off')
+YUT_RULE_PIECES = NP_('yut rules line', '{count} pieces each')
+YUT_HOW_TITLE = N_('**Yut in short**')
+YUT_HOW_GOAL = N_('Bring all your pieces once around the board and home before anyone else. On your turn, throw the four sticks: Do = 1 step, Gae = 2, Geol = 3, Yut = 4, Mo = 5.')
+YUT_HOW_EXTRA = N_('• Yut, Mo and capturing an opponent each earn another throw. Throws you have not used wait in a bank, and you choose the order.')
+YUT_HOW_BOARD = N_("• Landing on your own piece stacks them (they move together). Landing on an opponent's piece sends it back to the start. A piece that stops on a corner or the center takes the shortcut.")
+YUT_HOW_BACKDO = N_('• Back-do moves a piece one step back. A piece still at the start cannot use it, and with no piece on the board it is lost.')
+YUT_HOW_FINISH = N_('• Passing the last point takes a piece home; no exact throw is needed.')
+YUT_HOW_TIMEOUT = N_('• Take longer than {seconds} s and a throw or move is made for you; miss two in a row and you forfeit your seat.')
+YUT_HOW_WIN = N_('• The first to bring every piece home, or the last player standing, takes the pot.')
+YUT_HOW_WIN_POT = N_('• The first to bring every piece home, or the last player standing, takes the pot ({ante} each).')

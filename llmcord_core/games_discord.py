@@ -44,7 +44,7 @@ NOT_SEATED = N_("You're not seated at this table.")
 NOT_YOUR_TURN = N_("It's not your turn.")
 NO_CHARACTER_SEATS = N_("Characters can't sit at tables in this channel.")
 _OPEN_ELSEWHERE = {"doubt": N_("An I Doubt It table is open in this channel."), "holdem": N_("A Texas Hold'em table is open in this channel."),
-                   "onecard": N_("A One Card table is open in this channel.")}
+                   "onecard": N_("A One Card table is open in this channel."), "yut": N_("A Yut table is open in this channel.")}
 SKIPPED = {"seated": N_("already at the table"), "full": N_("table full"), "archived": N_("archived")}
 CLOSED_OFF = N_("Table closed: games were turned off here.")
 CLOSED_BLACKJACK_OFF = N_("Table closed: blackjack was turned off on this server.")
@@ -690,6 +690,10 @@ class GameTables:
                     await self.bot.doubt.sweep()
                     await self.bot.holdem.sweep()
                     await self.bot.onecard.sweep()
+                    await self.bot.yut.sweep()
+                break
+            if table["game"] == "yut":
+                closed = await self.bot.yut.close_for_channel(guild_id, channel_id, table["id"])
                 break
             if table["game"] == "onecard":
                 closed = await self.bot.onecard.close_for_channel(guild_id, channel_id, table["id"])
@@ -712,6 +716,7 @@ class GameTables:
                 await self.bot.doubt.sweep()
                 await self.bot.holdem.sweep()
                 await self.bot.onecard.sweep()
+                await self.bot.yut.sweep()
             break
         return closed is not None, paint
 

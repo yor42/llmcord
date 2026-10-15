@@ -10,7 +10,7 @@ import math
 from dataclasses import dataclass, field, replace
 from typing import Optional, Sequence
 
-from ..i18n import UserError, codes
+from ..i18n import Phrase, UserError, codes, terms
 from . import playstyle
 from .base import IllegalMove, Seat
 
@@ -338,6 +338,24 @@ def result(state):
         else:
             out.append(SeatResult(i, "lose", 0))
     return Result(state.finished, state.winner, tuple(out), pot)
+
+
+def rules_phrases(rules=None):
+    """The table's rules in plain words, one Phrase per part (display only); join with " · "."""
+    r = normalize_rules(rules)
+    return [Phrase(terms.DOUBT_RULE_ANTE, ante=r["ante"]) if r["ante"] else Phrase(terms.DOUBT_RULE_NO_ANTE), Phrase(terms.DOUBT_RULE_TIMEOUT, seconds=r["turn_timeout"]),
+            Phrase(terms.YUT_RULE_BACKDO_ON if r["backdo"] else terms.YUT_RULE_BACKDO_OFF), Phrase(terms.YUT_RULE_PIECES, count=r["pieces"])]
+
+
+def how_to_play_phrases(rules=None):
+    """The how-to-play lines, one Phrase per line (display only); join with a newline."""
+    r = normalize_rules(rules)
+    lines = [Phrase(terms.YUT_HOW_TITLE), Phrase(terms.YUT_HOW_GOAL), Phrase(terms.YUT_HOW_EXTRA), Phrase(terms.YUT_HOW_BOARD)]
+    if r["backdo"]:
+        lines.append(Phrase(terms.YUT_HOW_BACKDO))
+    lines += [Phrase(terms.YUT_HOW_FINISH), Phrase(terms.YUT_HOW_TIMEOUT, seconds=r["turn_timeout"]),
+              Phrase(terms.YUT_HOW_WIN_POT, ante=r["ante"]) if r["ante"] else Phrase(terms.YUT_HOW_WIN)]
+    return lines
 
 
 def _deep(x):

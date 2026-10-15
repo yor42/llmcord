@@ -20,7 +20,7 @@ from discord import app_commands
 
 from . import game_chooser
 from .admin_store import ConflictError, GameError
-from .games import blackjack, doubt, onecard
+from .games import blackjack, doubt, onecard, yut
 from .games_discord import MAX_BET, NO_CHARACTER_SEATS, NO_MENTIONS, NOT_SEATED, NOT_YOUR_TURN, OFF_HERE, STALE, GameTables, _sign, words
 from .games_holdem_discord import BET_NOTE
 from .games_spoken_discord import VETO_NOTICE
@@ -34,6 +34,7 @@ PREFIX = "llmcord:doubt"
 DOUBT_OFF = N_("I Doubt It is off on this server.")
 ANTE_NOTE = N_("I Doubt It uses the server's ante; no bet needed.")
 ONECARD_ANTE_NOTE = N_("One Card uses the server's ante; no bet needed.")
+YUT_ANTE_NOTE = N_("Yut uses the server's ante; no bet needed.")
 BET_NEEDED = N_("Blackjack needs a bet: /game start game:Blackjack bet:<amount>.")
 MOVED_ON = N_("The table moved on — open My hand again.")
 DOUBTED_FIRST = N_("Someone doubted first.")
@@ -1561,7 +1562,7 @@ class DoubtTables:
 def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
     require_guild = ctx.require_guild
     group = app_commands.Group(name="game", description=C_("Open a table and play"))
-    choices = [app_commands.Choice(name=C_("Blackjack"), value="blackjack"), app_commands.Choice(name=C_("I Doubt It"), value="doubt"), app_commands.Choice(name=C_("Texas Hold'em"), value="holdem"), app_commands.Choice(name=C_("One Card"), value="onecard")]
+    choices = [app_commands.Choice(name=C_("Blackjack"), value="blackjack"), app_commands.Choice(name=C_("I Doubt It"), value="doubt"), app_commands.Choice(name=C_("Texas Hold'em"), value="holdem"), app_commands.Choice(name=C_("One Card"), value="onecard"), app_commands.Choice(name=C_("Yut (윷놀이)"), value="yut")]
 
     @group.command(name="start", description=C_("Open a table in this channel"))
     @app_commands.describe(game=C_("Which game"), bet=C_("Blackjack only: how much to bet"), favorites=C_("Bring your favorite characters to the table"))
@@ -1586,6 +1587,12 @@ def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
                 return
             await bot.onecard.start_command(interaction, favorites)
             return
+        if game == "yut":
+            if bet is not None:
+                await bot.yut._say(interaction, YUT_ANTE_NOTE)
+                return
+            await bot.yut.start_command(interaction, favorites)
+            return
         if bet is not None:
             await bot.doubt._say(interaction, ANTE_NOTE)
             return
@@ -1595,7 +1602,7 @@ def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
     async def game_hand(interaction: discord.Interaction):
         require_guild(interaction)
         table = bot.store.table_for_thread(interaction.guild_id, interaction.channel.id) if interaction.channel else None
-        await {"holdem": bot.holdem, "onecard": bot.onecard}.get(table["game"] if table else None, bot.doubt).hand_command(interaction)
+        await {"holdem": bot.holdem, "onecard": bot.onecard, "yut": bot.yut}.get(table["game"] if table else None, bot.doubt).hand_command(interaction)
 
     @group.command(name="rules", description=C_("How a game is played and the rules this server uses"))
     @app_commands.describe(game=C_("Which game"))
@@ -1611,6 +1618,9 @@ def register_doubt_commands(bot, ctx: SimpleNamespace) -> None:
         elif game == "onecard":
             rules = bot.store.game_rules(interaction.guild_id, "onecard")
             text = "\n".join(t.render(p) for p in onecard.how_to_play_phrases(rules)) + "\n" + " · ".join(t.render(p) for p in onecard.rules_phrases(rules))
+        elif game == "yut":
+            rules = bot.store.game_rules(interaction.guild_id, "yut")
+            text = "\n".join(t.render(p) for p in yut.how_to_play_phrases(rules)) + "\n" + " · ".join(t.render(p) for p in yut.rules_phrases(rules))
         else:
             rules = bot.store.blackjack_rules(interaction.guild_id)
             text = bot.games.how_to_play(rules, t=t) + "\n" + " · ".join(t.render(p) for p in blackjack.rules_phrases(rules))

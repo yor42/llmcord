@@ -411,6 +411,10 @@ msgid "One Card"
 msgstr "원카드"
 
 #: llmcord_core/games_doubt_discord.py
+msgid "Yut (윷놀이)"
+msgstr "Yut (윷놀이)"
+
+#: llmcord_core/games_doubt_discord.py
 msgid "Open a table in this channel"
 msgstr "이 채널에 테이블 열기"
 

@@ -1,18 +1,10 @@
-
 msgid ""
 msgstr ""
-"Project-Id-Version: PROJECT VERSION\n"
-"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-15 08:15+0900\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: ko\n"
-"Language-Team: ko <LL@li.org>\n"
-"Plural-Forms: nplurals=1; plural=0;\n"
 "MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=utf-8\n"
+"Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Generated-By: Babel 2.18.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "item setting"
@@ -88,6 +80,12 @@ msgctxt "game name"
 msgid "One Card"
 msgstr "원카드"
 
+#. i18n: Korean: 윷놀이.
+#: llmcord_core/i18n/terms.py
+msgctxt "game name"
+msgid "Yut"
+msgstr "윷놀이"
+
 #: llmcord_core/i18n/terms.py
 msgctxt "game noun"
 msgid "blackjack"
@@ -110,6 +108,11 @@ msgstr "텍사스 홀덤"
 msgctxt "game noun"
 msgid "One Card"
 msgstr "원카드"
+
+#: llmcord_core/i18n/terms.py
+msgctxt "game noun"
+msgid "Yut"
+msgstr "윷놀이"
 
 #: llmcord_core/i18n/terms.py
 msgctxt "poker rank"
@@ -1153,4 +1156,89 @@ msgstr "• 끝까지 남은 사람, 또는 마지막 카드를 낸 사람이 �
 #, python-brace-format
 msgid "• The last player standing, or whoever plays their last card, takes the pot ({ante} each)."
 msgstr "• 끝까지 남은 사람, 또는 마지막 카드를 낸 사람이 팟을 가져가요(각자 {ante})."
+
+#. i18n: Korean throw names: 도, 개, 걸, 윷, 모, 빽도.
+#: llmcord_core/i18n/terms.py
+msgctxt "yut throw"
+msgid "Do"
+msgstr "도"
+
+#: llmcord_core/i18n/terms.py
+msgctxt "yut throw"
+msgid "Gae"
+msgstr "개"
+
+#: llmcord_core/i18n/terms.py
+msgctxt "yut throw"
+msgid "Geol"
+msgstr "걸"
+
+#: llmcord_core/i18n/terms.py
+msgctxt "yut throw"
+msgid "Yut"
+msgstr "윷"
+
+#: llmcord_core/i18n/terms.py
+msgctxt "yut throw"
+msgid "Mo"
+msgstr "모"
+
+#: llmcord_core/i18n/terms.py
+msgctxt "yut throw"
+msgid "Back-do"
+msgstr "빽도"
+
+#: llmcord_core/i18n/terms.py
+msgctxt "yut rules line"
+msgid "back-do on"
+msgstr "빽도 켜짐"
+
+#: llmcord_core/i18n/terms.py
+msgctxt "yut rules line"
+msgid "back-do off"
+msgstr "빽도 꺼짐"
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgctxt "yut rules line"
+msgid "{count} pieces each"
+msgstr "말 {count}개씩"
+
+#: llmcord_core/i18n/terms.py
+msgid "**Yut in short**"
+msgstr "**윷놀이 간단 규칙**"
+
+#: llmcord_core/i18n/terms.py
+msgid "Bring all your pieces once around the board and home before anyone else. On your turn, throw the four sticks: Do = 1 step, Gae = 2, Geol = 3, Yut = 4, Mo = 5."
+msgstr "모든 말을 판 한 바퀴 돌려 가장 먼저 도착시키세요. 차례가 오면 윷 네 개를 던져요. 도 = 1칸, 개 = 2칸, 걸 = 3칸, 윷 = 4칸, 모 = 5칸이에요."
+
+#: llmcord_core/i18n/terms.py
+msgid "• Yut, Mo and capturing an opponent each earn another throw. Throws you have not used wait in a bank, and you choose the order."
+msgstr "• 윷, 모, 그리고 상대 말을 잡으면 한 번 더 던져요. 아직 쓰지 않은 결과는 모아 두고 원하는 순서로 쓸 수 있어요."
+
+#: llmcord_core/i18n/terms.py
+msgid "• Landing on your own piece stacks them (they move together). Landing on an opponent's piece sends it back to the start. A piece that stops on a corner or the center takes the shortcut."
+msgstr "• 내 말 위에 놓으면 업혀서 함께 움직여요. 상대 말 위에 놓으면 그 말은 출발점으로 돌아가요. 모서리나 가운데에 멈춘 말은 지름길로 가요."
+
+#: llmcord_core/i18n/terms.py
+msgid "• Back-do moves a piece one step back. A piece still at the start cannot use it, and with no piece on the board it is lost."
+msgstr "• 빽도는 말을 한 칸 뒤로 보내요. 아직 출발하지 않은 말은 쓸 수 없고, 판 위에 말이 없으면 사라져요."
+
+#: llmcord_core/i18n/terms.py
+msgid "• Passing the last point takes a piece home; no exact throw is needed."
+msgstr "• 마지막 칸을 지나면 말이 도착해요. 딱 맞는 결과가 필요하지 않아요."
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "• Take longer than {seconds} s and a throw or move is made for you; miss two in a row and you forfeit your seat."
+msgstr "• {seconds}초 안에 하지 못하면 대신 던지거나 움직여 줘요. 두 번 연속으로 놓치면 자리를 기권해요."
+
+#: llmcord_core/i18n/terms.py
+msgid "• The first to bring every piece home, or the last player standing, takes the pot."
+msgstr "• 모든 말을 먼저 도착시킨 사람, 또는 끝까지 남은 사람이 팟을 가져가요."
+
+#: llmcord_core/i18n/terms.py
+#, python-brace-format
+msgid "• The first to bring every piece home, or the last player standing, takes the pot ({ante} each)."
+msgstr "• 모든 말을 먼저 도착시킨 사람, 또는 끝까지 남은 사람이 팟을 가져가요(각자 {ante})."
 

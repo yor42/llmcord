@@ -605,7 +605,7 @@ class CommandTests(OneCardCase):
     def test_game_start_and_rules_offer_one_card_after_the_existing_games(self):
         for path in ("game start", "game rules"):
             choices = [(c.name, c.value) for c in command(self.bot, path)._params["game"].choices]
-            self.assertEqual(choices, [("Blackjack", "blackjack"), ("I Doubt It", "doubt"), ("Texas Hold'em", "holdem"), ("One Card", "onecard")], path)
+            self.assertEqual(choices, [("Blackjack", "blackjack"), ("I Doubt It", "doubt"), ("Texas Hold'em", "holdem"), ("One Card", "onecard"), ("Yut (윷놀이)", "yut")], path)
         self.assertLessEqual(len(self.bot.tree.get_command("game").commands), 25)
 
     async def test_game_start_one_card_goes_through_the_one_card_lobby(self):

@@ -110,7 +110,7 @@ class RegistryTests(unittest.TestCase):
         self.store.set_game_channel(G, CH, True)
 
     def test_registry_entries(self):
-        self.assertEqual(registry.keys(), ("blackjack", "doubt", "holdem", "onecard"))
+        self.assertEqual(registry.keys(), ("blackjack", "doubt", "holdem", "onecard", "yut"))
         game = registry.get("blackjack")
         self.assertEqual((game.name, game.ledger_label, game.max_seats, game.default_enabled), ("Blackjack", "Blackjack", 7, True))
         with self.assertRaises(KeyError):

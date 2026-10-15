@@ -8,7 +8,7 @@ from types import ModuleType
 from typing import Any, Callable, Optional
 
 from ..i18n import codes, terms
-from . import blackjack, doubt, holdem, onecard
+from . import blackjack, doubt, holdem, onecard, yut
 
 
 @dataclass(frozen=True)
@@ -85,6 +85,16 @@ def _onecard_illegal(state, seat, move):
     return codes.ENGINE_NOT_YOUR_TURN if state.turn != seat else codes.ENGINE_MOVE_NOT_ALLOWED
 
 
+def _yut_settlements(state, ledger_label, label):
+    return [(res.seat, res.outcome, state.seats[res.seat].stake, res.payout, f'{ledger_label} payout ({label})') for res in yut.result(state).seats]
+
+
+def _yut_illegal(state, seat, move):
+    if state.finished:
+        return codes.ENGINE_GAME_OVER
+    return codes.ENGINE_NOT_YOUR_TURN if state.turn != seat else codes.ENGINE_MOVE_NOT_ALLOWED
+
+
 _GAMES = {
     "blackjack": Game("blackjack", terms.GAME_BLACKJACK, blackjack, blackjack.normalize_rules, blackjack.MAX_SEATS, True, "Blackjack", noun=terms.NOUN_BLACKJACK,
                       public_legal=_bj_legal, summary=lambda state: blackjack.result(state).summary, settlements=_bj_settlements,
@@ -105,6 +115,12 @@ _GAMES = {
                     public_legal=lambda state, can_double, can_insure: {}, summary=lambda state: None, settlements=_onecard_settlements,
                     round_facts=lambda state: {'winner': state.winner, 'pot': sum(s.stake for s in state.seats)}, fact_keys=('winner', 'pot'),
                     apply_move=lambda state, seat, move, can_double: onecard.apply(state, seat, move), illegal_text=_onecard_illegal),
+    "yut": Game("yut", terms.GAME_YUT, yut, yut.normalize_rules, yut.MAX_SEATS, True, "Yut", noun=terms.NOUN_YUT,
+                min_seats=yut.MIN_SEATS, ante=True,
+                public_legal=lambda state, can_double, can_insure: {state.turn: yut.legal_moves(state, state.turn)} if state.turn is not None else {},
+                summary=lambda state: None, settlements=_yut_settlements,
+                round_facts=lambda state: {'winner': state.winner, 'pot': sum(s.stake for s in state.seats)}, fact_keys=('winner', 'pot'),
+                apply_move=lambda state, seat, move, can_double: yut.apply(state, seat, move), illegal_text=_yut_illegal),
 }
 
 
