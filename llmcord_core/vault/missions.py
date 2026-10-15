@@ -66,7 +66,7 @@ def valid_forensics_answer(strikes, balls) -> bool:
 
 
 def generate_forensics(seed: str) -> ForensicsPuzzle:
-    """Deterministic from ``seed`` (about 0.2 s of CPU: call it off the event loop, e.g. asyncio.to_thread); retries until the hidden result is the only one the visible lines allow."""
+    """Deterministic from ``seed`` (about 0.2 s of CPU). Called on the loop by the Discord layer, not via asyncio.to_thread: store calls must stay off background threads (shared sqlite connection). A later change could split this pure step out. Retries until the hidden result is the only one the visible lines allow."""
     rng = random.Random(seed)
     for _ in range(FORENSICS_TRIES):
         code = random_secret(FORENSICS_LENGTH, rng)

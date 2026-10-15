@@ -3055,7 +3055,7 @@ msgstr "파트너 조언:"
 msgid "Guesses:"
 msgstr "추측 기록:"
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_support_discord.py
 #, python-brace-format
 msgid "{n}. {guess} — {feedback}"
 msgstr "{n}. {guess} — {feedback}"
@@ -3237,6 +3237,11 @@ msgstr "교차 검증"
 
 #: llmcord_core/vault_operation_discord.py
 msgctxt "button.vault"
+msgid "Support mission"
+msgstr "지원 임무"
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "button.vault"
 msgid "Ask my advisor"
 msgstr "내 조언자에게 묻기"
 
@@ -3275,6 +3280,26 @@ msgstr "첫 번째 추측 (번호)"
 msgctxt "modal.vault"
 msgid "Second guess (number)"
 msgstr "두 번째 추측 (번호)"
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "modal.vault"
+msgid "Support mission"
+msgstr "지원 임무"
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "modal.vault"
+msgid "Strikes of the hidden line"
+msgstr "가려진 줄의 스트라이크"
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "modal.vault"
+msgid "Balls of the hidden line"
+msgstr "가려진 줄의 볼"
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "modal.vault"
+msgid "Your code"
+msgstr "내 코드"
 
 #: llmcord_core/vault_operation_discord.py
 #, python-brace-format
@@ -3326,4 +3351,91 @@ msgstr "내 조언자: {name}"
 #: llmcord_core/vault_operation_discord.py
 msgid "You no longer have an advisor."
 msgstr "조언자를 해제했어요."
+
+#: llmcord_core/vault_support_discord.py
+msgid "Record forensics"
+msgstr "기록 분석"
+
+#: llmcord_core/vault_support_discord.py
+msgid "Three-digit Bulls and Cows"
+msgstr "세 자리 불스 앤 카우스"
+
+#: llmcord_core/vault_support_discord.py
+#, python-brace-format
+msgid "The code was {code}."
+msgstr "코드는 {code}였어요."
+
+#: llmcord_core/vault_support_discord.py
+#, python-brace-format
+msgid "The hidden result was {feedback}."
+msgstr "가려진 결과는 {feedback}였어요."
+
+#: llmcord_core/vault_support_discord.py
+#, python-brace-format
+msgid "Attempts left: {left} of {budget}"
+msgstr "남은 시도: {left}/{budget}"
+
+#: llmcord_core/vault_support_discord.py
+#, python-brace-format
+msgid "Support mission: {name}"
+msgstr "지원 임무: {name}"
+
+#: llmcord_core/vault_support_discord.py
+msgid "Recorded guesses of one secret code:"
+msgstr "하나의 비밀 코드에 대한 기록된 추측:"
+
+#: llmcord_core/vault_support_discord.py
+#, python-brace-format
+msgid "What are the strikes and balls of line {n}?"
+msgstr "{n}번 줄의 스트라이크와 볼은 몇 개일까요?"
+
+#: llmcord_core/vault_support_discord.py
+msgid "Guess a code of 3 different digits."
+msgstr "서로 다른 숫자 3개로 된 코드를 맞혀 보세요."
+
+#: llmcord_core/vault_support_discord.py
+msgid "Support mission complete!"
+msgstr "지원 임무를 완료했어요!"
+
+#: llmcord_core/vault_support_discord.py
+msgid "Support mission failed."
+msgstr "지원 임무에 실패했어요."
+
+#: llmcord_core/vault_support_discord.py
+#, python-brace-format
+msgid "Answer {n}: {guess} — {feedback}"
+msgstr "{n}번째 답: {guess} — {feedback}"
+
+#: llmcord_core/vault_support_discord.py
+#, python-brace-format
+msgid "Answer {n}: {feedback}"
+msgstr "{n}번째 답: {feedback}"
+
+#: llmcord_core/vault_support_discord.py
+#, python-brace-format
+msgid "Reward: {amount}"
+msgstr "보상: {amount}"
+
+#: llmcord_core/vault_support_discord.py
+msgid "No reward was paid for this mission."
+msgstr "이 임무로는 보상이 지급되지 않았어요."
+
+#: llmcord_core/vault_support_discord.py
+msgctxt "button.vault"
+msgid "Answer"
+msgstr "답하기"
+
+#: llmcord_core/vault_support_discord.py
+msgctxt "button.vault"
+msgid "Record forensics"
+msgstr "기록 분석"
+
+#: llmcord_core/vault_support_discord.py
+msgctxt "button.vault"
+msgid "Three-digit Bulls and Cows"
+msgstr "세 자리 불스 앤 카우스"
+
+#: llmcord_core/vault_support_discord.py
+msgid "Choose a support mission."
+msgstr "지원 임무를 골라 주세요."
 

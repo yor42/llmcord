@@ -19,6 +19,7 @@ from .vault import TOOLS, build_advice_facts
 from .vault_discord import (NO_MENTIONS, PREFIX, PROTOCOLS, SOMETHING_WRONG, STATUSES, TOOL_FIELDS, TOOL_REASONS, ADVICE_COUNT, ADVICE_USER, VaultPlay,
                             advice_line, clue_text, feedback_text, tool_line, tool_name)
 from .vault_store import MAX_TOOLS, VaultStoreError
+from .vault_support_discord import MISSION_ACTIONS, SupportMissions
 from llmcord_core import i18n
 from llmcord_core.i18n import UserError, codes
 from llmcord_core.i18n.discord_locale import C_, channel_locale, invoker_t
@@ -109,6 +110,7 @@ def render_buttons(view: dict, *, t=None):
         buttons.add_item(VaultOperationButton('clue', oid, t.p('button.vault', 'Reveal clue')))
     buttons.add_item(VaultOperationButton('tools', oid, t.p('button.vault', 'Tools')))
     buttons.add_item(VaultOperationButton('cross', oid, t.p('button.vault', 'Cross-check')))
+    buttons.add_item(VaultOperationButton('mission', oid, t.p('button.vault', 'Support mission')))
     for npc in view['npcs']:
         if npc['name']:
             buttons.add_item(VaultOperationButton(f"ask_{npc['character_id']}", oid, t.p('button.vault', 'Ask {name}', name=npc['name'])[:80]))
@@ -191,6 +193,25 @@ class OperationToolModal(_Modal):
         await interaction.client.vault_operation.submit_tool(interaction, self.operation_id, self.tool_key, values)
 
 
+class OperationMissionModal(_Modal):
+    def __init__(self, operation_id: int, mission_type: str, *, t=None):
+        t = t or i18n.english()
+        super().__init__(title=t.p('modal.vault', 'Support mission')[:45], timeout=600)
+        self.operation_id, self.mission_type = operation_id, mission_type
+        if mission_type == 'forensics':
+            self.inputs = {'strikes': discord.ui.TextInput(label=t.p('modal.vault', 'Strikes of the hidden line')[:45], required=True, max_length=3),
+                           'balls': discord.ui.TextInput(label=t.p('modal.vault', 'Balls of the hidden line')[:45], required=True, max_length=3)}
+        else:
+            self.inputs = {'code': discord.ui.TextInput(label=t.p('modal.vault', 'Your code')[:45], placeholder=t.p('modal.vault', '{length} different digits', length=3)[:100],
+                                                        required=True, max_length=16)}
+        for item in self.inputs.values():
+            self.add_item(item)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        values = {name: str(item.value or '') for name, item in self.inputs.items()}
+        await interaction.client.vault_operation.submit_mission(interaction, self.operation_id, self.mission_type, values)
+
+
 class AdvisorSelect(discord.ui.Select):
     def __init__(self, operation_id: int, options, placeholder: str):
         super().__init__(placeholder=placeholder[:150], min_values=0, max_values=1, options=options)
@@ -201,7 +222,7 @@ class AdvisorSelect(discord.ui.Select):
         await interaction.client.vault_operation.select_advisor(interaction, self.operation_id, chosen)
 
 
-class VaultOperationPlay:
+class VaultOperationPlay(SupportMissions):
     # The private-reply, defer, model-wording and tool-parameter helpers are the personal vault's; they only need .store and .bot.
     say = VaultPlay.say
     _defer = staticmethod(VaultPlay._defer)
@@ -383,11 +404,13 @@ class VaultOperationPlay:
             return await self._refresh(interaction, view, uid)
         if action == 'back':
             return await self._back(interaction, view, t)
-        if action in ('guess', 'cross', 'tools', 'clue', 'advisor') or action.startswith(('use_', 'ask_')):
+        if action in ('guess', 'cross', 'tools', 'clue', 'advisor', *MISSION_ACTIONS) or action.startswith(('use_', 'ask_')):
             if view['status'] != 'active' or view['stage'] is None:
                 return await self.say(interaction, t.error(VaultStoreError(codes.VAULT_NOT_ACTIVE)))
         else:
             return await self.say(interaction, t.error(VaultStoreError(codes.VAULT_NOT_FOUND)))
+        if action in MISSION_ACTIONS:
+            return await self._mission_press(interaction, view, action, t)
         if action == 'guess':
             return await self._modal(interaction, OperationGuessModal(operation_id, view['stage']['length'], t=t))
         if action == 'cross':

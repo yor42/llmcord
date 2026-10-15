@@ -318,7 +318,7 @@ class OpenTests(OpCase):
         self.assertIn("Characters: Ann, Bea", lines)
         self.assertIn(f"Participants: {A}", lines)
         self.assertNotIn("Guesses:", self.text())
-        self.assertEqual(self.labels_now(), ["Guess", "Reveal clue", "Tools", "Cross-check", "Ask Ann", "Ask Bea", "Ask my advisor", "Advisor", "Join", "Refresh"])
+        self.assertEqual(self.labels_now(), ["Guess", "Reveal clue", "Tools", "Cross-check", "Support mission", "Ask Ann", "Ask Bea", "Ask my advisor", "Advisor", "Join", "Refresh"])
         self.assertFalse(self.channel.sent[0].kwargs.get("allowed_mentions", discord.AllowedMentions.none()).users)
 
     async def test_the_buttons_use_the_operation_custom_ids(self):

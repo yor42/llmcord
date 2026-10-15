@@ -3,8 +3,7 @@
 A member of an operation may do one support mission per operation: record forensics or 3-digit Bulls and Cows. The puzzle and its answer are
 stored at creation and never regenerated; the answer leaves the store only once the mission is solved or failed. A solved mission counts as one
 contribution and may pay one support reward through the ledger (a claim of type 'support'; it never pays the main contribution reward but counts toward the team reward's min_guesses). Missions spend no shared stage turn and never touch
-a stage secret. Generating a forensics puzzle costs about 0.2 s of CPU: Discord code must call start_support_mission through asyncio.to_thread, never on
-the event loop hot path. Refusals are VaultStoreError codes; the Discord edge turns them into words.
+a stage secret. The Store shares one sqlite connection (check_same_thread=False) and write_admin only locks other write_admin callers, so store calls must not run on a background thread. The Discord layer defers the interaction and calls start_support_mission on the loop (about 0.2 s, once per member per operation, for forensics puzzle generation). A later change could split the pure generation step out. Refusals are VaultStoreError codes; the Discord edge turns them into words.
 """
 from __future__ import annotations
 

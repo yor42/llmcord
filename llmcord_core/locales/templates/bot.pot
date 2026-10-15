@@ -3051,7 +3051,7 @@ msgstr ""
 msgid "Guesses:"
 msgstr ""
 
-#: llmcord_core/vault_discord.py
+#: llmcord_core/vault_discord.py llmcord_core/vault_support_discord.py
 #, python-brace-format
 msgid "{n}. {guess} — {feedback}"
 msgstr ""
@@ -3235,6 +3235,11 @@ msgstr ""
 
 #: llmcord_core/vault_operation_discord.py
 msgctxt "button.vault"
+msgid "Support mission"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "button.vault"
 msgid "Ask my advisor"
 msgstr ""
 
@@ -3272,6 +3277,26 @@ msgstr ""
 #: llmcord_core/vault_operation_discord.py
 msgctxt "modal.vault"
 msgid "Second guess (number)"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "modal.vault"
+msgid "Support mission"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "modal.vault"
+msgid "Strikes of the hidden line"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "modal.vault"
+msgid "Balls of the hidden line"
+msgstr ""
+
+#: llmcord_core/vault_operation_discord.py
+msgctxt "modal.vault"
+msgid "Your code"
 msgstr ""
 
 #: llmcord_core/vault_operation_discord.py
@@ -3323,5 +3348,92 @@ msgstr ""
 
 #: llmcord_core/vault_operation_discord.py
 msgid "You no longer have an advisor."
+msgstr ""
+
+#: llmcord_core/vault_support_discord.py
+msgid "Record forensics"
+msgstr ""
+
+#: llmcord_core/vault_support_discord.py
+msgid "Three-digit Bulls and Cows"
+msgstr ""
+
+#: llmcord_core/vault_support_discord.py
+#, python-brace-format
+msgid "The code was {code}."
+msgstr ""
+
+#: llmcord_core/vault_support_discord.py
+#, python-brace-format
+msgid "The hidden result was {feedback}."
+msgstr ""
+
+#: llmcord_core/vault_support_discord.py
+#, python-brace-format
+msgid "Attempts left: {left} of {budget}"
+msgstr ""
+
+#: llmcord_core/vault_support_discord.py
+#, python-brace-format
+msgid "Support mission: {name}"
+msgstr ""
+
+#: llmcord_core/vault_support_discord.py
+msgid "Recorded guesses of one secret code:"
+msgstr ""
+
+#: llmcord_core/vault_support_discord.py
+#, python-brace-format
+msgid "What are the strikes and balls of line {n}?"
+msgstr ""
+
+#: llmcord_core/vault_support_discord.py
+msgid "Guess a code of 3 different digits."
+msgstr ""
+
+#: llmcord_core/vault_support_discord.py
+msgid "Support mission complete!"
+msgstr ""
+
+#: llmcord_core/vault_support_discord.py
+msgid "Support mission failed."
+msgstr ""
+
+#: llmcord_core/vault_support_discord.py
+#, python-brace-format
+msgid "Answer {n}: {guess} — {feedback}"
+msgstr ""
+
+#: llmcord_core/vault_support_discord.py
+#, python-brace-format
+msgid "Answer {n}: {feedback}"
+msgstr ""
+
+#: llmcord_core/vault_support_discord.py
+#, python-brace-format
+msgid "Reward: {amount}"
+msgstr ""
+
+#: llmcord_core/vault_support_discord.py
+msgid "No reward was paid for this mission."
+msgstr ""
+
+#: llmcord_core/vault_support_discord.py
+msgctxt "button.vault"
+msgid "Answer"
+msgstr ""
+
+#: llmcord_core/vault_support_discord.py
+msgctxt "button.vault"
+msgid "Record forensics"
+msgstr ""
+
+#: llmcord_core/vault_support_discord.py
+msgctxt "button.vault"
+msgid "Three-digit Bulls and Cows"
+msgstr ""
+
+#: llmcord_core/vault_support_discord.py
+msgid "Choose a support mission."
 msgstr ""
 
