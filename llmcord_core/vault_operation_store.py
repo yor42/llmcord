@@ -18,9 +18,9 @@ from datetime import datetime, time as day_time, timedelta
 from .admin_store import ConflictError
 from .i18n import UserError, codes
 from .items_store import NotHeld
-from .vault import (DEFAULT_LENGTH, PROTOCOLS, TOOLS, CommonCount, DigitAt, GuessResult, OpenDigit, VaultError, build_advice_facts, check_wording, cross_validation_common,
-                    evaluate_tool, feedback, filter_candidates, is_redundant, make_clues, open_digit, played, random_secret, tool_fits)
-from .vault_store import CLUE_COUNT, MAX_TOOLS, VaultStore, VaultStoreError
+from .vault import (DEFAULT_LENGTH, PROTOCOLS, TOOLS, CommonCount, OpenDigit, build_advice_facts, check_wording, cross_validation_common,
+                    feedback, filter_candidates, make_clues, open_digit, played, random_secret)
+from .vault_store import CLUE_COUNT, VaultStore, VaultStoreError
 
 STAGES = 3
 MAX_MIN_GUESSES = 30
@@ -457,29 +457,9 @@ class VaultOperationStore(VaultStore):
             if done is not None:
                 return self._op_tool_result(done, True, None)
             row, stage = self._op_active(guild_id, operation_id, now)
-            if not isinstance(tool_key, str) or tool_key not in TOOLS:
-                raise VaultStoreError(codes.VAULT_TOOL_UNKNOWN, tool=str(tool_key))
             tools = self._op_attempt(stage, 'tool')
-            if len(tools) >= MAX_TOOLS:
-                raise VaultStoreError(codes.VAULT_TOOL_LIMIT, limit=MAX_TOOLS)
             left = stage['turn_budget'] - self._op_used(stage)
-            if not tool_fits(tool_key, left):
-                raise VaultStoreError(codes.VAULT_TOOL_NO_TURNS)
-            if self.item_qty(guild_id, user_id, tool_key) < 1:
-                raise VaultStoreError(codes.VAULT_TOOL_NOT_HELD)
-            self._vault_tool_enabled(guild_id, tool_key)
-            history = [GuessResult(g['guess'], stage['protocol'], tuple(json.loads(g['feedback_json']))) for g in self._op_attempt(stage, 'guess')]
-            history += [c for c in map(self._vault_tool_constraint, tools) if isinstance(c, DigitAt)]
-            try:
-                found = evaluate_tool(stage['secret'], tool_key, params, history)
-            except VaultError as error:
-                if error.code != 'nothing_new':
-                    raise VaultStoreError(codes.VAULT_TOOL_BAD_PARAMS, reason=error.code) from None
-                found = None
-            if is_redundant(tool_key, params, filter_candidates(self._op_public(stage), stage['length']), history):
-                raise VaultStoreError(codes.VAULT_TOOL_REDUNDANT)
-            if found is None:
-                found = self._vault_verifier_known(stage['secret'], params['guess'])
+            found = self._vault_tool_check(guild_id, user_id, stage['secret'], stage['protocol'], stage['length'], tool_key, params, tools, self._op_attempt(stage, 'guess'), left, lambda: self._op_public(stage))
             cost = TOOLS[tool_key].turn_cost
             try:
                 used = self.consume_item(guild_id, user_id, row['channel_id'], tool_key, now=now, result={'tool': tool_key, 'vault_operation': operation_id, 'turn_cost': cost})

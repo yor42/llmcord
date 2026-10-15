@@ -400,31 +400,10 @@ class VaultStore:
 
     def _vault_tool_apply(self, row, tool_key, params, action_key, now):
         guild_id, session_id, user_id = row['guild_id'], row['id'], row['user_id']
-        if not isinstance(tool_key, str) or tool_key not in TOOLS:
-            raise VaultStoreError(codes.VAULT_TOOL_UNKNOWN, tool=str(tool_key))
         tools = self.all('SELECT * FROM vault_tool_uses WHERE guild_id=? AND session_id=? ORDER BY id', (guild_id, session_id))
-        if len(tools) >= MAX_TOOLS:
-            raise VaultStoreError(codes.VAULT_TOOL_LIMIT, limit=MAX_TOOLS)
         guesses = self.all('SELECT guess,feedback_json FROM vault_actions WHERE guild_id=? AND session_id=? ORDER BY number', (guild_id, session_id))
         left = row['turn_budget'] - len(guesses) - sum(t['turn_cost'] for t in tools)
-        if not tool_fits(tool_key, left):
-            raise VaultStoreError(codes.VAULT_TOOL_NO_TURNS)
-        if self.item_qty(guild_id, user_id, tool_key) < 1:
-            raise VaultStoreError(codes.VAULT_TOOL_NOT_HELD)
-        self._vault_tool_enabled(guild_id, tool_key)
-        history = [GuessResult(g['guess'], row['protocol'], tuple(json.loads(g['feedback_json']))) for g in guesses]
-        history += [c for c in map(self._vault_tool_constraint, tools) if isinstance(c, DigitAt)]
-        try:
-            found = evaluate_tool(row['secret'], tool_key, params, history)
-        except VaultError as error:
-            if error.code != 'nothing_new':
-                raise VaultStoreError(codes.VAULT_TOOL_BAD_PARAMS, reason=error.code) from None
-            found = None
-        public = self._vault_view(row)['constraints']
-        if is_redundant(tool_key, params, filter_candidates(public, row['length']), history):
-            raise VaultStoreError(codes.VAULT_TOOL_REDUNDANT)
-        if found is None:
-            found = self._vault_verifier_known(row['secret'], params['guess'])
+        found = self._vault_tool_check(guild_id, user_id, row['secret'], row['protocol'], row['length'], tool_key, params, tools, guesses, left, lambda: self._vault_view(row)['constraints'])
         cost = TOOLS[tool_key].turn_cost
         try:
             used = self.consume_item(guild_id, user_id, row['channel_id'], tool_key, now=now, result={'tool': tool_key, 'vault_session': session_id, 'turn_cost': cost})
@@ -439,6 +418,29 @@ class VaultStore:
             self._vault_finish(guild_id, session_id, 'failed', now)
         return self._vault_tool_result(self.one('SELECT * FROM vault_sessions WHERE id=? AND guild_id=?', (session_id, guild_id)),
                                        self.one('SELECT * FROM vault_tool_uses WHERE id=? AND guild_id=?', (action_id, guild_id)), False)
+
+    def _vault_tool_check(self, guild_id, user_id, secret, protocol, length, tool_key, params, tools, guesses, left, public):
+        """Shared tool pipeline for a session or an operation stage: every refusal, then the engine's answer. `public` is called only once the engine has answered."""
+        if not isinstance(tool_key, str) or tool_key not in TOOLS:
+            raise VaultStoreError(codes.VAULT_TOOL_UNKNOWN, tool=str(tool_key))
+        if len(tools) >= MAX_TOOLS:
+            raise VaultStoreError(codes.VAULT_TOOL_LIMIT, limit=MAX_TOOLS)
+        if not tool_fits(tool_key, left):
+            raise VaultStoreError(codes.VAULT_TOOL_NO_TURNS)
+        if self.item_qty(guild_id, user_id, tool_key) < 1:
+            raise VaultStoreError(codes.VAULT_TOOL_NOT_HELD)
+        self._vault_tool_enabled(guild_id, tool_key)
+        history = [GuessResult(g['guess'], protocol, tuple(json.loads(g['feedback_json']))) for g in guesses]
+        history += [c for c in map(self._vault_tool_constraint, tools) if isinstance(c, DigitAt)]
+        try:
+            found = evaluate_tool(secret, tool_key, params, history)
+        except VaultError as error:
+            if error.code != 'nothing_new':
+                raise VaultStoreError(codes.VAULT_TOOL_BAD_PARAMS, reason=error.code) from None
+            found = None
+        if is_redundant(tool_key, params, filter_candidates(public(), length), history):
+            raise VaultStoreError(codes.VAULT_TOOL_REDUNDANT)
+        return found if found is not None else self._vault_verifier_known(secret, params['guess'])
 
     def _vault_tool_enabled(self, guild_id, tool_key):
         """The shop's Allow use switch also governs Vault tools; inside the caller's transaction, before anything is consumed."""
