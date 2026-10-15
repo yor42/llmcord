@@ -33,7 +33,8 @@ class HelperTests(unittest.TestCase):
             save_item(store, 1, store.shop_item(1, 'dice'), **form(price=whole(math.inf)))
 
     def test_catalog_has_a_fixed_display_order(self):
-        self.assertEqual([r.key for r in items.all_items()], ['8ball', 'dice', 'd20', 'fortune_cookie', 'tarot'])
+        self.assertEqual([r.key for r in items.all_items() if r.kind == 'random_message'], ['8ball', 'dice', 'd20', 'fortune_cookie', 'tarot'])
+        self.assertEqual([r.key for r in items.all_items()][:5], ['8ball', 'dice', 'd20', 'fortune_cookie', 'tarot'])  # FEAT-64: vault tools follow the toys
 
     def test_ledger_rows_flag_shop_purchases_for_the_reverse_dialog(self):
         entry = lambda id, source: {'id': id, 'user_id': 5, 'amount': -5, 'balance_after': 1, 'reason': 'r', 'actor_id': 5, 'reverses_id': None, 'created_at': 0, 'source': source}
@@ -49,7 +50,7 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(with_lines({'en': ['x'], 'ko': ['y']}, []), {'ko': ['y']})
 
     def test_custom_lines_only_for_plain_string_tables(self):
-        plain = {r.key: has_plain_table(r) for r in items.all_items()}
+        plain = {r.key: has_plain_table(r) for r in items.all_items() if r.kind == 'random_message'}
         self.assertEqual(plain, {'8ball': True, 'd20': False, 'dice': False, 'fortune_cookie': True, 'tarot': False})
 
     def test_detail_holds_counts_never_the_text(self):

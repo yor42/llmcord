@@ -104,7 +104,7 @@ class ShopSettingsTests(unittest.TestCase):
 
     def test_catalog_defaults_without_rows(self):
         catalog = {e["key"]: e for e in self.store.shop_catalog(G)}
-        self.assertEqual(set(catalog), {BALL, COOKIE, DICE, "d20", "tarot"})
+        self.assertEqual({k for k in catalog if not k.startswith("vault_")}, {BALL, COOKIE, DICE, "d20", "tarot"})  # FEAT-64: vault tools are catalog items too
         ball = catalog[BALL]
         self.assertFalse(ball["for_sale"])
         self.assertTrue(ball["allow_use"])
@@ -341,7 +341,7 @@ class IsolationTests(unittest.TestCase):
         stock(self.store, G, balance=1000)
         self.store.change_balance(G2, U, 1000, "s", 1)
         self.store.set_item_hold_cap(G, 2)
-        self.assertEqual([e["for_sale"] for e in self.store.shop_catalog(G2)], [False] * 5)
+        self.assertEqual([e["for_sale"] for e in self.store.shop_catalog(G2)], [False] * 10)  # FEAT-64: five toys + five vault tools
         self.assertEqual(self.store.item_hold_cap(G2), 10)
         with self.assertRaises(NotForSale):
             self.store.buy_item(G2, U, BALL)

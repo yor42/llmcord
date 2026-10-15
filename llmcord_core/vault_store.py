@@ -17,14 +17,18 @@ from zoneinfo import ZoneInfo
 
 from .admin_store import ConflictError
 from .i18n import UserError, codes
-from .vault import (DEFAULT_LENGTH, DEFAULT_TURNS, PROTOCOLS, CountEven, CountLow, DigitPresent, OpenDigit, PositionHalf, PositionParity,
-                    VaultError, check_guess, feedback, make_clues, open_digit, played, random_secret)
+from .items_store import NotHeld
+from .vault import (DEFAULT_LENGTH, DEFAULT_TURNS, PROTOCOLS, TOOLS, CountEven, CountLow, DigitAt, DigitPresent, GuessResult, OpenDigit, PairCount,
+                    PositionHalf, PositionParity, ToolResult, VaultError, check_guess, evaluate_tool, feedback, filter_candidates, is_redundant, make_clues,
+                    open_digit, played, random_secret, tool_fits)
 
 MAX_PARTNERS = 2
 CLUE_COUNT = 2
 MAX_TURNS = 30
 HISTORY_MAX = 50
 CLUE_KINDS = {c.__name__: c for c in (CountEven, CountLow, DigitPresent, PositionHalf, PositionParity)}
+TOOL_CONSTRAINTS = {c.__name__: c for c in (DigitAt, DigitPresent, GuessResult, PairCount, PositionHalf)}
+MAX_TOOLS = 2
 GUESS_CODES = {'guess_length': codes.VAULT_GUESS_LENGTH, 'guess_not_digits': codes.VAULT_GUESS_NOT_DIGITS, 'guess_repeated_digit': codes.VAULT_GUESS_REPEATED_DIGIT}
 
 
@@ -115,20 +119,34 @@ class VaultStore:
         names = self.character_names(gid, partner_ids + [c['character_id'] for c in clue_rows])
 
         clues = [self._vault_clue_entry(c, names, row['status'] != 'active') for c in clue_rows]
+        tool_rows = self.all('SELECT * FROM vault_tool_uses WHERE guild_id=? AND session_id=? ORDER BY id', (gid, sid))
         guesses = [{'number': a['number'], 'guess': a['guess'], 'feedback': tuple(json.loads(a['feedback_json'])), 'won': bool(a['won'])} for a in actions]
         constraints = ([OpenDigit(row['open_digit'])] if row['open_digit'] else []) + [c['constraint'] for c in clues if c['revealed'] and 'constraint' in c]
         for g in guesses:
             constraints += played(row['protocol'], g['guess'], g['feedback'], g['won'])
+        constraints += [self._vault_tool_constraint(t) for t in tool_rows]
+        used = len(guesses) + sum(t['turn_cost'] for t in tool_rows)
         claim = self.one("SELECT amount,ledger_id FROM vault_reward_claims WHERE guild_id=? AND session_id=? AND user_id=? AND type='win'", (gid, sid, row['user_id']))
         reversed_ = bool(claim and self.one('SELECT 1 FROM currency_ledger WHERE guild_id=? AND reverses_id=?', (gid, claim['ledger_id'])))
         return {'id': sid, 'guild_id': gid, 'user_id': row['user_id'], 'channel_id': row['channel_id'], 'local_date': row['local_date'],
                 'protocol': row['protocol'], 'length': row['length'], 'status': row['status'], 'turn_budget': row['turn_budget'],
-                'turns_used': len(guesses), 'turns_left': max(row['turn_budget'] - len(guesses), 0), 'created_at': row['created_at'],
+                'turns_used': used, 'turns_left': max(row['turn_budget'] - used, 0), 'created_at': row['created_at'],
                 'expires_at': row['expires_at'], 'created': created, 'open_digit': row['open_digit'],
                 'partners': [{'character_id': i, 'name': names.get(i)} for i in partner_ids], 'clues': clues, 'guesses': guesses,
-                'constraints': constraints, 'secret': row['secret'] if row['status'] != 'active' else None,
+                'tools': [self._vault_tool_entry(t) for t in tool_rows], 'tools_used': len(tool_rows), 'constraints': constraints, 'secret': row['secret'] if row['status'] != 'active' else None,
                 'reward': {'amount': claim['amount'], 'ledger_id': claim['ledger_id']} if claim else None,
                 'reward_reversed': reversed_, 'reward_refused': refused}
+
+    @staticmethod
+    def _vault_tool_constraint(t):
+        data = json.loads(t['constraint_json'])
+        if t['constraint_kind'] == 'GuessResult':
+            data['result'] = tuple(data['result'])
+        return TOOL_CONSTRAINTS[t['constraint_kind']](**data)
+
+    @staticmethod
+    def _vault_tool_entry(t):
+        return {'tool': t['tool_key'], 'params': json.loads(t['params_json']), 'text_key': t['text_key'], 'data': json.loads(t['data_json']), 'turn_cost': t['turn_cost']}
 
     @staticmethod
     def _vault_clue_entry(c, names, terminal=False):
@@ -242,6 +260,7 @@ class VaultStore:
                 if self.one('SELECT 1 FROM vault_actions WHERE guild_id=? AND session_id=? AND guess=?', (guild_id, session_id, code)):
                     raise VaultStoreError(codes.VAULT_GUESS_DUPLICATE)
                 number = self.one('SELECT COUNT(*) FROM vault_actions WHERE session_id=? AND guild_id=?', (session_id, guild_id))[0] + 1
+                spent = number + self._vault_tool_turns(session_id, guild_id)
                 result = feedback(row['protocol'], row['secret'], code)
                 won = code == row['secret']
                 stage = self.one('SELECT id FROM vault_stages WHERE session_id=? AND guild_id=? ORDER BY number LIMIT 1', (session_id, guild_id))
@@ -250,7 +269,7 @@ class VaultStore:
                 if won:
                     self._vault_finish(guild_id, session_id, 'solved', now)
                     refused = not self._vault_pay(row, now) and self.vault_settings(guild_id)['reward'] > 0
-                elif number >= row['turn_budget']:
+                elif spent >= row['turn_budget']:
                     self._vault_finish(guild_id, session_id, 'failed', now)
                 return self._vault_result(self.one('SELECT * FROM vault_sessions WHERE id=? AND guild_id=?', (session_id, guild_id)), self.one('SELECT * FROM vault_actions WHERE id=? AND guild_id=?', (action_id, guild_id)), False, refused)
         raise VaultStoreError(codes.VAULT_NOT_ACTIVE)
@@ -261,6 +280,81 @@ class VaultStore:
             return check_guess(guess if isinstance(guess, str) else '', row['length'])
         except VaultError as error:
             raise VaultStoreError(GUESS_CODES[error.code], **error.params) from None
+
+    def _vault_tool_turns(self, session_id, guild_id):
+        return self.one('SELECT COALESCE(SUM(turn_cost),0) FROM vault_tool_uses WHERE session_id=? AND guild_id=?', (session_id, guild_id))[0]
+
+    def use_vault_tool(self, guild_id, user_id, session_id, tool_key, params, *, action_key=None, now=None):
+        """Activates one Vault tool: one transaction checks, asks the engine, consumes one inventory unit, records the use and spends the turns.
+        Every refusal is raised before anything is written. A replayed action_key returns the first result and spends nothing."""
+        now = time.time() if now is None else now
+        params = dict(params) if isinstance(params, dict) else {}
+        with self.write_admin():
+            row = self.one('SELECT * FROM vault_sessions WHERE id=? AND guild_id=? AND user_id=?', (session_id, guild_id, user_id))
+            if row is None:
+                raise VaultStoreError(codes.VAULT_NOT_FOUND)
+            if action_key is not None:
+                done = self.one('SELECT * FROM vault_tool_uses WHERE guild_id=? AND session_id=? AND action_key=?', (guild_id, session_id, action_key))
+                if done is not None:
+                    return self._vault_tool_result(row, done, True)
+            if row['status'] == 'active' and row['expires_at'] <= now:
+                self._vault_finish(guild_id, session_id, 'expired', now)
+            elif row['status'] == 'active':
+                return self._vault_tool_apply(row, tool_key, params, action_key, now)
+        raise VaultStoreError(codes.VAULT_NOT_ACTIVE)
+
+    def _vault_tool_apply(self, row, tool_key, params, action_key, now):
+        guild_id, session_id, user_id = row['guild_id'], row['id'], row['user_id']
+        if not isinstance(tool_key, str) or tool_key not in TOOLS:
+            raise VaultStoreError(codes.VAULT_TOOL_UNKNOWN, tool=str(tool_key))
+        tools = self.all('SELECT * FROM vault_tool_uses WHERE guild_id=? AND session_id=? ORDER BY id', (guild_id, session_id))
+        if len(tools) >= MAX_TOOLS:
+            raise VaultStoreError(codes.VAULT_TOOL_LIMIT, limit=MAX_TOOLS)
+        guesses = self.all('SELECT guess,feedback_json FROM vault_actions WHERE guild_id=? AND session_id=? ORDER BY number', (guild_id, session_id))
+        left = row['turn_budget'] - len(guesses) - sum(t['turn_cost'] for t in tools)
+        if not tool_fits(tool_key, left):
+            raise VaultStoreError(codes.VAULT_TOOL_NO_TURNS)
+        if self.item_qty(guild_id, user_id, tool_key) < 1:
+            raise VaultStoreError(codes.VAULT_TOOL_NOT_HELD)
+        history = [GuessResult(g['guess'], row['protocol'], tuple(json.loads(g['feedback_json']))) for g in guesses]
+        history += [c for c in map(self._vault_tool_constraint, tools) if isinstance(c, DigitAt)]
+        try:
+            found = evaluate_tool(row['secret'], tool_key, params, history)
+        except VaultError as error:
+            if error.code != 'nothing_new':
+                raise VaultStoreError(codes.VAULT_TOOL_BAD_PARAMS, reason=error.code) from None
+            found = None
+        public = self._vault_view(row)['constraints']
+        if is_redundant(tool_key, params, filter_candidates(public, row['length']), history):
+            raise VaultStoreError(codes.VAULT_TOOL_REDUNDANT)
+        if found is None:
+            found = self._vault_verifier_known(row['secret'], params['guess'])
+        cost = TOOLS[tool_key].turn_cost
+        try:
+            used = self.consume_item(guild_id, user_id, row['channel_id'], tool_key, now=now, result={'tool': tool_key, 'vault_session': session_id, 'turn_cost': cost})
+        except NotHeld:
+            raise VaultStoreError(codes.VAULT_TOOL_NOT_HELD) from None
+        stage = self.one('SELECT id FROM vault_stages WHERE session_id=? AND guild_id=? ORDER BY number LIMIT 1', (session_id, guild_id))
+        constraint = dataclasses.asdict(found.constraint)
+        action_id = self.db.execute('INSERT INTO vault_tool_uses(guild_id,session_id,stage_id,user_id,tool_key,params_json,text_key,data_json,constraint_kind,constraint_json,turn_cost,use_id,action_key,created_at) '
+            'VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)', (guild_id, session_id, stage['id'], user_id, tool_key, json.dumps(params, sort_keys=True), found.text_key,
+            json.dumps(found.data, sort_keys=True), type(found.constraint).__name__, json.dumps(constraint, sort_keys=True), cost, used['use_id'], action_key, now)).lastrowid
+        if left - cost <= 0:
+            self._vault_finish(guild_id, session_id, 'failed', now)
+        return self._vault_tool_result(self.one('SELECT * FROM vault_sessions WHERE id=? AND guild_id=?', (session_id, guild_id)),
+                                       self.one('SELECT * FROM vault_tool_uses WHERE id=? AND guild_id=?', (action_id, guild_id)), False)
+
+    @staticmethod
+    def _vault_verifier_known(secret, guess):
+        """The verifier's paid answer when every strike is already disclosed: a secret-dependent refusal would be a free leak."""
+        pos = next(i + 1 for i, (s, g) in enumerate(zip(secret, guess)) if s == g)
+        return ToolResult(DigitAt(pos, secret[pos - 1]), 'vault_verifier_position', {'guess': guess, 'position': pos, 'digit': secret[pos - 1]})
+
+    def _vault_tool_result(self, row, use, replayed):
+        entry = self._vault_tool_entry(use)
+        return {'tool': entry['tool'], 'params': entry['params'], 'text_key': entry['text_key'], 'data': entry['data'], 'turn_cost': entry['turn_cost'],
+                'constraint': self._vault_tool_constraint(use), 'qty': self.item_qty(row['guild_id'], row['user_id'], entry['tool']), 'replayed': replayed,
+                'session': self._vault_view(row)}
 
     def _vault_pay(self, row, now):
         """Inside write_admin: the win reward in force now, once per (session, member, type). A balance cap that refuses it leaves the win unpaid."""
@@ -288,7 +382,8 @@ class VaultStore:
                  'turns_used': r['used'], 'turn_budget': r['turn_budget'], 'secret': r['secret'] if r['status'] != 'active' else None,
                  'reward': r['reward'], 'reward_reversed': bool(r['reversed'])} for r in self.all(
             'SELECT s.id,s.local_date,s.protocol,s.status,s.turn_budget,s.secret,'
-            '(SELECT COUNT(*) FROM vault_actions a WHERE a.session_id=s.id AND a.guild_id=s.guild_id) AS used,'
+            '(SELECT COUNT(*) FROM vault_actions a WHERE a.session_id=s.id AND a.guild_id=s.guild_id)'
+            '+(SELECT COALESCE(SUM(u.turn_cost),0) FROM vault_tool_uses u WHERE u.session_id=s.id AND u.guild_id=s.guild_id) AS used,'
             "COALESCE((SELECT c.amount FROM vault_reward_claims c WHERE c.session_id=s.id AND c.guild_id=s.guild_id AND c.user_id=s.user_id AND c.type='win'),0) AS reward, "
             "EXISTS(SELECT 1 FROM vault_reward_claims c JOIN currency_ledger l ON l.guild_id=c.guild_id AND l.reverses_id=c.ledger_id WHERE c.session_id=s.id AND c.guild_id=s.guild_id AND c.user_id=s.user_id AND c.type='win') AS reversed "
             'FROM vault_sessions s WHERE s.guild_id=? AND s.user_id=? ORDER BY s.local_date DESC,s.id DESC LIMIT ?', (guild_id, user_id, limit))]

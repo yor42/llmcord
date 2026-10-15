@@ -745,6 +745,11 @@ msgstr ""
 
 #: llmcord_core/i18n/codes.py
 #, python-brace-format
+msgid "{name} is used inside your vault. Open /vault personal and pick it there."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
 msgid "{name} cannot be used on this server right now."
 msgstr ""
 
@@ -1807,6 +1812,31 @@ msgstr ""
 
 #: llmcord_core/i18n/codes.py
 msgid "You already tried that guess."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That is not a Vault tool."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "You can use at most {limit} tools in one vault."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "You do not have enough turns left for that tool."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "You do not have that tool. Buy one with /shop."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That tool cannot be used that way. Nothing was spent."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That would tell you nothing new. Nothing was spent."
 msgstr ""
 
 #: llmcord_core/i18n/codes.py

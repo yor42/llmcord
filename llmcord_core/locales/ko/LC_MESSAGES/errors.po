@@ -753,6 +753,11 @@ msgstr "그 아이템을 가지고 있지 않아요."
 
 #: llmcord_core/i18n/codes.py
 #, python-brace-format
+msgid "{name} is used inside your vault. Open /vault personal and pick it there."
+msgstr "{name:은/는} 금고 안에서 사용하는 도구예요. /vault personal을 열고 거기서 골라 주세요."
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
 msgid "{name} cannot be used on this server right now."
 msgstr "지금 이 서버에서는 {name:을/를} 사용할 수 없어요."
 
@@ -1816,6 +1821,31 @@ msgstr "추측의 숫자는 모두 달라야 해요."
 #: llmcord_core/i18n/codes.py
 msgid "You already tried that guess."
 msgstr "이미 시도한 추측이에요."
+
+#: llmcord_core/i18n/codes.py
+msgid "That is not a Vault tool."
+msgstr "그건 금고 도구가 아니에요."
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "You can use at most {limit} tools in one vault."
+msgstr "한 금고에서는 도구를 최대 {limit}개까지 쓸 수 있어요."
+
+#: llmcord_core/i18n/codes.py
+msgid "You do not have enough turns left for that tool."
+msgstr "그 도구를 쓰기에는 남은 턴이 부족해요."
+
+#: llmcord_core/i18n/codes.py
+msgid "You do not have that tool. Buy one with /shop."
+msgstr "그 도구를 가지고 있지 않아요. /shop에서 구매해 주세요."
+
+#: llmcord_core/i18n/codes.py
+msgid "That tool cannot be used that way. Nothing was spent."
+msgstr "그렇게는 도구를 쓸 수 없어요. 아무것도 소모되지 않았어요."
+
+#: llmcord_core/i18n/codes.py
+msgid "That would tell you nothing new. Nothing was spent."
+msgstr "새로 알게 되는 것이 없어요. 아무것도 소모되지 않았어요."
 
 #: llmcord_core/i18n/codes.py
 msgid "The Vault switch must be on or off."

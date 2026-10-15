@@ -1,0 +1,12 @@
+{
+  "key": "vault_residual_scanner",
+  "kind": "vault_tool",
+  "name": {
+    "en": "Residual Scanner",
+    "ko": "잔류 스캐너"
+  },
+  "emoji": "🔍",
+  "consumable": true,
+  "default_price": 80,
+  "audience": "none"
+}

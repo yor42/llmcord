@@ -279,6 +279,14 @@ CREATE TABLE IF NOT EXISTS vault_actions (
  UNIQUE(session_id,number), UNIQUE(session_id,guess)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS vault_actions_key ON vault_actions(session_id,action_key) WHERE action_key IS NOT NULL;
+CREATE TABLE IF NOT EXISTS vault_tool_uses (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, session_id INTEGER NOT NULL REFERENCES vault_sessions(id) ON DELETE CASCADE,
+ stage_id INTEGER NOT NULL REFERENCES vault_stages(id) ON DELETE CASCADE, user_id INTEGER NOT NULL, tool_key TEXT NOT NULL,
+ params_json TEXT NOT NULL, text_key TEXT NOT NULL, data_json TEXT NOT NULL, constraint_kind TEXT NOT NULL, constraint_json TEXT NOT NULL,
+ turn_cost INTEGER NOT NULL CHECK(turn_cost>=1), use_id INTEGER NOT NULL, action_key TEXT, created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS vault_tool_uses_session ON vault_tool_uses(guild_id,session_id,id);
+CREATE UNIQUE INDEX IF NOT EXISTS vault_tool_uses_key ON vault_tool_uses(session_id,action_key) WHERE action_key IS NOT NULL;
 CREATE TABLE IF NOT EXISTS vault_clues (
  id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, session_id INTEGER NOT NULL REFERENCES vault_sessions(id) ON DELETE CASCADE,
  position INTEGER NOT NULL, character_id INTEGER NOT NULL, kind TEXT NOT NULL, data_json TEXT NOT NULL, revealed_at REAL,

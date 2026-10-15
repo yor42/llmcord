@@ -1,0 +1,12 @@
+{
+  "key": "vault_position_verifier",
+  "kind": "vault_tool",
+  "name": {
+    "en": "Position Verifier",
+    "ko": "위치 검증기"
+  },
+  "emoji": "🎯",
+  "consumable": true,
+  "default_price": 120,
+  "audience": "none"
+}

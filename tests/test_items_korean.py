@@ -17,7 +17,7 @@ from llmcord_core.items_store import ItemError
 from llmcord_core.shop_ui import use_rows
 
 KO_NAMES = {'8ball': '매직 8볼', 'd20': '20면체 주사위 (d20)', 'dice': '주사위', 'fortune_cookie': '포춘 쿠키', 'tarot': '타로'}
-ALL = {r.key: r for r in items.all_items()}
+ALL = {r.key: r for r in items.all_items() if r.kind == 'random_message'}  # FEAT-64: vault tools have no tables or templates
 G, U = 1, 9
 
 

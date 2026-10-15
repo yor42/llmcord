@@ -1,0 +1,12 @@
+{
+  "key": "vault_spectrum_analyzer",
+  "kind": "vault_tool",
+  "name": {
+    "en": "Spectrum Analyzer",
+    "ko": "스펙트럼 분석기"
+  },
+  "emoji": "📶",
+  "consumable": true,
+  "default_price": 60,
+  "audience": "none"
+}

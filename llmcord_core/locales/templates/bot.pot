@@ -2622,7 +2622,34 @@ msgid "Draw a tarot card."
 msgstr ""
 
 #: llmcord_core/items_discord.py
+#, python-brace-format
+msgid "Costs {count} turn."
+msgid_plural "Costs {count} turns."
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/items_discord.py
 msgid "A toy from the shop."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "Vault tool: check whether one digit of a guess you already made is in the code."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "Vault tool: learn whether the digit at one position is high (5-9) or low (0-4)."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "Vault tool: learn how many of two digits are in the code."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "Vault tool: find one right digit, and where it goes, in a guess you already made."
+msgstr ""
+
+#: llmcord_core/items_discord.py
+msgid "Vault tool: reveal the exact digit at one position."
 msgstr ""
 
 #: llmcord_core/items_discord.py
@@ -2710,6 +2737,10 @@ msgid "Your items"
 msgstr ""
 
 #: llmcord_core/items_discord.py
+msgid "use it in /vault personal"
+msgstr ""
+
+#: llmcord_core/items_discord.py
 msgid "use is off right now"
 msgstr ""
 
@@ -2777,6 +2808,34 @@ msgstr ""
 
 #: llmcord_core/vault_discord.py
 msgid "Something went wrong with the vault. Try again."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Choose a position from 1 to 4."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Choose a single digit from 0 to 9."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Choose two different digits."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Choose one of your own guesses."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "That digit is not in that guess."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "That guess has no new strike to show."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "That position is already revealed."
 msgstr ""
 
 #: llmcord_core/vault_discord.py
@@ -2891,6 +2950,41 @@ msgstr ""
 
 #: llmcord_core/vault_discord.py
 #, python-brace-format
+msgid "Of the digits {a} and {b}, none is in the code."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Of the digits {a} and {b}, exactly one is in the code."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Of the digits {a} and {b}, both are in the code."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "In guess {guess}, digit {position} is {digit}."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Guess {guess} has no digit in the right position."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Digit {position} is {digit}."
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "{name}: {fact}"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
 msgid "Personal vault ({date})"
 msgstr ""
 
@@ -2907,6 +3001,15 @@ msgstr ""
 #: llmcord_core/vault_discord.py
 #, python-brace-format
 msgid "Turns left: {left} of {budget}"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Tools used: {n} of {limit}"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Tool results:"
 msgstr ""
 
 #: llmcord_core/vault_discord.py
@@ -2958,6 +3061,23 @@ msgid "Reveal clue"
 msgstr ""
 
 #: llmcord_core/vault_discord.py
+msgctxt "button.vault"
+msgid "Tools"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "{name} ×{qty} ({count} turn)"
+msgid_plural "{name} ×{qty} ({count} turns)"
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/vault_discord.py
+msgctxt "button.vault"
+msgid "Back"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
 #, python-brace-format
 msgid "Guess {n}: {guess} — {feedback}"
 msgstr ""
@@ -2992,6 +3112,26 @@ msgstr ""
 #: llmcord_core/vault_discord.py
 msgctxt "modal.vault"
 msgid "4 different digits"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Past guess (number)"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Digit"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Position (1 to 4)"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "First digit"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Second digit"
 msgstr ""
 
 #: llmcord_core/vault_discord.py

@@ -1,0 +1,12 @@
+{
+  "key": "vault_master_decoder",
+  "kind": "vault_tool",
+  "name": {
+    "en": "Master Decoder",
+    "ko": "마스터 디코더"
+  },
+  "emoji": "🔑",
+  "consumable": true,
+  "default_price": 300,
+  "audience": "none"
+}

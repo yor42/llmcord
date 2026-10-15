@@ -5,12 +5,15 @@ import unittest
 from llmcord_core.items import RecipeError, all_items, get_item, roll, validate_entries
 
 KEYS = {'8ball', 'fortune_cookie', 'dice', 'd20', 'tarot'}
+VAULT_KEYS = {'vault_residual_scanner', 'vault_spectrum_analyzer', 'vault_comparison_circuit', 'vault_position_verifier', 'vault_master_decoder'}  # FEAT-64
+TOYS = [i for i in all_items() if i.kind == 'random_message']
 
 
 class CatalogTests(unittest.TestCase):
     def test_catalog_contents_and_flags(self):
-        self.assertEqual({i.key for i in all_items()}, KEYS)
-        facts = {i.key: (i.consumable, i.default_price, i.default_cooldown_seconds) for i in all_items()}
+        self.assertEqual({i.key for i in all_items()}, KEYS | VAULT_KEYS)
+        self.assertEqual({i.key for i in TOYS}, KEYS)
+        facts = {i.key: (i.consumable, i.default_price, i.default_cooldown_seconds) for i in TOYS}
         self.assertEqual(facts, {'8ball': (False, 150, 30), 'fortune_cookie': (True, 25, 0), 'dice': (False, 50, 5),
                                  'd20': (False, 50, 5), 'tarot': (True, 60, 0)})
         self.assertEqual(get_item('dice').params['sides'], 6)
@@ -21,14 +24,14 @@ class CatalogTests(unittest.TestCase):
             get_item('nope')
 
     def test_every_builtin_rolls_200_seeds(self):
-        for item in all_items():
+        for item in TOYS:
             for seed in range(200):
                 res = roll(item, seed)
                 self.assertTrue(res.text.strip(), item.key)
                 json.dumps(res.to_json())
 
     def test_same_seed_same_result_and_seeds_differ(self):
-        for item in all_items():
+        for item in TOYS:
             self.assertEqual(roll(item, 7), roll(item, 7))
             self.assertEqual(roll(item, 7).to_json(), roll(item, 7).to_json())
             self.assertGreater(len({roll(item, s).text for s in range(100)}), 1, item.key)

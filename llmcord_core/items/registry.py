@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from ..i18n import codes
-from . import random_message
+from . import random_message, vault_tool
 from .recipe import DEFAULT_LOCALE, Recipe, RecipeError, parse_common
 
 
@@ -19,6 +19,7 @@ class Kind:
 
 _KINDS = {
     'random_message': Kind('random_message', 'none', random_message.validate, random_message.roll, random_message.validate_entries, random_message.PARAM_KEYS),
+    'vault_tool': Kind('vault_tool', 'none', vault_tool.validate, vault_tool.roll, vault_tool.validate_entries, vault_tool.PARAM_KEYS),
 }
 
 

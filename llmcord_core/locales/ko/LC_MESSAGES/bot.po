@@ -2627,8 +2627,34 @@ msgid "Draw a tarot card."
 msgstr "타로 카드를 한 장 뽑아요."
 
 #: llmcord_core/items_discord.py
+#, python-brace-format
+msgid "Costs {count} turn."
+msgid_plural "Costs {count} turns."
+msgstr[0] "{count}턴이 들어요."
+
+#: llmcord_core/items_discord.py
 msgid "A toy from the shop."
 msgstr "상점에서 산 장난감이에요."
+
+#: llmcord_core/items_discord.py
+msgid "Vault tool: check whether one digit of a guess you already made is in the code."
+msgstr "금고 도구: 이미 시도한 추측의 숫자 하나가 코드에 있는지 확인해요."
+
+#: llmcord_core/items_discord.py
+msgid "Vault tool: learn whether the digit at one position is high (5-9) or low (0-4)."
+msgstr "금고 도구: 한 자리의 숫자가 큰 수(5-9)인지 작은 수(0-4)인지 알려 줘요."
+
+#: llmcord_core/items_discord.py
+msgid "Vault tool: learn how many of two digits are in the code."
+msgstr "금고 도구: 두 숫자 중 몇 개가 코드에 있는지 알려 줘요."
+
+#: llmcord_core/items_discord.py
+msgid "Vault tool: find one right digit, and where it goes, in a guess you already made."
+msgstr "금고 도구: 이미 시도한 추측에서 맞는 숫자 하나와 그 자리를 찾아 줘요."
+
+#: llmcord_core/items_discord.py
+msgid "Vault tool: reveal the exact digit at one position."
+msgstr "금고 도구: 한 자리의 정확한 숫자를 알려 줘요."
 
 #: llmcord_core/items_discord.py
 #, python-brace-format
@@ -2715,6 +2741,10 @@ msgid "Your items"
 msgstr "내 아이템"
 
 #: llmcord_core/items_discord.py
+msgid "use it in /vault personal"
+msgstr "/vault personal에서 사용해요"
+
+#: llmcord_core/items_discord.py
 msgid "use is off right now"
 msgstr "지금은 사용할 수 없음"
 
@@ -2789,6 +2819,34 @@ msgstr "아직 금고가 없어요. /vault personal로 시작해 보세요."
 #: llmcord_core/vault_discord.py
 msgid "Something went wrong with the vault. Try again."
 msgstr "금고에 문제가 생겼어요. 다시 시도해 주세요."
+
+#: llmcord_core/vault_discord.py
+msgid "Choose a position from 1 to 4."
+msgstr "1~4 중에서 위치를 골라 주세요."
+
+#: llmcord_core/vault_discord.py
+msgid "Choose a single digit from 0 to 9."
+msgstr "0~9 중에서 숫자 하나를 골라 주세요."
+
+#: llmcord_core/vault_discord.py
+msgid "Choose two different digits."
+msgstr "서로 다른 숫자 두 개를 골라 주세요."
+
+#: llmcord_core/vault_discord.py
+msgid "Choose one of your own guesses."
+msgstr "내가 한 추측 중 하나를 골라 주세요."
+
+#: llmcord_core/vault_discord.py
+msgid "That digit is not in that guess."
+msgstr "그 추측에는 그 숫자가 없어요."
+
+#: llmcord_core/vault_discord.py
+msgid "That guess has no new strike to show."
+msgstr "그 추측에는 새로 보여 줄 스트라이크가 없어요."
+
+#: llmcord_core/vault_discord.py
+msgid "That position is already revealed."
+msgstr "이미 공개된 위치예요."
 
 #: llmcord_core/vault_discord.py
 msgctxt "vault protocol"
@@ -2897,6 +2955,41 @@ msgstr "{position}번째 숫자는 낮아요(0~4)."
 
 #: llmcord_core/vault_discord.py
 #, python-brace-format
+msgid "Of the digits {a} and {b}, none is in the code."
+msgstr "숫자 {a}와 {b} 중 코드에 있는 숫자는 없어요."
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Of the digits {a} and {b}, exactly one is in the code."
+msgstr "숫자 {a}와 {b} 중 정확히 하나가 코드에 있어요."
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Of the digits {a} and {b}, both are in the code."
+msgstr "숫자 {a}와 {b}는 둘 다 코드에 있어요."
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "In guess {guess}, digit {position} is {digit}."
+msgstr "추측 {guess}에서 {position}번째 숫자는 {digit}이에요."
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Guess {guess} has no digit in the right position."
+msgstr "추측 {guess}에는 자리가 맞는 숫자가 없어요."
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Digit {position} is {digit}."
+msgstr "{position}번째 숫자는 {digit}이에요."
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "{name}: {fact}"
+msgstr "{name}: {fact}"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
 msgid "Personal vault ({date})"
 msgstr "개인 금고 ({date})"
 
@@ -2914,6 +3007,15 @@ msgstr "상태: {status}"
 #, python-brace-format
 msgid "Turns left: {left} of {budget}"
 msgstr "남은 횟수: {left}/{budget}"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "Tools used: {n} of {limit}"
+msgstr "사용한 금고 도구: {n}/{limit}"
+
+#: llmcord_core/vault_discord.py
+msgid "Tool results:"
+msgstr "도구 결과:"
 
 #: llmcord_core/vault_discord.py
 #, python-brace-format
@@ -2964,6 +3066,22 @@ msgid "Reveal clue"
 msgstr "단서 보기"
 
 #: llmcord_core/vault_discord.py
+msgctxt "button.vault"
+msgid "Tools"
+msgstr "금고 도구"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "{name} ×{qty} ({count} turn)"
+msgid_plural "{name} ×{qty} ({count} turns)"
+msgstr[0] "{name} ×{qty} ({count}턴)"
+
+#: llmcord_core/vault_discord.py
+msgctxt "button.vault"
+msgid "Back"
+msgstr "뒤로"
+
+#: llmcord_core/vault_discord.py
 #, python-brace-format
 msgid "Guess {n}: {guess} — {feedback}"
 msgstr "{n}번째 추측: {guess} — {feedback}"
@@ -2999,6 +3117,26 @@ msgstr "내 추측"
 msgctxt "modal.vault"
 msgid "4 different digits"
 msgstr "서로 다른 숫자 4개"
+
+#: llmcord_core/vault_discord.py
+msgid "Past guess (number)"
+msgstr "지난 추측 (번호)"
+
+#: llmcord_core/vault_discord.py
+msgid "Digit"
+msgstr "숫자"
+
+#: llmcord_core/vault_discord.py
+msgid "Position (1 to 4)"
+msgstr "위치 (1~4)"
+
+#: llmcord_core/vault_discord.py
+msgid "First digit"
+msgstr "첫 번째 숫자"
+
+#: llmcord_core/vault_discord.py
+msgid "Second digit"
+msgstr "두 번째 숫자"
 
 #: llmcord_core/vault_discord.py
 #, python-brace-format

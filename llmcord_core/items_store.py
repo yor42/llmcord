@@ -20,6 +20,9 @@ def _rebuild_item_error(cls, message, params, state):
     return error
 
 
+NO_TRANSACTION = 'consume_item must run inside write_admin()'
+
+
 class ItemError(UserError):
     """A shop or item action refused; `code` is the ErrorCode (as on every UserError) and `kind` is the stable string (`insufficient`, `on_cooldown`, ...) set on each subclass, for callers that branch on the refusal."""
     kind = 'item_error'
@@ -71,6 +74,10 @@ class NotHeld(ItemError):
 
 class UseDisabled(ItemError):
     kind = 'use_disabled'
+
+
+class UseElsewhere(ItemError):
+    kind = 'use_elsewhere'
 
 
 class OnCooldown(ItemError):
@@ -219,6 +226,8 @@ class ItemsStore:
             held = self.one('SELECT qty,last_used_at FROM inventory WHERE guild_id=? AND user_id=? AND item_key=?', (guild_id, user_id, item_key))
             if recipe is None or held is None or held['qty'] < 1:
                 raise NotHeld(codes.ITEM_NOT_HELD)
+            if recipe.kind == 'vault_tool':
+                raise UseElsewhere(codes.ITEM_USE_VAULT, name=recipe.name, item=recipe.key)
             entry = self._shop_entry(recipe, self._shop_row(guild_id, item_key))
             if not entry['allow_use']:
                 raise UseDisabled(codes.ITEM_USE_DISABLED, name=recipe.name, item=recipe.key)
@@ -233,6 +242,19 @@ class ItemsStore:
             use_id = self.db.execute('INSERT INTO item_uses(guild_id,user_id,channel_id,item_key,seed,result,used_at) VALUES(?,?,?,?,?,?,?)',
                 (guild_id, user_id, channel_id, item_key, seed, json.dumps(result.to_json(), ensure_ascii=False), now)).lastrowid
         return {'result': result, 'qty': qty, 'use_id': use_id, 'seed': seed, 'item': entry}
+
+    def consume_item(self, guild_id, user_id, channel_id, item_key, *, now=None, result=None):
+        """Takes one held unit and writes the use log row inside the CALLER's write_admin() transaction (never begins or commits).
+        Returns {'qty': left, 'use_id'}; nothing held raises NotHeld before anything is written."""
+        if not self.db.in_transaction:
+            raise RuntimeError(NO_TRANSACTION)
+        now = time.time() if now is None else now
+        taken = self.db.execute('UPDATE inventory SET qty=qty-1,last_used_at=? WHERE guild_id=? AND user_id=? AND item_key=? AND qty>0', (now, guild_id, user_id, item_key)).rowcount
+        if not taken:
+            raise NotHeld(codes.ITEM_NOT_HELD)
+        use_id = self.db.execute('INSERT INTO item_uses(guild_id,user_id,channel_id,item_key,seed,result,used_at) VALUES(?,?,?,?,?,?,?)',
+            (guild_id, user_id, channel_id, item_key, '', json.dumps(result or {}, ensure_ascii=False), now)).lastrowid
+        return {'qty': self.item_qty(guild_id, user_id, item_key), 'use_id': use_id}
 
     def mark_use_posted(self, guild_id, use_id):
         """MNT-84: records that this use's result reached the channel (repeatable; another guild's use is left alone)."""

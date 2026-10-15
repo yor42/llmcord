@@ -1,0 +1,12 @@
+{
+  "key": "vault_comparison_circuit",
+  "kind": "vault_tool",
+  "name": {
+    "en": "Comparison Circuit",
+    "ko": "비교 회로"
+  },
+  "emoji": "⚖️",
+  "consumable": true,
+  "default_price": 90,
+  "audience": "none"
+}

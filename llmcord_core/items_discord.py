@@ -15,6 +15,7 @@ from .items_store import AlreadyOwned, HoldCapReached, ItemError, NotForSale, No
 from llmcord_core import i18n, items
 from llmcord_core.i18n import N_
 from llmcord_core.i18n.discord_locale import C_, channel_t, invoker_t
+from llmcord_core.vault import TOOLS
 
 NO_MENTIONS = discord.AllowedMentions.none()
 VIEW_SECONDS = 300
@@ -68,7 +69,21 @@ def item_description(key: str, *, t=None) -> str:
         return t('Roll a twenty-sided die.')
     if key == 'tarot':
         return t('Draw a tarot card.')
+    if key in TOOLS:
+        return f"{tool_description(key, t)} {t.n('Costs {count} turn.', 'Costs {count} turns.', TOOLS[key].turn_cost)}"
     return t('A toy from the shop.')
+
+
+def tool_description(key: str, t) -> str:
+    if key == 'vault_residual_scanner':
+        return t('Vault tool: check whether one digit of a guess you already made is in the code.')
+    if key == 'vault_spectrum_analyzer':
+        return t('Vault tool: learn whether the digit at one position is high (5-9) or low (0-4).')
+    if key == 'vault_comparison_circuit':
+        return t('Vault tool: learn how many of two digits are in the code.')
+    if key == 'vault_position_verifier':
+        return t('Vault tool: find one right digit, and where it goes, in a guess you already made.')
+    return t('Vault tool: reveal the exact digit at one position.')
 
 
 def shown_name(entry: dict, t) -> str:
@@ -181,7 +196,9 @@ def register_items_commands(bot, ctx: SimpleNamespace) -> None:
         for item in held:
             entry = store.shop_item(guild_id, item['key'])
             state = [kind_word(item['consumable'], t=t)]
-            if not entry['allow_use']:
+            if entry['kind'] == 'vault_tool':
+                state.append(t('use it in /vault personal'))
+            elif not entry['allow_use']:
                 state.append(t('use is off right now'))
             elif not item['consumable'] and entry['cooldown_seconds'] and item['last_used_at'] is not None:
                 ready = item['last_used_at'] + entry['cooldown_seconds']
@@ -320,7 +337,7 @@ def register_items_commands(bot, ctx: SimpleNamespace) -> None:
         if embed is None:
             return None, None
         view = InventoryView(origin, guild_id)
-        usable = [item for item, entry in rows if entry['allow_use']][:MAX_BUTTONS]
+        usable = [item for item, entry in rows if entry['allow_use'] and entry['kind'] != 'vault_tool'][:MAX_BUTTONS]
         for index, item in enumerate(usable):
             view.add_item(UseButton(item, index // 5, t))
         return embed, view

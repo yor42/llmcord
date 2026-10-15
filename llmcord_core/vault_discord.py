@@ -16,8 +16,9 @@ from discord import app_commands
 from .errors import error_detail
 from .names import resolve, suggest
 from .vault import CountEven, CountLow, DigitPresent, PositionHalf, PositionParity
-from .vault_store import VaultStoreError
-from llmcord_core import i18n
+from .vault import TOOLS
+from .vault_store import MAX_TOOLS, VaultStoreError
+from llmcord_core import i18n, items
 from llmcord_core.i18n import N_, NP_, UserError, codes
 from llmcord_core.i18n.discord_locale import C_, invoker_t
 
@@ -26,6 +27,9 @@ NO_MENTIONS = discord.AllowedMentions.none()
 NOT_YOURS = N_('This vault belongs to someone else. Run /vault personal to open your own.')
 NO_VAULTS = N_('You have no vaults yet. Start one with /vault personal.')
 SOMETHING_WRONG = N_('Something went wrong with the vault. Try again.')
+TOOL_REASONS = {'bad_position': N_('Choose a position from 1 to 4.'), 'bad_digit': N_('Choose a single digit from 0 to 9.'), 'digits_equal': N_('Choose two different digits.'),
+                'guess_not_in_history': N_('Choose one of your own guesses.'), 'digit_not_in_guess': N_('That digit is not in that guess.'),
+                'nothing_new': N_('That guess has no new strike to show.'), 'already_revealed': N_('That position is already revealed.')}
 PROTOCOLS = {'standard': NP_('vault protocol', 'Standard'), 'total_match': NP_('vault protocol', 'Total Match'),
              'position_only': NP_('vault protocol', 'Position-Only'), 'open': NP_('vault protocol', 'Open')}
 STATUSES = {'active': NP_('vault status', 'In progress'), 'solved': NP_('vault status', 'Solved'),
@@ -56,12 +60,50 @@ def clue_text(clue, *, t=None) -> str:
     return ''
 
 
-def render_main(view: dict, *, t=None) -> str:
+def tool_name(key: str, t) -> str:
+    try:
+        return items.display_name(items.get_item(key), t.locale)
+    except KeyError:
+        return key
+
+
+def tool_fact(entry: dict, t) -> str:
+    """The disclosed fact of one tool use, from the engine's text_key and data (deterministic template text)."""
+    data, key = entry['data'], entry['text_key']
+    if key in ('vault_scanner_present', 'vault_scanner_absent'):
+        return t('The code contains the digit {digit}.', digit=data['digit']) if data['present'] else t('The code does not contain the digit {digit}.', digit=data['digit'])
+    if key in ('vault_spectrum_high', 'vault_spectrum_low'):
+        return t('Digit {position} is high (5 to 9).', position=data['position']) if data['high'] else t('Digit {position} is low (0 to 4).', position=data['position'])
+    if key == 'vault_comparison_0':
+        return t('Of the digits {a} and {b}, none is in the code.', a=data['a'], b=data['b'])
+    if key == 'vault_comparison_1':
+        return t('Of the digits {a} and {b}, exactly one is in the code.', a=data['a'], b=data['b'])
+    if key == 'vault_comparison_2':
+        return t('Of the digits {a} and {b}, both are in the code.', a=data['a'], b=data['b'])
+    if key == 'vault_verifier_position':
+        return t('In guess {guess}, digit {position} is {digit}.', guess=data['guess'], position=data['position'], digit=data['digit'])
+    if key == 'vault_verifier_none':
+        return t('Guess {guess} has no digit in the right position.', guess=data['guess'])
+    if key == 'vault_decoder_digit':
+        return t('Digit {position} is {digit}.', position=data['position'], digit=data['digit'])
+    return ''
+
+
+def tool_line(entry: dict, t) -> str:
+    return t('{name}: {fact}', name=tool_name(entry['tool'], t), fact=tool_fact(entry, t))
+
+
+def render_main(view: dict, *, t=None, tools_held: int = 0) -> str:
     """The status message. The secret line appears only once the vault has ended (the store withholds it until then)."""
     t = t or i18n.english()
     protocol = view['protocol']
     lines = [t('Personal vault ({date})', date=view['local_date']), t('Protocol: {protocol}', protocol=t.render(PROTOCOLS[protocol])),
              t('Status: {status}', status=t.render(STATUSES[view['status']])), t('Turns left: {left} of {budget}', left=view['turns_left'], budget=view['turn_budget'])]
+    if view['tools_used'] or tools_held:
+        lines.append(t('Tools used: {n} of {limit}', n=view['tools_used'], limit=MAX_TOOLS))
+    if view['tools']:
+        lines.append(t('Tool results:'))
+        lines += [tool_line(entry, t) for entry in view['tools']]
     if view['open_digit']:
         lines.append(t('Open digit: {digit}', digit=view['open_digit']))
     deleted = t('a deleted character')
@@ -81,8 +123,8 @@ def render_main(view: dict, *, t=None) -> str:
     return '\n'.join(lines)
 
 
-def render_buttons(view: dict, *, t=None):
-    """Guess, and Reveal clue while a clue is hidden; None once the vault is no longer active."""
+def render_buttons(view: dict, *, t=None, tools_held: int = 0):
+    """Guess, Reveal clue while a clue is hidden, and Tools while the member holds a tool; None once the vault is no longer active."""
     t = t or i18n.english()
     if view['status'] != 'active':
         return None
@@ -90,6 +132,21 @@ def render_buttons(view: dict, *, t=None):
     buttons.add_item(VaultButton('guess', view['id'], t.p('button.vault', 'Guess'), discord.ButtonStyle.primary))
     if any(not c['revealed'] for c in view['clues']):
         buttons.add_item(VaultButton('clue', view['id'], t.p('button.vault', 'Reveal clue'), discord.ButtonStyle.secondary))
+    if tools_held > 0:
+        buttons.add_item(VaultButton('tools', view['id'], t.p('button.vault', 'Tools'), discord.ButtonStyle.secondary))
+    return buttons
+
+
+def render_picker(view: dict, held: dict, *, t=None):
+    """One button per held tool (in TOOLS order) and Back."""
+    t = t or i18n.english()
+    buttons = discord.ui.View(timeout=None)
+    for key, qty in held.items():
+        cost = TOOLS[key].turn_cost
+        name = tool_name(key, t)
+        label = t.n('{name} ×{qty} ({count} turn)', '{name} ×{qty} ({count} turns)', cost, name=name, qty=qty)
+        buttons.add_item(VaultButton(f'use_{key}', view['id'], label[:80]))
+    buttons.add_item(VaultButton('back', view['id'], t.p('button.vault', 'Back')))
     return buttons
 
 
@@ -141,6 +198,29 @@ class VaultGuessModal(discord.ui.Modal):
         await interaction.client.vault.say(interaction, invoker_t(interaction)(SOMETHING_WRONG))
 
 
+TOOL_FIELDS = {'guess': N_('Past guess (number)'), 'digit': N_('Digit'), 'position': N_('Position (1 to 4)'), 'a': N_('First digit'), 'b': N_('Second digit')}
+
+
+class VaultToolModal(discord.ui.Modal):
+    """The inputs of one Vault tool, named after the engine's params. Bound to the session it was opened for."""
+
+    def __init__(self, session_id: int, tool_key: str, *, t=None):
+        t = t or i18n.english()
+        super().__init__(title=tool_name(tool_key, t)[:45], timeout=600)
+        self.session_id, self.tool_key = session_id, tool_key
+        self.inputs = {name: discord.ui.TextInput(label=t.render(TOOL_FIELDS[name])[:45], required=True, max_length=16) for name in TOOLS[tool_key].needs}
+        for item in self.inputs.values():
+            self.add_item(item)
+
+    async def on_submit(self, interaction: discord.Interaction):
+        values = {name: str(item.value or '') for name, item in self.inputs.items()}
+        await interaction.client.vault.submit_tool(interaction, self.session_id, self.tool_key, values)
+
+    async def on_error(self, interaction: discord.Interaction, error: Exception):
+        logging.error('Vault tool modal failed: %s', error_detail(error))
+        await interaction.client.vault.say(interaction, invoker_t(interaction)(SOMETHING_WRONG))
+
+
 class VaultPlay:
     def __init__(self, bot, clock=time.time):
         self.bot, self.clock = bot, clock
@@ -159,8 +239,14 @@ class VaultPlay:
         except discord.HTTPException as error:
             logging.warning('Vault reply failed: %s', type(error).__name__)
 
-    async def _show(self, interaction, view: dict, t, *, edit: bool) -> None:
-        text, buttons = render_main(view, t=t), render_buttons(view, t=t)
+    def _held(self, interaction) -> dict:
+        held = {key: self.store.item_qty(interaction.guild_id, interaction.user.id, key) for key in TOOLS}
+        return {key: qty for key, qty in held.items() if qty > 0}
+
+    async def _show(self, interaction, view: dict, t, *, edit: bool, picker: bool = False) -> None:
+        held = self._held(interaction)
+        text = render_main(view, t=t, tools_held=sum(held.values()))
+        buttons = render_picker(view, held, t=t) if picker else render_buttons(view, t=t, tools_held=sum(held.values()))
         try:
             if edit:
                 await interaction.response.edit_message(content=text, view=buttons, allowed_mentions=NO_MENTIONS)
@@ -252,6 +338,10 @@ class VaultPlay:
             except discord.HTTPException as error:
                 logging.warning('Vault could not open the guess modal: %s', type(error).__name__)
             return
+        if action == 'back':
+            return await self._show(interaction, view, t, edit=True)
+        if action == 'tools' or action.startswith('use_'):
+            return await self._press_tool(interaction, action, view, t)
         if action != 'clue':
             return await self.say(interaction, t.error(VaultStoreError(codes.VAULT_NOT_FOUND)))
         hidden = next((c['position'] for c in view['clues'] if not c['revealed']), None)
@@ -267,6 +357,63 @@ class VaultPlay:
         await self._show(interaction, view, t, edit=True)
         if refused is not None:
             await self.say(interaction, t.error(refused))
+
+    async def _press_tool(self, interaction, action: str, view: dict, t) -> None:
+        key = action[4:]
+        if action != 'tools' and key not in TOOLS:
+            return await self.say(interaction, t.error(VaultStoreError(codes.VAULT_TOOL_UNKNOWN, tool=key)))
+        if view['status'] != 'active':
+            await self._show(interaction, view, t, edit=True)
+            return await self.say(interaction, t.error(VaultStoreError(codes.VAULT_NOT_ACTIVE)))
+        if action == 'tools':
+            return await self._show(interaction, view, t, edit=True, picker=True)
+        try:
+            await interaction.response.send_modal(VaultToolModal(view['id'], key, t=t))
+        except discord.HTTPException as error:
+            logging.warning('Vault could not open the tool modal: %s', type(error).__name__)
+
+    @staticmethod
+    def _tool_params(view: dict, tool_key: str, values: dict) -> dict:
+        params = {}
+        for name in TOOLS[tool_key].needs:
+            text = str(values.get(name, '')).strip()
+            if name == 'position':
+                params[name] = int(text) if text.isascii() and text.isdigit() else text
+            elif name == 'guess':
+                found = next((g['guess'] for g in view['guesses'] if text.isascii() and text.isdigit() and str(g['number']) == text), None)
+                params[name] = found or text
+            else:
+                params[name] = text
+        return params
+
+    async def submit_tool(self, interaction, session_id: int, tool_key: str, values: dict) -> None:
+        t = invoker_t(interaction)
+        gid, uid = interaction.guild_id, interaction.user.id
+        if gid is None:
+            return await self.say(interaction, t.error(UserError(codes.USE_IN_SERVER)))
+        try:
+            view = self.store.vault_session(gid, uid, session_id, now=self.clock())
+        except VaultStoreError:
+            return await self.say(interaction, t(NOT_YOURS))
+        if tool_key not in TOOLS:
+            return await self.say(interaction, t.error(VaultStoreError(codes.VAULT_TOOL_UNKNOWN, tool=str(tool_key))))
+        try:
+            result = self.store.use_vault_tool(gid, uid, session_id, tool_key, self._tool_params(view, tool_key, values), action_key=str(interaction.id), now=self.clock())
+        except VaultStoreError as error:
+            if error.code == codes.VAULT_NOT_ACTIVE:
+                try:
+                    await self._show(interaction, self.store.vault_session(gid, uid, session_id, now=self.clock()), t, edit=True)
+                except VaultStoreError:
+                    pass
+            text = t.error(error)
+            reason = TOOL_REASONS.get(error.params.get('reason')) if error.code == codes.VAULT_TOOL_BAD_PARAMS else None
+            return await self.say(interaction, f'{text} {t.render(reason)}' if reason else text)
+        session = result['session']
+        lines = [tool_line(result, t)]
+        if session['status'] == 'failed':
+            lines.append(t('Out of turns. The vault stays closed today.'))
+        await self._show(interaction, session, t, edit=True)
+        await self.say(interaction, '\n'.join(lines))
 
     async def submit_guess(self, interaction, session_id: int, text: str, *, edit: bool = True) -> None:
         t = invoker_t(interaction)
