@@ -1754,3 +1754,12 @@ msgstr ""
 msgid "Use at most {limit} declaration phrases."
 msgstr ""
 
+#: llmcord_core/i18n/codes.py
+msgid "The Yut rules must be a set of options."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Pieces per player must be a whole number from {low} to {high}."
+msgstr ""
+

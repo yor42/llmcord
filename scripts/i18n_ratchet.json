@@ -39,6 +39,9 @@
     "llmcord_core/games/playstyle.py": {
       "raise": 3
     },
+    "llmcord_core/games/yut.py": {
+      "raise": 9
+    },
     "llmcord_core/icons.py": {
       "raise": 1
     },

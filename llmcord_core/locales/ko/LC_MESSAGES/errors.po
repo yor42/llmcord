@@ -1762,3 +1762,12 @@ msgstr "선언 문구를 하나 이상 추가하세요."
 msgid "Use at most {limit} declaration phrases."
 msgstr "선언 문구는 최대 {limit}개까지 쓸 수 있어요."
 
+#: llmcord_core/i18n/codes.py
+msgid "The Yut rules must be a set of options."
+msgstr "윷놀이 규칙은 옵션 묶음이어야 해요."
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Pieces per player must be a whole number from {low} to {high}."
+msgstr "플레이어당 말 수는 {low}부터 {high}까지의 정수여야 해요."
+
