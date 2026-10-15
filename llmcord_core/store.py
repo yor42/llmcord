@@ -13,6 +13,7 @@ from .admin_store import AdminStore, ConflictError, entry_match, run_script
 from .games import playstyle
 from .i18n import UserError, codes
 from .holdem_store import HoldemStore
+from .vault_store import VaultStore
 from .items_store import ItemsStore
 
 
@@ -179,7 +180,7 @@ class TimedConnection(sqlite3.Connection):
         return self._timed("COMMIT" if exc_type is None else "ROLLBACK", super().__exit__, exc_type, exc, tb)
 
 
-class Store(ItemsStore, HoldemStore, AdminStore):
+class Store(ItemsStore, HoldemStore, VaultStore, AdminStore):
     def __init__(self, path: str | Path = ":memory:"):
         existing = str(path) != ":memory:" and Path(path).exists()
         if str(path) != ":memory:":
@@ -200,16 +201,16 @@ class Store(ItemsStore, HoldemStore, AdminStore):
 
     def _upgrade(self, path: str | Path, existing: bool) -> None:
         """The whole schema upgrade, backup included, in one write-locked transaction: a failure leaves the old file as it was,
-        and a second process opening the same file waits, then finds version 24 and does nothing. executescript commits, so scripts run per statement."""
+        and a second process opening the same file waits, then finds version 25 and does nothing. executescript commits, so scripts run per statement."""
         self.db.execute("BEGIN IMMEDIATE")
         try:
             old_version = self.db.execute("PRAGMA user_version").fetchone()[0]
-            if old_version > 24:
+            if old_version > 25:
                 raise ValueError('The database is newer than this application. Update the application.')
             node_columns = {row[1] for row in self.db.execute('PRAGMA table_info(nodes)')}
             needs_identities = bool(node_columns) and not {'author_label', 'mentions_json'} <= node_columns
-            if existing and (old_version < 24 or needs_identities):
-                upgrade = 'v3' if old_version < 3 else 'identities' if needs_identities else 'v4' if old_version == 3 else 'v5' if old_version == 4 else 'v6' if old_version == 5 else 'v7' if old_version == 6 else 'v8' if old_version == 7 else 'v9' if old_version == 8 else 'v10' if old_version == 9 else 'v11' if old_version == 10 else 'v12' if old_version == 11 else 'v13' if old_version == 12 else 'v14' if old_version == 13 else 'v15' if old_version == 14 else 'v16' if old_version == 15 else 'v17' if old_version == 16 else 'v18' if old_version == 17 else 'v19' if old_version == 18 else 'v20' if old_version == 19 else 'v21' if old_version == 20 else 'v22' if old_version == 21 else 'v23' if old_version == 22 else 'v24'
+            if existing and (old_version < 25 or needs_identities):
+                upgrade = 'v3' if old_version < 3 else 'identities' if needs_identities else 'v4' if old_version == 3 else 'v5' if old_version == 4 else 'v6' if old_version == 5 else 'v7' if old_version == 6 else 'v8' if old_version == 7 else 'v9' if old_version == 8 else 'v10' if old_version == 9 else 'v11' if old_version == 10 else 'v12' if old_version == 11 else 'v13' if old_version == 12 else 'v14' if old_version == 13 else 'v15' if old_version == 14 else 'v16' if old_version == 15 else 'v17' if old_version == 16 else 'v18' if old_version == 17 else 'v19' if old_version == 18 else 'v20' if old_version == 19 else 'v21' if old_version == 20 else 'v22' if old_version == 21 else 'v23' if old_version == 22 else 'v24' if old_version == 23 else 'v25'
                 backup = Path(str(path) + f".pre-{upgrade}-{time.time_ns()}.sqlite3")
                 # Connection.backup from the connection holding the write lock never finishes; a second reader sees the committed file (the lock excludes other writers).
                 with closing(sqlite3.connect(path, timeout=30)) as reader, closing(sqlite3.connect(backup)) as target:
@@ -246,7 +247,7 @@ class Store(ItemsStore, HoldemStore, AdminStore):
                 self._backfill_avatar_hashes()
             if old_version < 24:
                 self.db.execute('INSERT OR IGNORE INTO item_use_posts(use_id,posted_at) SELECT id,used_at FROM item_uses')
-            self.db.execute("PRAGMA user_version=24")
+            self.db.execute("PRAGMA user_version=25")
             self.db.commit()
         except BaseException:
             self.db.rollback()

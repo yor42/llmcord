@@ -35,7 +35,7 @@ class UpgradeTests(unittest.TestCase):
                 self.assertNotIn("spoken_moves", {r[1] for r in db.execute("PRAGMA table_info(member_settings)")})
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 24)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 25)
                 self.assertEqual(store.favorites_mode(G, ALICE), "step_in")
                 self.assertTrue(store.spoken_member_on(G, ALICE))
                 self.assertEqual(store.spoken_phrases(G), [])
@@ -63,7 +63,7 @@ class UpgradeTests(unittest.TestCase):
         self.addCleanup(store.close)
         tables = {r[0] for r in store.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         self.assertLessEqual({"spoken_phrases", "spoken_examples"}, tables)
-        self.assertEqual(store.one("PRAGMA user_version")[0], 24)
+        self.assertEqual(store.one("PRAGMA user_version")[0], 25)
         self.assertIn("spoken_moves", {r[1] for r in store.db.execute("PRAGMA table_info(member_settings)")})
 
 

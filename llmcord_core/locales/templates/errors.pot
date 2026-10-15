@@ -1763,3 +1763,71 @@ msgstr ""
 msgid "Pieces per player must be a whole number from {low} to {high}."
 msgstr ""
 
+#: llmcord_core/i18n/codes.py
+msgid "Vault is not turned on for this server."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "This server does not allow that Vault protocol."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "One of the chosen partners is not available to you here."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Choose at most {limit} partners."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That vault was not found."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "This vault has already ended."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "That clue does not exist."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "A guess must be {length} digits."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "A guess can only use the digits 0 to 9."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Every digit in a guess must be different."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "You already tried that guess."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The Vault switch must be on or off."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Choose at least one Vault protocol from the list."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Vault turns must be whole numbers from {low} to {high}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The Vault reward must be a whole number from 0 to {limit:,}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "The Vault settings were changed elsewhere. Reload the page and try again."
+msgstr ""
+

@@ -1771,3 +1771,71 @@ msgstr "윷놀이 규칙은 옵션 묶음이어야 해요."
 msgid "Pieces per player must be a whole number from {low} to {high}."
 msgstr "플레이어당 말 수는 {low}부터 {high}까지의 정수여야 해요."
 
+#: llmcord_core/i18n/codes.py
+msgid "Vault is not turned on for this server."
+msgstr "이 서버에서는 금고가 꺼져 있어요."
+
+#: llmcord_core/i18n/codes.py
+msgid "This server does not allow that Vault protocol."
+msgstr "이 서버에서는 그 금고 방식을 쓸 수 없어요."
+
+#: llmcord_core/i18n/codes.py
+msgid "One of the chosen partners is not available to you here."
+msgstr "고른 파트너 중 이곳에서 쓸 수 없는 캐릭터가 있어요."
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Choose at most {limit} partners."
+msgstr "파트너는 최대 {limit}명까지 고를 수 있어요."
+
+#: llmcord_core/i18n/codes.py
+msgid "That vault was not found."
+msgstr "그 금고를 찾을 수 없어요."
+
+#: llmcord_core/i18n/codes.py
+msgid "This vault has already ended."
+msgstr "이미 끝난 금고예요."
+
+#: llmcord_core/i18n/codes.py
+msgid "That clue does not exist."
+msgstr "그런 단서는 없어요."
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "A guess must be {length} digits."
+msgstr "추측은 {length}자리 숫자여야 해요."
+
+#: llmcord_core/i18n/codes.py
+msgid "A guess can only use the digits 0 to 9."
+msgstr "추측에는 0부터 9까지의 숫자만 쓸 수 있어요."
+
+#: llmcord_core/i18n/codes.py
+msgid "Every digit in a guess must be different."
+msgstr "추측의 숫자는 모두 달라야 해요."
+
+#: llmcord_core/i18n/codes.py
+msgid "You already tried that guess."
+msgstr "이미 시도한 추측이에요."
+
+#: llmcord_core/i18n/codes.py
+msgid "The Vault switch must be on or off."
+msgstr "금고 스위치는 켜거나 꺼야 해요."
+
+#: llmcord_core/i18n/codes.py
+msgid "Choose at least one Vault protocol from the list."
+msgstr "목록에서 금고 방식을 하나 이상 골라 주세요."
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Vault turns must be whole numbers from {low} to {high}."
+msgstr "금고 턴 수는 {low}부터 {high}까지의 정수여야 해요."
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "The Vault reward must be a whole number from 0 to {limit:,}."
+msgstr "금고 보상은 0부터 {limit:,}까지의 정수여야 해요."
+
+#: llmcord_core/i18n/codes.py
+msgid "The Vault settings were changed elsewhere. Reload the page and try again."
+msgstr "금고 설정이 다른 곳에서 바뀌었어요. 페이지를 새로고침한 뒤 다시 시도해 주세요."
+

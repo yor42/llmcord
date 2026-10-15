@@ -253,6 +253,42 @@ CREATE TABLE IF NOT EXISTS model_roles (
  revision INTEGER NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 0
 );
 INSERT OR IGNORE INTO model_roles(id) VALUES(1);
+CREATE TABLE IF NOT EXISTS vault_settings (
+ guild_id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),
+ protocols_json TEXT NOT NULL DEFAULT '', turns_json TEXT NOT NULL DEFAULT '', reward INTEGER NOT NULL DEFAULT 0 CHECK(reward>=0),
+ revision INTEGER NOT NULL DEFAULT 0, updated_at REAL NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS vault_sessions (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, channel_id INTEGER NOT NULL,
+ kind TEXT NOT NULL DEFAULT 'personal', local_date TEXT NOT NULL, protocol TEXT NOT NULL, length INTEGER NOT NULL,
+ status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','solved','failed','expired')),
+ turn_budget INTEGER NOT NULL CHECK(turn_budget>=1), secret TEXT NOT NULL, open_digit TEXT, partners_json TEXT NOT NULL DEFAULT '[]',
+ created_at REAL NOT NULL, expires_at REAL NOT NULL, finished_at REAL,
+ UNIQUE(guild_id,user_id,local_date)
+);
+CREATE INDEX IF NOT EXISTS vault_sessions_active ON vault_sessions(guild_id,status,expires_at);
+CREATE TABLE IF NOT EXISTS vault_stages (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, session_id INTEGER NOT NULL REFERENCES vault_sessions(id) ON DELETE CASCADE,
+ number INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'active', turn_budget INTEGER NOT NULL, created_at REAL NOT NULL,
+ UNIQUE(session_id,number)
+);
+CREATE TABLE IF NOT EXISTS vault_actions (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, session_id INTEGER NOT NULL REFERENCES vault_sessions(id) ON DELETE CASCADE,
+ stage_id INTEGER NOT NULL REFERENCES vault_stages(id) ON DELETE CASCADE, number INTEGER NOT NULL, user_id INTEGER NOT NULL,
+ guess TEXT NOT NULL, feedback_json TEXT NOT NULL, won INTEGER NOT NULL DEFAULT 0, action_key TEXT, created_at REAL NOT NULL,
+ UNIQUE(session_id,number), UNIQUE(session_id,guess)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS vault_actions_key ON vault_actions(session_id,action_key) WHERE action_key IS NOT NULL;
+CREATE TABLE IF NOT EXISTS vault_clues (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, session_id INTEGER NOT NULL REFERENCES vault_sessions(id) ON DELETE CASCADE,
+ position INTEGER NOT NULL, character_id INTEGER NOT NULL, kind TEXT NOT NULL, data_json TEXT NOT NULL, revealed_at REAL,
+ UNIQUE(session_id,position)
+);
+CREATE TABLE IF NOT EXISTS vault_reward_claims (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, session_id INTEGER NOT NULL REFERENCES vault_sessions(id) ON DELETE CASCADE,
+ user_id INTEGER NOT NULL, type TEXT NOT NULL, amount INTEGER NOT NULL, ledger_id INTEGER NOT NULL, created_at REAL NOT NULL,
+ UNIQUE(session_id,user_id,type)
+);
 """
 
 
@@ -597,6 +633,7 @@ class AdminStore:
             'currency_ledger': {'holder_kind': "TEXT NOT NULL DEFAULT 'member' CHECK(holder_kind IN ('member','character'))"},
             'member_settings': {'spoken_moves': 'INTEGER NOT NULL DEFAULT 1 CHECK(spoken_moves IN (0,1))', 'spoken_veto': 'INTEGER NOT NULL DEFAULT 1 CHECK(spoken_veto IN (0,1))'},
             'model_usage': {'channel_id': 'INTEGER', 'feature': "TEXT NOT NULL DEFAULT ''"},
+            'vault_clues': {'revealed_at': 'REAL'},
         }.items():
             columns = {row[1] for row in self.db.execute(f'PRAGMA table_info({table})')}
             for name, spec in additions.items():

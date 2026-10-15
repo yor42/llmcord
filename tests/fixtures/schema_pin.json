@@ -14,6 +14,7 @@
 "CREATE INDEX spoken_phrases_member ON spoken_phrases(guild_id, user_id)",
 "CREATE INDEX turn_log_guild_time ON turn_log(guild_id, created_at)",
 "CREATE INDEX usage_guild_model_time ON model_usage(guild_id,profile,model,created_at)",
+"CREATE INDEX vault_sessions_active ON vault_sessions(guild_id,status,expires_at)",
 "CREATE TABLE admin_audit (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, actor_id INTEGER NOT NULL,\n action TEXT NOT NULL, detail_json TEXT NOT NULL, created_at REAL NOT NULL\n)",
 "CREATE TABLE ambient_activity (\n channel_id INTEGER PRIMARY KEY, message_count INTEGER NOT NULL DEFAULT 0,\n last_response REAL NOT NULL DEFAULT 0\n)",
 "CREATE TABLE avatar_assets (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, character_id INTEGER NOT NULL,\n slot_key TEXT NOT NULL, image_hash TEXT NOT NULL, channel_id INTEGER NOT NULL,\n message_id INTEGER NOT NULL, url TEXT NOT NULL, created_at REAL NOT NULL\n)",
@@ -73,6 +74,12 @@
 "CREATE TABLE trace (\n response_id INTEGER PRIMARY KEY, details_json TEXT NOT NULL\n)",
 "CREATE TABLE turn_log (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, channel_id INTEGER, message_id INTEGER,\n stage TEXT NOT NULL DEFAULT '', profile TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '',\n status TEXT NOT NULL DEFAULT '', reference_id TEXT NOT NULL DEFAULT '', error_detail TEXT NOT NULL DEFAULT '',\n request_text TEXT NOT NULL DEFAULT '', response_text TEXT NOT NULL DEFAULT '',\n input_tokens INTEGER, output_tokens INTEGER, created_at REAL NOT NULL\n)",
 "CREATE TABLE user_timezones (\n guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, timezone TEXT NOT NULL, updated_at REAL NOT NULL,\n PRIMARY KEY(guild_id,user_id)\n)",
+"CREATE TABLE vault_actions (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, session_id INTEGER NOT NULL REFERENCES vault_sessions(id) ON DELETE CASCADE,\n stage_id INTEGER NOT NULL REFERENCES vault_stages(id) ON DELETE CASCADE, number INTEGER NOT NULL, user_id INTEGER NOT NULL,\n guess TEXT NOT NULL, feedback_json TEXT NOT NULL, won INTEGER NOT NULL DEFAULT 0, action_key TEXT, created_at REAL NOT NULL,\n UNIQUE(session_id,number), UNIQUE(session_id,guess)\n)",
+"CREATE TABLE vault_clues (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, session_id INTEGER NOT NULL REFERENCES vault_sessions(id) ON DELETE CASCADE,\n position INTEGER NOT NULL, character_id INTEGER NOT NULL, kind TEXT NOT NULL, data_json TEXT NOT NULL, revealed_at REAL,\n UNIQUE(session_id,position)\n)",
+"CREATE TABLE vault_reward_claims (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, session_id INTEGER NOT NULL REFERENCES vault_sessions(id) ON DELETE CASCADE,\n user_id INTEGER NOT NULL, type TEXT NOT NULL, amount INTEGER NOT NULL, ledger_id INTEGER NOT NULL, created_at REAL NOT NULL,\n UNIQUE(session_id,user_id,type)\n)",
+"CREATE TABLE vault_sessions (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, channel_id INTEGER NOT NULL,\n kind TEXT NOT NULL DEFAULT 'personal', local_date TEXT NOT NULL, protocol TEXT NOT NULL, length INTEGER NOT NULL,\n status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','solved','failed','expired')),\n turn_budget INTEGER NOT NULL CHECK(turn_budget>=1), secret TEXT NOT NULL, open_digit TEXT, partners_json TEXT NOT NULL DEFAULT '[]',\n created_at REAL NOT NULL, expires_at REAL NOT NULL, finished_at REAL,\n UNIQUE(guild_id,user_id,local_date)\n)",
+"CREATE TABLE vault_settings (\n guild_id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),\n protocols_json TEXT NOT NULL DEFAULT '', turns_json TEXT NOT NULL DEFAULT '', reward INTEGER NOT NULL DEFAULT 0 CHECK(reward>=0),\n revision INTEGER NOT NULL DEFAULT 0, updated_at REAL NOT NULL DEFAULT 0\n)",
+"CREATE TABLE vault_stages (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, session_id INTEGER NOT NULL REFERENCES vault_sessions(id) ON DELETE CASCADE,\n number INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'active', turn_budget INTEGER NOT NULL, created_at REAL NOT NULL,\n UNIQUE(session_id,number)\n)",
 "CREATE TABLE webhooks (\n channel_id INTEGER NOT NULL, character_id INTEGER NOT NULL,\n webhook_id INTEGER NOT NULL, PRIMARY KEY(channel_id,character_id)\n)",
 "CREATE TRIGGER currency_ledger_no_delete BEFORE DELETE ON currency_ledger\nBEGIN SELECT RAISE(ABORT, 'The currency ledger is append-only.'); END",
 "CREATE TRIGGER currency_ledger_no_update BEFORE UPDATE ON currency_ledger\nBEGIN SELECT RAISE(ABORT, 'The currency ledger is append-only.'); END",
@@ -88,7 +95,8 @@
 "CREATE UNIQUE INDEX book_identity ON lorebook_entries(entry_key) WHERE entry_key<>''",
 "CREATE UNIQUE INDEX currency_ledger_reversal ON currency_ledger(reverses_id) WHERE reverses_id IS NOT NULL",
 "CREATE UNIQUE INDEX game_tables_open ON game_tables(guild_id,channel_id) WHERE status='open'",
-"CREATE UNIQUE INDEX lore_identity ON lore(entry_key) WHERE entry_key<>''"
+"CREATE UNIQUE INDEX lore_identity ON lore(entry_key) WHERE entry_key<>''",
+"CREATE UNIQUE INDEX vault_actions_key ON vault_actions(session_id,action_key) WHERE action_key IS NOT NULL"
 ],
 "legacy_v5": [
 "CREATE INDEX currency_ledger_holder ON currency_ledger(guild_id,holder_kind,user_id,id)",
@@ -105,6 +113,7 @@
 "CREATE INDEX spoken_phrases_member ON spoken_phrases(guild_id, user_id)",
 "CREATE INDEX turn_log_guild_time ON turn_log(guild_id, created_at)",
 "CREATE INDEX usage_guild_model_time ON model_usage(guild_id,profile,model,created_at)",
+"CREATE INDEX vault_sessions_active ON vault_sessions(guild_id,status,expires_at)",
 "CREATE TABLE admin_audit (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, actor_id INTEGER NOT NULL,\n action TEXT NOT NULL, detail_json TEXT NOT NULL, created_at REAL NOT NULL\n)",
 "CREATE TABLE ambient_activity (\n channel_id INTEGER PRIMARY KEY, message_count INTEGER NOT NULL DEFAULT 0,\n last_response REAL NOT NULL DEFAULT 0\n)",
 "CREATE TABLE avatar_assets (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, character_id INTEGER NOT NULL,\n slot_key TEXT NOT NULL, image_hash TEXT NOT NULL, channel_id INTEGER NOT NULL,\n message_id INTEGER NOT NULL, url TEXT NOT NULL, created_at REAL NOT NULL\n)",
@@ -164,6 +173,12 @@
 "CREATE TABLE trace (\n response_id INTEGER PRIMARY KEY, details_json TEXT NOT NULL\n)",
 "CREATE TABLE turn_log (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, channel_id INTEGER, message_id INTEGER,\n stage TEXT NOT NULL DEFAULT '', profile TEXT NOT NULL DEFAULT '', model TEXT NOT NULL DEFAULT '',\n status TEXT NOT NULL DEFAULT '', reference_id TEXT NOT NULL DEFAULT '', error_detail TEXT NOT NULL DEFAULT '',\n request_text TEXT NOT NULL DEFAULT '', response_text TEXT NOT NULL DEFAULT '',\n input_tokens INTEGER, output_tokens INTEGER, created_at REAL NOT NULL\n)",
 "CREATE TABLE user_timezones (\n guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, timezone TEXT NOT NULL, updated_at REAL NOT NULL,\n PRIMARY KEY(guild_id,user_id)\n)",
+"CREATE TABLE vault_actions (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, session_id INTEGER NOT NULL REFERENCES vault_sessions(id) ON DELETE CASCADE,\n stage_id INTEGER NOT NULL REFERENCES vault_stages(id) ON DELETE CASCADE, number INTEGER NOT NULL, user_id INTEGER NOT NULL,\n guess TEXT NOT NULL, feedback_json TEXT NOT NULL, won INTEGER NOT NULL DEFAULT 0, action_key TEXT, created_at REAL NOT NULL,\n UNIQUE(session_id,number), UNIQUE(session_id,guess)\n)",
+"CREATE TABLE vault_clues (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, session_id INTEGER NOT NULL REFERENCES vault_sessions(id) ON DELETE CASCADE,\n position INTEGER NOT NULL, character_id INTEGER NOT NULL, kind TEXT NOT NULL, data_json TEXT NOT NULL, revealed_at REAL,\n UNIQUE(session_id,position)\n)",
+"CREATE TABLE vault_reward_claims (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, session_id INTEGER NOT NULL REFERENCES vault_sessions(id) ON DELETE CASCADE,\n user_id INTEGER NOT NULL, type TEXT NOT NULL, amount INTEGER NOT NULL, ledger_id INTEGER NOT NULL, created_at REAL NOT NULL,\n UNIQUE(session_id,user_id,type)\n)",
+"CREATE TABLE vault_sessions (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, channel_id INTEGER NOT NULL,\n kind TEXT NOT NULL DEFAULT 'personal', local_date TEXT NOT NULL, protocol TEXT NOT NULL, length INTEGER NOT NULL,\n status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','solved','failed','expired')),\n turn_budget INTEGER NOT NULL CHECK(turn_budget>=1), secret TEXT NOT NULL, open_digit TEXT, partners_json TEXT NOT NULL DEFAULT '[]',\n created_at REAL NOT NULL, expires_at REAL NOT NULL, finished_at REAL,\n UNIQUE(guild_id,user_id,local_date)\n)",
+"CREATE TABLE vault_settings (\n guild_id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),\n protocols_json TEXT NOT NULL DEFAULT '', turns_json TEXT NOT NULL DEFAULT '', reward INTEGER NOT NULL DEFAULT 0 CHECK(reward>=0),\n revision INTEGER NOT NULL DEFAULT 0, updated_at REAL NOT NULL DEFAULT 0\n)",
+"CREATE TABLE vault_stages (\n id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, session_id INTEGER NOT NULL REFERENCES vault_sessions(id) ON DELETE CASCADE,\n number INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'active', turn_budget INTEGER NOT NULL, created_at REAL NOT NULL,\n UNIQUE(session_id,number)\n)",
 "CREATE TABLE webhooks (\n channel_id INTEGER NOT NULL, character_id INTEGER NOT NULL,\n webhook_id INTEGER NOT NULL, PRIMARY KEY(channel_id,character_id)\n)",
 "CREATE TRIGGER currency_ledger_no_delete BEFORE DELETE ON currency_ledger\nBEGIN SELECT RAISE(ABORT, 'The currency ledger is append-only.'); END",
 "CREATE TRIGGER currency_ledger_no_update BEFORE UPDATE ON currency_ledger\nBEGIN SELECT RAISE(ABORT, 'The currency ledger is append-only.'); END",
@@ -179,6 +194,7 @@
 "CREATE UNIQUE INDEX book_identity ON lorebook_entries(entry_key) WHERE entry_key<>''",
 "CREATE UNIQUE INDEX currency_ledger_reversal ON currency_ledger(reverses_id) WHERE reverses_id IS NOT NULL",
 "CREATE UNIQUE INDEX game_tables_open ON game_tables(guild_id,channel_id) WHERE status='open'",
-"CREATE UNIQUE INDEX lore_identity ON lore(entry_key) WHERE entry_key<>''"
+"CREATE UNIQUE INDEX lore_identity ON lore(entry_key) WHERE entry_key<>''",
+"CREATE UNIQUE INDEX vault_actions_key ON vault_actions(session_id,action_key) WHERE action_key IS NOT NULL"
 ]
 }

@@ -43,7 +43,7 @@ class V18UpgradeTests(unittest.TestCase):
             path = self.v18_file(folder)
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 24)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 25)
                 self.assertIn("play_style", columns(store.db))
                 rows = store.all("SELECT name, play_style FROM characters ORDER BY name")
                 self.assertEqual([tuple(r) for r in rows], [("Ann", ""), ("Bo", "")])
@@ -73,7 +73,7 @@ class V18UpgradeTests(unittest.TestCase):
                 db.execute("PRAGMA user_version=18")
             store = Store(path)
             try:
-                self.assertEqual(store.one("PRAGMA user_version")[0], 24)
+                self.assertEqual(store.one("PRAGMA user_version")[0], 25)
                 self.assertIn("play_style", columns(store.db))
             finally:
                 store.close()
@@ -81,7 +81,7 @@ class V18UpgradeTests(unittest.TestCase):
     def test_fresh_database_is_current_version_with_the_column(self):
         store = Store()
         try:
-            self.assertEqual(store.one("PRAGMA user_version")[0], 24)
+            self.assertEqual(store.one("PRAGMA user_version")[0], 25)
             self.assertIn("play_style", columns(store.db))
         finally:
             store.close()
