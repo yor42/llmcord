@@ -1866,6 +1866,29 @@ msgid "The Vault reward must be a whole number from 0 to {limit:,}."
 msgstr "금고 보상은 0부터 {limit:,}까지의 정수여야 해요."
 
 #: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Partner advice per vault must be a whole number from 0 to {limit}."
+msgstr "금고당 파트너 조언 횟수는 0부터 {limit}까지의 정수여야 해요."
+
+#: llmcord_core/i18n/codes.py
+msgid "Choose the template or the model as the clue voice."
+msgstr "단서 말투는 기본 문구와 모델 중에서 골라 주세요."
+
+#: llmcord_core/i18n/codes.py
+msgid "Only a partner you chose for this vault can give advice."
+msgstr "이 금고에서 고른 파트너만 조언할 수 있어요."
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "This vault allows at most {limit} pieces of partner advice, and they are used up."
+msgstr "이 금고에서는 파트너 조언을 최대 {limit}번까지 받을 수 있는데, 모두 사용했어요."
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "This server has used up its {limit} character talk calls for today. Try again tomorrow."
+msgstr "이 서버는 오늘 캐릭터 대화 {limit}회를 모두 사용했어요. 내일 다시 시도해 주세요."
+
+#: llmcord_core/i18n/codes.py
 msgid "The Vault settings were changed elsewhere. Reload the page and try again."
 msgstr "금고 설정이 다른 곳에서 바뀌었어요. 페이지를 새로고침한 뒤 다시 시도해 주세요."
 

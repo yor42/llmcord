@@ -256,7 +256,8 @@ INSERT OR IGNORE INTO model_roles(id) VALUES(1);
 CREATE TABLE IF NOT EXISTS vault_settings (
  guild_id INTEGER PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),
  protocols_json TEXT NOT NULL DEFAULT '', turns_json TEXT NOT NULL DEFAULT '', reward INTEGER NOT NULL DEFAULT 0 CHECK(reward>=0),
- revision INTEGER NOT NULL DEFAULT 0, updated_at REAL NOT NULL DEFAULT 0
+ revision INTEGER NOT NULL DEFAULT 0, updated_at REAL NOT NULL DEFAULT 0,
+ advice_cap INTEGER NOT NULL DEFAULT 6 CHECK(advice_cap BETWEEN 0 AND 50), clue_voice TEXT NOT NULL DEFAULT 'template' CHECK(clue_voice IN ('template','llm'))
 );
 CREATE TABLE IF NOT EXISTS vault_sessions (
  id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, user_id INTEGER NOT NULL, channel_id INTEGER NOT NULL,
@@ -287,6 +288,13 @@ CREATE TABLE IF NOT EXISTS vault_tool_uses (
 );
 CREATE INDEX IF NOT EXISTS vault_tool_uses_session ON vault_tool_uses(guild_id,session_id,id);
 CREATE UNIQUE INDEX IF NOT EXISTS vault_tool_uses_key ON vault_tool_uses(session_id,action_key) WHERE action_key IS NOT NULL;
+CREATE TABLE IF NOT EXISTS vault_advice (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, session_id INTEGER NOT NULL REFERENCES vault_sessions(id) ON DELETE CASCADE,
+ user_id INTEGER NOT NULL, character_id INTEGER NOT NULL, guess TEXT NOT NULL, remaining INTEGER NOT NULL,
+ source TEXT NOT NULL CHECK(source IN ('llm','template')), text TEXT, action_key TEXT, created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS vault_advice_session ON vault_advice(guild_id,session_id,id);
+CREATE UNIQUE INDEX IF NOT EXISTS vault_advice_key ON vault_advice(session_id,action_key) WHERE action_key IS NOT NULL;
 CREATE TABLE IF NOT EXISTS vault_clues (
  id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, session_id INTEGER NOT NULL REFERENCES vault_sessions(id) ON DELETE CASCADE,
  position INTEGER NOT NULL, character_id INTEGER NOT NULL, kind TEXT NOT NULL, data_json TEXT NOT NULL, revealed_at REAL,
@@ -642,6 +650,7 @@ class AdminStore:
             'member_settings': {'spoken_moves': 'INTEGER NOT NULL DEFAULT 1 CHECK(spoken_moves IN (0,1))', 'spoken_veto': 'INTEGER NOT NULL DEFAULT 1 CHECK(spoken_veto IN (0,1))'},
             'model_usage': {'channel_id': 'INTEGER', 'feature': "TEXT NOT NULL DEFAULT ''"},
             'vault_clues': {'revealed_at': 'REAL'},
+            'vault_settings': {'advice_cap': 'INTEGER NOT NULL DEFAULT 6', 'clue_voice': "TEXT NOT NULL DEFAULT 'template'"},
         }.items():
             columns = {row[1] for row in self.db.execute(f'PRAGMA table_info({table})')}
             for name, spec in additions.items():

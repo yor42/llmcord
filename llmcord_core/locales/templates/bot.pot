@@ -2949,6 +2949,22 @@ msgid "Digit {position} is low (0 to 4)."
 msgstr ""
 
 #: llmcord_core/vault_discord.py
+msgid "a deleted character"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "{name}: {fact}"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "{name} suggests {guess}. {count} code is still possible."
+msgid_plural "{name} suggests {guess}. {count} codes are still possible."
+msgstr[0] ""
+msgstr[1] ""
+
+#: llmcord_core/vault_discord.py
 #, python-brace-format
 msgid "Of the digits {a} and {b}, none is in the code."
 msgstr ""
@@ -2976,11 +2992,6 @@ msgstr ""
 #: llmcord_core/vault_discord.py
 #, python-brace-format
 msgid "Digit {position} is {digit}."
-msgstr ""
-
-#: llmcord_core/vault_discord.py
-#, python-brace-format
-msgid "{name}: {fact}"
 msgstr ""
 
 #: llmcord_core/vault_discord.py
@@ -3018,10 +3029,6 @@ msgid "Open digit: {digit}"
 msgstr ""
 
 #: llmcord_core/vault_discord.py
-msgid "a deleted character"
-msgstr ""
-
-#: llmcord_core/vault_discord.py
 #, python-brace-format
 msgid "Partners: {names}"
 msgstr ""
@@ -3034,6 +3041,10 @@ msgstr ""
 #: llmcord_core/vault_discord.py
 #, python-brace-format
 msgid "Clue from {name}: {text}"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgid "Partner advice:"
 msgstr ""
 
 #: llmcord_core/vault_discord.py
@@ -3063,6 +3074,17 @@ msgstr ""
 #: llmcord_core/vault_discord.py
 msgctxt "button.vault"
 msgid "Tools"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgctxt "button.vault"
+msgid "Ask {name}"
+msgstr ""
+
+#: llmcord_core/vault_discord.py
+msgctxt "button.vault"
+msgid "Strategy meeting"
 msgstr ""
 
 #: llmcord_core/vault_discord.py

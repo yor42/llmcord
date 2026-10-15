@@ -6,17 +6,22 @@ layer takes input and builds the words. The secret is shown only from a terminal
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+import re
 import time
 from types import SimpleNamespace
 
 import discord
 from discord import app_commands
 
+from . import game_chooser
 from .errors import error_detail
+from .models import TurnMessage
 from .names import resolve, suggest
+from .usage import capture_usage, log_purpose, log_scope
 from .vault import CountEven, CountLow, DigitPresent, PositionHalf, PositionParity
-from .vault import TOOLS
+from .vault import TOOLS, build_advice_facts
 from .vault_store import MAX_TOOLS, VaultStoreError
 from llmcord_core import i18n, items
 from llmcord_core.i18n import N_, NP_, UserError, codes
@@ -30,6 +35,17 @@ SOMETHING_WRONG = N_('Something went wrong with the vault. Try again.')
 TOOL_REASONS = {'bad_position': N_('Choose a position from 1 to 4.'), 'bad_digit': N_('Choose a single digit from 0 to 9.'), 'digits_equal': N_('Choose two different digits.'),
                 'guess_not_in_history': N_('Choose one of your own guesses.'), 'digit_not_in_guess': N_('That digit is not in that guess.'),
                 'nothing_new': N_('That guess has no new strike to show.'), 'already_revealed': N_('That position is already revealed.')}
+ADVICE_SECONDS = 20
+MAX_WORDING = 200
+DIGIT_RUNS = re.compile(r'\d+')
+ADVICE_SYSTEM = ('You are {name}, a partner helping a friend open a four-digit vault in a roleplay server. Stay in character.\n{persona}\n'
+                 'Answer with one or two short sentences, at most ' + str(MAX_WORDING) + ' characters. Do not mention anyone with @. Return only JSON.')
+ADVICE_USER = ('The recommended guess is {guess}.{remaining} Tell your friend to try {guess}, in your own words. '
+               'Write the guess exactly as given and use no other numbers.')
+ADVICE_COUNT = ' About {remaining} codes are still possible.'
+CLUE_USER = ('You pass on this clue about the vault code: "{text}" Say it in your own words in one short sentence. '
+             'Keep every number exactly as given and add no other numbers.')
+LINE_SCHEMA = {'type': 'object', 'properties': {'line': {'type': 'string'}}, 'required': ['line'], 'additionalProperties': False}
 PROTOCOLS = {'standard': NP_('vault protocol', 'Standard'), 'total_match': NP_('vault protocol', 'Total Match'),
              'position_only': NP_('vault protocol', 'Position-Only'), 'open': NP_('vault protocol', 'Open')}
 STATUSES = {'active': NP_('vault status', 'In progress'), 'solved': NP_('vault status', 'Solved'),
@@ -58,6 +74,19 @@ def clue_text(clue, *, t=None) -> str:
     if isinstance(clue, PositionHalf):
         return t('Digit {position} is high (5 to 9).', position=clue.position) if clue.high else t('Digit {position} is low (0 to 4).', position=clue.position)
     return ''
+
+
+def advice_line(entry: dict, t) -> str:
+    """One piece of advice: the model's wording (shown as written, never translated) or the template line that names the guess."""
+    name = entry['name'] or t('a deleted character')
+    if entry['source'] == 'llm' and entry['text']:
+        return t('{name}: {fact}', name=name, fact=entry['text'][:MAX_WORDING])
+    return t.n('{name} suggests {guess}. {count} code is still possible.', '{name} suggests {guess}. {count} codes are still possible.',
+               entry['remaining'], name=name, guess=entry['guess'])
+
+
+def clue_wording_ok(wording, template: str) -> bool:
+    return isinstance(wording, str) and bool(wording.strip()) and set(DIGIT_RUNS.findall(wording)) == set(DIGIT_RUNS.findall(template))
 
 
 def tool_name(key: str, t) -> str:
@@ -115,6 +144,9 @@ def render_main(view: dict, *, t=None, tools_held: int = 0) -> str:
         for clue in view['clues']:
             if 'constraint' in clue:
                 lines.append(t('Clue from {name}: {text}', name=clue['name'] or deleted, text=clue_text(clue['constraint'], t=t)))
+    if view['advice']:
+        lines.append(t('Partner advice:'))
+        lines += [advice_line(entry, t) for entry in view['advice']]
     if view['guesses']:
         lines.append(t('Guesses:'))
         lines += [t('{n}. {guess} — {feedback}', n=g['number'], guess=g['guess'], feedback=feedback_text(protocol, g['feedback'], t=t)) for g in view['guesses']]
@@ -134,6 +166,11 @@ def render_buttons(view: dict, *, t=None, tools_held: int = 0):
         buttons.add_item(VaultButton('clue', view['id'], t.p('button.vault', 'Reveal clue'), discord.ButtonStyle.secondary))
     if tools_held > 0:
         buttons.add_item(VaultButton('tools', view['id'], t.p('button.vault', 'Tools'), discord.ButtonStyle.secondary))
+    asked = [p for p in view['partners'] if p['name']]
+    for partner in asked:
+        buttons.add_item(VaultButton(f"ask_{partner['character_id']}", view['id'], t.p('button.vault', 'Ask {name}', name=partner['name'])[:80]))
+    if len(view['partners']) == 2 and len(asked) == 2:
+        buttons.add_item(VaultButton('meeting', view['id'], t.p('button.vault', 'Strategy meeting')))
     return buttons
 
 
@@ -165,7 +202,7 @@ def guess_log(result: dict, currency: str, *, t=None) -> str:
     return '\n'.join(lines)
 
 
-class VaultButton(discord.ui.DynamicItem[discord.ui.Button], template=PREFIX + r':(?P<action>[a-z_]+):(?P<session>\d+)'):
+class VaultButton(discord.ui.DynamicItem[discord.ui.Button], template=PREFIX + r':(?P<action>[a-z0-9_]+):(?P<session>\d+)'):
     """One button; its custom_id carries the action and the session, never a member or the code."""
 
     def __init__(self, action: str, session_id: int, label: str = '', style=discord.ButtonStyle.secondary, disabled: bool = False):
@@ -243,12 +280,14 @@ class VaultPlay:
         held = {key: self.store.item_qty(interaction.guild_id, interaction.user.id, key) for key in TOOLS}
         return {key: qty for key, qty in held.items() if qty > 0}
 
-    async def _show(self, interaction, view: dict, t, *, edit: bool, picker: bool = False) -> None:
+    async def _show(self, interaction, view: dict, t, *, edit: bool, picker: bool = False, original: bool = False) -> None:
         held = self._held(interaction)
         text = render_main(view, t=t, tools_held=sum(held.values()))
         buttons = render_picker(view, held, t=t) if picker else render_buttons(view, t=t, tools_held=sum(held.values()))
         try:
-            if edit:
+            if original:
+                await interaction.edit_original_response(content=text, view=buttons, allowed_mentions=NO_MENTIONS)
+            elif edit:
                 await interaction.response.edit_message(content=text, view=buttons, allowed_mentions=NO_MENTIONS)
             else:
                 extra = {} if buttons is None else {'view': buttons}
@@ -342,6 +381,8 @@ class VaultPlay:
             return await self._show(interaction, view, t, edit=True)
         if action == 'tools' or action.startswith('use_'):
             return await self._press_tool(interaction, action, view, t)
+        if action == 'meeting' or (action.startswith('ask_') and action[4:].isascii() and action[4:].isdigit()):
+            return await self._press_advice(interaction, action, view, t)
         if action != 'clue':
             return await self.say(interaction, t.error(VaultStoreError(codes.VAULT_NOT_FOUND)))
         hidden = next((c['position'] for c in view['clues'] if not c['revealed']), None)
@@ -354,9 +395,120 @@ class VaultPlay:
             except VaultStoreError as error:
                 refused = error
         view = self.store.vault_session(gid, uid, session_id, now=self.clock())
-        await self._show(interaction, view, t, edit=True)
+        voiced = deferred = None
+        if refused is None and hidden is not None and self.store.vault_settings(gid)['clue_voice'] == 'llm':
+            entry = next((c for c in view['clues'] if c['position'] == hidden and c.get('constraint') is not None), None)
+            if entry is not None:
+                if not await self._defer(interaction):
+                    return
+                deferred = True
+                try:
+                    voiced = await self._voice_clue(interaction, entry)
+                except Exception as error:
+                    logging.error('Vault clue voice failed: %s', type(error).__name__)
+        await self._show(interaction, view, t, edit=True, original=bool(deferred))
+        if voiced:
+            await self.say(interaction, t('{name}: {fact}', name=entry['name'] or t('a deleted character'), fact=voiced))
         if refused is not None:
             await self.say(interaction, t.error(refused))
+
+    @staticmethod
+    async def _defer(interaction) -> bool:
+        """Acknowledge a press that will wait on the model; False (nothing may be spent) when Discord did not take it."""
+        try:
+            await interaction.response.defer()
+        except discord.HTTPException as error:
+            logging.warning('Vault could not acknowledge the press: %s', type(error).__name__)
+        return interaction.response.is_done()
+
+    async def _word(self, interaction, character_id: int, user_text: str, *, record: bool = False) -> tuple[str | None, list]:
+        """One structured model call that only words public facts: (wording or None, captured usage records). None on any failure or empty
+        answer (the caller keeps its template). Call inside a backend pin. The capture has no guild, so the gateway keeps the spend total but
+        leaves the model_usage row to the caller (the store inserts it with the advice, or ``record`` lets the gateway write it)."""
+        character = self.store.character_by_id(character_id)
+        if character is None or character['guild_id'] != interaction.guild_id:
+            return None, []
+        system = ADVICE_SYSTEM.format(name=character['name'], persona=game_chooser.persona(character))
+        request = SimpleNamespace(messages=[TurnMessage('system', system), TurnMessage('user', user_text)])
+        guild = interaction.guild_id if record else None
+        records = []
+        try:
+            with capture_usage(guild, interaction.channel_id, 'game') as records, log_scope(None), log_purpose('game'):
+                answer = await asyncio.wait_for(self.bot.models.structured_compiled(game_chooser.ROLE, request, 'vault_advice', LINE_SCHEMA), ADVICE_SECONDS)
+        except Exception as error:
+            logging.info('Vault wording failed, using the template: %s', type(error).__name__)
+            return None, records
+        line = next((v for v in answer.values() if isinstance(v, str)), None) if isinstance(answer, dict) else None
+        return game_chooser.clean_line(line)[:MAX_WORDING] or None, records
+
+    async def _voice_clue(self, interaction, entry: dict) -> str | None:
+        template = clue_text(entry['constraint'])
+        gid = interaction.guild_id
+        if self.store.game_talk_calls_today(gid, self.clock()) + 1 > self.store.game_talk_daily_limit(gid):
+            return None
+        with self.bot.backend.pin():
+            wording, _ = await self._word(interaction, entry['character_id'], CLUE_USER.format(text=template), record=True)
+        return wording if clue_wording_ok(wording, template) else None
+
+    def _advice_facts(self, view: dict, character_id: int):
+        style = self.store.resolved_play_style(view['guild_id'], character_id)
+        return build_advice_facts(view['constraints'], view['protocol'], view['length'], risk=style.risk, aggression=style.aggression,
+                                  unpredictability=style.unpredictability, seed=f"vault-advice/{view['id']}/{character_id}/{view['turns_used']}")
+
+    def _precheck_advice(self, view: dict, count: int) -> None:
+        """The store's cap and talk checks, ahead of any model call, so a refused press asks nothing."""
+        gid = view['guild_id']
+        cap = self.store.vault_settings(gid)['advice_cap']
+        if len(view['advice']) + count > cap:
+            raise VaultStoreError(codes.VAULT_ADVICE_LIMIT, limit=cap)
+        limit = self.store.game_talk_daily_limit(gid)
+        if self.store.game_talk_calls_today(gid, self.clock()) + count > limit:
+            raise VaultStoreError(codes.VAULT_ADVICE_TALK_LIMIT, limit=limit)
+
+    async def _press_advice(self, interaction, action: str, view: dict, t) -> None:
+        gid, uid, sid, iid = interaction.guild_id, interaction.user.id, view['id'], str(interaction.id)
+        if view['status'] != 'active':
+            await self._show(interaction, view, t, edit=True)
+            return await self.say(interaction, t.error(VaultStoreError(codes.VAULT_NOT_ACTIVE)))
+        partner_ids = [p['character_id'] for p in view['partners']]
+        asked = partner_ids if action == 'meeting' else [int(action[4:])]
+        if action == 'meeting' and len(partner_ids) < 2 or any(c not in partner_ids for c in asked):
+            return await self.say(interaction, t.error(VaultStoreError(codes.VAULT_ADVICE_NOT_PARTNER)))
+        replayed = self.store.vault_advice_replayed(gid, sid, iid, meeting=action == 'meeting')
+        if not replayed:
+            try:
+                self._precheck_advice(view, len(asked))
+            except VaultStoreError as error:
+                return await self.say(interaction, t.error(error))
+            if not await self._defer(interaction):
+                return
+        try:
+            texts, usage = {}, {}
+            if not replayed:
+                facts = {c: self._advice_facts(view, c) for c in asked}
+                prompts = {c: ADVICE_USER.format(guess=facts[c].guess, remaining=ADVICE_COUNT.format(remaining=facts[c].remaining)
+                                                 if len(str(facts[c].remaining)) < len(facts[c].guess) else '') for c in asked}
+                with self.bot.backend.pin():
+                    words = await asyncio.gather(*(self._word(interaction, c, prompts[c]) for c in asked))
+                texts = {c: w[0] for c, w in zip(asked, words)}
+                usage = {c: w[1] for c, w in zip(asked, words)}
+            try:
+                if action == 'meeting':
+                    entries = self.store.record_vault_meeting(gid, uid, sid, texts=texts, usage=usage, action_key=iid, now=self.clock())
+                else:
+                    entries = [self.store.record_vault_advice(gid, uid, sid, asked[0], text=texts.get(asked[0]), usage=usage.get(asked[0]), action_key=iid, now=self.clock())]
+            except VaultStoreError as error:
+                if error.code == codes.VAULT_NOT_ACTIVE:
+                    try:
+                        await self._show(interaction, self.store.vault_session(gid, uid, sid, now=self.clock()), t, edit=True, original=not replayed)
+                    except VaultStoreError:
+                        pass
+                return await self.say(interaction, t.error(error))
+            await self._show(interaction, self.store.vault_session(gid, uid, sid, now=self.clock()), t, edit=True, original=not replayed)
+            await self.say(interaction, '\n'.join(advice_line(entry, t) for entry in entries))
+        except Exception as error:
+            logging.error('Vault advice failed: %s', type(error).__name__)
+            await self.say(interaction, t(SOMETHING_WRONG))
 
     async def _press_tool(self, interaction, action: str, view: dict, t) -> None:
         key = action[4:]

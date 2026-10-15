@@ -2954,6 +2954,21 @@ msgid "Digit {position} is low (0 to 4)."
 msgstr "{position}번째 숫자는 낮아요(0~4)."
 
 #: llmcord_core/vault_discord.py
+msgid "a deleted character"
+msgstr "삭제된 캐릭터"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "{name}: {fact}"
+msgstr "{name}: {fact}"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgid "{name} suggests {guess}. {count} code is still possible."
+msgid_plural "{name} suggests {guess}. {count} codes are still possible."
+msgstr[0] "{name}의 추천은 {guess}예요. 가능한 코드는 아직 {count}개 남아 있어요."
+
+#: llmcord_core/vault_discord.py
 #, python-brace-format
 msgid "Of the digits {a} and {b}, none is in the code."
 msgstr "숫자 {a}와 {b} 중 코드에 있는 숫자는 없어요."
@@ -2982,11 +2997,6 @@ msgstr "추측 {guess}에는 자리가 맞는 숫자가 없어요."
 #, python-brace-format
 msgid "Digit {position} is {digit}."
 msgstr "{position}번째 숫자는 {digit}이에요."
-
-#: llmcord_core/vault_discord.py
-#, python-brace-format
-msgid "{name}: {fact}"
-msgstr "{name}: {fact}"
 
 #: llmcord_core/vault_discord.py
 #, python-brace-format
@@ -3023,10 +3033,6 @@ msgid "Open digit: {digit}"
 msgstr "공개된 숫자: {digit}"
 
 #: llmcord_core/vault_discord.py
-msgid "a deleted character"
-msgstr "삭제된 캐릭터"
-
-#: llmcord_core/vault_discord.py
 #, python-brace-format
 msgid "Partners: {names}"
 msgstr "파트너: {names}"
@@ -3040,6 +3046,10 @@ msgstr "확인한 단서: {total}개 중 {n}개"
 #, python-brace-format
 msgid "Clue from {name}: {text}"
 msgstr "{name}의 단서: {text}"
+
+#: llmcord_core/vault_discord.py
+msgid "Partner advice:"
+msgstr "파트너 조언:"
 
 #: llmcord_core/vault_discord.py
 msgid "Guesses:"
@@ -3069,6 +3079,17 @@ msgstr "단서 보기"
 msgctxt "button.vault"
 msgid "Tools"
 msgstr "금고 도구"
+
+#: llmcord_core/vault_discord.py
+#, python-brace-format
+msgctxt "button.vault"
+msgid "Ask {name}"
+msgstr "{name}에게 묻기"
+
+#: llmcord_core/vault_discord.py
+msgctxt "button.vault"
+msgid "Strategy meeting"
+msgstr "작전 회의"
 
 #: llmcord_core/vault_discord.py
 #, python-brace-format

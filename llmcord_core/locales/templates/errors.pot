@@ -1858,6 +1858,29 @@ msgid "The Vault reward must be a whole number from 0 to {limit:,}."
 msgstr ""
 
 #: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "Partner advice per vault must be a whole number from 0 to {limit}."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Choose the template or the model as the clue voice."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+msgid "Only a partner you chose for this vault can give advice."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "This vault allows at most {limit} pieces of partner advice, and they are used up."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
+#, python-brace-format
+msgid "This server has used up its {limit} character talk calls for today. Try again tomorrow."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
 msgid "The Vault settings were changed elsewhere. Reload the page and try again."
 msgstr ""
 

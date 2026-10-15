@@ -143,7 +143,7 @@ class ToolButtonTests(ToolUiCase):
         await self.personal(partner="Ann")
         self.give(SPECTRUM)
         again = await self.personal()
-        self.assertEqual(self.labels(again), ["Guess", "Reveal clue", "Tools"])
+        self.assertEqual(self.labels(again), ["Guess", "Reveal clue", "Tools", "Ask Ann"])
 
     async def test_an_ended_vault_has_no_tools_button(self):
         """FEAT-64: once the vault is solved or failed there are no buttons, tools or not."""

@@ -12,7 +12,7 @@ Revision conflicts raise ``admin_store.ConflictError``.
 
   Settings (own table ``vault_settings``; one row per guild, defaults when absent)
     vault_settings(guild_id) -> {"enabled": False, "protocols": ["standard", "open"], "turns": dict(DEFAULT_TURNS),
-                                 "reward": 0, "revision": 0}
+                                 "reward": 0, "revision": 0, "advice_cap": 6, "clue_voice": "template"}
     set_vault_settings(guild_id, *, enabled=None, protocols=None, turns=None, reward=None, expected_revision=None) -> new dict
         None leaves a field alone; revision +1 per successful call; expected_revision mismatch -> ConflictError, nothing written.
         protocols: non-empty subset of vault.PROTOCOLS (stored in PROTOCOLS order). turns: {protocol: int 1..30}, merged over the
@@ -149,7 +149,7 @@ class SettingsTests(unittest.TestCase):
 
     def test_defaults_are_off_standard_and_open_with_engine_budgets_and_no_reward(self):
         settings = self.store.vault_settings(G)
-        self.assertEqual(settings, {"enabled": False, "protocols": ["standard", "open"], "turns": dict(DEFAULT_TURNS), "reward": 0, "revision": 0})
+        self.assertEqual(settings, {"enabled": False, "protocols": ["standard", "open"], "turns": dict(DEFAULT_TURNS), "reward": 0, "revision": 0, "advice_cap": 6, "clue_voice": "template"})
 
     def test_save_reads_back_bumps_revision_and_leaves_other_fields(self):
         first = self.store.set_vault_settings(G, enabled=True, reward=25)
@@ -189,7 +189,7 @@ class SettingsTests(unittest.TestCase):
 
     def test_settings_are_per_guild(self):
         self.store.set_vault_settings(G, enabled=True, reward=7)
-        self.assertEqual(self.store.vault_settings(G2), {"enabled": False, "protocols": ["standard", "open"], "turns": dict(DEFAULT_TURNS), "reward": 0, "revision": 0})
+        self.assertEqual(self.store.vault_settings(G2), {"enabled": False, "protocols": ["standard", "open"], "turns": dict(DEFAULT_TURNS), "reward": 0, "revision": 0, "advice_cap": 6, "clue_voice": "template"})
 
 
 class SessionTests(VaultCase):

@@ -18,8 +18,8 @@ from zoneinfo import ZoneInfo
 from .admin_store import ConflictError
 from .i18n import UserError, codes
 from .items_store import NotHeld
-from .vault import (DEFAULT_LENGTH, DEFAULT_TURNS, PROTOCOLS, TOOLS, CountEven, CountLow, DigitAt, DigitPresent, GuessResult, OpenDigit, PairCount,
-                    PositionHalf, PositionParity, ToolResult, VaultError, check_guess, evaluate_tool, feedback, filter_candidates, is_redundant, make_clues,
+from .vault import (ADVICE_TEMPLATE_KEY, DEFAULT_LENGTH, DEFAULT_TURNS, PROTOCOLS, TOOLS, CountEven, CountLow, DigitAt, DigitPresent, GuessResult, OpenDigit, PairCount,
+                    PositionHalf, PositionParity, ToolResult, VaultError, build_advice_facts, check_guess, check_wording, evaluate_tool, feedback, filter_candidates, is_redundant, make_clues,
                     open_digit, played, random_secret, tool_fits)
 
 MAX_PARTNERS = 2
@@ -29,6 +29,8 @@ HISTORY_MAX = 50
 CLUE_KINDS = {c.__name__: c for c in (CountEven, CountLow, DigitPresent, PositionHalf, PositionParity)}
 TOOL_CONSTRAINTS = {c.__name__: c for c in (DigitAt, DigitPresent, GuessResult, PairCount, PositionHalf)}
 MAX_TOOLS = 2
+MAX_ADVICE_CAP = 50
+CLUE_VOICES = ('template', 'llm')
 GUESS_CODES = {'guess_length': codes.VAULT_GUESS_LENGTH, 'guess_not_digits': codes.VAULT_GUESS_NOT_DIGITS, 'guess_repeated_digit': codes.VAULT_GUESS_REPEATED_DIGIT}
 
 
@@ -45,9 +47,10 @@ class VaultStore:
             protocols = [p for p in PROTOCOLS if p in stored] if stored else protocols
             turns = {k: v for k, v in json.loads(row['turns_json'] or '{}').items() if k in PROTOCOLS}
         return {'enabled': bool(row['enabled']) if row else False, 'protocols': protocols, 'turns': {**DEFAULT_TURNS, **turns},
-                'reward': row['reward'] if row else 0, 'revision': row['revision'] if row else 0}
+                'reward': row['reward'] if row else 0, 'revision': row['revision'] if row else 0,
+                'advice_cap': row['advice_cap'] if row else 6, 'clue_voice': row['clue_voice'] if row else 'template'}
 
-    def set_vault_settings(self, guild_id, *, enabled=None, protocols=None, turns=None, reward=None, expected_revision=None):
+    def set_vault_settings(self, guild_id, *, enabled=None, protocols=None, turns=None, reward=None, advice_cap=None, clue_voice=None, expected_revision=None):
         if enabled is not None and not isinstance(enabled, bool):
             raise UserError(codes.VAULT_SETTINGS_FLAG)
         if protocols is not None and (not isinstance(protocols, (list, tuple)) or not protocols or not all(isinstance(p, str) and p in PROTOCOLS for p in protocols)):
@@ -56,6 +59,10 @@ class VaultStore:
             raise UserError(codes.VAULT_SETTINGS_TURNS, low=1, high=MAX_TURNS)
         if reward is not None and (isinstance(reward, bool) or not isinstance(reward, int) or not 0 <= reward <= self.MAX_CURRENCY_CHANGE):
             raise UserError(codes.VAULT_SETTINGS_REWARD, limit=self.MAX_CURRENCY_CHANGE)
+        if advice_cap is not None and (isinstance(advice_cap, bool) or not isinstance(advice_cap, int) or not 0 <= advice_cap <= MAX_ADVICE_CAP):
+            raise UserError(codes.VAULT_SETTINGS_ADVICE_CAP, limit=MAX_ADVICE_CAP)
+        if clue_voice is not None and (not isinstance(clue_voice, str) or clue_voice not in CLUE_VOICES):
+            raise UserError(codes.VAULT_SETTINGS_CLUE_VOICE)
         with self.write_admin():
             current = self.vault_settings(guild_id)
             row = self.one('SELECT turns_json FROM vault_settings WHERE guild_id=?', (guild_id,))
@@ -65,11 +72,13 @@ class VaultStore:
             new = {'enabled': current['enabled'] if enabled is None else enabled,
                    'protocols': current['protocols'] if protocols is None else [p for p in PROTOCOLS if p in protocols],
                    'turns': overrides if turns is None else {**overrides, **turns},
-                   'reward': current['reward'] if reward is None else reward, 'revision': current['revision'] + 1}
-            self.db.execute('INSERT INTO vault_settings(guild_id,enabled,protocols_json,turns_json,reward,revision,updated_at) VALUES(?,?,?,?,?,?,?) '
+                   'reward': current['reward'] if reward is None else reward, 'revision': current['revision'] + 1,
+                   'advice_cap': current['advice_cap'] if advice_cap is None else advice_cap, 'clue_voice': current['clue_voice'] if clue_voice is None else clue_voice}
+            self.db.execute('INSERT INTO vault_settings(guild_id,enabled,protocols_json,turns_json,reward,revision,updated_at,advice_cap,clue_voice) VALUES(?,?,?,?,?,?,?,?,?) '
                 'ON CONFLICT(guild_id) DO UPDATE SET enabled=excluded.enabled,protocols_json=excluded.protocols_json,turns_json=excluded.turns_json,'
-                'reward=excluded.reward,revision=excluded.revision,updated_at=excluded.updated_at',
-                (guild_id, int(new['enabled']), json.dumps(new['protocols']), json.dumps(new['turns'], sort_keys=True), new['reward'], new['revision'], time.time()))
+                'reward=excluded.reward,revision=excluded.revision,updated_at=excluded.updated_at,advice_cap=excluded.advice_cap,clue_voice=excluded.clue_voice',
+                (guild_id, int(new['enabled']), json.dumps(new['protocols']), json.dumps(new['turns'], sort_keys=True), new['reward'], new['revision'], time.time(),
+                 new['advice_cap'], new['clue_voice']))
         return self.vault_settings(guild_id)
 
     def _vault_zone(self, guild_id):
@@ -116,7 +125,8 @@ class VaultStore:
         partner_ids = json.loads(row['partners_json'])
         clue_rows = self.all('SELECT * FROM vault_clues WHERE guild_id=? AND session_id=? ORDER BY position', (gid, sid))
         actions = self.all('SELECT * FROM vault_actions WHERE guild_id=? AND session_id=? ORDER BY number', (gid, sid))
-        names = self.character_names(gid, partner_ids + [c['character_id'] for c in clue_rows])
+        advice_rows = self.all('SELECT * FROM vault_advice WHERE guild_id=? AND session_id=? ORDER BY id', (gid, sid))
+        names = self.character_names(gid, partner_ids + [c['character_id'] for c in clue_rows] + [a['character_id'] for a in advice_rows])
 
         clues = [self._vault_clue_entry(c, names, row['status'] != 'active') for c in clue_rows]
         tool_rows = self.all('SELECT * FROM vault_tool_uses WHERE guild_id=? AND session_id=? ORDER BY id', (gid, sid))
@@ -133,6 +143,7 @@ class VaultStore:
                 'turns_used': used, 'turns_left': max(row['turn_budget'] - used, 0), 'created_at': row['created_at'],
                 'expires_at': row['expires_at'], 'created': created, 'open_digit': row['open_digit'],
                 'partners': [{'character_id': i, 'name': names.get(i)} for i in partner_ids], 'clues': clues, 'guesses': guesses,
+                'advice': [self._vault_advice_entry(a, names) for a in advice_rows],
                 'tools': [self._vault_tool_entry(t) for t in tool_rows], 'tools_used': len(tool_rows), 'constraints': constraints, 'secret': row['secret'] if row['status'] != 'active' else None,
                 'reward': {'amount': claim['amount'], 'ledger_id': claim['ledger_id']} if claim else None,
                 'reward_reversed': reversed_, 'reward_refused': refused}
@@ -156,6 +167,90 @@ class VaultStore:
         if entry['revealed'] or terminal:
             entry['constraint'] = CLUE_KINDS[c['kind']](**json.loads(c['data_json']))
         return entry
+
+    @staticmethod
+    def _vault_advice_entry(a, names, replayed=False):
+        llm = a['source'] == 'llm'
+        return {'id': a['id'], 'character_id': a['character_id'], 'name': names.get(a['character_id']), 'guess': a['guess'], 'remaining': a['remaining'],
+                'source': a['source'], 'text': a['text'] if llm else None, 'text_key': None if llm else ADVICE_TEMPLATE_KEY,
+                'data': {'guess': a['guess'], 'remaining': a['remaining']}, 'created_at': a['created_at'], 'replayed': replayed}
+
+    def _vault_advice_usage(self, guild_id, channel_id, records, now):
+        """The one model_usage row of a delivered advice: the real call's record when the model was asked, else a placeholder for the template."""
+        rec = next((r for r in records or () if hasattr(r, 'profile')), None)
+        if rec is None:
+            self.db.execute('INSERT INTO model_usage(guild_id,profile,model,role,cached_tokens,reasoning_tokens,cost_basis,created_at,channel_id,feature) VALUES(?,?,?,?,0,0,?,?,?,?)',
+                            (guild_id, 'vault', 'advice', 'dialogue', 'none', now, channel_id, 'game'))
+            return
+        self.db.execute('INSERT INTO model_usage(guild_id,profile,model,role,input_tokens,output_tokens,cached_tokens,reasoning_tokens,cost_usd,cost_basis,created_at,channel_id,feature) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                        (guild_id, rec.profile, rec.model, rec.role, rec.input_tokens, rec.output_tokens, rec.cached_tokens, rec.reasoning_tokens, rec.cost_usd, rec.cost_basis, now, channel_id, 'game'))
+
+    def vault_advice_replayed(self, guild_id, session_id, action_key, *, meeting=False):
+        """True when this interaction already produced advice (the store owns the action_key format)."""
+        pattern = f'meeting:{action_key}:%' if meeting else f'ask:{action_key}'
+        return self.one('SELECT 1 FROM vault_advice WHERE guild_id=? AND session_id=? AND action_key LIKE ?', (guild_id, session_id, pattern)) is not None
+
+    def record_vault_advice(self, guild_id, user_id, session_id, character_id, *, text=None, usage=None, action_key=None, now=None):
+        """One piece of partner advice: facts from public constraints, the model's wording kept only if it passes check_wording.
+        Spends one advice cap unit and one shared talk call atomically; a replayed action_key returns the first advice and spends nothing."""
+        now = time.time() if now is None else now
+        key = None if action_key is None else f'ask:{action_key}'
+        with self.write_admin():
+            row = self.one('SELECT * FROM vault_sessions WHERE id=? AND guild_id=? AND user_id=?', (session_id, guild_id, user_id))
+            if row is None:
+                raise VaultStoreError(codes.VAULT_NOT_FOUND)
+            if key is not None:
+                done = self.one('SELECT * FROM vault_advice WHERE guild_id=? AND session_id=? AND action_key=?', (guild_id, session_id, key))
+                if done is not None:
+                    return self._vault_advice_entry(done, self.character_names(guild_id, [done['character_id']]), True)
+            return self._vault_advice_give(row, [character_id], {character_id: text}, [key], now, usage={character_id: usage})[0]
+
+    def record_vault_meeting(self, guild_id, user_id, session_id, *, texts=None, usage=None, action_key=None, now=None):
+        """Strategy meeting: advice from every chosen partner (at most two), all or nothing, one cap unit and one talk call each."""
+        now = time.time() if now is None else now
+        texts = texts if isinstance(texts, dict) else {}
+        with self.write_admin():
+            row = self.one('SELECT * FROM vault_sessions WHERE id=? AND guild_id=? AND user_id=?', (session_id, guild_id, user_id))
+            if row is None:
+                raise VaultStoreError(codes.VAULT_NOT_FOUND)
+            partners = json.loads(row['partners_json'])
+            keys = [None if action_key is None else f'meeting:{action_key}:{cid}' for cid in partners]
+            if action_key is not None and partners:
+                marks = ','.join('?' * len(keys))
+                done = self.all(f'SELECT * FROM vault_advice WHERE guild_id=? AND session_id=? AND action_key IN ({marks}) ORDER BY id', (guild_id, session_id, *keys))
+                if done:
+                    names = self.character_names(guild_id, [d['character_id'] for d in done])
+                    return [self._vault_advice_entry(d, names, True) for d in done]
+            return self._vault_advice_give(row, partners, texts, keys, now, meeting=True, usage=usage)
+
+    def _vault_advice_give(self, row, character_ids, texts, keys, now, meeting=False, usage=None):
+        """Inside write_admin: checks in order, then stores advice and spends cap and talk for every asked partner or for none."""
+        guild_id, session_id = row['guild_id'], row['id']
+        if row['status'] != 'active' or row['expires_at'] <= now:
+            raise VaultStoreError(codes.VAULT_NOT_ACTIVE)
+        partners = json.loads(row['partners_json'])
+        if not character_ids or any(isinstance(c, bool) or not isinstance(c, int) or c not in partners for c in character_ids):
+            raise VaultStoreError(codes.VAULT_ADVICE_NOT_PARTNER)
+        cap = self.vault_settings(guild_id)['advice_cap']
+        used = self.one('SELECT COUNT(*) FROM vault_advice WHERE guild_id=? AND session_id=?', (guild_id, session_id))[0]
+        if used + len(character_ids) > cap:
+            raise VaultStoreError(codes.VAULT_ADVICE_LIMIT, limit=cap)
+        limit = self.game_talk_daily_limit(guild_id)
+        if self.game_talk_calls_today(guild_id, now) + len(character_ids) > limit:
+            raise VaultStoreError(codes.VAULT_ADVICE_TALK_LIMIT, limit=limit)
+        view = self._vault_view(row)
+        out = []
+        for cid, key in zip(character_ids, keys):
+            style = self.resolved_play_style(guild_id, cid)
+            facts = build_advice_facts(view['constraints'], view['protocol'], view['length'], risk=style.risk, aggression=style.aggression,
+                                       unpredictability=style.unpredictability, seed=f"vault-advice/{session_id}/{cid}/{view['turns_used']}")
+            text = texts.get(cid)
+            source, text = ('llm', text) if check_wording(text, facts) else ('template', None)
+            advice_id = self.db.execute('INSERT INTO vault_advice(guild_id,session_id,user_id,character_id,guess,remaining,source,text,action_key,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',
+                (guild_id, session_id, row['user_id'], cid, facts.guess, facts.remaining, source, text, key, now)).lastrowid
+            self._vault_advice_usage(guild_id, row['channel_id'], (usage or {}).get(cid), now)
+            out.append(self._vault_advice_entry(self.one('SELECT * FROM vault_advice WHERE id=? AND guild_id=?', (advice_id, guild_id)), self.character_names(guild_id, [cid])))
+        return out
 
     def reveal_vault_clue(self, guild_id, user_id, session_id, position, *, now=None):
         """Shows one partner clue (1-based). Free and idempotent: the first call stores revealed_at, later calls keep it."""
