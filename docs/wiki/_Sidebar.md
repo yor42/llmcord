@@ -26,6 +26,7 @@
 - [Texas Hold'em](Texas-Holdem)
 - [One Card](One-Card)
 - [Yut](Yut)
+- [Vault](Vault)
 
 **Admin dashboard**
 - [Overview](Dashboard-Overview)

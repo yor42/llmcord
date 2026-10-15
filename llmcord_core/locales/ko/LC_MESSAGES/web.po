@@ -2994,6 +2994,153 @@ msgstr "어시스트 허용"
 msgid "The big blind is twice the small blind. Buy-ins are counted in big blinds. A player who runs out of action time checks, or folds when there is a bet. Allow assist lets the host turn on private hand and odds hints for the table. Changes apply to hands dealt afterwards."
 msgstr "빅 블라인드는 스몰 블라인드의 두 배예요. 바이인은 빅 블라인드 배수로 계산해요. 행동 시간이 다 된 플레이어는 체크하고, 베팅이 있으면 폴드해요. 어시스트 허용을 켜면 호스트가 테이블에 개인용 패와 확률 힌트를 켤 수 있어요. 변경 사항은 이후에 나누는 판부터 적용돼요."
 
+#: llmcord_core/games_ui.py
+msgid "Monday"
+msgstr "월요일"
+
+#: llmcord_core/games_ui.py
+msgid "Tuesday"
+msgstr "화요일"
+
+#: llmcord_core/games_ui.py
+msgid "Wednesday"
+msgstr "수요일"
+
+#: llmcord_core/games_ui.py
+msgid "Thursday"
+msgstr "목요일"
+
+#: llmcord_core/games_ui.py
+msgid "Friday"
+msgstr "금요일"
+
+#: llmcord_core/games_ui.py
+msgid "Saturday"
+msgstr "토요일"
+
+#: llmcord_core/games_ui.py
+msgid "Sunday"
+msgstr "일요일"
+
+#: llmcord_core/games_ui.py
+msgid "Vault (Experimental)"
+msgstr "금고 (실험 기능)"
+
+#: llmcord_core/games_ui.py
+msgid "A private code-breaking puzzle: a member opens a vault with /vault personal, guesses a secret code with clues, and can bring character partners for advice. Off by default. Tool prices are set in the Shop tab."
+msgstr "멤버가 /vault personal로 금고를 열고, 단서를 보며 비밀 코드를 맞히는 개인 퍼즐이에요. 캐릭터 파트너를 데려가 조언을 받을 수도 있어요. 기본값은 꺼짐이고, 금고 도구 가격은 상점 탭에서 정해요."
+
+#: llmcord_core/games_ui.py
+msgid "Vault is on"
+msgstr "금고 사용"
+
+#: llmcord_core/games_ui.py
+msgid "Off: /vault refuses to open a vault. Vaults already in progress are not touched."
+msgstr "꺼짐: /vault가 금고를 열어 주지 않아요. 이미 진행 중인 금고는 그대로 둬요."
+
+#: llmcord_core/games_ui.py
+msgid "Allowed protocols"
+msgstr "허용할 방식"
+
+#: llmcord_core/games_ui.py
+msgid "Standard and Open are on by default. Total Match and Position-Only give much less feedback per guess, so they are harder: turn them on only if your members want that."
+msgstr "기본 방식과 오픈은 기본으로 켜져 있어요. 전체 일치와 위치만은 추측마다 주는 정보가 훨씬 적어서 더 어려워요. 멤버들이 원할 때만 켜 주세요."
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "Turns: {protocol}"
+msgstr "턴 수: {protocol}"
+
+#: llmcord_core/games_ui.py
+msgid "Reward for solving a vault"
+msgstr "금고 해제 보상"
+
+#: llmcord_core/games_ui.py
+msgid "Partner advice per vault"
+msgstr "금고당 파트너 조언 횟수"
+
+#: llmcord_core/games_ui.py
+msgid "Template"
+msgstr "템플릿"
+
+#: llmcord_core/games_ui.py
+msgid "Model"
+msgstr "모델"
+
+#: llmcord_core/games_ui.py
+msgid "Clue voice"
+msgstr "단서 말투"
+
+#: llmcord_core/games_ui.py
+msgid "Turns: guesses a member gets in a personal vault. Reward: paid once when a member solves a personal vault; 0 = none. Partner advice: how many times chosen partners may give advice in one vault. Clue voice: partners speak their clues from a template, or the model words them in character (uses the model)."
+msgstr "턴 수: 개인 금고에서 멤버가 추측할 수 있는 횟수예요. 보상: 멤버가 개인 금고를 풀면 한 번 지급해요. 0이면 없어요. 파트너 조언: 한 금고에서 고른 파트너가 조언할 수 있는 횟수예요. 단서 말투: 파트너가 템플릿으로 단서를 말하거나, 모델이 캐릭터답게 다듬어 말해요(모델을 사용해요)."
+
+#: llmcord_core/games_ui.py
+msgid "Vault"
+msgstr "금고"
+
+#: llmcord_core/games_ui.py
+msgid "Vault settings saved"
+msgstr "금고 설정을 저장했어요"
+
+#: llmcord_core/games_ui.py
+msgid "Weekly operation"
+msgstr "주간 작전"
+
+#: llmcord_core/games_ui.py
+msgid "A weekly team operation in one channel: members join and contribute guesses, tools and cross-checks to crack three stages together."
+msgstr "한 채널에서 진행하는 주간 팀 작전이에요. 멤버들이 참여해 추측, 도구, 교차 검증으로 세 단계를 함께 풀어요."
+
+#: llmcord_core/games_ui.py
+msgid "Operation is on"
+msgstr "작전 사용"
+
+#: llmcord_core/games_ui.py
+msgid "Operation channel"
+msgstr "작전 채널"
+
+#: llmcord_core/games_ui.py
+msgid "A text channel; threads cannot be used. /vault operation works only there."
+msgstr "텍스트 채널이어야 하고 스레드는 쓸 수 없어요. /vault operation은 그 채널에서만 동작해요."
+
+#: llmcord_core/games_ui.py
+msgid "Week starts on"
+msgstr "한 주의 시작 요일"
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "The week turns over at midnight in the server time zone ({zone})."
+msgstr "서버 시간대({zone}) 자정에 한 주가 바뀌어요."
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "Stage {n} protocol"
+msgstr "{n}단계 방식"
+
+#: llmcord_core/games_ui.py
+msgid "Reward per contributor"
+msgstr "참여자당 보상"
+
+#: llmcord_core/games_ui.py
+msgid "Team reward"
+msgstr "팀 보상"
+
+#: llmcord_core/games_ui.py
+msgid "Support reward"
+msgstr "지원 보상"
+
+#: llmcord_core/games_ui.py
+msgid "Minimum contributions"
+msgstr "최소 참여 횟수"
+
+#: llmcord_core/games_ui.py
+msgid "Minimum contributions: guesses, tool uses and cross-checks a member needs before being paid. Reward per contributor: paid once to a member who reaches the minimum. Team reward: paid to each qualified member when all three stages are cleared. Support reward: paid for a solved support mission. A solved support mission counts toward the team reward's minimum only, not toward the contribution reward. 0 = none."
+msgstr "최소 참여 횟수: 보상을 받기 위해 필요한 추측, 도구 사용, 교차 검증의 합계예요. 참여자당 보상: 최소 횟수를 채운 멤버에게 한 번 지급해요. 팀 보상: 세 단계를 모두 풀면 자격을 채운 각 멤버에게 지급해요. 지원 보상: 지원 임무를 풀면 지급해요. 푼 지원 임무는 팀 보상의 최소 횟수에만 포함되고, 참여자당 보상에는 포함되지 않아요. 0이면 없어요."
+
+#: llmcord_core/games_ui.py
+msgid "Operation settings saved"
+msgstr "작전 설정을 저장했어요"
+
 #: llmcord_core/icons.py llmcord_core/presets_ui.py
 #, python-brace-format
 msgid "More actions for {name}"
@@ -3734,6 +3881,11 @@ msgid "Random message"
 msgstr "랜덤 메시지"
 
 #: llmcord_core/shop_ui.py
+msgctxt "item kind"
+msgid "Vault tool"
+msgstr "금고 도구"
+
+#: llmcord_core/shop_ui.py
 #, python-brace-format
 msgid "{kind} · Consumable"
 msgstr "{kind} · 소모품"
@@ -3742,6 +3894,10 @@ msgstr "{kind} · 소모품"
 #, python-brace-format
 msgid "{kind} · Reusable"
 msgstr "{kind} · 재사용 아이템"
+
+#: llmcord_core/shop_ui.py
+msgid "Used inside your vault with /vault personal, not with /use. It costs one turn."
+msgstr "/use가 아니라 /vault personal로 연 금고 안에서 사용해요. 턴을 1 소모해요."
 
 #: llmcord_core/shop_ui.py
 msgid "Items"

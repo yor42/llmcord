@@ -557,6 +557,148 @@ def holdem_section(ctx):
                           reset=lambda: [c.set_value(rules['value'][k]) for c, k in zip(controls, keys)])
 
 
+VAULT_KEYS = ('enabled', 'protocols', 'turns', 'reward', 'advice_cap', 'clue_voice')
+OPERATION_KEYS = ('enabled', 'channel_id', 'week_start', 'stage_protocols', 'contribution_reward', 'team_reward', 'min_guesses', 'support_reward')
+
+
+def vault_form(store, gid):
+    settings = store.vault_settings(gid)
+    return {**{k: settings[k] for k in VAULT_KEYS}, 'revision': settings['revision']}
+
+
+def operation_form(store, gid):
+    return dict(store.vault_operation_settings(gid))
+
+
+def _clean(value):
+    if isinstance(value, dict):
+        return {k: _clean(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_clean(v) for v in value]
+    return _whole(value)
+
+
+def save_vault(store, gid, form, base):
+    changes = {k: _clean(form[k]) for k in VAULT_KEYS if k != 'turns' and form[k] is not None and _clean(form[k]) != base[k]}
+    turns = {p: _clean(v) for p, v in form['turns'].items() if v is not None and _clean(v) != base['turns'].get(p)}
+    if turns:
+        changes['turns'] = turns
+    if not changes:
+        return store.vault_settings(gid)
+    return store.set_vault_settings(gid, **changes, expected_revision=base['revision'])
+
+
+def save_operation(store, gid, form, base):
+    changes = {k: _clean(form[k]) for k in OPERATION_KEYS if form[k] is not None and _clean(form[k]) != base[k]}
+    if not changes:
+        return store.vault_operation_settings(gid)
+    return store.set_vault_operation_settings(gid, **changes, expected_revision=base['revision'])
+
+
+def vault_channel_options(channel_names, thread_names, current=None):
+    options = {c: name for c, name in channel_names.items() if c not in (thread_names or {})}
+    if current is not None and current not in options:
+        options[current] = str(current)
+    return options
+
+
+def week_start_options(t):
+    days = (t('Monday'), t('Tuesday'), t('Wednesday'), t('Thursday'), t('Friday'), t('Saturday'), t('Sunday'))
+    return dict(enumerate(days))
+
+
+def vault_protocol_options(t):
+    from .vault import PROTOCOLS
+    from .vault_discord import PROTOCOLS as LABELS
+    return {p: t.render(LABELS[p]) for p in PROTOCOLS}
+
+
+def vault_section(ctx):
+    from nicegui import ui
+    from .dashboard import section
+    from .vault import PROTOCOLS
+    t = web_locale.current()
+    store, gid = ctx.store, ctx.guild_id
+    protocols = vault_protocol_options(t)
+    with section(t('Vault (Experimental)')):
+        ui.label(t('A private code-breaking puzzle: a member opens a vault with /vault personal, guesses a secret code with clues, and can bring character partners for advice. '
+                   'Off by default. Tool prices are set in the Shop tab.')).classes('ll-muted')
+        base = {'value': vault_form(store, gid)}
+        form = base['value']
+        enabled = ui.switch(t('Vault is on'), value=form['enabled'])
+        ui.label(t('Off: /vault refuses to open a vault. Vaults already in progress are not touched.')).classes('ll-muted')
+        allowed = ui.select(protocols, value=form['protocols'], multiple=True, label=t('Allowed protocols')).props('use-chips').classes('w-full')
+        ui.label(t('Standard and Open are on by default. Total Match and Position-Only give much less feedback per guess, so they are harder: turn them on only if your members want that.')).classes('ll-muted')
+        with ui.element('div').classes('ll-form-row ll-field-row'):
+            turns = {p: ui.number(t('Turns: {protocol}', protocol=protocols[p]), value=form['turns'][p], min=1, max=50, precision=0, format='%d').classes('ll-wide') for p in PROTOCOLS}
+        with ui.element('div').classes('ll-form-row ll-field-row'):
+            reward = ui.number(t('Reward for solving a vault'), value=form['reward'], min=0, precision=0, format='%d').classes('ll-wide')
+            cap = ui.number(t('Partner advice per vault'), value=form['advice_cap'], min=0, max=50, precision=0, format='%d').classes('ll-wide')
+            voice = ui.select({'template': t('Template'), 'llm': t('Model')}, value=form['clue_voice'], label=t('Clue voice')).classes('ll-wide')
+        ui.label(t('Turns: guesses a member gets in a personal vault. Reward: paid once when a member solves a personal vault; 0 = none. '
+                   'Partner advice: how many times chosen partners may give advice in one vault. Clue voice: partners speak their clues from a template, or the model words them in character (uses the model).')).classes('ll-muted')
+        controls = (enabled, allowed, reward, cap, voice, *turns.values())
+        def current():
+            return {'enabled': bool(enabled.value), 'protocols': [p for p in PROTOCOLS if p in (allowed.value or ())], 'turns': {p: turns[p].value for p in PROTOCOLS},
+                    'reward': reward.value, 'advice_cap': cap.value, 'clue_voice': voice.value}
+        def saved():
+            return {**base['value'], 'turns': dict(base['value']['turns'])}
+        def shown():
+            v = base['value']
+            return [v['enabled'], v['protocols'], v['reward'], v['advice_cap'], v['clue_voice'], *(v['turns'][p] for p in PROTOCOLS)]
+        def save_settings():
+            result = save_vault(store, gid, {**current(), 'revision': 0}, saved())
+            base['value'] = vault_form(store, gid)
+            return result
+        def reset():
+            for control, value in zip(controls, shown()):
+                control.set_value(value)
+        def dirty():
+            return _clean(current()) != {k: base['value'][k] for k in VAULT_KEYS}
+        ctx.savebar.track(t('Vault'), dict(zip(controls, shown())), save=save_settings, action='games.vault_settings',
+                          detail=lambda result: {k: result[k] for k in VAULT_KEYS}, success=t('Vault settings saved'), dirty=dirty, reset=reset)
+
+        ui.label(t('Weekly operation')).classes('ll-subtitle')
+        ui.label(t('A weekly team operation in one channel: members join and contribute guesses, tools and cross-checks to crack three stages together.')).classes('ll-muted')
+        obase = {'value': operation_form(store, gid)}
+        oform = obase['value']
+        op_on = ui.switch(t('Operation is on'), value=oform['enabled'])
+        names = vault_channel_options(ctx.channel_names, ctx.thread_names, oform['channel_id'])
+        channel = ui.select(names, value=oform['channel_id'], label=t('Operation channel')).classes('w-full')
+        ui.label(t('A text channel; threads cannot be used. /vault operation works only there.')).classes('ll-muted')
+        days = week_start_options(t)
+        with ui.element('div').classes('ll-form-row ll-field-row'):
+            week = ui.select(days, value=oform['week_start'], label=t('Week starts on')).classes('ll-wide')
+        ui.label(t('The week turns over at midnight in the server time zone ({zone}).', zone=store.guild_timezone(gid) or 'UTC')).classes('ll-muted')
+        with ui.element('div').classes('ll-form-row ll-field-row'):
+            stages = [ui.select(protocols, value=oform['stage_protocols'][i], label=t('Stage {n} protocol', n=i + 1)).classes('ll-wide') for i in range(3)]
+        with ui.element('div').classes('ll-form-row ll-field-row'):
+            contribution = ui.number(t('Reward per contributor'), value=oform['contribution_reward'], min=0, precision=0, format='%d').classes('ll-wide')
+            team = ui.number(t('Team reward'), value=oform['team_reward'], min=0, precision=0, format='%d').classes('ll-wide')
+            support = ui.number(t('Support reward'), value=oform['support_reward'], min=0, precision=0, format='%d').classes('ll-wide')
+            minimum = ui.number(t('Minimum contributions'), value=oform['min_guesses'], min=1, max=30, precision=0, format='%d').classes('ll-wide')
+        ui.label(t('Minimum contributions: guesses, tool uses and cross-checks a member needs before being paid. Reward per contributor: paid once to a member who reaches the minimum. '
+                   'Team reward: paid to each qualified member when all three stages are cleared. Support reward: paid for a solved support mission. '
+                   'A solved support mission counts toward the team reward\'s minimum only, not toward the contribution reward. 0 = none.')).classes('ll-muted')
+        ocontrols = (op_on, channel, week, *stages, contribution, team, support, minimum)
+        def ocurrent():
+            return {'enabled': bool(op_on.value), 'channel_id': channel.value, 'week_start': week.value, 'stage_protocols': [s.value for s in stages],
+                    'contribution_reward': contribution.value, 'team_reward': team.value, 'min_guesses': minimum.value, 'support_reward': support.value}
+        def oshown():
+            v = obase['value']
+            return [v['enabled'], v['channel_id'], v['week_start'], *v['stage_protocols'], v['contribution_reward'], v['team_reward'], v['support_reward'], v['min_guesses']]
+        def save_op():
+            result = save_operation(store, gid, {**ocurrent(), 'revision': 0}, obase['value'])
+            obase['value'] = operation_form(store, gid)
+            return result
+        def oreset():
+            for control, value in zip(ocontrols, oshown()):
+                control.set_value(value)
+        ctx.savebar.track(t('Weekly operation'), dict(zip(ocontrols, oshown())), save=save_op, action='games.vault_operation_settings',
+                          detail=lambda result: {k: result[k] for k in OPERATION_KEYS}, success=t('Operation settings saved'),
+                          dirty=lambda: _clean(ocurrent()) != {k: obase['value'][k] for k in OPERATION_KEYS}, reset=oreset)
+
+
 GAME_SECTIONS = {'blackjack': blackjack_section, 'doubt': doubt_section, 'holdem': holdem_section, 'onecard': onecard_section, 'yut': yut_section}
 
 
@@ -566,3 +708,4 @@ async def games_panel(ctx):
     for key in registry.keys():
         if key in GAME_SECTIONS:
             GAME_SECTIONS[key](ctx)
+    vault_section(ctx)

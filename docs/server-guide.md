@@ -76,6 +76,9 @@ Commands marked **Admin** live under `/admin` and require Discord server adminis
 | `/scene reset` | Member | Start fresh context on the next invitation. |
 | `/admin scene delete` | Admin | Delete a stored message and everything after it in its branch, by message ID. Earlier messages and other branches stay; Discord messages are not deleted. Personal facts and character encounters first learned from the deleted messages are forgotten too; lore already promoted from them stays. |
 | `/context` | Admin | Inspect the last saved character line, or supply a message ID. |
+| `/vault personal [protocol] [partner] [second_partner] [guess]` | Member | Start or resume your [vault](#vault) for today. Private to you. |
+| `/vault history` | Member | Your recent vaults; the code is shown only for finished ones. |
+| `/vault operation` | Member | Join this week's [operation](#vault) in the operation channel. |
 
 Character and space options (`character`, `characters`, `space`, `hub`, `world`) suggest matching names as you type. A name matches exactly first, then ignoring case; if several names differ only by case, type the exact one. In `characters`, separate names with commas; suggestions complete the last name.
 
@@ -161,6 +164,17 @@ A poker game for 2 to 9 players, played as a **cash table**: no-limit, with hand
 - **Check the deck.** Each hand shows a short fingerprint of its secret seed. The seeds stay hidden while the table is open (a seed would show the cards of players who folded) and are all posted in the thread when the table closes. Anyone can then replay every hand from them.
 - **Table talk.** The thread works like an I Doubt It thread: only seated characters answer, each knowing the public table and its own hole cards, never anyone else's, and showdowns, busts and all-ins can prompt a comment. The same talk limits apply.
 - **Permissions.** Like I Doubt It, the bot needs **Create Public Threads** and **Send Messages in Threads** in game channels.
+
+## Vault
+
+Experimental, and off until an admin turns it on in the dashboard's Games tab (Vault section). A vault is a hidden code of unique digits (four by default, leading zeros allowed). You guess; each guess is answered by the vault's protocol. Invalid or repeated guesses cost nothing. The code is shown only after the vault ends.
+
+- **Personal vault.** One per member per server day (server timezone), started with `/vault personal`. Pick a protocol (Standard: strikes and balls; Open: one correct digit shown at the start; Total Match and Position-Only if the server allows them), and up to two **partners**: your favorites or characters eligible in the channel. A partner holds one true **clue** about the code, which you reveal for free with **Reveal clue**, and can give advice (**Ask <name>**, or **Strategy meeting** with two partners). Advice never reveals the code, costs no turns, and counts toward a daily per-vault limit and the server's table talk limit. If the vault is not opened within its turns it fails and cannot be restarted that day. Progress survives restarts.
+- **Vault tools.** Five shop items (Spectrum Analyzer, Residual Scanner, Comparison Circuit, Position Verifier, Master Decoder) are used inside a vault from the **Tools** button, not with `/use`. A tool costs one turn (the Master Decoder two and needs three left), is used up, and at most two can be used per stage. A query whose answer is already certain from the public record is refused for free and nothing is used up.
+- **Weekly operation.** `/vault operation` in the operation channel an admin chose joins the server's co-op run of three stages. All participants share each stage's turns; the first time a stage runs out of turns it is retried once with a new code, the second time the operation fails. Two cast characters hold the stage clues; you can bring one favorite as an advisor. **Cross-check** compares two guesses made by different members (one turn, once per stage attempt). One shared status message in the channel is edited as the team plays.
+- **Support missions.** A separate **Support mission** button offers a record-forensics puzzle or a three-digit Bulls and Cows game. They use none of the operation's turns, one mission per member per operation, and a failed one is final.
+- **Rewards.** Paid once each through the ledger, with amounts the admin sets (they default to 0): a personal win; in an operation a contribution reward, a support-mission reward and a team reward when the operation is solved (the team reward needs the admin's minimum number of contributions; a support mission counts toward that minimum, but not toward the contribution reward).
+- **Admin setup.** Games tab, Vault section: enable the switch, choose the protocols, turn budgets, rewards, the advice limit and whether clue wording uses a model; then the operation switch, channel, week start day and stage protocols. Tool prices are set in the Shop tab.
 
 ## Language
 

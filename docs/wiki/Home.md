@@ -12,7 +12,7 @@ Administrators arrange characters and lore into **worlds**, **hubs** and **chann
 | Learn the commands | [Discord commands](Discord-Commands) |
 | Understand worlds, hubs and casts | [Worlds, hubs and casts](Worlds-Hubs-and-Casts), [Scenes and ambient mode](Scenes-and-Ambient-Mode), [Favorites](Favorites) |
 | Know what a character remembers | [Lore and memory](Lore-and-Memory) |
-| Play games and spend currency | [Blackjack](Blackjack), [I Doubt It](I-Doubt-It), [Texas Hold'em](Texas-Holdem), [One Card](One-Card), [Yut](Yut), [Items and the shop](Items-and-Shop) |
+| Play games and spend currency | [Blackjack](Blackjack), [I Doubt It](I-Doubt-It), [Texas Hold'em](Texas-Holdem), [One Card](One-Card), [Yut](Yut), [Vault](Vault), [Items and the shop](Items-and-Shop) |
 | Run a server from the dashboard | [Dashboard overview](Dashboard-Overview), then the dashboard pages in the sidebar |
 | Operate the bot (caps, model profiles) | [Bot settings](Bot-Settings), [Monitoring and costs](Monitoring-and-Costs) |
 | Work on the code | [Architecture](Architecture), [Testing and verification](Testing-and-Verification), [Engineering docs](Engineering-Docs) |

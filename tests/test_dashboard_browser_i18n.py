@@ -38,6 +38,7 @@ NEVER_TRANSLATED_NODES = tuple(re.compile(pattern) for pattern in (
     r'Seed grant \d+',                               # ledger reason typed by the fixture
     r'Aria',                                         # member nickname from the mock Discord API
     r'.*Dice',                                       # built-in shop item name with its emoji (stored catalog name)
+    r'.*(Comparison Circuit|Master Decoder|Position Verifier|Residual Scanner|Spectrum Analyzer)',  # vault tool item names (stored catalog names)
     r'You rolled a \d \(1-6\)\.',                    # stored use-log text (SUSPECTED untranslated, see report)
 ))
 COLLECT_TEXT = """

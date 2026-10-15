@@ -2989,6 +2989,153 @@ msgstr ""
 msgid "The big blind is twice the small blind. Buy-ins are counted in big blinds. A player who runs out of action time checks, or folds when there is a bet. Allow assist lets the host turn on private hand and odds hints for the table. Changes apply to hands dealt afterwards."
 msgstr ""
 
+#: llmcord_core/games_ui.py
+msgid "Monday"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Tuesday"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Wednesday"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Thursday"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Friday"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Saturday"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Sunday"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Vault (Experimental)"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "A private code-breaking puzzle: a member opens a vault with /vault personal, guesses a secret code with clues, and can bring character partners for advice. Off by default. Tool prices are set in the Shop tab."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Vault is on"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Off: /vault refuses to open a vault. Vaults already in progress are not touched."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Allowed protocols"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Standard and Open are on by default. Total Match and Position-Only give much less feedback per guess, so they are harder: turn them on only if your members want that."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "Turns: {protocol}"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Reward for solving a vault"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Partner advice per vault"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Template"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Model"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Clue voice"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Turns: guesses a member gets in a personal vault. Reward: paid once when a member solves a personal vault; 0 = none. Partner advice: how many times chosen partners may give advice in one vault. Clue voice: partners speak their clues from a template, or the model words them in character (uses the model)."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Vault"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Vault settings saved"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Weekly operation"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "A weekly team operation in one channel: members join and contribute guesses, tools and cross-checks to crack three stages together."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Operation is on"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Operation channel"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "A text channel; threads cannot be used. /vault operation works only there."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Week starts on"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "The week turns over at midnight in the server time zone ({zone})."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+#, python-brace-format
+msgid "Stage {n} protocol"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Reward per contributor"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Team reward"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Support reward"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Minimum contributions"
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Minimum contributions: guesses, tool uses and cross-checks a member needs before being paid. Reward per contributor: paid once to a member who reaches the minimum. Team reward: paid to each qualified member when all three stages are cleared. Support reward: paid for a solved support mission. A solved support mission counts toward the team reward's minimum only, not toward the contribution reward. 0 = none."
+msgstr ""
+
+#: llmcord_core/games_ui.py
+msgid "Operation settings saved"
+msgstr ""
+
 #: llmcord_core/icons.py llmcord_core/presets_ui.py
 #, python-brace-format
 msgid "More actions for {name}"
@@ -3734,6 +3881,11 @@ msgid "Random message"
 msgstr ""
 
 #: llmcord_core/shop_ui.py
+msgctxt "item kind"
+msgid "Vault tool"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
 #, python-brace-format
 msgid "{kind} · Consumable"
 msgstr ""
@@ -3741,6 +3893,10 @@ msgstr ""
 #: llmcord_core/shop_ui.py
 #, python-brace-format
 msgid "{kind} · Reusable"
+msgstr ""
+
+#: llmcord_core/shop_ui.py
+msgid "Used inside your vault with /vault personal, not with /use. It costs one turn."
 msgstr ""
 
 #: llmcord_core/shop_ui.py
