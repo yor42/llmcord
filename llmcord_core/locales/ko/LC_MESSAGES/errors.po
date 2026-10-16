@@ -1905,6 +1905,10 @@ msgid "The operation runs in a different channel. Join it there."
 msgstr "작전은 다른 채널에서 진행돼요. 그 채널에서 참여해 주세요."
 
 #: llmcord_core/i18n/codes.py
+msgid "The operation channel set for this server is not a text channel here. Ask an admin to choose another one."
+msgstr "이 서버에 설정된 작전 채널이 여기서는 텍스트 채널이 아니에요. 관리자에게 다른 채널로 바꿔 달라고 요청해 주세요."
+
+#: llmcord_core/i18n/codes.py
 msgid "The operation needs two eligible characters in this channel's cast to hold the clues."
 msgstr "작전에는 단서를 맡을 수 있는 캐릭터 두 명이 이 채널의 출연진에 있어야 해요."
 

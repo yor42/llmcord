@@ -14,7 +14,7 @@ import time
 
 from .i18n import codes
 from .vault import (BULLS_COWS_LENGTH, BULLS_COWS_TURNS, FORENSICS_ATTEMPTS, MISSION_TYPES, VaultError, bulls_cows_feedback, bulls_cows_secret,
-                    check_bulls_cows_guess, forensics_answers, generate_forensics, valid_forensics_answer)
+                    check_bulls_cows_guess, forensics_answers, generate_forensics, valid_code, valid_forensics_answer)
 from .vault.missions import FORENSICS_LENGTH, FORENSICS_LINES
 from .vault_operation_store import VaultOperationStore
 from .vault_store import GUESS_CODES, VaultStoreError
@@ -52,14 +52,24 @@ class VaultSupportStore(VaultOperationStore):
         return {'amount': claim['amount'], 'ledger_id': claim['ledger_id'], 'reversed': undone}
 
     @staticmethod
-    def _puzzle_holds(puzzle):
+    def _plain_puzzle(p, records=None, hidden=None, answer=None):
+        return [[g, list(r) if r is not None else None] for g, r in (p.records if records is None else records)], p.hidden if hidden is None else hidden, list(p.answer if answer is None else answer)
+
+    @staticmethod
+    def _checked_puzzle(puzzle):
+        """The caller's ForensicsPuzzle as normalised plain data (records, hidden, answer) when it holds, else None: legal distinct guesses, int results, one hidden line, solver-unique answer."""
         try:
             records = tuple((g, None if r is None else tuple(r)) for g, r in puzzle.records)
-            return (len(records) == FORENSICS_LINES and 0 <= puzzle.hidden < len(records) and records[puzzle.hidden][1] is None
-                    and all(isinstance(g, str) and len(g) == FORENSICS_LENGTH for g, _ in records)
-                    and forensics_answers(records) == frozenset({tuple(puzzle.answer)}))
+            answer, hidden = tuple(puzzle.answer), puzzle.hidden
+            guesses = [g for g, _ in records]
+            if not (len(records) == FORENSICS_LINES and type(hidden) is int and 0 <= hidden < len(records) and records[hidden][1] is None
+                    and all(isinstance(g, str) and valid_code(g, FORENSICS_LENGTH) for g in guesses) and len(set(guesses)) == len(guesses)
+                    and all(r is None or (len(r) == 2 and all(type(x) is int for x in r) and valid_forensics_answer(*r)) for _, r in records)
+                    and len(answer) == 2 and all(type(x) is int for x in answer) and valid_forensics_answer(*answer) and forensics_answers(records) == frozenset({answer})):
+                return None
+            return VaultSupportStore._plain_puzzle(puzzle, records, hidden, answer)
         except (AttributeError, TypeError, ValueError, VaultError):
-            return False
+            return None
 
     def start_support_mission(self, guild_id, user_id, operation_id, mission_type, *, now=None, seed=None, puzzle=None):
         """The member's one mission of this operation: created, or the persisted one (`seed` and `puzzle` ignored then). `seed` is a test seam only.
@@ -69,7 +79,7 @@ class VaultSupportStore(VaultOperationStore):
         self._op_load(guild_id, user_id, operation_id, now)
         made = None
         if isinstance(mission_type, str) and mission_type == 'forensics' and self._support_row(guild_id, operation_id, user_id) is None:
-            made = puzzle if puzzle is not None and self._puzzle_holds(puzzle) else generate_forensics(seed if seed is not None else secrets.token_hex(16))   # pure and slow: before the write lock; discarded if a mission appeared meanwhile
+            made = (self._checked_puzzle(puzzle) if puzzle is not None else None) or self._plain_puzzle(generate_forensics(seed if seed is not None else secrets.token_hex(16)))   # pure and slow: before the write lock; discarded if a mission appeared meanwhile
         with self.write_admin():
             self._op_active(guild_id, operation_id, now)
             if not isinstance(mission_type, str) or mission_type not in MISSION_TYPES:
@@ -83,8 +93,8 @@ class VaultSupportStore(VaultOperationStore):
                 code = bulls_cows_secret(random.Random(seed) if seed is not None else secrets.SystemRandom())
                 puzzle, answer = {'length': BULLS_COWS_LENGTH}, code
             else:
-                made = made or generate_forensics(seed if seed is not None else secrets.token_hex(16))
-                puzzle, answer = {'records': [[g, list(r) if r is not None else None] for g, r in made.records], 'hidden': made.hidden}, list(made.answer)
+                made = made or self._plain_puzzle(generate_forensics(seed if seed is not None else secrets.token_hex(16)))
+                puzzle, answer = {'records': made[0], 'hidden': made[1]}, made[2]
             mission_id = self.db.execute('INSERT INTO vault_support_missions(guild_id,operation_id,user_id,mission_type,puzzle_json,answer_json,created_at) VALUES(?,?,?,?,?,?,?)',
                 (guild_id, operation_id, user_id, mission_type, json.dumps(puzzle), json.dumps(answer), now)).lastrowid
             return self._support_view(self.one('SELECT * FROM vault_support_missions WHERE id=? AND guild_id=?', (mission_id, guild_id)), created=True)
@@ -141,9 +151,11 @@ class VaultSupportStore(VaultOperationStore):
             refused = False
             if correct:
                 operation, _ = self._op_active(guild_id, operation_id, now)
-                reward = self.vault_operation_settings(guild_id)['support_reward']
+                settings = self.vault_operation_settings(guild_id)
+                reward = settings['support_reward']
                 if reward > 0:
                     refused = self._op_pay(operation, user_id, 'support', reward, now)
+                refused = self._op_retry_team(guild_id, user_id, now, settings) or refused
             return self._support_result(self.one('SELECT * FROM vault_support_missions WHERE id=? AND guild_id=?', (row['id'], guild_id)),
                                         self.one('SELECT * FROM vault_support_attempts WHERE id=? AND guild_id=?', (attempt_id, guild_id)), False, event, refused)
 

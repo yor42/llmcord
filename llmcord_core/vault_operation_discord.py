@@ -368,9 +368,23 @@ class VaultOperationPlay(SupportMissions):
         parent_id, _ = self.bot.location(channel)
         return self.store.open_vault_operation(gid, uid, channel.id, now=self.clock(), parent_id=parent_id)
 
+    def _check_channel(self, gid: int, here=None) -> None:
+        """The configured operation channel must be a plain text channel of this guild (the store only checks the id is a number)."""
+        settings = self.store.vault_operation_settings(gid)
+        if not settings['enabled'] or settings['channel_id'] is None or not self.store.vault_settings(gid)['enabled']:
+            return
+        channel = here if getattr(here, 'id', None) == settings['channel_id'] else self.bot.get_channel(settings['channel_id'])  # the channel the press came from needs no cache
+        guild = getattr(channel, 'guild', None)
+        owner = guild.id if guild is not None else getattr(channel, 'guild_id', None)
+        other = isinstance(channel, (discord.abc.GuildChannel, discord.Thread)) and not isinstance(channel, discord.TextChannel)
+        if channel is None or other or (owner is not None and owner != gid):
+            raise VaultStoreError(codes.VAULT_OPERATION_CHANNEL_INVALID)
+
     async def _enter(self, interaction, t, channel_id=None) -> None:
         uid = interaction.user.id
         try:
+            if not isinstance(interaction.channel, discord.Thread):
+                self._check_channel(interaction.guild_id, interaction.channel)
             view = self._open(interaction, uid) if channel_id is None else self._open_for(interaction, uid, channel_id)
         except UserError as error:
             return await self.say(interaction, t.error(error))

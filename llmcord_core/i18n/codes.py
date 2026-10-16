@@ -490,6 +490,7 @@ VAULT_SETTINGS_CHANGED = E_('vault.settings_changed', 'The Vault settings were c
 # --- FEAT-66: Vault operation store
 VAULT_OPERATION_DISABLED = E_('vault.operation_disabled', 'The weekly operation is not turned on for this server.')
 VAULT_OPERATION_CHANNEL = E_('vault.operation_channel', 'The operation runs in a different channel. Join it there.')
+VAULT_OPERATION_CHANNEL_INVALID = E_('vault.operation_channel_invalid', 'The operation channel set for this server is not a text channel here. Ask an admin to choose another one.')
 VAULT_OPERATION_NPCS = E_('vault.operation_npcs', 'The operation needs two eligible characters in this channel\'s cast to hold the clues.')
 VAULT_OPERATION_NOT_PARTICIPANT = E_('vault.operation_not_participant', 'Join the operation first.')
 VAULT_CROSS_UNKNOWN = E_('vault.cross_unknown', 'Pick two different guesses from this attempt.')

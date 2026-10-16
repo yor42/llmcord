@@ -572,6 +572,25 @@ class ClueVoiceTests(AdviceUiCase):
         self.assertEqual(len(click.response.edited), 1)
         self.assertEqual(self.store.one("SELECT COUNT(*) FROM vault_clues WHERE session_id=? AND revealed_at IS NOT NULL", (self.sid,))[0], 1)
 
+    async def test_the_llm_clue_press_is_deferred_before_the_reveal_commits(self):
+        """MNT-92: the interaction is acknowledged first, then the reveal is written."""
+        self.store.set_vault_settings(G, clue_voice="llm")
+        await self.start()
+        click = self.click()
+        order = []
+        real_defer, real_reveal = click.response.defer, self.store.reveal_vault_clue
+
+        async def defer(*a, **kw):
+            order.append("defer")
+            return await real_defer(*a, **kw)
+
+        def reveal(*a, **kw):
+            order.append("reveal")
+            return real_reveal(*a, **kw)
+        click.response.defer, self.store.reveal_vault_clue = defer, reveal
+        await self.bot.vault.press(click, "clue", self.sid)
+        self.assertEqual(order[:2], ["defer", "reveal"])
+
     async def test_bad_clue_wording_keeps_the_template_clue_silently(self):
         """FEAT-65: wording that drops the clue's numbers or adds another digit run is not shown; the template clue is."""
         self.store.set_vault_settings(G, clue_voice="llm")
@@ -589,6 +608,16 @@ class ClueVoiceTests(AdviceUiCase):
                 self.assertNotIn(wording, self.seen(click))
                 self.assertIn(template, self.edits(click)[-1])
                 self.assertNotIn("Something went wrong", self.seen(click))
+
+    def test_spelled_number_check_covers_korean_forms_and_skips_common_false_positives(self):
+        """MNT-92: copulas, counters and Sino-Korean runs are caught; verb 열, 둘 다, 하나도 and "this one" are not."""
+        from llmcord_core.vault import spells_number
+        for text in ("셋이에요", "둘이야", "하나예요", "다섯까지", "한 개", "세 번", "두 번째", "열째", "삼십", "삼칠팔", "삼 칠 팔", "exactly one", "Three"):
+            with self.subTest(caught=text):
+                self.assertTrue(spells_number(text))
+        for text in ("열 수 있어요", "열어 보세요", "둘 다 아니야", "하나도 몰라요", "this one", "no one", "one of them", "이번엔", "오이", "사이", "이사 갔어", "한번 해봐요"):
+            with self.subTest(allowed=text):
+                self.assertFalse(spells_number(text))
 
     def test_clue_wording_that_spells_a_number_is_rejected_but_whole_words_are_kept(self):
         """MNT-92: 'three' or '셋' spells a number out and is refused; 'someone' and 'phone' are not number words."""
@@ -628,6 +657,33 @@ class ClueVoiceTests(AdviceUiCase):
         self.assertEqual(len(self.models.calls), before)
         self.assertNotIn("Something went wrong", self.seen(click))
         self.assertEqual(self.store.game_talk_calls_today(G, NOW), 1)
+
+    async def test_concurrent_llm_voices_cannot_pass_the_talk_limit(self):
+        """MNT-92: the talk use is reserved before the call, so two presses racing on the last allowed call make one model call."""
+        self.store.set_vault_settings(G, clue_voice="llm")
+        await self.start()
+        self.store.reveal_vault_clue(G, ALICE, self.sid, 1, now=NOW)
+        view = self.store.vault_session(G, ALICE, self.sid, now=NOW)
+        entry = next(c for c in view["clues"] if c.get("constraint") is not None)
+        self.store.set_game_talk_daily_limit(G, 1)
+        await asyncio.gather(self.bot.vault._voice_clue(self.click(), entry), self.bot.vault._voice_clue(self.click(), entry))
+        self.assertEqual((len(self.models.calls), self.store.game_talk_calls_today(G, NOW)), (1, 1))
+        self.assertEqual(self.bot.vault.talk_reserved, {})
+
+    async def test_a_failed_voice_call_releases_its_reservation(self):
+        """MNT-92: a model failure frees the reserved talk use, so the next press may still ask."""
+        self.store.set_vault_settings(G, clue_voice="llm")
+        await self.start()
+        self.store.reveal_vault_clue(G, ALICE, self.sid, 1, now=NOW)
+        view = self.store.vault_session(G, ALICE, self.sid, now=NOW)
+        entry = next(c for c in view["clues"] if c.get("constraint") is not None)
+        self.store.set_game_talk_daily_limit(G, 1)
+        self.models.answer = RuntimeError("down")
+        self.assertIsNone(await self.bot.vault._voice_clue(self.click(), entry))
+        self.assertEqual(self.bot.vault.talk_reserved, {})
+        self.models.answer = None
+        await self.bot.vault._voice_clue(self.click(), entry)
+        self.assertEqual(len(self.models.calls), 2)
 
     async def test_the_template_voice_after_switching_back_asks_no_model(self):
         """FEAT-65: the setting is read at each press: switching back to 'template' stops model calls at once."""

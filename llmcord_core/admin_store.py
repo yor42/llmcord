@@ -350,6 +350,11 @@ CREATE TABLE IF NOT EXISTS vault_operation_claims (
  user_id INTEGER NOT NULL, type TEXT NOT NULL, amount INTEGER NOT NULL, ledger_id INTEGER NOT NULL, created_at REAL NOT NULL,
  UNIQUE(operation_id, user_id, type)
 );
+CREATE TABLE IF NOT EXISTS vault_operation_held (
+ id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, operation_id INTEGER NOT NULL REFERENCES vault_operations(id) ON DELETE CASCADE,
+ user_id INTEGER NOT NULL, type TEXT NOT NULL, amount INTEGER NOT NULL, created_at REAL NOT NULL,
+ UNIQUE(operation_id, user_id, type)
+);
 CREATE TABLE IF NOT EXISTS vault_support_missions (
  id INTEGER PRIMARY KEY, guild_id INTEGER NOT NULL, operation_id INTEGER NOT NULL REFERENCES vault_operations(id) ON DELETE CASCADE,
  user_id INTEGER NOT NULL, mission_type TEXT NOT NULL CHECK(mission_type IN ('forensics','bulls_cows')), puzzle_json TEXT NOT NULL, answer_json TEXT NOT NULL,

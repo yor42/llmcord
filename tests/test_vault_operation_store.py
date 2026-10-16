@@ -81,10 +81,12 @@ API CONTRACT (new methods on ``VaultStore`` in ``llmcord_core/vault_store.py``; 
     joining, reading and rejected actions do not count) reach min_guesses. team_reward: to every member who has qualified, when the operation
     becomes "solved". Amount 0 pays nothing and writes no claim. Reversal is the ordinary reverse_entry (flagged ``reversed``, never repaid).
 """
+import random
 import itertools
 import sqlite3
 import tempfile
 import unittest
+from unittest import mock
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -732,10 +734,11 @@ class ToolTests(OpCase):
 
     def test_a_tool_spending_the_last_turn_triggers_the_retry(self):
         self.store.set_vault_settings(G, turns={"standard": 3})
-        self.solve()
-        self.give(SPECTRUM, 1, BOB)
-        self.burn(2, ALICE)
-        result = self.tool({"position": 1}, BOB)
+        with mock.patch("llmcord_core.vault_operation_store.secrets.SystemRandom", lambda: random.Random(7)):   # later stage secrets must not make the tool redundant by chance
+            self.solve()
+            self.give(SPECTRUM, 1, BOB)
+            self.burn(2, ALICE)
+            result = self.tool({"position": 1}, BOB)
         self.assertEqual(result["event"], "stage_retry")
         self.assertEqual(self.op()["stage"]["retry"], 1)
         self.assertEqual(self.store.item_qty(G, BOB, SPECTRUM), 0)
@@ -928,6 +931,103 @@ class RewardTests(OpCase):
         view = done["operation"]
         self.assertEqual([p["reward_refused"] for p in view["participants"]], [True, False, False])
         self.assertEqual(self.store.balance(G, BOB), 50)
+
+    def test_a_refused_team_reward_is_paid_once_on_a_later_action_when_room_exists(self):
+        self.store.set_vault_operation_settings(G, contribution_reward=0)
+        self.g(self.wrongs()[0], ALICE)
+        self.fill(ALICE)
+        self.solve(BOB)
+        self.solve(BOB)
+        self.assertTrue(self.solve(ALICE)["reward_refused"])
+        later = NOW + 8 * 86400
+        second = self.store.open_vault_operation(G, ALICE, CH, now=later, seed="op-2")["id"]
+
+        def wrong(now):
+            secret = self.secret(oid=second, number=1)
+            return next(c for c in all_secrets(4) if c != secret)
+        stuck = self.store.submit_operation_guess(G, ALICE, second, wrong(later), now=later)
+        self.assertTrue(stuck["reward_refused"])
+        self.assertEqual([r for r in self.vault_ledger(ALICE) if r["amount"] == 50], [])
+        self.store.db.execute("UPDATE currency_balances SET balance=0 WHERE guild_id=? AND user_id=?", (G, ALICE))
+        self.store.db.commit()
+        secret = self.secret(oid=second, number=1)
+        other = next(c for c in all_secrets(4) if c not in (secret, wrong(later)))
+        freed = self.store.submit_operation_guess(G, ALICE, second, other, now=later)
+        self.assertFalse(freed["reward_refused"])
+        self.assertEqual(self.store.balance(G, ALICE), 50)
+        again = self.store.submit_operation_guess(G, ALICE, second, next(c for c in all_secrets(4) if c not in (secret, wrong(later), other)), now=later)
+        self.assertFalse(again["reward_refused"])
+        self.assertEqual(self.store.balance(G, ALICE), 50)
+        self.assertEqual(self.store.one("SELECT COUNT(*) AS n FROM vault_operation_claims WHERE guild_id=? AND operation_id=? AND user_id=? AND type='team'", (G, self.oid, ALICE))["n"], 1)
+
+    def refuse_team_for_alice(self):
+        """Alice's team reward is refused by the cap on the winning action; returns the first operation id and a helper that guesses in the next week's operation."""
+        self.store.set_vault_operation_settings(G, contribution_reward=0)
+        self.g(self.wrongs()[0], ALICE)
+        self.fill(ALICE)
+        self.solve(BOB)
+        self.solve(BOB)
+        self.assertTrue(self.solve(ALICE)["reward_refused"])
+        later = NOW + 8 * 86400
+        second = self.store.open_vault_operation(G, ALICE, CH, now=later, seed="op-2")["id"]
+        used = []
+
+        def guess():
+            secret = self.secret(oid=second, number=1)
+            code = next(c for c in all_secrets(4) if c != secret and c not in used)
+            used.append(code)
+            return self.store.submit_operation_guess(G, ALICE, second, code, now=later)
+        return self.oid, guess
+
+    def free_alice(self):
+        self.store.db.execute("UPDATE currency_balances SET balance=0 WHERE guild_id=? AND user_id=?", (G, ALICE))
+        self.store.db.commit()
+
+    def test_a_team_reward_that_was_never_owed_is_not_paid_later(self):
+        self.store.set_vault_operation_settings(G, contribution_reward=0, team_reward=0)
+        self.g(self.wrongs()[0], ALICE)
+        self.solve(BOB)
+        self.solve(BOB)
+        self.solve(ALICE)
+        self.store.set_vault_operation_settings(G, team_reward=50)
+        second = self.store.open_vault_operation(G, ALICE, CH, now=NOW + 8 * 86400, seed="op-2")["id"]
+        secret = self.secret(oid=second, number=1)
+        self.store.submit_operation_guess(G, ALICE, second, next(c for c in all_secrets(4) if c != secret), now=NOW + 8 * 86400)
+        self.assertEqual(self.store.balance(G, ALICE), 0)
+
+    def test_lowering_min_guesses_after_a_solve_does_not_pay_a_team_reward_that_was_not_owed(self):
+        self.store.set_vault_operation_settings(G, contribution_reward=0, min_guesses=3)
+        self.solve(BOB)
+        self.solve(BOB)
+        self.solve(BOB)
+        self.assertEqual(self.store.balance(G, ALICE), 0)
+        self.store.set_vault_operation_settings(G, min_guesses=1)
+        second = self.store.open_vault_operation(G, ALICE, CH, now=NOW + 8 * 86400, seed="op-2")["id"]
+        secret = self.secret(oid=second, number=1)
+        self.store.submit_operation_guess(G, ALICE, second, next(c for c in all_secrets(4) if c != secret), now=NOW + 8 * 86400)
+        self.assertEqual(self.store.balance(G, ALICE), 0)
+
+    def test_a_cap_refused_team_reward_is_paid_later_at_the_amount_owed_then_and_only_once(self):
+        first, guess = self.refuse_team_for_alice()
+        self.store.set_vault_operation_settings(G, team_reward=999)
+        self.assertTrue(guess()["reward_refused"])
+        self.free_alice()
+        self.assertFalse(guess()["reward_refused"])
+        self.assertEqual(self.store.balance(G, ALICE), 50)
+        guess()
+        self.assertEqual(self.store.balance(G, ALICE), 50)
+        self.assertEqual(self.store.one("SELECT COUNT(*) AS n FROM vault_operation_claims WHERE operation_id=? AND user_id=? AND type='team'", (first, ALICE))["n"], 1)
+        self.assertEqual(self.store.one("SELECT COUNT(*) AS n FROM vault_operation_held")["n"], 0)
+
+    def test_a_reversed_team_claim_is_not_repaid(self):
+        first, guess = self.refuse_team_for_alice()
+        self.free_alice()
+        guess()
+        claim = self.store.one("SELECT ledger_id FROM vault_operation_claims WHERE operation_id=? AND user_id=? AND type='team'", (first, ALICE))
+        self.store.reverse_entry(G, claim["ledger_id"], 1, "undo")
+        balance = self.store.balance(G, ALICE)
+        guess()
+        self.assertEqual(self.store.balance(G, ALICE), balance)
 
     def test_replays_and_unrewarded_actions_report_no_refusal(self):
         self.fill(ALICE)

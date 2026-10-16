@@ -260,6 +260,7 @@ class VaultToolModal(discord.ui.Modal):
 class VaultPlay:
     def __init__(self, bot, clock=time.time):
         self.bot, self.clock = bot, clock
+        self.talk_reserved: dict[int, int] = {}  # clue-voice talk calls in flight per guild (usage rows land when the call returns)
 
     @property
     def store(self):
@@ -385,7 +386,9 @@ class VaultPlay:
         if action != 'clue':
             return await self.say(interaction, t.error(VaultStoreError(codes.VAULT_NOT_FOUND)))
         hidden = next((c['position'] for c in view['clues'] if not c['revealed']), None)
-        refused = None
+        refused = voiced = deferred = None
+        if view['status'] == 'active' and hidden is not None and self.store.vault_settings(gid)['clue_voice'] == 'llm':
+            deferred = await self._defer(interaction)   # acknowledged before the reveal commits; a refused defer still reveals, just without the voice
         if view['status'] != 'active':
             refused = VaultStoreError(codes.VAULT_NOT_ACTIVE)
         elif hidden is not None:
@@ -394,16 +397,13 @@ class VaultPlay:
             except VaultStoreError as error:
                 refused = error
         view = self.store.vault_session(gid, uid, session_id, now=self.clock())
-        voiced = deferred = None
-        if refused is None and hidden is not None and self.store.vault_settings(gid)['clue_voice'] == 'llm':
+        if deferred and refused is None:
             entry = next((c for c in view['clues'] if c['position'] == hidden and c.get('constraint') is not None), None)
             if entry is not None:
-                deferred = await self._defer(interaction)
-                if deferred:
-                    try:
-                        voiced = await self._voice_clue(interaction, entry)
-                    except Exception as error:
-                        logging.error('Vault clue voice failed: %s', type(error).__name__)
+                try:
+                    voiced = await self._voice_clue(interaction, entry)
+                except Exception as error:
+                    logging.error('Vault clue voice failed: %s', type(error).__name__)
         await self._show(interaction, view, t, edit=True, original=bool(deferred))
         if voiced:
             await self.say(interaction, t('{name}: {fact}', name=entry['name'] or t('a deleted character'), fact=voiced))
@@ -442,10 +442,16 @@ class VaultPlay:
     async def _voice_clue(self, interaction, entry: dict) -> str | None:
         template = clue_text(entry['constraint'])
         gid = interaction.guild_id
-        if self.store.game_talk_calls_today(gid, self.clock()) + 1 > self.store.game_talk_daily_limit(gid):
+        if self.store.game_talk_calls_today(gid, self.clock()) + self.talk_reserved.get(gid, 0) + 1 > self.store.game_talk_daily_limit(gid):
             return None
-        with self.bot.backend.pin():
-            wording, _ = await self._word(interaction, entry['character_id'], CLUE_USER.format(text=template), record=True)
+        self.talk_reserved[gid] = self.talk_reserved.get(gid, 0) + 1  # reserved before the call; released once its usage row exists or it never ran
+        try:
+            with self.bot.backend.pin():
+                wording, _ = await self._word(interaction, entry['character_id'], CLUE_USER.format(text=template), record=True)
+        finally:
+            self.talk_reserved[gid] -= 1
+            if self.talk_reserved[gid] <= 0:
+                del self.talk_reserved[gid]
         return wording if clue_wording_ok(wording, template) else None
 
     def _advice_facts(self, view: dict, character_id: int):

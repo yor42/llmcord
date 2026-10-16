@@ -1897,6 +1897,10 @@ msgid "The operation runs in a different channel. Join it there."
 msgstr ""
 
 #: llmcord_core/i18n/codes.py
+msgid "The operation channel set for this server is not a text channel here. Ask an admin to choose another one."
+msgstr ""
+
+#: llmcord_core/i18n/codes.py
 msgid "The operation needs two eligible characters in this channel's cast to hold the clues."
 msgstr ""
 

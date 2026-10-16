@@ -98,6 +98,7 @@ SPECTRUM, VERIFIER = "vault_spectrum_analyzer", "vault_position_verifier"
 MISSING = "llmcord_core/vault_operation_discord.py is missing: SkitBot has no .vault_operation (FEAT-66 phase B)"
 JOIN_FIRST = "Join the operation first."
 WRONG_CHANNEL = "The operation runs in a different channel. Join it there."
+INVALID_CHANNEL = "The operation channel set for this server is not a text channel here. Ask an admin to choose another one."
 OP_OFF = "The weekly operation is not turned on for this server."
 NEED_NPCS = "The operation needs two eligible characters in this channel's cast to hold the clues."
 NO_TOOL = "You do not have that tool. Buy one with /shop."
@@ -384,6 +385,32 @@ class OpenTests(OpCase):
         click = await self.join(channel=thread)
         self.assertEqual(self.private(click), WRONG_CHANNEL)
         self.assertEqual((thread.sent, self.channel.sent, self.store.one("SELECT COUNT(*) FROM vault_operations")[0]), ([], [], 0))
+
+    async def test_a_configured_channel_that_is_not_a_text_channel_of_this_guild_is_refused(self):
+        """MNT-92: missing, thread, voice and other-guild configured channels are refused with a translated private message and nothing is created."""
+        thread = await self.channel.make_thread("t")
+        for ident, channel in ((CH, None), (CH, thread), (CH, discord.VoiceChannel.__new__(discord.VoiceChannel)), (CH, FakeGameChannel(CH, guild_id=G + 1))):
+            with self.subTest(channel=type(channel).__name__):
+                self.bot.get_channel = lambda i, found=channel: found if i == ident else None
+                click = await self.join(channel=FakeGameChannel(200))
+                self.assertEqual(self.private(click), INVALID_CHANNEL)
+                self.assertEqual(self.store.one("SELECT COUNT(*) FROM vault_operations")[0], 0)
+        self.bot.get_channel = lambda i: self.channel if i == CH else None
+        click = await self.join(locale="ko")
+        self.assertEqual(self.store.one("SELECT COUNT(*) FROM vault_operations")[0], 1)
+
+    async def test_the_channel_the_press_came_from_needs_no_cache(self):
+        """MNT-92: a cache miss for the configured channel does not refuse a press made in that very channel."""
+        self.bot.get_channel = lambda i: None
+        await self.join()
+        self.assertEqual(self.store.one("SELECT COUNT(*) FROM vault_operations")[0], 1)
+
+    async def test_the_invalid_channel_refusal_is_in_the_invokers_language(self):
+        """MNT-92: the refusal reads in Korean for a Korean invoker."""
+        self.bot.get_channel = lambda i: None
+        click = await self.join(locale="ko", channel=FakeGameChannel(200))
+        self.assertNotEqual(self.private(click), INVALID_CHANNEL)
+        self.assertIn("작전 채널", self.private(click))
 
     async def test_a_click_from_another_server_is_not_found(self):
         """FEAT-66: guild isolation: a press from another guild on this operation id is answered 'not found' and changes nothing."""

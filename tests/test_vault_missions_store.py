@@ -188,6 +188,24 @@ class StartTests(MissionCase):
         self.begin(FORENSICS, CAROL, puzzle="not a puzzle", seed="x")
         self.assertEqual(self.truth(CAROL), list(generate_forensics("x").answer))
 
+    def test_a_puzzle_with_illegal_or_repeated_guesses_or_bool_results_is_replaced(self):
+        """MNT-92: the stored puzzle needs legal distinct guesses and int results, not just a solver-unique answer."""
+        from llmcord_core.vault import generate_forensics
+        from llmcord_core.vault.missions import ForensicsPuzzle
+        made = generate_forensics("caller")
+        shown = next(i for i, (_, r) in enumerate(made.records) if r is not None)
+        other = next(g for i, (g, _) in enumerate(made.records) if i != shown)
+        repeated = tuple((other if i == shown else g, r) for i, (g, r) in enumerate(made.records))
+        letters = tuple(("abcd"[:len(g)] if i == shown else g, r) for i, (g, r) in enumerate(made.records))
+        floats = tuple((g, (float(r[0]), r[1]) if i == shown else r) for i, (g, r) in enumerate(made.records))
+        flagged = ForensicsPuzzle(made.records, made.hidden, tuple(bool(x) for x in made.answer))
+        self.join(user=9)
+        for who, bad in ((ALICE, ForensicsPuzzle(repeated, made.hidden, made.answer)), (BOB, ForensicsPuzzle(letters, made.hidden, made.answer)),
+                         (CAROL, ForensicsPuzzle(floats, made.hidden, made.answer)), (9, flagged)):
+            self.begin(FORENSICS, who, puzzle=bad, seed="fb")
+            self.assertEqual(self.truth(who), list(generate_forensics("fb").answer))
+            self.assertEqual(json.loads(self.row(who)["puzzle_json"])["records"], [[g, list(r) if r else None] for g, r in generate_forensics("fb").records])
+
     def test_reopening_returns_the_persisted_puzzle_and_never_regenerates(self):
         first = self.begin(BC, seed="one")
         before = dict(self.row())
