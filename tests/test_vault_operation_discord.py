@@ -592,7 +592,7 @@ class EventTests(OpCase):
         self.assertIn("Stage 2 of 3: Standard", self.text())
         self.assertIn("Secret of stage 1: 1357", self.text())
         self.assertIn("Attempt 1 of 2", self.text())
-        self.assertNotIn(self.secret(), self.text())
+        self.assertNotIn(self.secret(), re.sub(r"\d{4}-\d{2}-\d{2}", "", self.text()))
         self.assertIn("Guess", self.labels_now())
 
     async def test_stage_retry_is_announced_and_the_attempt_resets(self):
@@ -611,7 +611,7 @@ class EventTests(OpCase):
         self.assertNotIn("Guesses:", text)
         self.assertIn(f"Previous attempt's code for stage 1: {old}", text)   # MNT-92: the failed attempt's code is public once it has ended
         self.assertNotIn("Secret of stage", text)
-        self.assertNotIn(self.secret(), text)
+        self.assertNotIn(self.secret(), re.sub(r"\d{4}-\d{2}-\d{2}", "", text))
 
     async def test_previous_attempt_code_shows_in_the_channel_language_and_keeps_the_budget_logic(self):
         """MNT-92: the retry status lists the first attempt's code (Korean for a Korean server) and never the current one; it survives the length budget."""
@@ -622,7 +622,7 @@ class EventTests(OpCase):
         await self.burn(3)
         await self.play.flush()
         self.assertIn(f"1단계 이전 시도의 코드: {old}", self.text())
-        self.assertNotIn(self.secret(), self.text())
+        self.assertNotIn(self.secret(), re.sub(r"\d{4}-\d{2}-\d{2}", "", self.text()))
         from llmcord_core.vault_operation_discord import MAX_TEXT, render_status
         view = self.op()
         view["participants"] = view["participants"] * 80

@@ -47,6 +47,7 @@ CONTRACT
   Korean glossary: 작전, 단계, 금고 (the Korean strings are hand written; this file only smokes that they are Korean).
 """
 import json
+import re
 from llmcord_core import i18n
 from llmcord_core.vault import bulls_cows_feedback, bulls_cows_secrets
 from llmcord_core.vault_discord import VaultButton
@@ -475,7 +476,8 @@ class BullsAndCowsTests(MissionCase):
         secret = self.truth()
         for click in (picker, shown, answered, reopened):
             self.assertNotIn(secret, self.private(click) + "".join(self.ids_of(click)))
-        self.assertNotIn(secret, self.text())
+        # The status header carries the week date (2026-10-12), which can contain a 3-digit secret; strip dates first.
+        self.assertNotIn(secret, re.sub(r"\d{4}-\d{2}-\d{2}", "", self.text()))
         self.assertNotIn(secret, "".join(self.announcements()))
 
     async def test_the_same_interaction_twice_counts_one_attempt_and_pays_once(self):

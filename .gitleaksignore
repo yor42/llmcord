@@ -8,3 +8,7 @@ eabe0b165598b39dd9d024f25e89161eaa7c61a2:tests/test_model_backend_store.py:gener
 f82911043d10beb5de2df4203a1fc7aa500d081f:llmcord_core/spoken/onnx_embedder.py:generic-api-key:22
 d30c1063d0ab2634ef40a31833c867f5127db53b:prototypes/spoken_moves/models.lock.json:generic-api-key:7
 d30c1063d0ab2634ef40a31833c867f5127db53b:prototypes/spoken_moves/models.lock.json:generic-api-key:17
+# Vault clue table keys (vault_comparison_0/1/2) that look like token names: not secrets.
+83b54fc485a2906dd330cb33cfc7ae4b37521835:llmcord_core/vault_discord.py:generic-api-key:77
+83b54fc485a2906dd330cb33cfc7ae4b37521835:llmcord_core/vault_discord.py:generic-api-key:79
+83b54fc485a2906dd330cb33cfc7ae4b37521835:llmcord_core/vault_discord.py:generic-api-key:81
